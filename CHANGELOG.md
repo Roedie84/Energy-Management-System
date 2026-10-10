@@ -32231,3 +32231,52 @@ vooral iOS (geen scroll anchoring), schoof de pagina daardoor tijdens het
 scrollen. Panelen worden nu alleen nog vervangen als de inhoud echt anders
 is, en tijdens aanraken of scrollen wacht de cockpit met bijwerken tot kort
 na het loslaten. Zelfde oplossing als StormchaseNL 0.51.1.
+
+## v5.72.0 — meldingen die kloppen, en een bijna lege module telt mee
+
+Zes punten uit de leerronde van 10-10 (akkoord Ruud).
+
+1. **Zelfcontrole nachtrondes** (`_tel_nachtronde`,
+   `zelfcontrole_nacht_gecontroleerd`). Per nacht geteld, en alleen als de
+   accu bij het begin van de nacht energie had (laadstand meer dan
+   `NACHT_BEOORDEELBAAR_MARGE_PROCENT` boven de ondergrens). Een nacht met
+   een lege accu is "niet te beoordelen": geen melding "Nul van ...
+   nachtrondes". Laadstand onbekend: telt zoals voorheen. Alleen
+   meldingslogica.
+2. **Reserve en laadstand altijd in het dagverloop**
+   (`_vul_reserve_en_laadstand_aan`). Zonder goedkoop blok in zicht de
+   bodem (die houdt de verkooptoets dan aan), anders de vorige regel; de
+   laadstand uit de vorige regel (hooguit een half uur) of uit de recorder
+   (`async_vul_dagverloop_aan_uit_recorder`, eens per uur). Met
+   `reserve_bron` en `soc_bron`. Bij het indelen valt een regel zonder
+   reserve terug op de laatst bewaarde reserve uit hetzelfde venster, dan
+   op de bodem. Onbekende tekortnachten worden een keer opnieuw ingedeeld
+   (`onbekend_hertoets`). **Onbekend telt niet meer mee in de marge-opslag**
+   (`MARGE_TELT_NIET_MEE_SOORTEN`), net als economisch: wel vastgelegd en
+   gemeld.
+3. **Dagtotalen rond middernacht** (`_dagtotaal_slaapt`). Dagtellers,
+   dagbedragen van de leverancier en elke entiteit met "_today"/"vandaag"
+   slapen tot 00:45 (`DAGTOTAAL_SLAAPT_TOT_MINUUT`); de dagbedragen houden
+   hun venster tot 03:00 (v5.65.1). De oorzaak van de melding van 10-10
+   00:19: de uitzondering van v5.65.1 stond wel in de configuratiecontrole
+   ("slaapt"), maar de beschikbaarheidsbewaking las alleen "in_orde". Nu
+   telt slapen als beschikbaar en begint de bevestigingstijd na het venster.
+4. **L-EMS-015: soort over de hele nacht** (`verwacht_tekort`). De live
+   soort wordt bepaald op wat er vannacht al als tekort bijgekocht is plus
+   het restant (`tekort_hele_nacht_kwh`), zoals het dagrecord van 09:00.
+   `tekort_kwh` blijft het restant. Alleen uitleg.
+5. **L-EMS-013**: economische tekortnachten tellen niet mee in de marge -
+   al aanwezig sinds v5.70, ongewijzigd.
+6. **L-EMS-014: een bijna lege module** (`_volg_module_leeg`,
+   `module_leeg_correctie_kwh`). Meldt een module minder dan 15% of een cel
+   minder dan 3,0 V, dan gaat de verwachte sprong vooraf van de beschikbare
+   energie af (brug, ontlaadvermogen, plan, MPC, Monte Carlo): de mediaan
+   van de gemeten sprongen (`module_leeg_sprongen`, bewaard), anders
+   `MODULE_LEEG_SPRONG_KWH` (0,35). Is de sprong gekomen (laadstand minstens
+   3% omlaag binnen tien minuten, na aftrek van het ontladen), dan geen
+   correctie meer. Zonder moduledata geen correctie; de noodlaadgrens leest
+   de ruwe meting. Zichtbaar als `module_bijna_leeg` op de
+   modulegezondheid en `module_leeg` in de export.
+
+Tests: `test_v572.py` (34). `test_v570_verkoopreserve.py` volgt de nieuwe
+margeregel voor onbekend.

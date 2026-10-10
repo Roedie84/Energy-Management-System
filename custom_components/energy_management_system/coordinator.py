@@ -722,6 +722,18 @@ from .const import (
     DIGITAL_TWIN_HORIZON_HOURS,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
     MARGE_TELT_NIET_MEE_SOORTEN,
+    # v5.72
+    NACHT_BEOORDEELBAAR_MARGE_PROCENT,
+    DAGTOTAAL_SLAAPT_TOT_MINUUT,
+    DAGTOTAAL_HINTS,
+    MODULE_LEEG_SOC_PROCENT,
+    MODULE_LEEG_CEL_V,
+    MODULE_LEEG_SPRONG_KWH,
+    MODULE_LEEG_SPRONG_MIN_PROCENT,
+    MODULE_LEEG_HERSTEL_PROCENT,
+    MODULE_LEEG_HERSTEL_V,
+    MODULE_LEEG_SPRONG_MAX_KWH,
+    MODULE_LEEG_SPRONGEN_BEWAARD,
     VERKOOP_NA_BLOK_MIN_WINST_EUR,
     SHORTFALL_MIN_NETIMPORT_KWH,
     TEKORT_LEEG_MARGE_PROCENT,
@@ -8297,7 +8309,10 @@ class EnergyManagementSystemCoordinator:
             self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         )
         if gemeten is not None and gemeten >= 0:
-            return gemeten
+            # v5.72 (L-EMS-014): min de verwachte sprong van een bijna lege
+            # module. De terugval hieronder komt uit de brug, die al
+            # gecorrigeerd is.
+            return self._na_module_leeg(gemeten)
 
         # v3.50.0: het bijproduct mag terugval blijven, maar alleen
         # zolang het VERS is.
@@ -8346,6 +8361,155 @@ class EnergyManagementSystemCoordinator:
             return True
         leeftijd = (dt_util.now() - gezet).total_seconds() / 60
         return leeftijd <= METING_MAX_LEEFTIJD_MINUTEN
+
+    # --- v5.72 (L-EMS-014): een module die bijna leeg is ----------------
+
+    _module_leeg: dict | None = None
+    _module_leeg_socs: list | None = None
+    # Bewaard (PERSISTED_FIELDS); None tot de eerste gemeten sprong.
+    module_leeg_sprongen: list | None = None
+
+    def module_leeg_correctie_kwh(self) -> float:
+        """Hoeveel van de beschikbare energie er vooraf af gaat (v5.72).
+
+        In 2 van 2 bijna-lege nachten sprong de laadstand 4-5% omlaag zodra
+        een module (AB3000 00996) onder 15% kwam: circa 0,35 kWh die de EMS
+        dacht nog te hebben. Zolang een module onder `MODULE_LEEG_SOC_PROCENT`
+        staat (of een cel onder `MODULE_LEEG_CEL_V`) en die sprong nog niet
+        gezien is, telt hij niet als beschikbaar. De gemeten waarde (mediaan
+        van `module_leeg_sprongen`) gaat voor de constante. Geen moduledata,
+        geen correctie.
+        """
+        staat = self._module_leeg or {}
+        if not staat.get("actief") or staat.get("sprong_gezien"):
+            return 0.0
+        return self._module_leeg_sprong_kwh()
+
+    def _module_leeg_sprong_kwh(self) -> float:
+        """De sprong: gemeten als die er is, anders de constante (v5.72)."""
+        gemeten = [
+            float(r["kwh"]) for r in (self.module_leeg_sprongen or [])
+            if isinstance(r, dict) and isinstance(r.get("kwh"), (int, float))
+            and 0 < r["kwh"] <= MODULE_LEEG_SPRONG_MAX_KWH
+        ]
+        return round(statistics.median(gemeten), 3) if gemeten else MODULE_LEEG_SPRONG_KWH
+
+    def _na_module_leeg(self, beschikbaar_kwh: float | None) -> float | None:
+        """De beschikbare energie min de verwachte modulesprong (v5.72).
+        Nooit onder nul; None blijft None."""
+        if beschikbaar_kwh is None:
+            return None
+        try:
+            correctie = self.module_leeg_correctie_kwh()
+        except Exception:  # noqa: BLE001 - veilig falen: geen correctie
+            correctie = 0.0
+        if correctie <= 0:
+            return beschikbaar_kwh
+        return max(0.0, beschikbaar_kwh - correctie)
+
+    def _volg_module_leeg(self, now: datetime) -> None:
+        """Staat er een module bijna leeg, en is de sprong al gekomen? (v5.72)
+
+        Aan: een module onder `MODULE_LEEG_SOC_PROCENT` of een cel onder
+        `MODULE_LEEG_CEL_V`. Uit: alle bekende modules weer
+        `MODULE_LEEG_HERSTEL_PROCENT` erboven (en de cellen
+        `MODULE_LEEG_HERSTEL_V`). De sprong is gezien als de laadstand in één
+        ronde (binnen tien minuten) minstens `MODULE_LEEG_SPRONG_MIN_PROCENT`
+        zakt - ook als dat in het kwartier vóór het aanslaan gebeurde, want
+        de modulesensor loopt soms achter op de totale laadstand. Daarna
+        geen correctie meer: de sprong zit dan al in de meting. De gemeten
+        sprong wordt bewaard. Ontbreekt de data, dan geen correctie.
+        """
+        modules = self.battery_module_live or []
+        socs = [m.get("soc_percent") for m in modules if m.get("soc_percent") is not None]
+        cellen = [m.get("cel_min_v") for m in modules if m.get("cel_min_v") is not None]
+        soc_nu = self._read_sensor_float(self.config.get(CONF_SOC_SENSOR))
+        # De totale laadstand van de laatste twintig minuten.
+        reeks = [
+            (t, v) for t, v in (self._module_leeg_socs or [])
+            if (now - t).total_seconds() <= 1200
+        ]
+        if soc_nu is not None:
+            reeks.append((now, float(soc_nu)))
+        self._module_leeg_socs = reeks
+        if not socs and not cellen:
+            self._module_leeg = None
+            return
+        laag = [
+            m for m in modules
+            if (m.get("soc_percent") is not None and m["soc_percent"] < MODULE_LEEG_SOC_PROCENT)
+            or (m.get("cel_min_v") is not None and m["cel_min_v"] < MODULE_LEEG_CEL_V)
+        ]
+        staat = self._module_leeg
+        if staat and staat.get("actief"):
+            hersteld = all(
+                v >= MODULE_LEEG_SOC_PROCENT + MODULE_LEEG_HERSTEL_PROCENT for v in socs
+            ) and all(v >= MODULE_LEEG_CEL_V + MODULE_LEEG_HERSTEL_V for v in cellen)
+            if hersteld:
+                self._module_leeg = None
+                return
+        elif laag:
+            eerste = laag[0]
+            staat = {
+                "actief": True,
+                "sinds": now.isoformat(),
+                "module": eerste.get("module"),
+                "apparaat": eerste.get("apparaat_id") or eerste.get("naam"),
+                "soc_percent": eerste.get("soc_percent"),
+                "cel_min_v": eerste.get("cel_min_v"),
+                "sprong_gezien": False,
+            }
+            self._module_leeg = staat
+        else:
+            self._module_leeg = None
+            return
+        if staat.get("sprong_gezien"):
+            return
+        # Is de sprong er (al)? Twee opeenvolgende metingen, hooguit tien
+        # minuten uit elkaar, met minstens de drempel ertussen - na aftrek
+        # van wat het ontladen in die tijd verklaart (bij 2,4 kW is dat
+        # ruim 2% per vijf minuten; dat is geen sprong).
+        capaciteit = self.bruikbare_capaciteit_kwh()
+        try:
+            accu_w = max(0.0, float(self._read_corrected_battery_power() or 0.0))
+        except Exception:  # noqa: BLE001
+            accu_w = 0.0
+        for (t1, v1), (t2, v2) in zip(reeks, reeks[1:]):
+            duur_s = (t2 - t1).total_seconds()
+            if duur_s > 600:
+                continue
+            verklaard = (
+                accu_w * duur_s / 3600 / 1000 / capaciteit * 100 if capaciteit else 0.0
+            )
+            sprong = (v1 - v2) - verklaard
+            if sprong >= MODULE_LEEG_SPRONG_MIN_PROCENT:
+                staat["sprong_gezien"] = True
+                staat["sprong_moment"] = t2.isoformat()
+                if capaciteit:
+                    kwh = round(capaciteit * sprong / 100, 3)
+                    if 0 < kwh <= MODULE_LEEG_SPRONG_MAX_KWH:
+                        staat["sprong_kwh"] = kwh
+                        self.module_leeg_sprongen = (
+                            list(self.module_leeg_sprongen or [])
+                            + [{"moment": t2.isoformat(), "kwh": kwh,
+                                "module": staat.get("apparaat"),
+                                "van_procent": round(v1, 1), "naar_procent": round(v2, 1)}]
+                        )[-MODULE_LEEG_SPRONGEN_BEWAARD:]
+                break
+
+    def get_module_leeg(self) -> dict:
+        """De toestand van de modulesprong, voor sensor en export (v5.72)."""
+        staat = dict(self._module_leeg or {})
+        return {
+            "actief": bool(staat.get("actief")),
+            "correctie_kwh": round(self.module_leeg_correctie_kwh(), 3),
+            "sprong_kwh": self._module_leeg_sprong_kwh(),
+            "bron": "gemeten" if any(
+                isinstance(r, dict) and r.get("kwh") for r in (self.module_leeg_sprongen or [])
+            ) else "constante",
+            "toestand": staat,
+            "gemeten_sprongen": list(self.module_leeg_sprongen or []),
+        }
 
     def effective_min_soc_percent(self) -> float:
         """De minimum-SoC die de accu WERKELIJK aanhoudt (v1.23.3).
@@ -16739,19 +16903,24 @@ class EnergyManagementSystemCoordinator:
                         "horizon. Blijft dit staan terwijl de zon op is, "
                         "dan is er wél iets aan de hand."
                     )
-                elif (
-                    sleutel in PRIJSDAG_VELDEN.values()
-                    and dt_util.now().hour < PRIJSDAG_SLAAPT_TOT_UUR
-                ):
+                elif self._dagtotaal_slaapt(sleutel, waarde, dt_util.now()):
                     # v5.65.1: na middernacht begint de leverancier een
                     # nieuwe dag en meldt hij een tijd niets. Op 9 oktober
                     # 00:02-01:07 telde dat als kapotte koppeling.
+                    # v5.72: en elk dagtotaal tot 00:45 - zie
+                    # `_dagtotaal_slaapt`. `dagtotaal` zorgt dat de
+                    # beschikbaarheidsbewaking dit ook als slapen ziet.
                     regel["oordeel"] = "slaapt"
+                    regel["dagtotaal"] = True
+                    tot = (
+                        f"{PRIJSDAG_SLAAPT_TOT_UUR}:00"
+                        if sleutel in PRIJSDAG_VELDEN.values()
+                        else f"00:{DAGTOTAAL_SLAAPT_TOT_MINUUT:02d}"
+                    )
                     regel["uitleg"] = (
-                        "De leverancier begint na middernacht een nieuwe dag "
-                        "en meldt de dagbedragen dan een tijd niet. Blijft "
-                        f"dit na {PRIJSDAG_SLAAPT_TOT_UUR}:00 staan, dan is "
-                        "er wél iets aan de hand."
+                        "Een dagtotaal begint na middernacht opnieuw en meldt "
+                        "dan een tijd niets. Blijft dit na "
+                        f"{tot} staan, dan is er wél iets aan de hand."
                     )
                 else:
                     regel["oordeel"] = "geen_waarde"
@@ -22121,6 +22290,11 @@ class EnergyManagementSystemCoordinator:
         krappe reserve, en de opslag van 5% hield de accu daarna een week
         's avonds voller dan nodig. Een nacht zonder soort telt als
         onbekend en telt mee (huis gaat voor).
+
+        v5.72 (akkoord Ruud 10-10): onbekend telt ook niet meer mee. Een
+        nacht die niet na te gaan is, bewijst geen te krappe reserve; hij
+        wordt wel vastgelegd en gemeld, maar verhoogt de marge niet blind.
+        Zie `MARGE_TELT_NIET_MEE_SOORTEN`.
         """
         return sum(
             1
@@ -23998,6 +24172,9 @@ class EnergyManagementSystemCoordinator:
             ),
         }
         reeks = self.dagverloop.setdefault(dag, [])
+        # v5.72: reserve en laadstand ALTIJD in het dagverloop, zodat een
+        # tekortnacht achteraf te duiden is - zie `_vul_reserve_en_laadstand_aan`.
+        self._vul_reserve_en_laadstand_aan(regel, reeks)
         if reeks and reeks[-1]["tijd"] == regel["tijd"]:
             reeks[-1] = regel
         else:
@@ -24005,6 +24182,126 @@ class EnergyManagementSystemCoordinator:
         self.noteer_meting_gevuld("dagverloop")
         for oud in sorted(self.dagverloop)[:-DAGVERLOOP_DAGEN]:
             self.dagverloop.pop(oud, None)
+
+    def _vul_reserve_en_laadstand_aan(self, regel: dict, reeks: list) -> None:
+        """Een regel van het dagverloop nooit zonder reserve of laadstand
+        (v5.72, akkoord Ruud 10-10).
+
+        Op 03-10 en 04-10 bleven twee tekortnachten "onbekend": "reserve of
+        laadstand ontbreekt in het dagverloop". De reserve ontbreekt zodra
+        er geen goedkoop blok in zicht is (de uitsplitsing is dan leeg,
+        v4.9) - en dan houdt de verkooptoets de BODEM aan. Dat is dus de
+        reserve van dat kwartier. Ontbreekt de laadstand, dan de vorige
+        regel van vandaag (eerder bewaarde waarde); de recorder vult later
+        aan wat dan nog leeg is (`async_vul_dagverloop_aan_uit_recorder`).
+        `reserve_bron` en `soc_bron` zeggen waar het getal vandaan komt.
+        """
+        if regel.get("reserve_kwh") is None:
+            try:
+                bodem = self._reserve_bodem_kwh() if self.bruikbare_capaciteit_kwh() else None
+            except Exception:  # noqa: BLE001 - het verloop mag nooit omvallen
+                bodem = None
+            vorige = next(
+                (r.get("reserve_kwh") for r in reversed(reeks)
+                 if isinstance(r, dict) and r.get("tijd") != regel["tijd"]
+                 and r.get("reserve_kwh") is not None),
+                None,
+            )
+            blok = self.last_cheap_block_start
+            if bodem is not None and (blok is None or blok <= dt_util.now()):
+                regel["reserve_kwh"] = round(bodem, 3)
+                regel["reserve_bron"] = "bodem (geen blok in zicht)"
+            elif vorige is not None:
+                regel["reserve_kwh"] = vorige
+                regel["reserve_bron"] = "vorige regel"
+            elif bodem is not None:
+                regel["reserve_kwh"] = round(bodem, 3)
+                regel["reserve_bron"] = "bodem"
+        if regel.get("soc") is None:
+            vorige = next(
+                (r for r in reversed(reeks)
+                 if isinstance(r, dict) and r.get("tijd") != regel["tijd"]
+                 and r.get("soc") is not None),
+                None,
+            )
+            if vorige is not None and self._kwartieren_tussen(vorige.get("tijd"), regel["tijd"]) <= 2:
+                regel["soc"] = vorige["soc"]
+                regel["soc_bron"] = "vorige regel"
+
+    @staticmethod
+    def _kwartieren_tussen(van: str | None, tot: str | None) -> int:
+        """Aantal kwartieren tussen twee tijden "HH:MM" van dezelfde dag (v5.72)."""
+        try:
+            a = int(van[:2]) * 60 + int(van[3:5])
+            b = int(tot[:2]) * 60 + int(tot[3:5])
+        except (TypeError, ValueError):
+            return 999
+        return abs(b - a) // 15
+
+    _dagverloop_recorder_geprobeerd: str | None = None
+
+    async def async_vul_dagverloop_aan_uit_recorder(self, now: datetime) -> int:
+        """Lege laadstanden in het dagverloop uit de recorder (v5.72).
+
+        Eens per uur, alleen voor de dagen die de recorder nog heeft (tien
+        dagen) en alleen voor regels zonder laadstand. Best effort: lukt
+        het niet, dan blijft de regel zoals hij was. Geeft het aantal
+        aangevulde regels.
+        """
+        uur = now.strftime("%Y-%m-%dT%H")
+        if self._dagverloop_recorder_geprobeerd == uur:
+            return 0
+        self._dagverloop_recorder_geprobeerd = uur
+        soc_entity = self.config.get(CONF_SOC_SENSOR)
+        verloop = self.dagverloop if isinstance(self.dagverloop, dict) else {}
+        grens = (now - timedelta(days=9)).date().isoformat()
+        leeg = [
+            (dag, r) for dag, reeks in verloop.items() if dag >= grens
+            for r in (reeks or []) if isinstance(r, dict) and r.get("soc") is None
+        ]
+        if not soc_entity or not leeg:
+            return 0
+        try:
+            from homeassistant.components.recorder import get_instance, history
+        except ImportError:
+            return 0
+        begin = min(
+            datetime.fromisoformat(f"{dag}T{r.get('tijd') or '00:00'}").replace(tzinfo=now.tzinfo)
+            for dag, r in leeg
+        ) - timedelta(hours=1)
+
+        def _ophalen():
+            return history.get_significant_states(self.hass, begin, now, [soc_entity])
+
+        try:
+            staten = await get_instance(self.hass).async_add_executor_job(_ophalen)
+        except Exception:  # noqa: BLE001 - best effort
+            return 0
+        reeks = []
+        for staat in (staten or {}).get(soc_entity, []) or []:
+            try:
+                reeks.append((staat.last_changed, float(staat.state)))
+            except (TypeError, ValueError, AttributeError):
+                continue
+        reeks.sort(key=lambda x: x[0])
+        gevuld = 0
+        for dag, r in leeg:
+            try:
+                moment = datetime.fromisoformat(f"{dag}T{r.get('tijd')}").replace(
+                    tzinfo=now.tzinfo
+                ) + timedelta(minutes=15)
+            except (TypeError, ValueError):
+                continue
+            waarde = None
+            for tijd, w in reeks:
+                if tijd > moment:
+                    break
+                waarde = w
+            if waarde is not None and 0 <= waarde <= 100:
+                r["soc"] = waarde
+                r["soc_bron"] = "recorder"
+                gevuld += 1
+        return gevuld
 
     def get_nabeschouwing(self, datum: str | None = None) -> dict:
         """Wat had de accu die dag het best kunnen doen, en wat deed ze?
@@ -26746,7 +27043,8 @@ class EnergyManagementSystemCoordinator:
         """
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if available_entity and now is not None:
-            available_kwh = self._read_sensor_float(available_entity)
+            # v5.72 (L-EMS-014): min de sprong van een bijna lege module.
+            available_kwh = self._na_module_leeg(self._read_sensor_float(available_entity))
             reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
                 now, cheap_block_start
             )
@@ -27164,6 +27462,8 @@ class EnergyManagementSystemCoordinator:
             # around empty. Clamp instead of letting a slightly-negative
             # reading skew the comparison below.
             available_kwh = 0.0
+        # v5.72 (L-EMS-014): min de sprong van een bijna lege module.
+        available_kwh = self._na_module_leeg(available_kwh)
 
         if available_kwh is not None:
             hours_until_cheap = max(
@@ -30006,7 +30306,12 @@ class EnergyManagementSystemCoordinator:
             return {}
         if not capaciteit:
             return {}
-        return {"capaciteit_kwh": float(capaciteit), "min_soc": min_soc}
+        # v5.72: en de bodem, als terugval voor een regel zonder reserve.
+        return {
+            "capaciteit_kwh": float(capaciteit),
+            "min_soc": min_soc,
+            "bodem_kwh": float(self._reserve_bodem_kwh()),
+        }
 
     def _verwacht_uit_verloop(self, now: datetime, begin: datetime) -> tuple[str | None, str | None]:
         """Het verwachte tekort indelen uit het dagverloop van het lopende
@@ -30242,6 +30547,7 @@ class EnergyManagementSystemCoordinator:
     def _verkocht_onder_reserve(
         rijen: list, verschuiving_w: float,
         capaciteit_kwh: float | None = None, min_soc: float | None = None,
+        bodem_kwh: float | None = None,
     ) -> tuple[float, float]:
         """Hoeveel van de verkoop lag op of onder de reserve, en hoeveel is
         niet te beoordelen (v5.61, L-EMS-010).
@@ -30254,10 +30560,21 @@ class EnergyManagementSystemCoordinator:
         capaciteit x (laadstand - minimum) / 100. Ontbreekt de reserve, of
         is de beschikbare energie niet te bepalen, dan telt het kwartier
         als onbepaald. Geeft (kWh onder de reserve, kWh onbepaald).
+
+        v5.72: ontbreekt de reserve in een regel, dan de laatst bewaarde
+        reserve uit hetzelfde venster (de waarde die eerder wél in het
+        dagverloop stond); is die er niet, de bodem (`bodem_kwh`) - zonder
+        goedkoop blok in zicht houdt de verkooptoets de bodem aan. Pas als
+        ook die ontbreekt, blijft het onbepaald. Op 03-10 en 04-10 ontstond
+        zo twee keer "onbekend" terwijl het venster de reserve van een paar
+        kwartieren eerder wel had.
         """
         onder, onbepaald = 0.0, 0.0
         vloer = max(verschuiving_w, TEKORT_IMPORT_MIN_W)
+        laatste_reserve = None
         for r in rijen:
+            if r.get("reserve_kwh") is not None:
+                laatste_reserve = r.get("reserve_kwh")
             net_w, accu_w = r.get("net_w"), r.get("accu_w")
             if net_w is None or accu_w is None:
                 continue
@@ -30268,6 +30585,8 @@ class EnergyManagementSystemCoordinator:
             if beschikbaar is None and capaciteit_kwh and min_soc is not None and r.get("soc") is not None:
                 beschikbaar = max(0.0, capaciteit_kwh * (float(r["soc"]) - min_soc) / 100)
             reserve = r.get("reserve_kwh")
+            if reserve is None:
+                reserve = laatste_reserve if laatste_reserve is not None else bodem_kwh
             if beschikbaar is None or reserve is None:
                 onbepaald += deel
             elif beschikbaar <= reserve:
@@ -30330,6 +30649,7 @@ class EnergyManagementSystemCoordinator:
         min_kwartieren: int = TEKORT_HERLEIDING_MIN_KWARTIEREN,
         capaciteit_kwh: float | None = None,
         min_soc: float | None = None,
+        bodem_kwh: float | None = None,
     ) -> tuple[str | None, str | None]:
         """Een tekortnacht achteraf indelen, met de reden (v5.41, v5.42).
 
@@ -30383,7 +30703,7 @@ class EnergyManagementSystemCoordinator:
             if verkocht <= SHORTFALL_MIN_NETIMPORT_KWH:
                 return TEKORTSOORT_CAPACITEIT, "vol geweest, daarna niets verkocht"
             onder, onbepaald = cls._verkocht_onder_reserve(
-                na_vol, verschuiving_w, capaciteit_kwh, min_soc
+                na_vol, verschuiving_w, capaciteit_kwh, min_soc, bodem_kwh
             )
             uitkomst = cls._winst_of_onder_reserve(
                 verkocht, prijs, tekortprijs, onder, onbepaald, "vol geweest, daarna "
@@ -30403,7 +30723,7 @@ class EnergyManagementSystemCoordinator:
         verkocht, prijs = cls._verkocht_uit_verloop(voor, verschuiving_w)
         if verkocht > SHORTFALL_MIN_NETIMPORT_KWH:
             onder, onbepaald = cls._verkocht_onder_reserve(
-                voor, verschuiving_w, capaciteit_kwh, min_soc
+                voor, verschuiving_w, capaciteit_kwh, min_soc, bodem_kwh
             )
             uitkomst = cls._winst_of_onder_reserve(
                 verkocht, prijs, tekortprijs, onder, onbepaald, ""
@@ -30553,6 +30873,10 @@ class EnergyManagementSystemCoordinator:
                 (r.get("tekort_soort") == TEKORTSOORT_VERKOCHT_MET_WINST
                  and r.get("reservetoets") != TEKORT_RESERVETOETS)
                 or r.get("reservetoets") == "open"
+                # v5.72: een onbekende nacht één keer opnieuw, nu een regel
+                # zonder reserve terugvalt op de eerder bewaarde reserve.
+                or (r.get("tekort_soort") == TEKORTSOORT_ONBEKEND
+                    and r.get("onbekend_hertoets") != "v5.72")
             )
         )
 
@@ -30584,6 +30908,12 @@ class EnergyManagementSystemCoordinator:
             except ValueError:
                 continue
             soort, reden = self._verkoop_uit_verloop(dag - timedelta(days=1))
+            if record.get("tekort_soort") == TEKORTSOORT_ONBEKEND:
+                # v5.72: één keer; blijft hij niet te bepalen, dan blijft
+                # hij onbekend (niet elk uur opnieuw).
+                record["onbekend_hertoets"] = "v5.72"
+                if soort is None:
+                    continue
             if soort is None:
                 if record.get("tekort_soort") == TEKORTSOORT_VERKOCHT_MET_WINST:
                     record.update(
@@ -30717,8 +31047,16 @@ class EnergyManagementSystemCoordinator:
         # horizon min het deel tot het blok. Dat wordt in het laadblok
         # bijgeladen; geen nachttekort.
         tekort_na_blok = max(0.0, nodig + na_blok - beschikbaar) - tekort
+        # v5.72 (L-EMS-015): de soort over de HELE nacht, zoals het dagrecord
+        # van 09:00 (`_tekortnacht_vandaag_kwh`): wat er vannacht al als
+        # tekort van het net kwam plus wat er nog ontbreekt. Op 10-10 's
+        # ochtends was het resterende tekort onder 0,5 kWh en verdween
+        # "economisch" uit de uitleg, terwijl het dagrecord die nacht wel
+        # economisch noemde. Alleen uitleg; `tekort_kwh` blijft het
+        # resterende tekort.
+        hele_nacht = tekort + max(0.0, float(self._tekortnacht_lopend_kwh or 0.0))
         soort = self._tekort_soort(
-            tekort, self._vol_voor_nacht, self._verkocht_na_vol_kwh, nodig,
+            hele_nacht, self._vol_voor_nacht, self._verkocht_na_vol_kwh, nodig,
             economisch=self._netladen_economisch_afgewezen(),
         )
         # v5.44: is de live volging van dit venster onvolledig, dan uit het
@@ -30738,6 +31076,8 @@ class EnergyManagementSystemCoordinator:
             reden = herleid_reden or f"{onvolledig}, en niet uit het dagverloop te herleiden"
         return {
             "tekort_kwh": round(tekort, 2),
+            # v5.72 (L-EMS-015): de maat waarop de soort is bepaald.
+            "tekort_hele_nacht_kwh": round(hele_nacht, 2),
             # v5.47: expliciet gesplitst rond het goedkope blok (L-EMS-006).
             "verwacht_tekort_tot_blok_kwh": round(tekort, 2),
             "verwacht_tekort_na_blok_kwh": round(tekort_na_blok, 2),
@@ -30808,12 +31148,16 @@ class EnergyManagementSystemCoordinator:
             delen.append(f"{onbekend}x niet meer na te gaan")
         # v5.70 (L-EMS-013): economische nachten verhogen de marge niet.
         marge = self.marge_tekortnachten()
+        # v5.72: onbekend telt ook niet mee.
         if marge == 0:
-            slot = "dat verhoogt de veiligheidsmarge niet (economisch telt niet mee)."
+            slot = (
+                "dat verhoogt de veiligheidsmarge niet (economisch en niet na "
+                "te gaan tellen niet mee)."
+            )
         elif marge < aantal:
             slot = (
                 f"de veiligheidsmarge is daardoor automatisch verhoogd ({marge} "
-                "tellen mee; economische nachten niet)."
+                "tellen mee; economische en niet na te gaan nachten niet)."
             )
         else:
             slot = "de veiligheidsmarge is daardoor automatisch verhoogd."
@@ -30827,8 +31171,8 @@ class EnergyManagementSystemCoordinator:
 
         v5.41: records zonder soort worden waar mogelijk achteraf ingedeeld
         (`_herleid_onbekende_tekortnachten`). Wat overblijft is `onbekend`:
-        informatief, niet bewezen planning. In de zelfcorrigerende marge
-        tellen ze gewoon mee - die kijkt naar `shortfall`, niet naar de soort.
+        informatief, niet bewezen planning. v5.72: in de zelfcorrigerende
+        marge tellen ze niet mee (`marge_tekortnachten`).
         """
         records = list(self.reserve_daily_records or [])
         soorten = [
@@ -30895,8 +31239,8 @@ class EnergyManagementSystemCoordinator:
             info.append(
                 f"{onbekend} tekortnacht(en) zonder soort in de laatste {dagen} "
                 "dagen (niet uit het dagverloop te herleiden, of niet na te gaan "
-                "of een verkoop boven de reserve lag). Telt mee in de "
-                "reservemarge, niet als aandachtspunt."
+                "of een verkoop boven de reserve lag). Telt niet mee in de "
+                "reservemarge en niet als aandachtspunt."
             )
         verwacht = soorten["verwacht_tekort"]
         if verwacht.get("tekort_soort") == TEKORTSOORT_CAPACITEIT:
@@ -31947,6 +32291,8 @@ class EnergyManagementSystemCoordinator:
         modules = self._read_battery_modules()
         if not modules:
             self.battery_module_live = []
+            # v5.72: zonder moduledata geen correctie.
+            self._module_leeg = None
             return
 
         deltas = [m["cel_delta_v"] for m in modules]
@@ -31960,6 +32306,12 @@ class EnergyManagementSystemCoordinator:
             module["soc_afwijking_percent"] = self._deviation_from_peers(socs, index)
             module["vermogen_afwijking_w"] = self._deviation_from_peers(powers, index)
         self.battery_module_live = modules
+        # v5.72 (L-EMS-014): een module die bijna leeg is.
+        try:
+            self._volg_module_leeg(now)
+        except Exception as fout:  # noqa: BLE001 - veilig falen: geen correctie
+            self._module_leeg = None
+            self.internal_failures["module_leeg"] = f"{type(fout).__name__}: {fout}"
 
         day_key = now.date()
         if self._battery_module_day_key is None:
@@ -33247,6 +33599,14 @@ class EnergyManagementSystemCoordinator:
                 and regel.get("waarde") == "unknown"
             ):
                 in_orde = True
+            # v5.72: een dagtotaal rond middernacht slaapt (zie
+            # `_dagtotaal_slaapt`). Als beschikbaar tellen, zodat de
+            # bevestigingstijd pas NA het venster begint te lopen. Gemeld:
+            # "'n Sensor is d'r neet meer" om 00:19 over drie Zonneplan-
+            # dagbedragen - de uitzondering van v5.65.1 stond wel in de
+            # configuratiecontrole, maar de melding las alleen "in_orde".
+            if not in_orde and regel.get("oordeel") == "slaapt" and regel.get("dagtotaal"):
+                in_orde = True
             self._track_sensor_availability(now, entity_id, in_orde)
             self._invoer_gebruik[entity_id] = self._instelling_leesbaar(
                 regel.get("instelling") or ""
@@ -33254,6 +33614,36 @@ class EnergyManagementSystemCoordinator:
             self._invoer_instelling[entity_id] = regel.get("instelling") or ""
 
     _instelling_labels: dict[str, str] | None = None
+
+    @staticmethod
+    def _is_dagtotaal(sleutel: str, entity_id: str) -> bool:
+        """Is dit een dagtotaal dat om middernacht opnieuw begint? (v5.72)
+
+        De dagtellers en de dagbedragen van de leverancier, en elke
+        entiteit die zich als dagtotaal laat herkennen ("_today",
+        "vandaag", ...), zoals `sensor.zonneplan_gas_delivery_costs_today`.
+        """
+        if sleutel in DAGTELLER_INSTELLINGEN or sleutel in PRIJSDAG_VELDEN.values():
+            return True
+        tekst = f"{sleutel} {entity_id}".lower()
+        return any(hint in tekst for hint in DAGTOTAAL_HINTS)
+
+    def _dagtotaal_slaapt(self, sleutel: str, entity_id: str, now: datetime) -> bool:
+        """Mag dit dagtotaal nu zonder waarde zijn? (v5.72, akkoord Ruud 10-10)
+
+        Dagtotalen gaan elke nacht rond 00:00-00:25 kort op unknown of
+        unavailable. Tot `DAGTOTAAL_SLAAPT_TOT_MINUUT` na middernacht
+        (lokale tijd) is dat geen storing. De dagbedragen van de
+        leverancier houden hun ruimere venster (v5.65.1): op 9 en 10
+        oktober stond het gasbedrag tot 01:07 op unknown.
+        """
+        if sleutel in PRIJSDAG_VELDEN.values() and now.hour < PRIJSDAG_SLAAPT_TOT_UUR:
+            return True
+        return (
+            now.hour == 0
+            and now.minute < DAGTOTAAL_SLAAPT_TOT_MINUUT
+            and self._is_dagtotaal(sleutel, entity_id)
+        )
 
     def _instelling_leesbaar(self, sleutel: str) -> str:
         """De Nederlandse naam van een instelling, uit de vertaling.
@@ -35286,7 +35676,8 @@ class EnergyManagementSystemCoordinator:
                 "energie er nu beschikbaar is."
             )
             return
-        available_kwh = self._read_sensor_float(available_entity)
+        # v5.72 (L-EMS-014): min de sprong van een bijna lege module.
+        available_kwh = self._na_module_leeg(self._read_sensor_float(available_entity))
         if available_kwh is None:
             self.mpc_note = "Beschikbare-energie-sensor niet uitleesbaar."
             return
@@ -35769,7 +36160,8 @@ class EnergyManagementSystemCoordinator:
         )
 
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
-        available_kwh = (
+        # v5.72 (L-EMS-014): min de sprong van een bijna lege module.
+        available_kwh = self._na_module_leeg(
             self._read_sensor_float(available_entity) if available_entity else None
         )
         if available_kwh is not None:
@@ -41533,14 +41925,70 @@ class EnergyManagementSystemCoordinator:
         """
         if not (now.hour >= 22 or now.hour < 6):
             return
+        # v5.72: per nacht, en alleen een nacht waarin de accu bij het begin
+        # energie had. Zie `_nacht_is_beoordeelbaar`.
+        nacht = (now.date() if now.hour >= 22 else now.date() - timedelta(days=1)).isoformat()
+        if self._nachtrondes_nacht != nacht:
+            if self._nachtrondes_nacht is not None:
+                # Een nieuwe nacht: de vorige telling vervalt.
+                self._nachtrondes = {"totaal": 0, "zelfvoorzienend": 0}
+            self._nachtrondes_nacht = nacht
+            self._nacht_beoordeling = self._nacht_is_beoordeelbaar()
+        if not (self._nacht_beoordeling or {}).get("beoordeelbaar", True):
+            return
         if self._nachtrondes is None:
             self._nachtrondes = {"totaal": 0, "zelfvoorzienend": 0}
         self._nachtrondes["totaal"] += 1
         if net_w is not None and net_w < NACHT_ZELFVOORZIENEND_MARGE_W:
             self._nachtrondes["zelfvoorzienend"] += 1
 
+    # v5.72: welke nacht er geteld wordt, en of die te beoordelen is.
+    _nachtrondes_nacht: str | None = None
+    _nacht_beoordeling: dict | None = None
+
+    def _nacht_is_beoordeelbaar(self) -> dict:
+        """Had de accu bij het begin van de nacht energie? (v5.72)
+
+        Gemeld: "Nul van ... nachtrondes waren zelfvoorzienend" in een nacht
+        waarin de accu al leeg aan de nacht begon. Dan komt alle stroom
+        terecht van het net en zegt nul zelfvoorzienende rondes niets over
+        de tekortdetectie. Alleen een nacht die begon met de laadstand
+        minstens `NACHT_BEOORDEELBAAR_MARGE_PROCENT` boven de ondergrens
+        telt mee. Is de laadstand onbekend, dan telt de nacht zoals vóór
+        v5.72 (geen gegevens = geen uitzondering). Alleen meldingslogica;
+        de sturing leest dit niet.
+        """
+        try:
+            soc = self.accustand_procent()
+            ondergrens = float(self.effective_min_soc_percent())
+        except Exception:  # noqa: BLE001 - een controle mag nooit de ronde breken
+            soc, ondergrens = None, None
+        if soc is None or ondergrens is None:
+            return {"beoordeelbaar": True, "soc_begin": None, "ondergrens": ondergrens}
+        return {
+            "beoordeelbaar": soc > ondergrens + NACHT_BEOORDEELBAAR_MARGE_PROCENT,
+            "soc_begin": round(float(soc), 1),
+            "ondergrens": round(ondergrens, 1),
+        }
+
     def zelfcontrole_nacht_gecontroleerd(self) -> dict:
         """Heeft de tekortdetectie vannacht gedraaid?"""
+        beoordeling = self._nacht_beoordeling or {}
+        if not beoordeling.get("beoordeelbaar", True):
+            # v5.72: een nacht met een lege accu is niet te beoordelen.
+            return {
+                "in_orde": True,
+                "totaal": 0,
+                "zelfvoorzienend": 0,
+                "beoordeelbaar": False,
+                "nacht": self._nachtrondes_nacht,
+                "uitleg": (
+                    f"Niet te beoordelen: de accu begon de nacht op "
+                    f"{beoordeling.get('soc_begin')}% (ondergrens "
+                    f"{beoordeling.get('ondergrens')}%). Zonder energie in de "
+                    "accu komt alle stroom terecht van het net."
+                ),
+            }
         n = self._nachtrondes or {"totaal": 0, "zelfvoorzienend": 0}
         if n["totaal"] < 60:
             return {"in_orde": True, **n, "uitleg": "Nog geen volledige nacht geteld."}
@@ -42547,6 +42995,11 @@ class EnergyManagementSystemCoordinator:
             await self._async_apply_battery_cooling()
         except Exception:  # noqa: BLE001
             self._noteer_staartfout("accukoeling")
+        # v5.72: lege laadstanden in het dagverloop uit de recorder.
+        try:
+            await self.async_vul_dagverloop_aan_uit_recorder(now)
+        except Exception:  # noqa: BLE001
+            self._noteer_staartfout("dagverloop uit recorder")
 
         for naam, stap in (
             # v5.43: de lange reserve wordt gemeten vóór de beslissing,
@@ -42686,6 +43139,8 @@ class EnergyManagementSystemCoordinator:
         )
         if projection_available_kwh is not None and projection_available_kwh < 0:
             projection_available_kwh = 0.0
+        # v5.72 (L-EMS-014): min de sprong van een bijna lege module.
+        projection_available_kwh = self._na_module_leeg(projection_available_kwh)
         self.last_projection_available_kwh = projection_available_kwh
         self.last_projection_reserve_kwh = projection_reserve_kwh
         self.last_timeline = self._build_forecast_timeline(

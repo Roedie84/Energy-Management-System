@@ -38,18 +38,20 @@ def test_economische_nacht_telt_niet_mee_in_de_marge(make_coordinator):
         _dag("2026-10-06", False),
         _dag("2026-10-09", True, TEKORTSOORT_ECONOMISCH),
     ]
-    assert c.marge_tekortnachten() == 2
+    # v5.72: onbekend telt ook niet meer mee (zie test_v572.py).
+    assert c.marge_tekortnachten() == 0
 
 
-def test_planning_en_onbekend_tellen_wel(make_coordinator):
-    """Huis gaat voor: alleen economisch valt eruit."""
+def test_planning_telt_wel_onbekend_niet_meer(make_coordinator):
+    """Huis gaat voor: planning telt. v5.72: onbekend (ook een oud record
+    zonder soort) valt er net als economisch uit."""
     c = make_coordinator({})
     c.reserve_daily_records = [
         _dag("2026-10-04", True, TEKORTSOORT_PLANNING),
         _dag("2026-10-05", True, None),  # oud record zonder soort = onbekend
         _dag("2026-10-06", True, TEKORTSOORT_ONBEKEND),
     ]
-    assert c.marge_tekortnachten() == 3
+    assert c.marge_tekortnachten() == 1
 
 
 def test_de_reserve_rekent_met_de_marge_tekortnachten(make_coordinator):

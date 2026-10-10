@@ -2063,7 +2063,11 @@ SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY = 5.0
 # bewust goedkoper bijgekocht. Die nacht de marge laten verhogen hield de
 # accu de week erna 's avonds voller dan nodig. Onbekend telt wel mee
 # (voorzichtig: huis gaat voor), net als planning, capaciteit en verkocht.
-MARGE_TELT_NIET_MEE_SOORTEN = ("economisch",)
+# v5.72 (akkoord Ruud 10-10): ook ONBEKEND telt niet meer mee. Een nacht die
+# niet na te gaan is, bewijst geen te krappe reserve; hij wordt wel
+# vastgelegd en gemeld, maar verhoogt de marge niet blind. Zelfde
+# behandeling als economisch.
+MARGE_TELT_NIET_MEE_SOORTEN = ("economisch", "onbekend")
 
 # v5.70: verkopen van de energie die pas NA het volgende goedkope blok nodig
 # is (de lange horizon). Die wordt in dat blok goedkoper teruggeladen, dus
@@ -3501,6 +3505,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "weerbron_helderheid_paren": {"type": "plain"},
     "helderheid_dagen": {"type": "plain"},
     "reserve_daily_records": {"type": "plain"},
+    # v5.72 (L-EMS-014): gemeten sprongen als een module bijna leeg is.
+    "module_leeg_sprongen": {"type": "plain"},
     "baseline_load_history": {"type": "plain"},
     "climate_forecast_bias_history": {"type": "plain"},
     "climate_rate_history": {"type": "plain"},
@@ -7267,3 +7273,44 @@ DASHBOARD_ONBEKEND_IS_NORMAAL = frozenset(
         "sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur",
     }
 )
+
+
+# --- v5.72 (akkoord Ruud 10-10) ---------------------------------------
+
+# 1. Zelfcontrole nachtrondes: een nacht telt alleen mee als de accu bij het
+# begin van de nacht energie had - laadstand minstens zoveel procentpunt
+# boven de ondergrens. Een nacht met een lege accu is niet te beoordelen:
+# dan komt alle stroom terecht van het net en zegt nul zelfvoorzienende
+# rondes niets over de tekortdetectie.
+NACHT_BEOORDEELBAAR_MARGE_PROCENT = 2.0
+
+# 3. Dagtotalen (kosten vandaag, dagtellers, "_today") beginnen na
+# middernacht opnieuw en staan dan even op unknown/unavailable. Tot dit
+# aantal minuten na middernacht (lokale tijd) is dat geen storing; pas
+# daarna begint de bevestigingstijd te lopen. De dagbedragen van de
+# leverancier (PRIJSDAG_VELDEN) houden hun ruimere venster tot
+# PRIJSDAG_SLAAPT_TOT_UUR.
+DAGTOTAAL_SLAAPT_TOT_MINUUT = 45
+# Woorden in een entity_id die een dagtotaal aanduiden.
+DAGTOTAAL_HINTS = ("_today", "vandaag", "_daily", "dagtotaal")
+
+# 6. L-EMS-014: een module die bijna leeg is. In 2 van 2 bijna-lege nachten
+# sprong de laadstand 4-5% omlaag zodra een module (AB3000 00996) onder 15%
+# kwam - circa 0,35 kWh die de EMS dacht nog te hebben. Zodra een module
+# onder MODULE_LEEG_SOC_PROCENT komt of een cel onder MODULE_LEEG_CEL_V,
+# telt die sprong vooraf niet meer als beschikbaar. Gemeten sprongen
+# (laadstand minstens MODULE_LEEG_SPRONG_MIN_PROCENT omlaag binnen een
+# ronde) worden bewaard; is er een gemeten waarde, dan geldt de mediaan
+# daarvan in plaats van de constante.
+MODULE_LEEG_SOC_PROCENT = 15.0
+MODULE_LEEG_CEL_V = 3.0
+MODULE_LEEG_SPRONG_KWH = 0.35
+MODULE_LEEG_SPRONG_MIN_PROCENT = 3.0
+# Een module moet zoveel boven de grens komen (of de cel 0,05 V) voordat
+# een volgende sprong verwacht wordt - anders telt ruis rond 15% als nieuw.
+MODULE_LEEG_HERSTEL_PROCENT = 5.0
+MODULE_LEEG_HERSTEL_V = 0.05
+# Grenzen aan een gemeten sprong: daarbuiten is het geen modulesprong maar
+# een herstart, een kalibratie of een meetfout.
+MODULE_LEEG_SPRONG_MAX_KWH = 1.5
+MODULE_LEEG_SPRONGEN_BEWAARD = 10

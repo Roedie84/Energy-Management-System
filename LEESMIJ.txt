@@ -1,3 +1,23 @@
+EMS v5.72.0 - meldingen die kloppen, en een bijna lege module telt mee
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Zelfcontrole nachtrondes: een nacht die met een lege accu begint, telt
+  niet meer mee. Geen melding "Nul van ... nachtrondes" als de accu al leeg
+  was; de uitleg zegt dan "niet te beoordelen".
+- Reserve en laadstand staan altijd in het dagverloop (zonder goedkoop blok
+  de bodem, anders de vorige waarde; de laadstand zo nodig uit de
+  recorder). Onbekende tekortnachten worden een keer opnieuw ingedeeld en
+  verhogen de veiligheidsmarge niet meer (net als economisch).
+- Dagtotalen (kosten vandaag e.d.) die na middernacht even leeg zijn, geven
+  geen melding "'n Sensor is d'r neet meer" meer: tot 00:45 (dagbedragen
+  van de leverancier tot 03:00).
+- De uitleg noemt de soort tekortnacht over de hele nacht, net als het
+  dagrecord van 09:00 ("economisch" verdwijnt 's ochtends niet meer).
+- Komt een accumodule onder 15% (of een cel onder 3,0 V), dan gaat de
+  verwachte sprong (0,35 kWh, of de gemeten sprong) vooraf van de
+  beschikbare energie af. Zonder moduledata geen correctie.
+
 EMS v5.71.1 - de cockpit verspringt niet meer tijdens scrollen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna de

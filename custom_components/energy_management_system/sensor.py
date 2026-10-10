@@ -4215,6 +4215,8 @@ class BatteryModuleHealthSensor(SensorEntity):
             "modules": tabel,
             "aantal_modules": len(tabel),
             "spreiding": self._coordinator.battery_module_spread,
+            # v5.72 (L-EMS-014): een bijna lege module en de verwachte sprong.
+            "module_bijna_leeg": self._coordinator.get_module_leeg(),
             "note": (
                 "Elke module wordt vergeleken met het gemiddelde van de "
                 "ANDERE modules op hetzelfde moment. Omdat ze onder "
