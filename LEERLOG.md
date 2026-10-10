@@ -208,3 +208,14 @@ laatste ronde: 10-10 03:40, gemeten t/m 10-10 03:50
 - PV vandaag: Solcast day-ahead 9,1 kWh (nog niet ververst vandaag). H-EMS-2, H-EMS-4, H-EMS-8 ongewijzigd; L-EMS-013/014 open. Geen release (tussenronde, niets acuut).
 
 laatste ronde: 10-10 07:40, gemeten t/m 10-10 07:44
+
+## 10-10 11:40 · tussenronde
+- Geïnstalleerd: **v5.71.1** (v5.70 verkoopreserve + L-EMS-013, v5.71 cockpit). Niet: v5.72.0 (chatsessie 11:27: L-EMS-014/015, onbekend telt niet in de marge) en v5.72.1 (deze ronde). HA-herstarts 08:20, 08:44, 09:18, 10:52. Logboek: 0 EMS-fouten (1× REST-time-out P1-API, extern).
+- Beslissingen 07:44-11:44 alleen `default_smart` → 0× verkoop onder de reserve (harde regel gehaald). Accu 7 → 23 % op zon (laden vanaf 09:57); plan: laden uit het net 12:00-13:00 en 13:30-15:00 (12,5-13,0 ct) tot 100 %.
+- **Nacht 09→10 gemeten:** tekort 2,363 kWh (live `tekortnacht_tot_nu`) tegen voorspeld 2,38 (23:40) → fout −0,02 kWh. **Correctie vorige ronde:** de nacht komt pas om 00:00 in het dagrecord (`reserve_daily_records` met datum 10-10), dus ook het Brier-paar (22:00 = 100 %, tekort) en de soort zijn pas in de dagafsluiting van 11-10 te toetsen, niet om 09:00.
+- PV tot 11:50 2,85 kWh tegen Solcast 2,72 → +5 % (zonnig, bewolking 14 %). H-EMS-2: gewone dag klein, n=1 deel van een dag.
+- **Gevonden (acuut) → L-EMS-016, gebouwd v5.72.1:** om 11:18 sprong MC vaste extra 1,9 → 25,8 kWh en diepste tekort 6,3 → 30,0 kWh: de geplande vaatwasser (12:16) telde in elk van de 22 uursegmenten, omdat de start per segment opnieuw "begin segment + seconden" was. Verder dan een uur vooruit telde hij juist nergens. Zelfde wandeling voedt de reserve → release in de tussenronde (5 tests, suite 5351 groen, workflow groen, HACS ververst).
+- L-EMS-012 horizon-reden geverifieerd (blok loopt: "het goedkoopste blok loopt nu"). L-EMS-014/015 gebouwd in v5.72.0 (chat). Meetbaarheid: diagnostics heeft nu `prijsreeks` → H-EMS-4 (achteraf-optimum) in de dagafsluiting van 11-10 opnieuw proberen.
+- Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-4 (achteraf-optimum, wacht op prijsreeks-toets). H-EMS-8 afgerond in L-EMS-014.
+
+laatste ronde: 10-10 11:40, gemeten t/m 10-10 11:50
