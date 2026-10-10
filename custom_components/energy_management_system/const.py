@@ -7383,3 +7383,8 @@ CONF_AIRCO_RAAM_ENTITIES = "airco_raam_entities"
 # v5.78: zo lang mag een raam open staan voor het EMS een door hem aangezette
 # airco uitzet (gelijk met de HA-automatisering, Ruud 10-10).
 AIRCO_RAAM_UITSTEL_S = 300
+
+# v5.80: de accubesparing rekent aan de wisselstroomkant. Een gemeten halve
+# slag onder dit rendement is geen verlies maar een meetfout (de
+# vermogenssensor en de voorraad lopen niet gelijk); dan de begrenzing.
+ACCU_AC_MIN_RENDEMENT = 0.75

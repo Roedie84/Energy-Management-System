@@ -32578,3 +32578,40 @@ te dekken en niets vrij: de slimme stand.
 - Het dagverloop bewaart per kwartier `mag_verkopen`.
 
 Tests: `test_v579.py` (8).
+
+## v5.80.0 — accubesparing met het rondreisverlies
+
+Gemeten (01-10..09-10, akkoord Ruud 10-10 20:15): `battery_savings_cost_basis_model`
+steeg € 5,23, de eigen afrekening (5-min P1/Zendure/PV × kwartierprijs, met
+de accu-inhoud) was ≈ € 2,57.
+
+**Oorzaak** (`_update_battery_cost_basis_and_savings`). Zon in de accu werd
+al tegen de gemiste teruglevering geboekt (zolang salderen geldt: de
+kwartierprijs + premie; daarna de terugleverwaarde) - dat klopte. Maar het
+model boekte de VOORRAAD, de gelijkstroomkant (beschikbare energie): bij
+laden de kosten van alleen de opgeslagen kWh, bij ontladen de opbrengst van
+de hele daling. Het rondreisverlies (gemeten op de auditdata 83%) zat
+nergens in: elke opgeslagen kWh kostte ~1,09 kWh van net of zon, elke
+ontladen kWh leverde ~0,92 kWh aan het huis. De lage kostprijs (~€ 0,14)
+was de stand na het blok van die dag (13 ct uit het net); het verlies
+ontbrak in elke kWh.
+
+**Fix.** De besparing rekent nu aan de wisselstroomkant
+(`_tel_accu_ac_energie`, `_accu_ac_kwh`): elke ronde wordt het accuvermogen
+opgeteld tot de beschikbare energie beweegt. Laden: kosten van de AC-energie
+erin (net tegen de kwartierprijs, zon tegen de gemiste teruglevering),
+gedeeld door de opgeslagen kWh - de kostprijs bevat het laadverlies.
+Ontladen: opbrengst van de AC-energie eruit, min de opgeslagen kWh tegen de
+kostprijs. Een meting buiten 75-100% rendement per halve slag wordt
+begrensd; zonder accuvermogen het geleerde halve rendement. Verlies blijft
+zichtbaar (de sensor kan dalen). Nagerekend op de auditdata 01-10..09-10:
+oud model € 4,52, nieuw € 3,22 (eigen afrekening € 2,57; het verschil is de
+accu-inhoud die in de periode 5,4 kWh daalde en tegen kostprijs in plaats
+van marktprijs wordt gewaardeerd).
+
+**Hoofdgetal.** Dashboard en cockpit tonen al "besparing t.o.v. zonder
+accu-sturing" als hoofdgetal; dat blijft zo. Het kostprijsmodel staat
+ernaast, met `rekenwijze` en `verschil_met_besparing_zonder_sturing` als
+uitleg in de attributen.
+
+Tests: `test_v580.py` (6).

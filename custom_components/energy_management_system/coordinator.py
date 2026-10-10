@@ -342,6 +342,7 @@ from .const import (
     CUSUM_VLOER_MIN_KW,
     VLOER_BOOTSTRAP_DAGEN,
     CONF_P1_HISTORY_SENSOR,
+    ACCU_AC_MIN_RENDEMENT,
     P1_HISTORIE_MIN_METINGEN,
     VLOER_BOOTSTRAP_MIN_KWARTIEREN,
     CUSUM_VLOER_MIN_MONSTERS,
@@ -33387,6 +33388,8 @@ class EnergyManagementSystemCoordinator:
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if not available_entity:
             return
+        # v5.80: elke ronde de AC-energie die de accu in en uit ging.
+        self._tel_accu_ac_energie(now)
         available_kwh = self._read_sensor_float(available_entity)
         if available_kwh is None:
             return
@@ -33438,15 +33441,19 @@ class EnergyManagementSystemCoordinator:
             # nooit werd afgetrokken terwijl die bij export wél werd
             # bijgeteld: een structurele, eenzijdige overschatting van
             # de besparing.
+            # v5.80: wat er AAN DE WISSELSTROOMKANT in ging, inclusief het
+            # laadverlies - zie `_accu_ac_kwh`. De kostprijs per opgeslagen
+            # kWh wordt dan kosten / delta: het verlies zit erin.
+            ac_in_kwh = self._accu_ac_kwh("in", delta_kwh)
             pv_kwh, grid_kwh = self._split_charge_pv_vs_grid(
-                delta_kwh, elapsed_hours
+                ac_in_kwh, elapsed_hours
             )
             feedin_value = self._get_feedin_value_per_kwh(entries, now)
             if feedin_value is None:
                 # Geen betrouwbare terugleverwaarde - alles tegen de
                 # inkoopprijs boeken, de conservatieve kant (hogere
                 # kostprijs, dus geen overschatte besparing).
-                pv_kwh, grid_kwh = 0.0, delta_kwh
+                pv_kwh, grid_kwh = 0.0, ac_in_kwh
                 feedin_value = current_price
 
             charge_cost_eur = grid_kwh * current_price + pv_kwh * feedin_value
@@ -33483,17 +33490,23 @@ class EnergyManagementSystemCoordinator:
             # net op gaat levert de terugleverwaarde op - onder
             # saldering gelijk aan de inkoopprijs plus premie (identiek
             # aan het oude gedrag), daarna fors lager.
+            if self.battery_cost_basis_eur_per_kwh is None:
+                self._accu_ac_kwh("uit", -delta_kwh)  # tellers leeg
             if self.battery_cost_basis_eur_per_kwh is not None:
                 discharged_kwh = -delta_kwh
+                # v5.80: wat er AAN DE WISSELSTROOMKANT uit kwam - minder dan
+                # de daling van de voorraad (ontlaadverlies). Alleen die kWh
+                # vermijden inkoop of gaan het net op.
+                ac_uit_kwh = self._accu_ac_kwh("uit", discharged_kwh)
 
                 export_kwh, load_kwh = self._split_discharge_export_vs_load(
-                    discharged_kwh, elapsed_hours
+                    ac_uit_kwh, elapsed_hours
                 )
                 feedin_value = self._get_feedin_value_per_kwh(entries, now)
                 if feedin_value is None:
                     # Geen betrouwbare terugleverwaarde - alles
                     # waarderen als vermeden inkoop, zonder premie.
-                    export_kwh, load_kwh = 0.0, discharged_kwh
+                    export_kwh, load_kwh = 0.0, ac_uit_kwh
                     feedin_value = current_price
 
                 revenue_eur = load_kwh * current_price + export_kwh * feedin_value
@@ -33505,6 +33518,78 @@ class EnergyManagementSystemCoordinator:
                 self.total_battery_savings_eur += savings_eur
                 self.total_feedin_premium_eur += feedin_premium_eur
                 self.discharge_export_kwh_total += export_kwh
+
+    # v5.80: AC-energie in en uit de accu sinds de vorige boeking.
+    _accu_ac_in: float = 0.0
+    _accu_ac_uit: float = 0.0
+    _accu_ac_laatst: datetime | None = None
+
+    def _tel_accu_ac_energie(self, now: datetime) -> None:
+        """Telt elke ronde het accuvermogen op (v5.80, akkoord Ruud 10-10).
+
+        Gemeld: de besparing volgens het kostprijsmodel liep ~2x te hoog
+        (01-10..09-10: model +€ 5,23, eigen afrekening ≈ € 2,57). Het model
+        boekte de verandering van de VOORRAAD (beschikbare energie, de
+        gelijkstroomkant): bij laden de kosten van alleen de opgeslagen kWh,
+        bij ontladen de opbrengst van de hele daling. Het rondreisverlies
+        (gemeten 83-84%) zat nergens in: elke geladen kWh kostte in
+        werkelijkheid ~1,09 kWh van net of zon, en elke ontladen kWh leverde
+        ~0,92 kWh aan het huis. Nagerekend op de auditdata: zonder verlies
+        € 4,52, met de wisselstroomkant € 3,22.
+
+        De wisselstroom komt uit de accuvermogenssensor (+ is ontladen),
+        bijgehouden tot de beschikbare energie beweegt - die sensor loopt
+        trager dan de ronde. Een ronde-gat van meer dan een half uur telt
+        niet.
+        """
+        vermogen_w = self._read_corrected_battery_power()
+        vorige = self._accu_ac_laatst
+        self._accu_ac_laatst = now
+        if vermogen_w is None or vorige is None:
+            return
+        uren = (now - vorige).total_seconds() / 3600
+        if not 0 < uren <= 0.5:
+            return
+        kwh = vermogen_w / 1000 * uren
+        if kwh > 0:
+            self._accu_ac_uit += kwh
+        else:
+            self._accu_ac_in += -kwh
+
+    def _accu_ac_kwh(self, richting: str, voorraad_kwh: float) -> float:
+        """De wisselstroomenergie bij een voorraadverandering (v5.80).
+
+        Laden ("in"): wat er van net of zon in ging, minstens de opgeslagen
+        kWh en hooguit die gedeeld door `ACCU_AC_MIN_RENDEMENT`. Ontladen
+        ("uit"): wat er aan het huis of het net werd geleverd, hooguit de
+        daling van de voorraad en minstens die maal `ACCU_AC_MIN_RENDEMENT`.
+        Zonder (bruikbare) meting: de voorraad gedeeld of vermenigvuldigd
+        met het geleerde halve rendement (laden of ontladen), anders de
+        wortel van het rondreisrendement. Zet de teller van die richting
+        terug; de andere ook - een boeking sluit het interval af.
+        """
+        gemeten = self._accu_ac_in if richting == "in" else self._accu_ac_uit
+        self._accu_ac_in = 0.0
+        self._accu_ac_uit = 0.0
+        if voorraad_kwh <= 0:
+            return max(0.0, voorraad_kwh)
+        half = (
+            self.learned_charge_efficiency_percent if richting == "in"
+            else self.learned_discharge_efficiency_percent
+        )
+        if half is None:
+            rondreis = self.learned_battery_efficiency_percent
+            half = (rondreis / 100) ** 0.5 * 100 if rondreis else None
+        factor = (half or 100.0) / 100
+        if richting == "in":
+            schatting = voorraad_kwh / factor
+            ondergrens, bovengrens = voorraad_kwh, voorraad_kwh / ACCU_AC_MIN_RENDEMENT
+        else:
+            schatting = voorraad_kwh * factor
+            ondergrens, bovengrens = voorraad_kwh * ACCU_AC_MIN_RENDEMENT, voorraad_kwh
+        if gemeten > 0 and ondergrens <= gemeten <= bovengrens:
+            return gemeten
+        return min(max(schatting, ondergrens), bovengrens)
 
     def _update_energy_balance_validation(self, now: datetime) -> None:
         """Kirchhoff-style internal-consistency check (v0.63.28): cross-

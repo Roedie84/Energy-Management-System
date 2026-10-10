@@ -1,3 +1,14 @@
+EMS v5.80.0 - accubesparing met het rondreisverlies
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De "Battery savings (cost-basis model)" rekent nu aan de wisselstroomkant:
+  laden kost wat er van net of zon in de accu ging (inclusief laadverlies,
+  zon tegen de kwartierprijs zolang salderen geldt), ontladen levert wat er
+  aan huis of net uit kwam. Het getal lag tot nu toe ongeveer 2x te hoog.
+  Het hoofdgetal op dashboard en cockpit blijft "besparing t.o.v. zonder
+  accu-sturing".
+
 EMS v5.79.0 - ontladen dekt het huis, terugleveren alleen uit vrije ruimte
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

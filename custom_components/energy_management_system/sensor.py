@@ -1342,6 +1342,24 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
             "gederfde_teruglevering_eur": round(
                 self._coordinator.forgone_feedin_eur_total, 4
             ),
+            # v5.80: aan de wisselstroomkant, met het rondreisverlies.
+            "rekenwijze": (
+                "Sinds v5.80: laden kost wat er van net of zon in de accu ging "
+                "(incl. laadverlies; zon tegen de kwartierprijs zolang salderen "
+                "geldt, daarna tegen de terugleverwaarde), ontladen levert wat "
+                "er aan huis of net uit kwam (na ontlaadverlies). Tot v5.80 "
+                "telde het verlies niet mee en lag het getal ~2x te hoog."
+            ),
+            "verschil_met_besparing_zonder_sturing": (
+                "Dit model rekent alleen gerealiseerde winst: een kWh telt pas "
+                "als hij de accu verlaat, tegen zijn kostprijs. 'Besparing "
+                "t.o.v. zonder accu-sturing' vergelijkt de hele energierekening "
+                "met een huis zonder sturing en waardeert de accu-inhoud aan het "
+                "eind van de dag. Over een paar dagen liggen ze dicht bij "
+                "elkaar; per dag kunnen ze uiteenlopen doordat de accu-inhoud "
+                "verschuift. Het hoofdgetal op het dashboard en de cockpit is "
+                "de besparing t.o.v. zonder sturing."
+            ),
             "note": (
                 "Elke kWh die de accu ingaat krijgt de kostprijs van zijn "
                 "BRON: netinkoop de inkoopprijs, PV-overschot de gederfde "
