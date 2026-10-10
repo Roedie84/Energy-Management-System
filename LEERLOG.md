@@ -221,3 +221,14 @@ laatste ronde: 10-10 07:40, gemeten t/m 10-10 07:44
 - Naschrift 12:15: **v5.73.0** geïnstalleerd (chatsessie 11:58: sparen in het goedkope blok; bevat v5.72.0 en v5.72.1). MC vaste extra 2,34 kWh, diepste tekort 6,70 met de vaatwasser nog gepland → L-EMS-016 eerste meetpunt gehaald.
 
 laatste ronde: 10-10 11:40, gemeten t/m 10-10 12:15
+
+## 10-10 15:40 · tussenronde
+- Geïnstalleerd: **v5.76.1** (v5.74-v5.76.1 via chatsessies: verbruiksaudit, niet ontladen vóór netladen in hetzelfde blok, recorder-attributen, bootstraps). HA-herstarts 12:04, 13:37, 14:41. Logboek: 0 EMS-fouten (P1-REST-time-out 1×, extern).
+- Beslissingen 12:15-15:45: `grid_charging_profitable` (12:10-13:00, 13:15-13:20, 13:30-15:06), kort `default_smart`, `sparen_in_blok` sinds 15:06 (blok 14:30-17:15, netladen 16:00; ontladen 13,4 ct tegen rondtrip 20,0 ct). **0× verkoop onder de reserve** (harde regel gehaald): export 12-15 u 0,049 kWh, ontladen alleen 0,115 kWh (13-14 u).
+- Laadblok: netimport 12-15 u 6,50 kWh, accu laden 6,22 → SoC 23 → 97 %. MC-tekortkans 0 %, beschikbaar 7,52 kWh.
+- PV 08-15 u 7,23 kWh (Modbus) tegen Solcast-intraday 6,73 → **+7 %** (ochtend −12 %, middag +28 %; MAE 0,19 kWh/uur). Day-ahead 9,1 → dagcijfer in de dagafsluiting. H-EMS-2 (donkere dagen te hoog): vandaag een gewone dag, telt als controle.
+- L-EMS-013 (marge-opslag) meten op de avond: tekortnachten 7 d nu 1 (`onbekend`) → opslag verwacht 0 %. `last_reserve_margin_breakdown` nu leeg (reserve "geen blok" tijdens het lopende blok) → toets 19:40/23:40.
+- L-EMS-014/015/016: geen nieuwe meetgelegenheid (geen lege accu, geen tekortnacht, vaatwasser klaar 14:47 zonder uitgestelde start > 1 uur).
+- Hypotheses: H-EMS-2, H-EMS-4 (achteraf-optimum, toets dagafsluiting 11-10). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 10-10 15:40, gemeten t/m 10-10 15:45

@@ -257,3 +257,8 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-10 11:44,TUSSEN,ems_mc_vaste_extra_kwh,25.79,1,"11:18 sprong 1.93->25.79 (vaatwasser gepland 12:16 binnen het uur) -> L-EMS-016"
 2026-10-10 11:44,TUSSEN,ems_mc_deterministisch_kwh,29.92,1,"11:18; was 6.26 om 11:17; horizon 22 u tot 11-10 09:00 (blok loopt)"
 2026-10-10 11:44,TUSSEN,ems_herstarts,4,4,"08:20, 08:44, 09:18, 10:52; v5.71.1 geinstalleerd; v5.72.0 (11:27) en v5.72.1 (11:49) niet"
+2026-10-10 15:45,TUSSEN,ems_verkoop_onder_reserve,0,14,"12:15-15:45: grid_charging_profitable/default_smart/sparen_in_blok, geen expensive_quarter*; export 12-15 u 0.049 kWh, ontladen 0.115 (13-14 u)"
+2026-10-10 15:45,TUSSEN,ems_laadblok_netimport_kwh,6.498,3,"12-15 u P1; accu laden 6.22, SoC 23 -> 97 %"
+2026-10-10 15:45,TUSSEN,ems_pv_tot_nu_vs_solcast_pct,7.4,7,"08-15 u Modbus 7.23 tegen Solcast (intraday) 6.73; ochtend 08-12 -12 %, middag 12-15 +28 %; MAE/uur 0.19 kWh"
+2026-10-10 15:45,TUSSEN,ems_mc_tekortkans_pct,0.0,1,"15:41; accu 97 %, beschikbaar 7.52 kWh"
+2026-10-10 15:45,TUSSEN,ems_herstarts,3,3,"12:04, 13:37, 14:41 (v5.74-v5.76.1 via chatsessies)"
