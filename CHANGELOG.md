@@ -32532,3 +32532,15 @@ als open telt; nu blokkeert juist ook die.
   `raam_open`), en daarmee op de kaart en de cockpit.
 
 Tests: `test_v577.py` (9).
+
+## v5.78.0 — raam open: pas na 5 minuten uit
+
+Gevraagd (Ruud, 10-10 16:31): "pas uit na 5 minuten als er iets open gaat".
+
+- Heeft het EMS de airco aangezet en gaat een raam open, dan zet het EMS hem
+  pas uit als het (langst) openstaande raam 5 minuten open is
+  (`AIRCO_RAAM_UITSTEL_S = 300`), gelijk met de HA-automatisering. Tot dan
+  actie "niets" met tekst "Raam open: de airco gaat over N min uit.".
+- Aanzetten of hoger zetten met een raam open blijft direct geblokkeerd.
+
+Tests: `test_v578.py` (3).

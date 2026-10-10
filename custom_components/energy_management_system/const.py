@@ -7380,3 +7380,6 @@ P1_HISTORIE_MIN_METINGEN = 12
 # sensor mag de airco niet blokkeren), maar staat wel in de redenen. Leeg =
 # geen blokkade.
 CONF_AIRCO_RAAM_ENTITIES = "airco_raam_entities"
+# v5.78: zo lang mag een raam open staan voor het EMS een door hem aangezette
+# airco uitzet (gelijk met de HA-automatisering, Ruud 10-10).
+AIRCO_RAAM_UITSTEL_S = 300

@@ -308,7 +308,15 @@ def ramen(toestanden: list) -> dict:
     return {"open": open_, "onbekend": onbekend}
 
 
-def raam_open(uit: dict, raam: dict, *, airco_stand: str | None, door_ems_aan: bool) -> dict:
+def raam_open(
+    uit: dict,
+    raam: dict,
+    *,
+    airco_stand: str | None,
+    door_ems_aan: bool,
+    open_sinds_s: float | None = None,
+    uitstel_s: float = 0,
+) -> dict:
     """Het besluit met de ramen erbij (v5.77, Ruud 10-10).
 
     Na alle andere stappen (gewoon besluit, dagritme, thuiskomst,
@@ -331,7 +339,13 @@ def raam_open(uit: dict, raam: dict, *, airco_stand: str | None, door_ems_aan: b
     if uit.get("actie") == "uit":
         return nieuw
     if door_ems_aan and airco_stand == "heat":
-        nieuw.update(actie="uit", tekst="Uitzetten: " + reden + ".")
+        # v5.78 (Ruud 10-10 16:31): pas uit als het raam `uitstel_s` open is,
+        # gelijk met de HA-automatisering (5 min). Aanzetten blijft geblokkeerd.
+        if open_sinds_s is not None and open_sinds_s < uitstel_s:
+            nog = max(1, round((uitstel_s - open_sinds_s) / 60))
+            nieuw.update(actie="niets", tekst=f"Raam open: de airco gaat over {nog} min uit.")
+        else:
+            nieuw.update(actie="uit", tekst="Uitzetten: " + reden + ".")
     else:
         nieuw.update(actie="niets", tekst="Niet aanzetten: " + reden + ".")
     return nieuw
