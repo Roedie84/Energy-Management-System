@@ -7362,3 +7362,12 @@ CYCLUS_VENSTER_TOT = "23:00"
 # dagen) en hoeveel kwartieren een dag minstens moet hebben om mee te tellen.
 VLOER_BOOTSTRAP_DAGEN = 10
 VLOER_BOOTSTRAP_MIN_KWARTIEREN = 80
+
+# v5.76.1: de P1-bron voor de bootstraps uit de recorder. De ingestelde
+# P1-sensor kan bewust buiten de recorder staan (een REST-sensor die elke
+# seconde meet). Dan valt het inlezen terug op een P1-vermogensbron die wél
+# wordt vastgelegd: eerst deze optionele instelling, anders het totaal dat
+# hoort bij de ingestelde fasesensoren (`..._l1` -> zonder `_l1`). Minder
+# metingen dan dit in de periode telt als "geen historie".
+CONF_P1_HISTORY_SENSOR = "p1_history_sensor_entity"
+P1_HISTORIE_MIN_METINGEN = 12

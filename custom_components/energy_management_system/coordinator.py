@@ -339,6 +339,8 @@ from .const import (
     CUSUM_VLOER_BLOK_MINUTEN,
     CUSUM_VLOER_MIN_KW,
     VLOER_BOOTSTRAP_DAGEN,
+    CONF_P1_HISTORY_SENSOR,
+    P1_HISTORIE_MIN_METINGEN,
     VLOER_BOOTSTRAP_MIN_KWARTIEREN,
     CUSUM_VLOER_MIN_MONSTERS,
     SLUIPVERBRUIK_METHODE_VERSIE,
@@ -2428,7 +2430,9 @@ class EnergyManagementSystemCoordinator:
 
         now = dt_util.now()
         start = now - timedelta(days=LEARNING_HISTORY_DAYS + 1)
-        entities_to_fetch = [consumption_entity]
+        # v5.76.1: ook de terugvalbronnen voor de P1-meter - zie
+        # `_p1_historiebronnen`.
+        entities_to_fetch = self._p1_historiebronnen()
         if battery_entity:
             entities_to_fetch.append(battery_entity)
         if pv_entity:
@@ -2449,7 +2453,11 @@ class EnergyManagementSystemCoordinator:
             )
             return
 
-        p1_states = states_by_entity.get(consumption_entity, [])
+        # v5.76.1: in één uitspraak, want deze functie staat op de ratel.
+        consumption_entity, p1_states = (
+            bron := self._kies_p1_bron(states_by_entity, "nachtverbruik"),
+            states_by_entity.get(bron, []),
+        )
         if not p1_states:
             _LOGGER.debug(
                 "No historical states found for %s to bootstrap from",
@@ -34304,6 +34312,70 @@ class EnergyManagementSystemCoordinator:
             self._cusum_check_date = vandaag
         self._today_min_load_kw = minima.get(vandaag.isoformat())
 
+    # v5.76.1: welke P1-bron elke bootstrap gebruikte.
+    p1_historiebron: dict | None = None
+
+    def _p1_historiebronnen(self) -> list[str]:
+        """De P1-vermogensbronnen voor de recorder, op volgorde (v5.76.1).
+
+        Gemeld: `sensor.hw_p1_vermogen` (REST, elke seconde) staat bewust
+        buiten de recorder, dus het nachtverbruik en de sluipverbruikvloer
+        leerden na een herstart niets uit de historie. Volgorde:
+
+        1. de ingestelde P1-sensor (als die wel historie heeft);
+        2. de optionele instelling `p1_history_sensor_entity`;
+        3. afgeleid: het totaal bij de ingestelde fasesensoren - van
+           `sensor.p1_meter_active_power_l1` is dat
+           `sensor.p1_meter_active_power` - als die bestaat.
+
+        Zelfde teken als de P1-sensor: + is afname, - is teruglevering (de
+        HomeWizard-totaalsensor en de fasesensoren meten zo). Geen
+        hardgecodeerde entiteit; de keuze per bootstrap staat in
+        `p1_historiebron`.
+        """
+        bronnen: list[str] = []
+
+        def voeg_toe(entiteit) -> None:
+            if isinstance(entiteit, str) and entiteit and entiteit not in bronnen:
+                bronnen.append(entiteit)
+
+        voeg_toe(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
+        voeg_toe(self.config.get(CONF_P1_HISTORY_SENSOR))
+        for fase in self.config.get(CONF_PHASE_POWER_SENSORS) or []:
+            totaal = re.sub(r"_l[123]$", "", str(fase))
+            if totaal != fase and self.hass.states.get(totaal) is not None:
+                voeg_toe(totaal)
+        return bronnen
+
+    def _kies_p1_bron(self, gelezen: dict, doel: str) -> str | None:
+        """De eerste P1-bron met genoeg metingen in `gelezen`, anders de
+        ingestelde - en legt de keuze vast (v5.76.1)."""
+        bronnen = self._p1_historiebronnen()
+        gekozen = next(
+            (b for b in bronnen if len(gelezen.get(b) or []) >= P1_HISTORIE_MIN_METINGEN),
+            bronnen[0] if bronnen else None,
+        )
+        self._noteer_p1_historiebron(doel, gekozen, bronnen)
+        return gekozen
+
+    def _noteer_p1_historiebron(self, doel: str, gekozen: str | None, bronnen: list) -> None:
+        """Legt vast welke P1-bron een bootstrap gebruikte (v5.76.1)."""
+        ingesteld = bronnen[0] if bronnen else None
+        self.p1_historiebron = {
+            **(self.p1_historiebron or {}),
+            doel: {
+                "bron": gekozen,
+                "ingesteld": ingesteld,
+                "teruggevallen": gekozen is not None and gekozen != ingesteld,
+                "kandidaten": list(bronnen),
+            },
+        }
+        if gekozen is not None and gekozen != ingesteld:
+            _LOGGER.info(
+                "%s: %s heeft geen recorderhistorie; ingelezen uit %s",
+                doel, ingesteld, gekozen,
+            )
+
     async def async_bootstrap_vloer_uit_recorder(self) -> int:
         """De vloerreeks aanvullen uit de recorder (v5.74).
 
@@ -34324,7 +34396,9 @@ class EnergyManagementSystemCoordinator:
             return 0
         accu = self.config.get(CONF_BATTERY_POWER_SENSOR)
         zon = self.config.get(CONF_PV_POWER_SENSOR)
-        ids = {e for e in (p1, accu, zon) if e}
+        # v5.76.1: ook de terugvalbronnen voor de P1-meter.
+        p1_bronnen = self._p1_historiebronnen()
+        ids = {e for e in (*p1_bronnen, accu, zon) if e}
         try:
             from homeassistant.components.recorder import get_instance
             from homeassistant.components.recorder.statistics import (
@@ -34351,8 +34425,10 @@ class EnergyManagementSystemCoordinator:
         except Exception as fout:  # noqa: BLE001 - best effort
             _LOGGER.debug("Vloerverbruik niet uit de recorder: %s", fout)
             return 0
+        rijen = rijen or {}
+        p1 = self._kies_p1_bron(rijen, "vloerverbruik")
         dagen = self._vloer_uit_statistieken(
-            rijen or {}, meta or {}, p1, accu, zon, vandaag
+            rijen, meta or {}, p1, accu, zon, vandaag
         )
         if not dagen:
             return 0
@@ -34374,6 +34450,8 @@ class EnergyManagementSystemCoordinator:
             "moment": nu.isoformat(),
             "dagen": [d for d, _w in dagen],
             "bron": "recorder (5-minutenstatistieken)",
+            # v5.76.1: welke P1-sensor.
+            "p1_bron": p1,
         }
         self.schedule_persisted_state_save()
         return len(dagen)

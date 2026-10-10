@@ -1478,6 +1478,8 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
             "baseline_load_history": self._coordinator.baseline_load_history,
             "dagen_geschiedenis": len(self._coordinator.baseline_load_history),
             "methode_versie": self._coordinator.sluipverbruik_methode_versie,
+            # v5.76.1: waar de reeks na een herstart uit is aangevuld.
+            "bootstrap": getattr(self._coordinator, "vloer_bootstrap", None),
             "note": (
                 "Vergelijkt het laagste kwartier van de dag (mediaan per "
                 "kwartier, nooit onder 0 W; meestal diep in de nacht) met "

@@ -1328,6 +1328,9 @@ async def async_get_config_entry_diagnostics(
             "sluipverbruik_reference_w": coordinator.sluipverbruik_reference_w,
             "cusum_accumulator_kw": round(coordinator.cusum_accumulator_kw, 4),
             "baseline_load_history": coordinator.baseline_load_history,
+            # v5.76.1: welke P1-bron de bootstraps uit de recorder gebruikten.
+            "p1_historiebron": getattr(coordinator, "p1_historiebron", None),
+            "vloer_bootstrap": getattr(coordinator, "vloer_bootstrap", None),
             "weather_ensemble_cloud_cover_percent": (
                 coordinator.weather_ensemble_cloud_cover_percent
             ),

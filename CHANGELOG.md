@@ -32483,3 +32483,26 @@ dag), het komende schema (~4 KB × ~840), de NILM-kandidaten (~1,3 KB ×
   attributen veranderen.
 
 Tests: `test_v576.py` (per entiteitklasse de uitgesloten attributen).
+
+## v5.76.1 — historie uit een P1-bron die wel bewaard wordt
+
+Gevonden bij v5.76: `async_bootstrap_night_consumption_from_history` en
+`async_bootstrap_vloer_uit_recorder` lazen historie en statistieken van de
+ingestelde P1-sensor (`sensor.hw_p1_vermogen`, REST, elke seconde), die
+bewust buiten de recorder staat. Het nachtverbruik, het uurprofiel en de
+sluipverbruikvloer leerden na een herstart dus niets uit de historie.
+
+Nu kiezen beide bootstraps de P1-bron op volgorde (`_p1_historiebronnen`):
+1. de ingestelde sensor, als die minstens `P1_HISTORIE_MIN_METINGEN`
+   metingen in de recorder heeft;
+2. de optionele instelling `p1_history_sensor_entity`;
+3. afgeleid uit de ingestelde fasesensoren: het totaal zonder `_l1/_l2/_l3`
+   (`sensor.p1_meter_active_power`, HomeWizard, met 5-minutenstatistieken),
+   als die bestaat. Geen hardgecodeerde entiteit.
+
+Zelfde teken als de P1-sensor (+ afname, − teruglevering; live nagekeken:
+2026 W tegen 2093 W). De keuze staat in `p1_historiebron` (export), in
+`vloer_bootstrap.p1_bron` en het attribuut `bootstrap` op de
+sluipverbruiksensor, en bij terugvallen in het logboek (info).
+
+Tests: `test_v5761.py` (6).

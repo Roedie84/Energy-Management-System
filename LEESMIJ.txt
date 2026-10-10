@@ -1,3 +1,14 @@
+EMS v5.76.1 - historie uit een P1-bron die wel bewaard wordt
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Staat de ingestelde P1-sensor buiten de recorder, dan lezen het
+  nachtverbruik en de sluipverbruik-detectie bij het opstarten de historie
+  uit de P1-totaalsensor die bij de fasesensoren hoort (of uit de optionele
+  instelling p1_history_sensor_entity). Zo heeft de sluipverbruik-referentie
+  na de herstart meteen een waarde. Welke bron gebruikt is, staat in de
+  export (p1_historiebron) en op de sluipverbruiksensor (bootstrap).
+
 EMS v5.76.0 - minder databasegroei
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
