@@ -243,3 +243,14 @@ laatste ronde: 10-10 15:40, gemeten t/m 10-10 15:45
 - Hypotheses: H-EMS-2, H-EMS-4 (achteraf-optimum, dagafsluiting 11-10), **H-EMS-9 (nieuw):** de behoefte tot het blok wordt 's avonds onderschat in de verkooptoets (5,11 om 16:45 → 5,35 om 19:41 ondanks ~1,6 kWh verbruik ertussen; spaarplan 8,1). Geen release (tussenronde; niets acuut aantoonbaar, sturing = voorstel).
 
 laatste ronde: 10-10 19:40, gemeten t/m 10-10 19:45
+
+## 10-10 23:40 · tussenronde
+- Geïnstalleerd **v5.80.0** (v5.79.0 19:45 en v5.80.0 20:20, chatsessies). HA-herstarts 19:48, 20:26. Logboek: 0 EMS-fouten.
+- **Correctie 19:40:** volgens v5.79.0 (CHANGELOG, chatsessie) zakte de verkoop van 18:45-19:00 van 6,91 naar 6,22 kWh tegen een reserve tot het blok van **6,78** → **0,56 kWh onder de reserve (harde regel geschonden, 1 kwartier)**. Oorzaak: het vermogen (2,4 kW vast) werd niet op de vrije ruimte afgestemd. Opgelost in v5.79.0 (`_begrens_tot_verkoopruimte`). KPI rechtgezet.
+- Beslissingen 19:45-23:45: `default_smart`, `expensive_quarter_soc_protected` (21:24-21:26, 22:15-22:45) en **`expensive_quarter` 22:45-23:00**: P1-export 0,50 kWh, beschikbaar 3,89 → 3,20. Ontlaadgrens 22:59: vrij 0,05 kWh, `mag_verkopen` true → eerste verkoop onder v5.79: stopte op de verkoopreserve tot het blok (≈ 2,4-2,6 × 1,25), **0× onder de reserve**. Export rest van de avond 0,12 kWh, import 0,06.
+- **H-EMS-9:** om 23:41 spaarplan en verkooptoets gelijk (nodig tot blok 2,40, beschikbaar 3,11; marge 0,71 kWh). Avondverbruik 19:41-23:41 ≈ 2,2 kWh (5,79 → 3,11 min 0,50 verkocht). Toets: nacht → blok 10:45 (dagafsluiting 11-10). MC tot blok 0 %.
+- L-EMS-018 deels gedekt door v5.79 (dagverloop per kwartier `mag_verkopen`, `beschikbaar_kwh`, `reserve_kwh` = totaal; diagnostics `ontlaadgrens` = alleen laatste moment). Rest: verkoopreserve tot het blok en `vrij_kwh` per kwartier → scope verkleind, blijft gepland voor de dagafsluiting.
+- v5.80.0 (accubesparing met rondreisverlies): effect meten in de dagafsluiting (dagstijging kostprijsmodel tegen eigen afrekening; basis 01-10..09-10: € 5,23 tegen € 2,57).
+- Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-4 (achteraf-optimum, dagafsluiting 11-10), H-EMS-9 (behoefte tot blok). Geen release (tussenronde, niets acuut: de verkoopfout is al opgelost in v5.79).
+
+laatste ronde: 10-10 23:40, gemeten t/m 10-10 23:45
