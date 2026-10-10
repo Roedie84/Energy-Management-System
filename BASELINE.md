@@ -37,3 +37,7 @@
 | Achteraf (uur, 4,22 ct): werkelijk / optimum t.o.v. zonder accu | +0,24 / −0,56 €/dag | 5 dagen | 09-10 03:40 |
 | Meetlog kwartieren gemeten | 74/96 (20 herstarts) · 76/96 (15) | 08-10, 07-10 | 09-10 03:40 |
 | Nacht-export 00-07 na L-EMS-005 | 0,163 kWh (−62%) | nacht 08→09 | 09-10 07:40 |
+| PV-voorspelling MAE (dag, day-ahead) | 10,7 % (30 d) · 8,1 % (14 d) · 12,1 % (7 d); bias −7,4 / −5,4 / −8,5 | 10-09..09-10 | 10-10 03:40 |
+| Meetlog kwartieren gemeten na L-EMS-009 | 93/96 (22 herstarts, 20 over herstart) · pv_onbekend 0 | 09-10 | 10-10 03:40 |
+| SoC-sprong vlak boven leeg | 2× in 10 d (4-5 pp ≈ 0,35 kWh) | 30-09..09-10 | 10-10 03:40 |
+| MC 22:00 Brier (tot blok) | 0 (n=1) | avond 08-10 | 10-10 03:40 |

@@ -12,7 +12,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Zelf te bouwen (meetbaarheid) vervalt: `regelverschuiving_w` meet dit al.
 
 ## L-EMS-002 · MC-tekortkans van 22:00 bewaren in het dagrecord
-- Status: **gebouwd v5.45** (08-10 04:33), geïnstalleerd ~06:23 — eerste avond 08-10 22:00 (07-10 22:00 draaide v5.45 nog niet: `kalibratie_22u.nachten` 0)
+- Status: **geverifieerd 10-10 03:40** — eerste paar in het dagrecord (avond 08-10 0 % tot blok, nacht →09-10 geen tekort), `kalibratie_22u.nachten` 1, Brier 0. Eerder: **gebouwd v5.45** (08-10 04:33), geïnstalleerd ~06:23 — eerste avond 08-10 22:00 (07-10 22:00 draaide v5.45 nog niet: `kalibratie_22u.nachten` 0)
 - (eerder: gepland, zelf bouwen: meetbaarheid)
 - Onderbouwing: de MC-sensor heeft geen state_class; kalibratie (Brier 0,038, n=8, 30-09..07-10) kan nu alleen uit ~10 dagen recorder. Na 10 dagen is de voorspelling per nacht weg.
 - Bouw: in `reserve_daily_records` per nacht `mc_tekortkans_22u` (en deterministisch tekort) vastleggen; test.
@@ -21,7 +21,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Gebouwd: `mc_22u_per_avond` (14 avonden, bewaard), `mc_22u` in dagrecord van de nacht erna, attribuut `kalibratie_22u` met Brier. 11 tests.
 
 ## L-EMS-003 · PV-energieteller van de cloud-dagteller naar de Modbus-teller
-- Status: **akkoord 08-10** → **gebouwd v5.46**, geïnstalleerd 07:03, instelling omgezet 07:04 — eerste meting: kwartier 07:15 pv `measured`, dagopwek 0,0 (geen sprong). Dekking (`kwartieren_bruikbaar` ≥ 90) toetsen in de dagafsluiting van 08-10.
+- Status: **geverifieerd 10-10 03:40** — dagrapport 09-10 `pv_onbekend` 0 (was 27), dekking 96 %. Eerder: **akkoord 08-10** → **gebouwd v5.46**, geïnstalleerd 07:03, instelling omgezet 07:04 — eerste meting: kwartier 07:15 pv `measured`, dagopwek 0,0 (geen sprong). Dekking (`kwartieren_bruikbaar` ≥ 90) toetsen in de dagafsluiting van 08-10.
 - 09-10 03:40: dagrapport 08-10 bruikbaar 47/74 met 27× `pv_onbekend` (00-07, vóór de omzetting) → verwacht; 09-10 03:15 pv `measured` 's nachts. Toets: dagrapport 09-10 `pv_onbekend` ≈ 0. NB `kwartieren_gemeten` 74/96 komt van herstarts → L-EMS-009.
 - Bij de controle vooraf (08-10): eenheid Wh/kWh wordt overal goed omgerekend, maar de premisse "raakt alleen de meetlaag" klopte niet: de dagopwek (`pv_production_today_kwh`) rekent vanaf een bewaard dagbegin van de OUDE meter. Cloud = dagteller (11,868 kWh), Modbus = levensteller (23.426 kWh) → dagopwek ~23.414 kWh. v5.46 onthoudt welke meter bij het dagbegin hoort en ijkt opnieuw bij een andere meter.
 - Na installatie v5.46: `ha_set_integration(entry_id=01KYVA81YPQF0PXKHSWFFQS1E5, config={"pv_energy_sensor_entity": "sensor.solaredge_i1_ac_energy"})`, options-dict voor/na vergelijken, logs controleren, dagopwek dezelfde dag controleren (geen sprong).
@@ -75,7 +75,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: overdag `trend_procent` binnen ±50% op gewone dagen; om 23:59 gelijk aan de oude berekening.
 
 ## L-EMS-009 · meetlaag: het kwartier van een herstart meten
-- Status: **gebouwd v5.57** (09-10 03:56, zelf gebouwd: meetfout; stuurt niets), geïnstalleerd 06:02 — toets: dagrapport 09-10 (4 herstarts t/m 07:42) in de dagafsluiting van 10-10
+- Status: **geverifieerd 10-10 03:40** — dagrapport 09-10 gemeten 93/96 (was 74/96), `kwartieren_over_herstart` 20 bij 22 herstarts, 3 niet gemeten. Eerder: **gebouwd v5.57** (09-10 03:56, zelf gebouwd: meetfout; stuurt niets), geïnstalleerd 06:02 — toets: dagrapport 09-10 (4 herstarts t/m 07:42) in de dagafsluiting van 10-10
 - Onderbouwing: dagrapport 08-10 `kwartieren_gemeten` 74 van 96 bij 20 herstarts (18 kwartieren met een herstart); 07-10 76 bij 15. Code: `_kwartiergrens` slaat het eerste kwartier na de start over (`_vorige_standen` None). De tellers (P1, omvormer) lopen in het apparaat door; de accutellers van zendure_ha zijn in HA opgeteld vermogen.
 - Bouw: tellerstanden per grens in de bewaarde toestand (`meetlaag_kwartierstanden`); eerste grens na de start gebruikt ze alleen als ze precies 15 min ouder zijn én van dezelfde tellers (anders ongemeten zoals voorheen). Record `over_herstart`, accutellers `partially_estimated`. Dagrapport `kwartieren_niet_gemeten`, `kwartieren_over_herstart`. Ook `kalibratie_22u.laatste_avond` en `avonden_bewaard`. 8 tests (`test_v557_leerronde.py`), suite 4997 groen.
 - Meten na installatie: dagrapport `kwartieren_niet_gemeten` ≈ 0 op een dag met herstarts < 15 min, `kwartieren_over_herstart` ≈ aantal herstarts; geen kwartier met `house_kwh` < 0 of > 3 kWh rond een herstart.
@@ -90,20 +90,28 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Gebouwd (v5.61): per verkoopkwartier beschikbaar (nieuw `beschikbaar_kwh` in het dagverloop, oudere regels uit de laadstand: capaciteit × (soc − min) / 100) tegen `reserve_kwh`. Op of onder de reserve → planning ("… kWh verkocht onder de reserve … stuurfout, ook al was de prijs gunstig"); winst maar reserve/laadstand onbekend → onbekend; alleen volledig boven de reserve → `verkocht_met_winst`. Bewaarde winstnachten eenmalig herberekend (`reservetoets`; zonder dagverloop onbekend + "open"). 17 tests; 5114 groen.
 
 ## L-EMS-011 · waterontharder: regel krijgt ook bron "waterontharder"
-- Status: **gepland (zelf bouwen: rapportage/classificatie; stuurt niets)** — bouwen in de dagafsluiting
+- Status: **gebouwd v5.69.1** (10-10 03:50; workflow groen, HACS ververst) — wacht op installatie; toets bij de volgende regeneratie (~10 d): bron "waterontharder".
 - Onderbouwing: 09-10 03:07 sessie 154 L / 38 min: `waarschijnlijk_waterontharder` true en `waterontharder_laatste_regeneratie` gezet, maar in dezelfde regel `bron` null, `zekerheid` "onbekend", `reden` "Geen apparaat actief en geen herkenbaar patroon." Oorzaak: `classify_water_session(liters, duur)` kent de ontharder-vlag niet (coordinator.py, sessie-afsluiting).
 - Bouw: bij `is_waterontharder` bron "waterontharder", zekerheid "waarschijnlijk", reden met tijdvenster/volume/duur; anders ongewijzigd. Test met de sessie van 09-10.
 - Meten na bouw: volgende regeneratie (~10 dagen) toont bron "waterontharder"; overige sessies ongewijzigd.
 
 ## L-EMS-012 · MC-horizon en uitleg: juiste reden bij een lopend blok, tekortsoort in de "Let op"-zin
-- Status: **gepland (zelf bouwen: rapportage; stuurt niets)** — bouwen in de dagafsluiting van 10-10 (23:40: geen nieuwe meting; horizon tot blok 10:30 goed). 19:40: na afloop van het blok staat de horizon goed (10:30 morgen); fout alleen zolang een blok loopt. Let-op-zin telt nog 3 nachten zonder soort.
+- Status: **gebouwd v5.69.1** (10-10 03:50) — wacht op installatie; toets: middag tijdens een lopend blok horizon-reden zonder "onbekend"; Let-op-zin noemt economische nachten "bewust". (eerder: gepland, bouwen in de dagafsluiting van 10-10 (23:40: geen nieuwe meting; horizon tot blok 10:30 goed). 19:40: na afloop van het blok staat de horizon goed (10:30 morgen); fout alleen zolang een blok loopt. Let-op-zin telt nog 3 nachten zonder soort.
 - Onderbouwing: 09-10 15:42: MC `horizon_basis` "tot 09:00 (prijzen morgen nog onbekend)" terwijl nordpool `tomorrow_valid` true (96 kwartieren) en de planning morgen 12:00-15:00 laden kent. Oorzaak: `_monte_carlo_horizon_kiezen` valt terug op 09:00 zodra `cheap_block_start <= now`, ook als het blok van vandaag nog loopt (12:15-16:45). Zelfde uitleg: "3x onverwacht stroom van het net terwijl de accu genoeg had moeten hebben" (coordinator.py ~41600) telt `reserve_shortfall_history` zonder soort; de 3 nachten zijn nu 1 economisch + 2 onbekend.
 - Bouw: reden "blok van vandaag loopt nog / is voorbij" vs "prijzen morgen nog onbekend" naar de werkelijke prijsbeschikbaarheid; "Let op"-zin splitst per soort (alleen planning/capaciteit = "had genoeg moeten hebben"). Horizon zelf (09:00 = einde tekortnacht) ongewijzigd. Tests.
 - Meten na bouw: middag na publicatie van de prijzen tekst zonder "onbekend"; "Let op"-zin noemt economische nachten niet als onverwacht.
 
 ## L-EMS-013 · marge-opslag voor tekortnachten alleen bij een reserve-tekort, niet bij een economische nacht
-- Status: **open** (sturing/marge: Ruud beslist)
+- Status: **open** (sturing/marge: Ruud beslist). 10-10 03:40: de economische nacht van 01-10 viel uit het 7-dagenvenster (opslag nu 10 %, 2× onbekend); nacht →10-10 is live weer economisch (1,19 kWh t/m 03:50) en telt vanaf 09:00 weer +5 %.
 - Onderbouwing: 09-10 19:42 `shortfall_bonus_percent` 15 (3 × 5 %) op `needed_kwh` 5,62 = +0,84 kWh reserve. De 3 nachten zijn volgens de eigen classificatie (v5.61) 1× `economisch` ("laden loonde nergens") en 2× `onbekend` (verkoop door de piekregel-bug, hersteld v5.28.4). `recent_shortfalls` (coordinator ~22227) telt elke tekortnacht, ongeacht soort. Een economische tekortnacht betekent: bijkopen was goedkoper dan vooraf laden — geen te krappe reserve. Vannacht →10-10 wordt naar verwachting weer `economisch` (1,99 kWh), waardoor de opslag 7 dagen blijft staan.
 - Voorstel: alleen nachten van soort `capaciteit`, `planning` en `onbekend` tellen voor de opslag; `economisch` niet. (Voorzichtig: `onbekend` blijft meetellen, huis gaat voor.)
 - Verwacht effect: bij 1 economische nacht in 7 dagen −5 % marge (~0,3 kWh minder reserve op een avond met ~6 kWh behoefte) → iets meer verkoop op zonnige dagen; geen effect op dagen dat de accu toch onder de reserve zit.
 - Meten na bouw: `shortfall_bonus_percent` tegen het aantal niet-economische nachten; tekortnachten van soort `capaciteit`/`planning` (moet 0 blijven) en verkocht boven de reserve over 14 dagen.
+
+## L-EMS-014 · beschikbaar vlak boven leeg: rekening houden met de zwakste accumodule
+- Status: **open** (beschikbaar/reserve = sturing: Ruud beslist; module-instelling zelf ligt bij de uuranalyse)
+- Onderbouwing: recorder 30-09..09-10 (10 d): de accu kwam 2× onder ~12 %, en beide keren sprong het totaal-SoC 4-5 pp omlaag aan het eind: 30-09 04:11 12 → 7 % en 09-10 22:34 11 → 7 % (module 00996 12 → 0 %, laagste cel 2,73 V; modules 00917/02093 10/11 %). Het totaal-SoC is het gemiddelde; de zwakste module bepaalt wanneer de Zendure stopt. Elke keer ~0,35 kWh (4 pp × 8,64 kWh) minder bruikbaar dan `beschikbaar` aangaf, dus ook marge en tekortkans waren vlak boven leeg te gunstig.
+- Voorstel: in `beschikbaar` (en daarmee marge/MC) een afslag gelijk aan de gemeten SoC-sprong (geleerd, start 0,35 kWh) zodra een module < 15 % of een laagste cel < 3,0 V meldt; of `beschikbaar` rekenen als n_modules × de laagste module-SoC. Raakt alleen de rand naar leeg: eerder netimport, nooit extra verkoop.
+- Verwacht effect: voorspelde lege accu valt ~10-20 min eerder samen met de werkelijke; tekort-kWh per tekortnacht ~0,3 kWh nauwkeuriger.
+- Meten na bouw: per nacht met lege accu het verschil tussen voorspeld en werkelijk leeg-tijdstip, en `beschikbaar` vlak vóór de sprong; sprongen ≥ 3 pp blijven geteld (KPI ems_soc_sprong_laag).
+

@@ -226,3 +226,21 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-09 23:40,TUSSEN,ems_verwacht_tekort_tot_blok_kwh,2.38,1,"23:50; soort economisch (live); laadbesluit_sinds_9u loont_niet"
 2026-10-09 23:40,TUSSEN,ems_reserve_temperatuur_extra_kwh,0,1,"v5.69; temperatuur_model_kw null"
 2026-10-09 23:40,TUSSEN,ems_herstarts,3,3,"19:48 20:53 22:43"
+2026-10-09,DAG,ems_pv_kwh,1.240,1,solaredge_i1_ac_energy statistics
+2026-10-09,DAG,ems_net_import_kwh,6.366,1,p1 statistics
+2026-10-09,DAG,ems_net_export_kwh,0.531,1,p1 statistics
+2026-10-09,DAG,ems_accu_ontladen_kwh,5.379,1,solarflow aggr
+2026-10-09,DAG,ems_accu_laden_kwh,3.296,1,"solarflow aggr; laden 12-16 u uit het net (grid_charging_profitable)"
+2026-10-09,DAG,ems_huisverbruik_kwh,9.16,24,imp-exp+ontl-laden+pv per uur
+2026-10-09,DAG,ems_nacht_export_00_07_kwh,0.163,7,"nacht 08->09, regelverschuiving 20 W (L-EMS-005)"
+2026-10-09,DAG,ems_pv_afwijking_pct,-48.2,1,"day-ahead Solcast 2.39, werkelijk 1.24; bewolking 100%"
+2026-10-09,DAG,ems_pv_mae_30d_pct,10.7,30,"bias -7.4; 14 d 8.1/-5.4; 7 d 12.1/-8.5"
+2026-10-09,DAG,ems_pv_learned_bias_pct,,34,"null: ingehouden (twee soorten dagen) sinds -48.2"
+2026-10-09,DAG,ems_tekort_nacht_kwh,0,1,"nacht 08->09 geen tekort"
+2026-10-09,DAG,ems_verkoop_onder_reserve,0,1,"geen expensive_quarter*; accu leeg vanaf 22:34"
+2026-10-09,DAG,ems_herstarts,22,22,"06:03-22:43 (installaties)"
+2026-10-09,DAG,ems_dagrapport_dekking_pct,96.0,93,"gemeten 93/96, niet gemeten 3, over_herstart 20, pv_onbekend 0 (L-EMS-003/009)"
+2026-10-09,DAG,ems_accu_min_soc_pct,7,1,"22:34 sprong 11->7; module 00996 12->0"
+2026-10-09,DAG,ems_soc_sprong_laag,1,2,"sprongen >=3 pp omlaag bij <=20%: 30-09 04:11 (12->7) en 09-10 22:34 (11->7); n=2 in 10 d"
+2026-10-09,DAG,ems_mc_kalibratie_brier,0,1,"eerste paar: avond 08-10 0% tot blok, nacht ->09-10 geen tekort"
+2026-10-10 03:50,TUSSEN,ems_tekort_nacht_tot_nu_kwh,1.188,1,"nacht 09->10 (live economisch), verwacht tot blok 10:30 1.27"

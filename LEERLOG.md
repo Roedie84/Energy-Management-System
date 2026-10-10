@@ -186,3 +186,15 @@ laatste ronde: 09-10 19:40, gemeten t/m 09-10 19:44
 - Lopend: L-EMS-013 (open, Ruud). H-EMS-2, H-EMS-4, H-EMS-6 ongewijzigd. Geen release (tussenronde, niets acuut).
 
 laatste ronde: 09-10 23:40, gemeten t/m 09-10 23:52
+
+## 10-10 03:40 · dagafsluiting 09-10
+- Dag 09-10: PV 1,24 kWh (day-ahead Solcast 2,39 → **−48 %**, 100 % bewolking), import 6,37, export 0,53, accu 3,30 in / 5,38 uit, huis 9,16 kWh. 22 HA-herstarts. Beslissingen 23:52-03:50 alleen `default_smart`; hele dag 0× verkoop onder de reserve (harde regel gehaald).
+- PV 30 d MAE 10,7 % (bias −7,4), 14 d 8,1 % (−5,4), 7 d 12,1 % (−8,5). Door de −48 % houdt de integratie de vlakke biascorrectie in (`learned_bias_percent` null: twee soorten dagen) — zo ontworpen (v3.33). H-EMS-2 bijgesteld: klein op gewone dagen (7 d zonder 09-10: −2,9 %), groot op een zeer donkere dag (n=1); volgen of donkere dagen (< 3 kWh voorspeld) stelselmatig te hoog zijn.
+- **L-EMS-009 geverifieerd:** dagrapport 09-10 gemeten 93/96 (was 74), `kwartieren_over_herstart` 20 bij 22 herstarts, 3 niet gemeten. **L-EMS-003 geverifieerd:** `pv_onbekend` 0 (was 27). **L-EMS-002 geverifieerd:** eerste Brier-paar (avond 08-10 0 %, geen tekort) → `kalibratie_22u.nachten` 1, Brier 0.
+- **H-EMS-8 getoetst (10 d recorder):** 2× een SoC-sprong ≥ 3 pp omlaag vlak boven leeg, beide keren aan het eind van de ontlading: 30-09 04:11 (12 → 7 %) en 09-10 22:34 (11 → 7 %; module 00996 12 → 0 %). Elke keer ~0,35 kWh minder dan beschikbaar leek. n=2 → voorstel L-EMS-014 (reserve/beschikbaar = sturing, Ruud beslist).
+- Tekortnachten 7 d nu 2 (beide `onbekend`, piekregel-bug 03/04-10); de economische nacht viel uit het venster → marge-opslag 10 %. Nacht 09→10 loopt: tekort tot nu 1,19 kWh (live economisch, verwacht 1,27 tot blok 10:30), MC 100 % → komt morgen terug in L-EMS-013.
+- **Gebouwd v5.69.1** (L-EMS-011 ontharder als bron, L-EMS-012 horizon-reden bij lopend blok + Let-op-zin per soort): alleen rapportage, 10 nieuwe tests, 5275 groen, workflow groen, HACS ververst.
+- Niet gemeten: H-EMS-4 (achteraf-optimum) voor 09-10 — de kwartierprijs (`zonneplan_current_quarter_hourly_electricity_tariff`) en nordpool staan niet als reeks in de recorder; eerdere rondes rekenden uit attributen. Verbruiksprofiel-MAE overgeslagen (donkere dag, netladen).
+- Hypotheses: H-EMS-2 (bijgesteld), H-EMS-4 (n=5, wacht op prijsreeks), H-EMS-8 (bevestigd n=2 → L-EMS-014).
+
+laatste ronde: 10-10 03:40, gemeten t/m 10-10 03:50
