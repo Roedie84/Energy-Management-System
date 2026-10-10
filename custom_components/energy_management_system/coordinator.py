@@ -7508,7 +7508,10 @@ class EnergyManagementSystemCoordinator:
         return None
 
     def classify_water_session(
-        self, liters: float | None, duur_minuten: float | None
+        self,
+        liters: float | None,
+        duur_minuten: float | None,
+        waterontharder: bool = False,
     ) -> dict:
         """Waar ging dit water heen? (v1.18.0)
 
@@ -7547,6 +7550,28 @@ class EnergyManagementSystemCoordinator:
                 "bron": "wasmachine",
                 "zekerheid": "waarschijnlijk",
                 "reden": f"De wasmachine draait ({wasmachine:.0f} W).",
+            }
+        # v5.69.1 (L-EMS-011): de sessie-afsluiting herkende de
+        # regeneratie al (`waarschijnlijk_waterontharder`), maar deze
+        # functie kreeg dat niet mee. Gemeten 09-10 03:07: 154 L in 38
+        # min, vlag true en `waterontharder_laatste_regeneratie` gezet,
+        # terwijl dezelfde regel "bron: null, geen herkenbaar patroon"
+        # zei. Een draaiende vaatwasser of wasmachine blijft voorgaan
+        # (hardere aanwijzing); daarna de ontharder.
+        if waterontharder:
+            delen = []
+            if liters is not None:
+                delen.append(f"{liters:.0f} liter")
+            if duur_minuten is not None:
+                delen.append(f"in {duur_minuten:.0f} minuten")
+            return {
+                "bron": "waterontharder",
+                "zekerheid": "waarschijnlijk",
+                "reden": (
+                    "Nachtelijke sessie binnen het ontharder-venster"
+                    + (f" ({' '.join(delen)})" if delen else "")
+                    + ": past bij een regeneratie."
+                ),
             }
         if ketel is not None and ketel > WATER_BOILER_ACTIVE_W:
             if duur_minuten is not None and (
@@ -30519,6 +30544,50 @@ class EnergyManagementSystemCoordinator:
             "zon_naar_net_met_ruimte_kwh": round(self._pv_export_met_ruimte_kwh, 2),
         }
 
+    def _let_op_tekortnachten_tekst(self, aantal: int) -> str:
+        """De "Let op"-zin over tekortnachten, per soort (v5.69.1, L-EMS-012).
+
+        Stond als "kwam het 3x voor dat er onverwacht stroom van het net
+        kwam terwijl de accu genoeg had moeten hebben", ook toen die drie
+        nachten volgens de eigen indeling 1x economisch (bijladen loonde
+        niet - een keuze) en 2x onbekend waren. Alleen planning en
+        capaciteit zijn "had genoeg moeten hebben". De marge zelf telt
+        nog steeds elke tekortnacht (ongewijzigd; zie L-EMS-013).
+        """
+        try:
+            soorten = self.get_tekortsoorten()
+        except Exception:  # noqa: BLE001 - tekst mag nooit de uitleg breken
+            soorten = {}
+        planning = int(soorten.get("tekortnachten_planning") or 0) + int(
+            soorten.get("tekortnachten_capaciteit") or 0
+        )
+        economisch = int(soorten.get("tekortnachten_economisch") or 0)
+        winst = int(soorten.get("tekortnachten_verkocht_met_winst") or 0)
+        onbekend = int(soorten.get("tekortnachten_onbekend") or 0)
+        if planning + economisch + winst + onbekend == 0:
+            # Geen indeling beschikbaar: de oude zin, eerlijk zonder soort.
+            return (
+                f"Let op: de afgelopen {LEARNING_HISTORY_DAYS} dagen kwam er "
+                f"{aantal}x 's nachts stroom van het net terwijl de accu leeg "
+                f"was - de veiligheidsmarge is daardoor automatisch verhoogd."
+            )
+        delen = []
+        if planning:
+            delen.append(
+                f"{planning}x onverwacht, terwijl de accu genoeg had moeten hebben"
+            )
+        if economisch:
+            delen.append(f"{economisch}x bewust: bijladen uit het net loonde niet")
+        if winst:
+            delen.append(f"{winst}x na verkoop boven de reserve tegen een hogere prijs")
+        if onbekend:
+            delen.append(f"{onbekend}x niet meer na te gaan")
+        return (
+            f"Let op: de afgelopen {LEARNING_HISTORY_DAYS} dagen {aantal} "
+            f"tekortnacht(en): {'; '.join(delen)} - de veiligheidsmarge is "
+            f"daardoor automatisch verhoogd."
+        )
+
     def get_tekortsoorten(self) -> dict:
         """De tekortnachten per soort, voor sensoren en cockpit (v5.40).
 
@@ -34500,7 +34569,9 @@ class EnergyManagementSystemCoordinator:
                     "waarschijnlijk_waterontharder": is_waterontharder,
                     # v1.18.0: waar ging dit water heen? Een vermoeden,
                     # met de reden erbij zodat je het kunt beoordelen.
-                    **self.classify_water_session(liters, duration_minutes),
+                    **self.classify_water_session(
+                        liters, duration_minutes, waterontharder=is_waterontharder
+                    ),
                 }
             )
             self.water_session_history = self.water_session_history[
@@ -35784,9 +35855,24 @@ class EnergyManagementSystemCoordinator:
         """
         self.monte_carlo_horizon_basis = "goedkoopste blok"
         if cheap_block_start is None or cheap_block_start <= now:
+            # v5.69.1 (L-EMS-012): de reden naar wat er echt speelt. Een
+            # blok dat nu loopt blijft het blok tot het eindigt (v5.28.5),
+            # dus valt de horizon terug - maar niet omdat de prijzen van
+            # morgen onbekend zijn. Gemeten 09-10 15:42: "prijzen morgen
+            # nog onbekend" terwijl nordpool 96 kwartieren voor morgen had
+            # en het blok van vandaag (12:15-16:45) nog liep.
+            blok_eind = getattr(self, "last_cheap_block_end", None)
+            blok_loopt = (
+                cheap_block_start is not None
+                and blok_eind is not None
+                and cheap_block_start <= now < blok_eind
+            )
             cheap_block_start = self._monte_carlo_terugval_horizon(now)
             self.monte_carlo_horizon_basis = (
-                f"tot {MONTE_CARLO_TERUGVAL_UUR:02d}:00 (prijzen morgen nog onbekend)"
+                f"tot {MONTE_CARLO_TERUGVAL_UUR:02d}:00 (het goedkoopste blok "
+                "loopt nu; het volgende is nog niet bepaald)"
+                if blok_loopt
+                else f"tot {MONTE_CARLO_TERUGVAL_UUR:02d}:00 (prijzen morgen nog onbekend)"
             )
         self.monte_carlo_horizon = cheap_block_start
         return cheap_block_start
@@ -42002,12 +42088,7 @@ class EnergyManagementSystemCoordinator:
 
         recent_shortfalls = sum(1 for v in self.reserve_shortfall_history if v)
         if recent_shortfalls > 0:
-            parts.append(
-                f"Let op: de afgelopen {LEARNING_HISTORY_DAYS} dagen kwam het "
-                f"{recent_shortfalls}x voor dat er onverwacht stroom van het net "
-                f"kwam terwijl de accu genoeg had moeten hebben - de "
-                f"veiligheidsmarge is daardoor automatisch verhoogd."
-            )
+            parts.append(self._let_op_tekortnachten_tekst(recent_shortfalls))
 
         if self.learning_only:
             parts.append(

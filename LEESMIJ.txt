@@ -1,13 +1,12 @@
-EMS v5.69 - kort weg: de airco blijft aan
+EMS v5.69.1 - uitleg klopt: ontharder, lopend blok, soort tekortnacht
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-- Gaan jullie even weg (de hond uitlaten), dan zet het EMS de airco niet
-  meteen uit: eerst na een uur, en zodra het genoeg korte uitstapjes heeft
-  gezien, na zo lang als die meestal duren (30-120 minuten).
-- Is iemand verder dan 3 km van huis, dan gaat hij meteen uit.
-- Om 22:00 gaat hij altijd uit.
+- De nachtelijke regeneratie van de waterontharder heet in het
+  waterlogboek nu ook zo (bron "waterontharder").
+- Loopt het goedkoopste blok nog, dan zegt de tekortkans niet meer dat de
+  prijzen van morgen onbekend zijn.
+- De "Let op"-zin over tekortnachten noemt per soort wat er gebeurde: een
+  bewuste (economische) nacht heet niet meer "onverwacht".
 
-Ook in deze versie: de melding "Accumodule loopt uit de pas" per module uit
-te zetten (op fabrieksnaam, bv. AB3000 00996); een vervangen module begint
-met een schone lei.
+Laden, ontladen, reserve en marges ongewijzigd.

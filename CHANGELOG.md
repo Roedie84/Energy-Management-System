@@ -32107,3 +32107,27 @@ met de hond wandelen en dus niet aanwezig zijn?" - en "Ja graag".
 - Bewaard in `airco_ritme["afwezig"]`.
 
 Laden, ontladen, reserve en marges ongewijzigd.
+
+## v5.69.1 — uitleg klopt: ontharder, lopend blok, soort tekortnacht
+
+Uit de leerronde van 10-10 (L-EMS-011, L-EMS-012). Alleen rapportage en
+indeling; laden, ontladen, reserve en marges ongewijzigd.
+
+- **Waterontharder als bron.** Een sessie die als regeneratie herkend werd
+  (`waarschijnlijk_waterontharder` true) kreeg toch "bron: null, geen
+  herkenbaar patroon" (gemeten 09-10 03:07: 154 L in 38 min). De indeling
+  krijgt de herkenning nu mee: bron "waterontharder", zekerheid
+  "waarschijnlijk", met volume en duur in de reden. Een draaiende
+  vaatwasser of wasmachine gaat nog steeds voor.
+- **Monte Carlo-horizon tijdens een lopend blok.** Liep het goedkoopste blok
+  van vandaag nog, dan stond er "tot 09:00 (prijzen morgen nog onbekend)",
+  ook als de prijzen van morgen er al waren (09-10 15:42). Nu: "het
+  goedkoopste blok loopt nu; het volgende is nog niet bepaald". De horizon
+  zelf (09:00) is ongewijzigd.
+- **"Let op"-zin per soort tekortnacht.** Stond als "kwam het 3x voor dat er
+  onverwacht stroom van het net kwam terwijl de accu genoeg had moeten
+  hebben", ook bij nachten die als economisch (bijladen loonde niet) of
+  onbekend zijn ingedeeld. Nu per soort: onverwacht (planning/capaciteit),
+  bewust (economisch), na verkoop boven de reserve, of niet meer na te gaan.
+  De marge-opslag telt nog steeds elke tekortnacht.
+
