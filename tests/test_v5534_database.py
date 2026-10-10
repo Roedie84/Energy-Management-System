@@ -11,6 +11,7 @@ def test_cockpit_bewaart_geen_attributen():
 
 
 def test_zendure_lokaal_alleen_kerngetallen():
+    # v5.76 - BEWUST GEWIJZIGD: alle attributen buiten de recorder; ook de
+    # kerngetallen gaven elke 30 s een nieuwe attribuutrij.
     weg = s.ZendureLokaalSensor._unrecorded_attributes
-    assert {"tekst", "beste_bron", "reactiesnelheid", "per_veld"} <= weg
-    assert "overeenkomst_totaal_procent" not in weg and "rondes" not in weg
+    assert weg == frozenset({"*"})

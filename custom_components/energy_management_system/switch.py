@@ -8,6 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
+    GEEN_ATTRIBUTEN_IN_RECORDER,
     DEFAULT_NAME,
     DOMAIN,
     HANDMATIG_LAADVERMOGEN_W,
@@ -92,6 +93,9 @@ class KalibratieSwitch(SwitchEntity, RestoreEntity):
     kalibratie als een gewone dag opvatten en er de verkeerde les uit
     trekken.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Kalibratie"
@@ -250,6 +254,9 @@ class HandmatigeStandSwitch(SwitchEntity, RestoreEntity):
     denkt - en dat is precies wat er op 28 augustus een halve dag
     gebeurde.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
 
@@ -483,6 +490,9 @@ class NuLadenSwitch(SwitchEntity):
     herstart aan blijven staan terwijl de tijd allang verstreken is.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Nu laden"
     _attr_icon = "mdi:battery-charging-high"
@@ -652,6 +662,9 @@ class NotificationsMasterSwitch(SwitchEntity):
     elkaar zouden na een herstart uit elkaar kunnen lopen.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Meldingen (hoofdschakelaar)"
     _attr_icon = "mdi:bell-ring-outline"
@@ -717,6 +730,9 @@ class NotificationTypeSwitch(SwitchEntity):
     aanzetten is een garantie dat er binnen een week niets meer van
     gelezen wordt - en dan is de hele functie waardeloos.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:bell-outline"

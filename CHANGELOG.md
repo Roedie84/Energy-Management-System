@@ -32458,3 +32458,28 @@ verkopen, noodladen, handmatig en de piekregels gaan voor.
   (sparen)".
 
 Tests: `test_v575.py` (10), met het scenario van 10-10 13:23.
+
+## v5.76.0 — minder databasegroei
+
+Gemeten schrijvers in de recorder: Monte Carlo (~3,4 KB × ~1.500 rijen per
+dag), het komende schema (~4 KB × ~840), de NILM-kandidaten (~1,3 KB ×
+~1.500), de advies-gereedheid (~1,5 KB × ~900) en het Zendure-meelezen
+(~2.900 rijen per dag, de kerngetallen wisselden elke 30 s).
+
+- Elke entiteit van de integratie met attributen zet ze nu als geheel buiten
+  de recorder (`_unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER`, "*"
+  = MATCH_ALL), zoals sinds v5.34 al voor de cockpit en de kwartierplanning:
+  28 sensorklassen erbij (waaronder de basisklasse van de diagnosesensoren),
+  vijf schakelaars en vier knoppen; Meetlog, Airco besluit en Zendure lokaal
+  van een deelverzameling naar alles.
+- Toestanden blijven gerecord (history-graph en statistieken op de toestand
+  werken), de kaarten en de cockpit lezen attributen live, en het herstel na
+  een herstart komt uit `core.restore_state`, niet uit de recorder.
+- Gecontroleerd: de integratie leest nergens recorderhistorie van eigen
+  attributen terug (alle reads gaan over bronsensoren), en geen kaart toont
+  attribuutgeschiedenis.
+- Het Zendure-meelezen schrijft nog steeds een (kleine) rij per wijziging:
+  de recorder legt elke toestandswijziging vast, ook als alleen niet-bewaarde
+  attributen veranderen.
+
+Tests: `test_v576.py` (per entiteitklasse de uitgesloten attributen).

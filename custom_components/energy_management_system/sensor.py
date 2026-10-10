@@ -314,6 +314,9 @@ def _store_wint(methode):
 class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
     """Deviation (%) between yesterday's Solcast forecast and today's actual yield."""
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "PV forecast accuracy"
     _attr_icon = "mdi:solar-power-variant"
@@ -463,6 +466,9 @@ def _to_date(value: str | None) -> date | None:
 class _CoordinatorDiagnosticSensor(SensorEntity):
     """Base class for the read-only debug/diagnostic sensors."""
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -481,6 +487,9 @@ class CheapestBlockStartSensor(_CoordinatorDiagnosticSensor):
     The block's width is now detected dynamically (natural valley width),
     see the `end` attribute for where it currently ends.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_name = "Cheapest block start"
     _attr_icon = "mdi:cash-clock"
@@ -1039,6 +1048,9 @@ class BatteryProtectionSensor(_CoordinatorDiagnosticSensor):
     configured minimum, to avoid over-draining the battery).
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_name = "Battery protection"
     _attr_icon = "mdi:battery-heart-variant"
 
@@ -1067,6 +1079,9 @@ class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
     since this sensor previously only extended the non-restoring
     diagnostic base class.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_name = "Steelstofzuiger status"
     _attr_icon = "mdi:vacuum"
@@ -1121,6 +1136,9 @@ class FietsladersStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
     (v0.63.13). RestoreEntity (v0.63.64) - see SteelstofzuigerStatusSensor's
     docstring for why.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_name = "Fietsladers status"
     _attr_icon = "mdi:bike"
@@ -1278,6 +1296,9 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
     uses `state_class: total` rather than `total_increasing`.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Battery savings (cost-basis model)"
     _attr_icon = "mdi:piggy-bank-outline"
@@ -1374,6 +1395,9 @@ class EnergyBalanceHealthSensor(SensorEntity):
     actively misleading about *current* sensor health.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Sensor health score"
     _attr_icon = "mdi:pulse"
@@ -1425,6 +1449,9 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
     en CUSUM-accumulator zijn juist bedoeld om over een lange periode
     op te bouwen, dat mag een herstart niet steeds resetten.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Sluipverbruik-detectie"
@@ -1601,6 +1628,9 @@ class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
     as the scheduled-charge appliances (v0.63.12).
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _state_attr = ""
     _duration_history_attr = ""
     _learned_duration_property = ""
@@ -1758,6 +1788,9 @@ class MonteCarloAdvisorySensor(SensorEntity):
     tick from live forecast/history data; a restored stale distribution
     would be actively misleading.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Monte Carlo risico (tekortkans)"
@@ -1954,6 +1987,9 @@ class NilmUnconfirmedCandidatesSensor(SensorEntity):
     disappear from this list immediately, not linger from a restored
     stale state.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "NILM onbevestigde kandidaten"
@@ -2187,6 +2223,9 @@ class AdvisoryReadinessSensor(SensorEntity):
 
     Not a RestoreEntity - recomputed fresh every tick from live state.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Advies-gereedheid (10 modules)"
@@ -2523,6 +2562,9 @@ class HouseholdConsumptionSensor(SensorEntity):
     de accu of PV wordt gedekt. Puur informatief, stuurt niets aan.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Huishoudverbruik (werkelijk)"
     _attr_icon = "mdi:home-lightning-bolt-outline"
@@ -2573,6 +2615,9 @@ class MissingOptionalFeaturesSensor(SensorEntity):
     net als de Advies-gereedheid-sensor.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Optionele functies nog niet geconfigureerd"
     _attr_icon = "mdi:puzzle-outline"
@@ -2607,6 +2652,9 @@ class CO2IntensitySensor(SensorEntity):
     Niet een RestoreEntity - een "vandaag"-metriek, zelfde afweging als
     de zelfvoorzieningsratio-sensor.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "CO2-uitstoot vandaag"
@@ -2651,6 +2699,9 @@ class BatteryHealthSensor(SensorEntity, RestoreEntity):
     RestoreEntity - de cumulatieve ontladen energie is een levenslange
     teller, moet een herstart overleven.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Accu-gezondheid (geschat)"
@@ -2721,6 +2772,9 @@ class SelfConsumptionSensor(SensorEntity):
     voor wie het al gebruikte.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Zelfconsumptieratio"
     _attr_icon = "mdi:solar-power-variant-outline"
@@ -2771,6 +2825,9 @@ class SelfSufficiencySensor(SensorEntity):
     toch elke dag weer bij 0 begint; een herstart halverwege de dag
     kost hooguit een beetje precisie voor die ene dag.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Zelfvoorzieningsratio"
@@ -2973,6 +3030,9 @@ class PeakPowerSensor(SensorEntity, RestoreEntity):
     RestoreEntity - all-time/maand-records moeten een herstart
     overleven.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Piekvermogen (netimport)"
@@ -3225,6 +3285,9 @@ class ModelTrendInsightSensor(SensorEntity, RestoreEntity):
     elders in deze integratie.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Model- en parameternauwkeurigheid"
     _attr_icon = "mdi:chart-line-variant"
@@ -3354,6 +3417,9 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
     the raw True/False per day. Persisted across restarts.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Reserve shortfall days"
     _attr_icon = "mdi:battery-alert-variant-outline"
@@ -3422,6 +3488,9 @@ class ReserveExcessSensor(SensorEntity, RestoreEntity):
     across restarts.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Reserve excess days"
     _attr_icon = "mdi:battery-high"
@@ -3477,6 +3546,9 @@ class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):
     each individual sample. Persisted across restarts.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     _attr_has_entity_name = True
     _attr_name = "Learned battery efficiency"
     _attr_icon = "mdi:battery-sync"
@@ -3521,6 +3593,9 @@ class ApplianceUsageHoursSensor(SensorEntity, RestoreEntity):
     typically active, learned from its power sensor. Never used to
     control anything - purely so you (or a future automation) can see
     the pattern."""
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -3623,6 +3698,9 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
     This is also where the learned history is persisted across Home
     Assistant restarts.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     # v1.21.5, gemeld: "Tevens een nachtverbruik van 400W? Mijns
@@ -4087,6 +4165,9 @@ class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
     discharge window; see the coordinator's `_build_forecast_timeline` for
     the exact assumptions and limitations.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_name = "Upcoming schedule"
     _attr_icon = "mdi:calendar-clock"
@@ -4992,7 +5073,8 @@ class MeetlogSensor(_CoordinatorDiagnosticSensor):
     _attr_has_entity_name = True
     _attr_name = "Meetlog"
     _attr_icon = "mdi:database-eye-outline"
-    _unrecorded_attributes = frozenset({"laatste_evaluatie", "laatste_kwartier", "laatste_dagrapport", "opslag", "grootverbruikers", "meerdaags"})
+    # v5.76: alle attributen niet naar de recorder (was een deelverzameling).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "meetlog")
@@ -5026,7 +5108,8 @@ class AircoBesluitSensor(_CoordinatorDiagnosticSensor):
     _attr_has_entity_name = True
     _attr_name = "Airco besluit"
     _attr_icon = "mdi:air-conditioner"
-    _unrecorded_attributes = frozenset({"redenen", "redenen_tekst", "tekst", "dagritme"})
+    # v5.76: alle attributen niet naar de recorder (was een deelverzameling).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "airco_besluit")
@@ -5049,6 +5132,9 @@ class RolluikIsolatieSensor(_CoordinatorDiagnosticSensor):
     "dicht" of "open", met de reden. Stuurt zelf niets: de rolluik-
     automatisering leest hem.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Rolluik isolatie"
@@ -5218,12 +5304,9 @@ class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
     _attr_icon = "mdi:battery-sync-outline"
     # v5.53.4: ~9 KB aan attributen, elke 30 s; in de database alleen de
     # kerngetallen (toestand, rondes, overeenkomst), de rest staat live.
-    _unrecorded_attributes = frozenset({
-        "per_veld", "laatste_lezing", "afwijkende_velden", "accu", "tekst",
-        "beste_bron", "reactiesnelheid", "omzetrendement", "relaisschakelingen",
-        "laatste_fout", "laatste_gelukt", "sinds", "adres", "modus",
-        "latentie_mediaan_ms", "latentie_p90_ms", "velden_vergeleken", "gelukt", "mislukt",
-    })
+    # v5.76: alle attributen; ook de kerngetallen (rondes, overeenkomst)
+    # wisselden elke 30 s en gaven elke keer een nieuwe attribuutrij.
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "zendure_lokaal")

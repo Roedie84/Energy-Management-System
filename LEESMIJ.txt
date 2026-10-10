@@ -1,3 +1,13 @@
+EMS v5.76.0 - minder databasegroei
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Alle sensoren, schakelaars en knoppen van het EMS houden hun attributen
+  buiten de recorder (Monte Carlo, komend schema, NILM-kandidaten,
+  advies-gereedheid, Zendure meelezen en de rest). De toestanden worden
+  gewoon bewaard; dashboards en de cockpit lezen de attributen live en
+  werken zoals voorheen.
+
 EMS v5.75.0 - niet ontladen voor netladen in hetzelfde blok
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

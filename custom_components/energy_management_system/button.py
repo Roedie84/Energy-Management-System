@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    GEEN_ATTRIBUTEN_IN_RECORDER,
     WATERBRONNEN,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     DEFAULT_NAME,
@@ -60,6 +61,9 @@ class VerbruiksleerResetButton(ButtonEntity):
     Onomkeerbaar. Daarom laat de knop zijn attributen zien wát er de
     vorige keer is weggegooid, en wanneer.
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Verbruiksleer opnieuw beginnen"
@@ -255,6 +259,9 @@ class _NilmSlotButton(ButtonEntity):
     ignored or cleaned up whenever convenient.
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     def __init__(
         self,
         coordinator,
@@ -430,6 +437,9 @@ class _NilmDuplicateSlotButton(ButtonEntity):
     mee te botsen: geen `_v2`/`_v3`-suffix nodig (v0.63.80/.81).
     """
 
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
     def __init__(
         self,
         coordinator,
@@ -549,6 +559,9 @@ class WaterbronKnop(ButtonEntity):
     Een andere sessie kiezen kan nog met de actie
     `confirm_water_source` en het veld `sessie` (een tijd als "08:06").
     """
+
+    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:water-check"
