@@ -32424,3 +32424,37 @@ is.
 Tests: `test_v574.py` (22). Aangepast aan de nieuwe maatstaven:
 `test_cycluskosten.py`, `test_outlier_resistant_learning.py`,
 `test_trend_restore.py`, `test_startup_order.py`.
+
+## v5.75.0 — niet ontladen vóór netladen in hetzelfde blok
+
+Gezien op 10-10 13:23 (v5.73, akkoord Ruud): goedkoop blok 12:00-16:45 tegen
+13,0 ct, zon 0,18 kW, de accu (54%) gaf in `smart` 0,53 kW aan het huis. Het
+kwartierplan liet vanaf 13:30 tot 14:45 netladen tot 96-100% zien (12,6-12,7
+ct). `sparen_in_blok` zei "na het blok dekt de lading alles al; een extra kWh
+is niets waard" en bleef op smart. Maar elke kWh die nu naar het huis gaat
+(13,0 ct bespaard), wordt straks teruggeladen tegen blokprijs / rendement +
+slijtage (12,6 / 0,842 + 4,2 ≈ 19,2 ct): een rondtrip met puur verlies.
+
+**Tweede grond in `sparen_in_blok`** (`_netladen_volgt_in_blok`). In het
+goedkope blok, als er nu niet uit het net geladen wordt en het kwartierplan
+(`get_quarter_plan`, modus "manual (laden)" via `_plan_laadt` - geen tweede
+inschatting) later in hetzelfde blok netladen laat zien: tot het begin van
+dat laadmoment `smart_charging` (zon in de accu, huis van het net), mits
+prijs laadmoment / geleerd rendement + slijtage > prijs nu. Zonder gepland
+netladen, of als terugladen niet duurder is, geldt de regel van v5.73
+(`_sparen_in_blok_v573`); de afweging staat dan ter inzage in
+`netladen_in_blok`. Zelfde grendels: `smart_charging` moet bestaan, gemeten
+getallen (prijs, rendement, slijtage), één besluit per kwartier; netladen,
+verkopen, noodladen, handmatig en de piekregels gaan voor.
+
+- Reden "netladen volgt om HH:MM in dit blok: ontladen nu kost een rondtrip
+  (x ct tegen y ct)"; attributen `grond` (netladen_in_blok), `netladen_om`,
+  `rondtrip_ct`, `prijs_nu_ct`, `prijs_laadmoment_ct`, `besluit` (attribuut
+  `sparen_in_blok` op de uitleg-sensor en in de export).
+- Uitleg (ook "Wat doet de integratie nu"): "Goedkoop blok: om HH:MM laadt de
+  accu uit het net. Nu ontladen naar het huis spaart x ct, maar die kWh
+  straks terugladen kost y ct ..." en de waarom-regels.
+- Kwartierplan: de kwartieren tot het laadmoment als "smart_charging
+  (sparen)".
+
+Tests: `test_v575.py` (10), met het scenario van 10-10 13:23.

@@ -1,3 +1,13 @@
+EMS v5.75.0 - niet ontladen voor netladen in hetzelfde blok
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Staat er later in het goedkope blok netladen gepland (volgens het
+  kwartierplan), dan geeft de accu tot dat moment geen stroom aan het huis:
+  alleen zon in de accu, het huis op het net. Ontladen en straks terugladen
+  kost blokprijs / rendement + slijtage - meer dan de stroom nu. In de uitleg
+  staat om hoe laat het netladen begint en wat de rondtrip kost.
+
 EMS v5.74.0 - verbruiksaudit: eerlijke maatstaven en een vloer die blijft
 
 Installeren: via HACS bijwerken en Home Assistant herstarten. Het

@@ -2469,8 +2469,9 @@ REASON_REGISTRY: dict[str, dict] = {
         "titel": "Sparen in het goedkope blok",
         "uitleg": (
             "Goedkoop blok: het huis draait op het net en de zon vult de "
-            "accu. Die lading is na het blok meer waard dan de stroom nu "
-            "kost, en de accu raakt vandaag niet vol."
+            "accu. Die lading is later meer waard dan de stroom nu kost - na "
+            "het blok, of omdat de accu later in dit blok toch uit het net "
+            "wordt bijgeladen (v5.75)."
         ),
         "ernst": "info",
         "getallen": True,

@@ -20638,6 +20638,13 @@ class EnergyManagementSystemCoordinator:
         if reden == "sparen_in_blok":
             # v5.73: de afweging zelf.
             a = self.last_sparen_in_blok or {}
+            if a.get("grond") == "netladen_in_blok" and a.get("besluit"):
+                # v5.75
+                return [
+                    f"netladen volgt in dit blok ({a.get('netladen_om', '')[11:16]})",
+                    f"stroom kost nu {a['prijs_nu_ct']:.1f} ct",
+                    f"terugladen kost {a['rondtrip_ct']:.1f} ct (blokprijs / rendement + slijtage)",
+                ]
             if a.get("prijs_nu_eur") is None or a.get("waarde_na_blok_eur") is None:
                 return list(gemeenschappelijk)
             return [
@@ -44369,7 +44376,99 @@ class EnergyManagementSystemCoordinator:
     def _sparen_in_blok_afweging(
         self, now: datetime, entries, blok_start: datetime, blok_eind: datetime, uit: dict
     ) -> dict:
-        """De rekensom van `sparen_in_blok` (v5.73)."""
+        """De rekensom van `sparen_in_blok` (v5.73).
+
+        v5.75: eerst de tweede grond - netladen later in hetzelfde blok
+        (`_netladen_volgt_in_blok`). Geldt die niet, dan de regel van v5.73.
+        """
+        rondtrip = self._netladen_volgt_in_blok(now, entries, blok_eind)
+        if rondtrip is not None and rondtrip.get("besluit"):
+            uit.update(rondtrip)
+            uit["actief"] = True
+            return uit
+        uit = self._sparen_in_blok_v573(now, entries, blok_start, blok_eind, uit)
+        if rondtrip is not None:
+            # Wel gepland netladen, maar het loont niet: ter inzage.
+            uit["netladen_in_blok"] = rondtrip
+        return uit
+
+    def _netladen_volgt_in_blok(
+        self, now: datetime, entries, blok_eind: datetime
+    ) -> dict | None:
+        """Staat er later in DIT blok netladen gepland? (v5.75, akkoord Ruud)
+
+        Gezien op 10-10 13:23: blok 12:00-16:45 tegen 13,0 ct, zon 0,18 kW,
+        de accu (54%) gaf in `smart` 0,53 kW aan het huis - terwijl het
+        kwartierplan vanaf 13:30 netladen tot 96-100% liet zien (12,6-12,7
+        ct). Elke kWh die nu naar het huis gaat (13,0 ct bespaard) wordt
+        straks teruggeladen tegen blokprijs / rendement + slijtage (12,7 /
+        0,842 + slijtage). Een rondtrip met puur verlies; v5.73 zag het niet
+        ("na het blok dekt de lading alles al").
+
+        Het laadmoment komt uit het kwartierplan zelf (`get_quarter_plan`,
+        de modus "manual (laden)" via `_plan_laadt`) - geen tweede
+        inschatting. Sparen als terugladen duurder is dan de stroom nu:
+        prijs laadmoment / rendement + slijtage > prijs nu, met het geleerde
+        rendement en de slijtage die de laadregel ook gebruikt. None als er
+        geen netladen in het blok gepland staat; dan geldt v5.73.
+        """
+        prijs_nu = next(
+            (p / PRICE_SCALE_FACTOR for b, e, p in (entries or []) if b <= now < e), None
+        )
+        try:
+            plan = self.get_quarter_plan(now) or []
+        except Exception:  # noqa: BLE001 - zonder plan geen tweede grond
+            return None
+        kwartier = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+        laden = None
+        for regel in plan:
+            begin = dt_util.parse_datetime(str(regel.get("start") or ""))
+            if begin is None or begin < kwartier or begin >= blok_eind:
+                continue
+            if str(regel.get("modus") or "").startswith("manual (laden)"):
+                laden = (begin, regel.get("prijs_ct"))
+                break
+        if laden is None:
+            return None
+        rendement = self.learned_battery_efficiency_percent
+        slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        uit = {
+            "grond": "netladen_in_blok",
+            "netladen_om": laden[0].isoformat(),
+            "prijs_nu_ct": round(prijs_nu * 100, 1) if prijs_nu is not None else None,
+            "prijs_laadmoment_ct": laden[1],
+            "besluit": False,
+        }
+        if prijs_nu is None or laden[1] is None or not rendement or slijtage_ct is None:
+            uit["reden"] = "netladen volgt, maar prijs, rendement of slijtage onbekend"
+            return uit
+        rondtrip_ct = laden[1] / (rendement / 100) + slijtage_ct
+        uit["rondtrip_ct"] = round(rondtrip_ct, 1)
+        if rondtrip_ct <= prijs_nu * 100:
+            uit["reden"] = "netladen volgt, maar terugladen is niet duurder dan de stroom nu"
+            return uit
+        uit.update(
+            {
+                "besluit": True,
+                "prijs_nu_eur": round(prijs_nu, 4),
+                "reden": (
+                    f"netladen volgt om {laden[0]:%H:%M} in dit blok: ontladen nu "
+                    f"kost een rondtrip ({_nl(rondtrip_ct)} ct tegen "
+                    f"{_nl(prijs_nu * 100)} ct)"
+                ),
+                # Voor het kwartierplan: tot het laadmoment sparen.
+                "kwartieren": [
+                    b.isoformat() for b, _e, _p in (entries or [])
+                    if now - timedelta(minutes=15) < b < laden[0]
+                ],
+            }
+        )
+        return uit
+
+    def _sparen_in_blok_v573(
+        self, now: datetime, entries, blok_start: datetime, blok_eind: datetime, uit: dict
+    ) -> dict:
+        """De rekensom van `sparen_in_blok` zonder netladen in het blok (v5.73)."""
         beschikbaar = self.beschikbare_energie_kwh()
         ruimte = self.bruikbaar_tussen_grenzen_kwh()
         prijs_nu = next(
@@ -44477,6 +44576,16 @@ class EnergyManagementSystemCoordinator:
     def _sparen_in_blok_zin(self) -> str:
         """De uitleg met getallen (v5.73)."""
         a = self.last_sparen_in_blok or {}
+        # v5.75: de tweede grond - netladen later in dit blok.
+        if a.get("grond") == "netladen_in_blok" and a.get("besluit"):
+            om = dt_util.parse_datetime(str(a.get("netladen_om") or ""))
+            return (
+                f"Goedkoop blok: om {om:%H:%M} laadt de accu uit het net. Nu "
+                f"ontladen naar het huis spaart {_nl(a['prijs_nu_ct'])} ct, maar "
+                f"die kWh straks terugladen kost {_nl(a['rondtrip_ct'])} ct "
+                "(blokprijs / rendement + slijtage). Daarom tot dan alleen zon "
+                "in de accu; het huis draait op het net."
+            ) if om is not None else REASON_REGISTRY["sparen_in_blok"]["uitleg"]
         if a.get("prijs_nu_eur") is None or a.get("waarde_na_blok_eur") is None:
             return REASON_REGISTRY["sparen_in_blok"]["uitleg"]
         return (
