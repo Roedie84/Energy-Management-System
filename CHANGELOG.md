@@ -32280,3 +32280,31 @@ Zes punten uit de leerronde van 10-10 (akkoord Ruud).
 
 Tests: `test_v572.py` (34). `test_v570_verkoopreserve.py` volgt de nieuwe
 margeregel voor onbekend.
+
+## v5.72.1 — gepland witgoed telt één keer, ook in een lange wandeling
+
+Gevonden in de leerronde van 10-10 11:40. De vaatwasser stond gepland om
+12:16 (1,14 kWh). Om 11:18, toen de start binnen het uur kwam, sprong Monte
+Carlo van een vaste extra van 1,9 naar **25,8 kWh** en een diepste tekort
+van 6,3 naar **30,0 kWh** (in een accu van 8,64).
+
+Oorzaak: `geplande_witgoed_kwh_in_periode` vroeg de planning op met het
+BEGIN van elk uursegment als "nu". De vaatwasser geeft zijn uitgestelde
+start in seconden vanaf nu (`number.vaatwasser_begin_relatief`), dus de
+start schoof met de wandeling mee: lag hij binnen het uur, dan viel hij in
+elk segment. Over 22 uur telde dezelfde afwas 22 keer. Dezelfde wandeling
+voedt de reserve (`_segmenten_verbruik_zon`): in dat uur rekende ook de
+reserve met die te hoge behoefte (veilige kant, maar onjuist).
+
+Andersom telde een start op meer dan een uur in de uurwandeling juist
+nooit: elk segment is hooguit een uur, dus "begin segment + seconden" lag
+altijd voorbij het segment. De belofte van v1.61.0/v3.99.3 ("telt mee in de
+reserve, ook in de wandeling") gold dus alleen in het laatste uur, en dan
+22 keer.
+
+Nu wordt de planning één keer op het echte nu bepaald en telt hij in het
+segment waarin de start valt - één keer. Gevolg voor de sturing: met een
+geplande vaatwasser 's nachts rekent de reserve ~1,1 kWh hoger (zoals
+bedoeld); het laatste uur voor de start niet meer 20+ kWh.
+
+Tests: `test_v5721_gepland_witgoed.py` (5).

@@ -1,3 +1,14 @@
+EMS v5.72.1 - gepland witgoed telt een keer
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Een geplande vaatwasser (uitgestelde start) telde in het laatste uur voor
+  de start in elk uur van de reserveberekening opnieuw mee: 10-10 tussen
+  11:18 en 12:16 rekende Monte Carlo met 25,8 kWh extra (tekortkans 100 %,
+  diepste tekort 30 kWh). Verder dan een uur vooruit telde hij in die
+  berekening juist niet. Nu telt een geplande cyclus een keer, in het uur
+  waarin hij start.
+
 EMS v5.72.0 - meldingen die kloppen, en een bijna lege module telt mee
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

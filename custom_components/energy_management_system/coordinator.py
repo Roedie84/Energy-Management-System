@@ -10002,9 +10002,18 @@ class EnergyManagementSystemCoordinator:
         Hierop leunen de reserve, de energiebrug en de verkooptoets: die
         rekenen met het geleerde uurprofiel, en daar zit een geplande
         wasbeurt niet in.
+
+        v5.72.1: de planning hoort bij NU, niet bij het begin van de periode.
+        De vaatwasser geeft een uitgestelde start in seconden VANAF NU
+        (`number.vaatwasser_begin_relatief`). Met het begin van elk
+        uursegment als "nu" schoof de geplande start mee met de wandeling:
+        zodra de start binnen het uur lag, viel hij in ELK segment. Gemeten
+        10-10 11:18 (leerronde): vaatwasser gepland 12:16 (1,14 kWh),
+        wandeling van 22 uur tot morgen 09:00 - de vaste extra sprong van
+        1,9 naar 25,8 kWh en het diepste tekort van 6,3 naar 30,0 kWh.
         """
         totaal = 0.0
-        for regel in self.get_planned_appliance_load(start).get("apparaten", []):
+        for regel in self.get_planned_appliance_load().get("apparaten", []):
             moment = dt_util.parse_datetime(regel["start"])
             if moment is not None and start <= moment < einde:
                 totaal += regel["kwh"]
