@@ -218,4 +218,6 @@ laatste ronde: 10-10 07:40, gemeten t/m 10-10 07:44
 - L-EMS-012 horizon-reden geverifieerd (blok loopt: "het goedkoopste blok loopt nu"). L-EMS-014/015 gebouwd in v5.72.0 (chat). Meetbaarheid: diagnostics heeft nu `prijsreeks` → H-EMS-4 (achteraf-optimum) in de dagafsluiting van 11-10 opnieuw proberen.
 - Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-4 (achteraf-optimum, wacht op prijsreeks-toets). H-EMS-8 afgerond in L-EMS-014.
 
-laatste ronde: 10-10 11:40, gemeten t/m 10-10 11:50
+- Naschrift 12:15: **v5.73.0** geïnstalleerd (chatsessie 11:58: sparen in het goedkope blok; bevat v5.72.0 en v5.72.1). MC vaste extra 2,34 kWh, diepste tekort 6,70 met de vaatwasser nog gepland → L-EMS-016 eerste meetpunt gehaald.
+
+laatste ronde: 10-10 11:40, gemeten t/m 10-10 12:15

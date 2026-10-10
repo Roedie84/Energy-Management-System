@@ -109,7 +109,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: `shortfall_bonus_percent` tegen het aantal niet-economische nachten; tekortnachten van soort `capaciteit`/`planning` (moet 0 blijven) en verkocht boven de reserve over 14 dagen.
 
 ## L-EMS-014 · beschikbaar vlak boven leeg: rekening houden met de zwakste accumodule
-- Status: **gebouwd v5.72.0** (10-10 11:27, chatsessie, akkoord Ruud) — wacht op installatie. (eerder: open, beschikbaar/reserve = sturing)
+- Status: **gebouwd v5.72.0** (10-10 11:27, chatsessie, akkoord Ruud), geïnstalleerd via v5.73.0 (~12:05) — toets bij de eerstvolgende nacht met lege accu. (eerder: open, beschikbaar/reserve = sturing)
 - Onderbouwing: recorder 30-09..09-10 (10 d): de accu kwam 2× onder ~12 %, en beide keren sprong het totaal-SoC 4-5 pp omlaag aan het eind: 30-09 04:11 12 → 7 % en 09-10 22:34 11 → 7 % (module 00996 12 → 0 %, laagste cel 2,73 V; modules 00917/02093 10/11 %). Het totaal-SoC is het gemiddelde; de zwakste module bepaalt wanneer de Zendure stopt. Elke keer ~0,35 kWh (4 pp × 8,64 kWh) minder bruikbaar dan `beschikbaar` aangaf, dus ook marge en tekortkans waren vlak boven leeg te gunstig.
 - Voorstel: in `beschikbaar` (en daarmee marge/MC) een afslag gelijk aan de gemeten SoC-sprong (geleerd, start 0,35 kWh) zodra een module < 15 % of een laagste cel < 3,0 V meldt; of `beschikbaar` rekenen als n_modules × de laagste module-SoC. Raakt alleen de rand naar leeg: eerder netimport, nooit extra verkoop.
 - Verwacht effect: voorspelde lege accu valt ~10-20 min eerder samen met de werkelijke; tekort-kWh per tekortnacht ~0,3 kWh nauwkeuriger.
@@ -117,14 +117,14 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 
 
 ## L-EMS-015 · live tekortsoort niet laten verdwijnen als het resterende tekort klein wordt
-- Status: **gebouwd v5.72.0** (10-10 11:27, chatsessie) — wacht op installatie. (eerder: gepland, zelf bouwen: rapportage; bouwen in een dagafsluiting nadat v5.69.1 geïnstalleerd is en de nachtindeling van 09:00 (10-10) getoetst is.
+- Status: **gebouwd v5.72.0** (10-10 11:27, chatsessie), geïnstalleerd via v5.73.0 (~12:05) — toets bij de eerstvolgende tekortnacht. (eerder: gepland, zelf bouwen: rapportage; bouwen in een dagafsluiting nadat v5.69.1 geïnstalleerd is en de nachtindeling van 09:00 (10-10) getoetst is.
 - Onderbouwing: nacht 09→10. Om 03:50 `verwacht_tekort.tekort_soort` "economisch" (live); om 07:41 null, terwijl `tekortnacht_tot_nu_kwh` 2,07 is (telt als tekortdag). Oorzaak (coordinator `verwacht_tekort` → `_tekort_soort(tekort, …)`): de soort wordt bepaald op het nog resterende tekort tot het blok (0,33 kWh < 0,5-grens), niet op lopend + resterend. De nachtafsluiting om 09:00 (`_deel_afgelopen_nacht_in`) gebruikt wel de gemeten nacht → het dagrecord zelf is niet geraakt.
 - Voorstel: in `verwacht_tekort` de soort bepalen op `tekortnacht_tot_nu + resterend tekort` (zelfde grens), zodat de live weergave tot 09:00 "economisch" blijft zeggen.
 - Verwacht effect: geen soort-wissel economisch → null in de ochtend van een tekortnacht.
 - Meten na bouw: in een tekortnacht blijft `verwacht_tekort.tekort_soort` tussen het eerste tekort en 09:00 gelijk.
 
 ## L-EMS-016 · gepland witgoed telt één keer in de uurwandeling (reserve en Monte Carlo)
-- Status: **gebouwd v5.72.1** (10-10 11:49, tussenronde: acuut — foute data nu, raakt de reservewandeling; zelf gebouwd: bug; workflow groen, HACS ververst) — wacht op installatie.
+- Status: **gebouwd v5.72.1** (10-10 11:49, tussenronde: acuut — foute data nu, raakt de reservewandeling; zelf gebouwd: bug; workflow groen, HACS ververst), geïnstalleerd via v5.73.0 (~12:05) — eerste meetpunt 12:15: vaatwasser nog gepland (12:16), MC vaste extra **2,34 kWh** (was 25,79), diepste tekort 6,70 (was 29,92). Verifiëren bij de volgende uitgestelde start > 1 uur vooruit (dan +1,1 kWh in het juiste uur).
 - Onderbouwing: 10-10 11:18 sprong MC `vaste_extra_kwh` 1,93 → 25,79 en `deterministisch_diepste_tekort_kwh` 6,26 → 29,92 (accu 8,64 kWh), op het moment dat de geplande vaatwasser (12:16, 1,14 kWh) binnen het uur kwam. Oorzaak: `geplande_witgoed_kwh_in_periode(start, einde)` riep `get_planned_appliance_load(start)` aan; de vaatwasserstart = "start + resterende seconden", dus per uursegment schoof de start mee → binnen het uur in elk van de 22 segmenten (22 × 1,14 = 25,1), verder vooruit in geen enkel. Dezelfde wandeling (`_segmenten_verbruik_zon`) voedt de reserve.
 - Bouw: planning één keer op het echte nu (`get_planned_appliance_load()`); 5 nieuwe tests (reproductie faalde op de oude code), suite 5351 groen.
 - Verwacht effect: met een geplande vaatwasser rekent de reserve +1,1 kWh in het juiste uur (zoals v1.61/v3.99.3 bedoelde), niet +25 kWh in het laatste uur en 0 daarvoor.
