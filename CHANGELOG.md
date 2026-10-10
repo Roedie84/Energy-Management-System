@@ -32308,3 +32308,48 @@ geplande vaatwasser 's nachts rekent de reserve ~1,1 kWh hoger (zoals
 bedoeld); het laatste uur voor de start niet meer 20+ kWh.
 
 Tests: `test_v5721_gepland_witgoed.py` (5).
+
+## v5.73.0 — sparen in het goedkope blok
+
+Gezien op 10-10 11:44 (akkoord Ruud): blok 10:45-16:45, 13,4 ct, de EMS
+laadt niet uit het net en zet `smart`. De accu (24%, laadt ~1,2 kW uit zon)
+gaf het huis stroom zodra het verbruik boven de zon kwam - tegen 13,4 ct,
+terwijl die kWh vanavond 25-35 ct vervangt. `_spaarkwartieren` sloeg het
+blok over ("goedkoop van het net, accu laadt bij"), maar dat bijladen
+gebeurt niet als het blok besluit niet uit het net te laden; en het
+spaarplan doet alleen iets vóór het blok.
+
+**Nieuw: `sparen_in_blok`** (`sparen_in_blok`, `_spaar_in_blok_als_het_loont`).
+In het goedkope blok, als er niet uit het net geladen wordt (die tak,
+verkopen, noodladen, de handmatige stand en de piekregels gaan vóór):
+`smart_charging` - alleen zon laden, het huis van het net - als BEIDE:
+
+1. De accu raakt volgens de verwachting (`_segmenten_verbruik_zon`) NIET
+   vol vóór het einde van het blok (marge `SPAREN_IN_BLOK_VOL_MARGE_KWH`).
+   Raakt hij wel vol, dan gaat het overschot toch het net op: smart.
+2. Het loont: een extra kWh is na het blok meer waard dan de prijs nu plus
+   `SPAREN_IN_BLOK_MIN_WINST_EUR` (2 ct). De waarde is de prijs van het
+   duurste kwartier na het blok (24 uur vooruit, zonoverschot vult eerst
+   bij, zoals het spaarplan) dat de lading die de accu in `smart` aan het
+   eind van het blok zou hebben NIET meer dekt (`_waarde_na_blok`). Dekt
+   die lading alles, dan is een extra kWh niets waard: smart.
+
+Rendement en slijtage staan bewust niet in de vergelijking: de kWh zit al
+in de accu of komt er gratis uit de zon in; nu of na het blok ontladen kost
+hetzelfde verlies. Grendels: alleen met `smart_charging` op deze accu,
+alleen met gemeten getallen, één besluit per kwartier.
+
+- Reden `sparen_in_blok` (REASON_REGISTRY, stand `smart_charging`, bewuste
+  netafname - telt nooit als tekort). Uitleg met getallen: "Goedkoop blok:
+  het huis draait op het net (x ct), de zon vult de accu; die lading is na
+  het blok y ct waard. De accu raakt vandaag niet vol." Ook de waarom-regels.
+- Kwartierplan: de blokkwartieren als "smart_charging (sparen)". Een
+  spaarkwartier in het plan vangt nu ook de zon op (`_plan_sparen`); dat
+  deed het plan tot nu toe niet, terwijl `smart_charging` dat wel doet.
+- Afweging als attribuut `sparen_in_blok` op de uitleg-sensor en in de
+  export: `vol_voor_blokeinde`, `waarde_na_blok_eur`, `prijs_nu_eur`,
+  `besluit`, `reden`, `zon_naar_accu_kwh`, `eind_smart_kwh`.
+- Financiële registratie: geen ontlaad- of laadpost (zoals
+  `battery_saved_for_peak`); de huisafname loopt via de kostentelling.
+
+Tests: `test_v573.py` (16).

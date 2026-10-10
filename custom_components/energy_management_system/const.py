@@ -1746,6 +1746,8 @@ REDENEN_BEWUSTE_NETAFNAME = (
     "kalibratie",
     "force_manual",
     "emergency_low_battery",
+    # v5.73: in het goedkope blok bewust van het net, de accu spaart.
+    "sparen_in_blok",
 )
 
 # Hoe ver de accu onder zijn ontlaadgrens mag zitten en toch als "op de
@@ -2455,6 +2457,26 @@ REASON_REGISTRY: dict[str, dict] = {
         "label": "accu sparen voor de duurste uren",
         "waarom_vraag": "Waarom gebruik je de accu nu niet?",
         "korte_naam": "accu sparen",
+        "emoji": "🔋⏸️",
+    },
+    # v5.73 (akkoord Ruud 10-10): sparen BINNEN het goedkope blok. Laadt
+    # het blok niet uit het net, dan gaf de accu in `smart` het huis stroom
+    # tegen de blokprijs, terwijl die kWh na het blok een duurder kwartier
+    # vervangt. Alleen zon laden, het huis van het net - zolang de accu
+    # vandaag toch niet vol raakt.
+    "sparen_in_blok": {
+        "mode": OPTION_SMART_CHARGING,
+        "titel": "Sparen in het goedkope blok",
+        "uitleg": (
+            "Goedkoop blok: het huis draait op het net en de zon vult de "
+            "accu. Die lading is na het blok meer waard dan de stroom nu "
+            "kost, en de accu raakt vandaag niet vol."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "sparen in het goedkope blok",
+        "waarom_vraag": "Waarom gebruik je de accu nu niet?",
+        "korte_naam": "sparen in het blok",
         "emoji": "🔋⏸️",
     },
     "expensive_quarter_peak": {
@@ -7314,3 +7336,12 @@ MODULE_LEEG_HERSTEL_V = 0.05
 # een herstart, een kalibratie of een meetfout.
 MODULE_LEEG_SPRONG_MAX_KWH = 1.5
 MODULE_LEEG_SPRONGEN_BEWAARD = 10
+
+# v5.73 (akkoord Ruud 10-10): sparen BINNEN het goedkope blok.
+# Raakt de accu volgens de verwachting tot zoveel kWh onder vol vóór het
+# einde van het blok, dan telt hij als vol: dan gaat het overschot toch het
+# net op en is sparen zinloos.
+SPAREN_IN_BLOK_VOL_MARGE_KWH = 0.10
+# Hoeveel de bewaarde kWh na het blok meer waard moet zijn dan de prijs nu.
+# Dezelfde marge als de vergelijking net tegen accu (GRID_CHEAPER_MARGIN_EUR).
+SPAREN_IN_BLOK_MIN_WINST_EUR = 0.02

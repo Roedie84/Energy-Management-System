@@ -1,3 +1,15 @@
+EMS v5.73.0 - sparen in het goedkope blok
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Laadt het goedkope blok niet uit het net, dan gaf de accu in "smart" het
+  huis stroom tegen de blokprijs, terwijl die kWh na het blok een duurder
+  kwartier vervangt. Nu zet de EMS de accu in het blok op alleen zon laden
+  (smart_charging, het huis van het net) als de accu vandaag toch niet vol
+  raakt en de lading na het blok minstens 2 ct meer waard is dan de stroom
+  nu. Nieuwe reden "Sparen in het goedkope blok", met de getallen in de
+  uitleg en "smart_charging (sparen)" in het kwartierplan.
+
 EMS v5.72.1 - gepland witgoed telt een keer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

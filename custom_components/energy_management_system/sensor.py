@@ -934,6 +934,9 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
                 self._coordinator.last_effective_expensive_quarters_count
             ),
             "heavy_load_source": self._coordinator.last_heavy_load_source,
+            # v5.73: sparen in het goedkope blok - vol_voor_blokeinde,
+            # waarde_na_blok_eur, prijs_nu_eur, besluit en reden.
+            "sparen_in_blok": dict(self._coordinator.last_sparen_in_blok or {}),
         }
 
 
