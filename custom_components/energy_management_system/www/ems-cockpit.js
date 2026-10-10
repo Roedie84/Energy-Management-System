@@ -770,6 +770,34 @@ const LINKS = [
   ["Logboek", "detail-logboek"], ["Overzicht", "overzicht"],
 ];
 
+/* ---- rustig scrollen (v5.71.1) ----
+   Op mobiel (vooral iOS, dat geen scroll anchoring kent) verspringt de pagina
+   als een paneel tijdens het scrollen opnieuw wordt opgebouwd. Daarom:
+   tijdens aanraken en scrollen niets tekenen, pas kort na het loslaten. */
+const SCROLL = { tot: 0, aan: false, klaar: false };
+const volgScroll = () => {
+  if (SCROLL.klaar || typeof window === "undefined") return;
+  SCROLL.klaar = true;
+  const opt = { passive: true, capture: true };
+  const rust = (ms) => () => {
+    SCROLL.tot = Math.max(SCROLL.tot, Date.now() + ms);
+  };
+  window.addEventListener("scroll", rust(400), opt);
+  window.addEventListener("wheel", rust(400), opt);
+  window.addEventListener("touchmove", rust(400), opt);
+  window.addEventListener("touchstart", () => {
+    SCROLL.aan = true;
+    rust(400)();
+  }, opt);
+  const los = () => {
+    SCROLL.aan = false;
+    rust(500)();
+  };
+  window.addEventListener("touchend", los, opt);
+  window.addEventListener("touchcancel", los, opt);
+};
+const scrolltNog = () => SCROLL.aan || Date.now() < SCROLL.tot;
+
 class EmsCockpitCard extends HTMLElement {
   constructor() {
     super();
@@ -864,6 +892,8 @@ class EmsCockpitCard extends HTMLElement {
 
   _bouw() {
     this._gebouwd = true;
+    this._html = {};
+    volgScroll();
     this.shadowRoot.innerHTML =
       `<style>${STIJL}</style>` +
       `<div class="root">${ACHTERGROND}<div class="wrap">` +
@@ -908,6 +938,11 @@ class EmsCockpitCard extends HTMLElement {
     if (this._gepland || !this._hass || !this._gebouwd) return;
     this._gepland = true;
     const doe = () => {
+      if (scrolltNog()) {
+        // Pas tekenen als de gebruiker klaar is met scrollen
+        setTimeout(doe, 250);
+        return;
+      }
       this._gepland = false;
       this._teken();
     };
@@ -923,10 +958,12 @@ class EmsCockpitCard extends HTMLElement {
   _teken() {
     const geen = this._el.geenbron;
     if (!this._gevonden) {
-      geen.hidden = false;
-      geen.innerHTML =
-        `<b>De sensor Dashboardbronnen van het Energy Management System is (nog) niet gevonden.</b><br>` +
-        `Werk de integratie bij naar v5.71 of nieuwer en herstart Home Assistant.`;
+      if (geen.hidden) {
+        geen.hidden = false;
+        geen.innerHTML =
+          `<b>De sensor Dashboardbronnen van het Energy Management System is (nog) niet gevonden.</b><br>` +
+          `Werk de integratie bij naar v5.71 of nieuwer en herstart Home Assistant.`;
+      }
     } else {
       geen.hidden = true;
     }
@@ -938,12 +975,17 @@ class EmsCockpitCard extends HTMLElement {
       try {
         const html = this[`_${paneel}`].call(this, el);
         if (html === undefined) continue;
+        // Vergelijken met de vorige opbouw, niet met innerHTML (dat schrijft
+        // de browser anders terug, waardoor elk paneel steeds opnieuw werd
+        // opgebouwd)
+        if (this._html[paneel] === html) continue;
+        this._html[paneel] = html;
         if (html === null) {
           el.hidden = true;
           el.innerHTML = "";
         } else {
           el.hidden = false;
-          if (el.innerHTML !== html) el.innerHTML = html;
+          el.innerHTML = html;
         }
       } catch (err) {
         console.warn("EMS cockpit: paneel", paneel, "kon niet getekend worden", err);

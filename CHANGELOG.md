@@ -32221,3 +32221,13 @@ beetje lijken op de dashboards van de andere 2 integraties."
 - **Komend schema**: kolom Accu (zie v5.70.1).
 
 Sturing ongewijzigd. Tests in `test_v571_cockpit.py`.
+
+## v5.71.1 — de cockpit verspringt niet meer tijdens scrollen op mobiel
+
+Een paneel van de energiecockpit werd bij elke update opnieuw opgebouwd,
+ook als er niets veranderde: de vergelijking liep via `innerHTML`, dat de
+browser anders terugschrijft dan de opgebouwde tekst. Op een telefoon,
+vooral iOS (geen scroll anchoring), schoof de pagina daardoor tijdens het
+scrollen. Panelen worden nu alleen nog vervangen als de inhoud echt anders
+is, en tijdens aanraken of scrollen wacht de cockpit met bijwerken tot kort
+na het loslaten. Zelfde oplossing als StormchaseNL 0.51.1.

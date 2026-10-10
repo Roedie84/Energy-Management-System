@@ -153,3 +153,22 @@ def test_overzicht_heeft_een_tegel_naar_de_cockpit():
     tekst = (PAKKET / "dashboard_template.yaml").read_text(encoding="utf-8")
     assert "navigation_path: /ems-cockpit" in tekst
     assert "sensor.woonkamer_energy_management_system_dashboardbronnen" in tekst
+
+
+# --- v5.71.1: niet verspringen tijdens scrollen ------------------------------
+
+
+def test_panelen_vergelijken_met_de_vorige_opbouw():
+    """Vergelijken met innerHTML is altijd 'anders' (de browser schrijft het
+    anders terug), dus dan werd elk paneel bij elke update vervangen."""
+    script = _script()
+    assert "el.innerHTML !== html" not in script
+    assert "if (this._html[paneel] === html) continue;" in script
+
+
+def test_tekenen_wacht_tot_het_scrollen_klaar_is():
+    script = _script()
+    assert "const scrolltNog = () =>" in script
+    assert "if (scrolltNog()) {" in script
+    for gebeurtenis in ("scroll", "touchstart", "touchmove", "touchend", "touchcancel", "wheel"):
+        assert f'window.addEventListener("{gebeurtenis}"' in script

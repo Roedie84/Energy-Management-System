@@ -1,3 +1,12 @@
+EMS v5.71.1 - de cockpit verspringt niet meer tijdens scrollen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna de
+browser een keer hard verversen (in de app de cache wissen).
+
+- De energiecockpit bouwt een paneel alleen nog opnieuw op als de inhoud
+  echt verandert, en wacht met bijwerken tot je klaar bent met scrollen.
+  Op de telefoon schoof de pagina daardoor tijdens het scrollen.
+
 EMS v5.71 - de energiecockpit
 
 Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna de
