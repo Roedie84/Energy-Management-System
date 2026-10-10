@@ -3742,6 +3742,10 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # winterwacht die na het netladen weer vrijgaf.
     "_today_min_load_kw": {"type": "plain"},
     "_cusum_check_date": {"type": "date"},
+    # v5.74: per dag het laagste kwartier, en de laatst afgesloten dag.
+    "vloer_dagminima": {"type": "plain"},
+    "vloer_afgesloten_tot": {"type": "plain"},
+    "vloer_bootstrap": {"type": "plain"},
     "_capacity_trend_day_key": {"type": "date"},
     "_proefstand_doorzet_bij_dagstart": {"type": "plain"},
     "_price_shape_day_key": {"type": "date"},
@@ -7345,3 +7349,15 @@ SPAREN_IN_BLOK_VOL_MARGE_KWH = 0.10
 # Hoeveel de bewaarde kWh na het blok meer waard moet zijn dan de prijs nu.
 # Dezelfde marge als de vergelijking net tegen accu (GRID_CHEAPER_MARGIN_EUR).
 SPAREN_IN_BLOK_MIN_WINST_EUR = 0.02
+
+# v5.74 (verbruiksaudit, akkoord Ruud): de haalbare startvensters voor de
+# eerlijke maatstaf van een witgoedbeurt - start tussen deze tijden, klaar
+# vóór middernacht.
+CYCLUS_VENSTER_VAN = "06:00"
+CYCLUS_VENSTER_TOT = "23:00"
+
+# v5.74: de vloerreeks (sluipverbruik) uit de recorder aanvullen - hoeveel
+# dagen terug (de recorder bewaart 5-minutenstatistieken standaard tien
+# dagen) en hoeveel kwartieren een dag minstens moet hebben om mee te tellen.
+VLOER_BOOTSTRAP_DAGEN = 10
+VLOER_BOOTSTRAP_MIN_KWARTIEREN = 80

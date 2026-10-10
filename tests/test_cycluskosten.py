@@ -46,16 +46,21 @@ def _dag(c):
 
 def test_de_kosten_van_een_cyclus_in_de_zon(make_coordinator, hass):
     """Anderhalf uur draaien om 13:00, 1,0 kWh, met 2,5 kW zon en 300 W
-    huis: alles uit de zon, dus geen netkosten."""
+    huis: alles uit de zon, dus geen netkosten.
+
+    v5.74 - VERWACHTING BEWUST GEWIJZIGD: zolang salderen geldt is die zon
+    niet gratis (hij had tegen dezelfde prijs het net op gekund). De kosten
+    zijn dus de kwartierprijs; `netkosten_eur` is wat er van het net kwam."""
     c = make_coordinator({})
     _dag(c)
 
     uit = c.cycluskosten("wasmachine", NU - timedelta(hours=1), NU, 1.0)
 
     assert uit["kwh"] == 1.0
-    assert uit["kosten_eur"] == pytest.approx(0.0, abs=0.01)
+    assert uit["netkosten_eur"] == pytest.approx(0.0, abs=0.01)
+    assert uit["kosten_eur"] == pytest.approx(0.22, abs=0.01)
     assert uit["op_netstroom_eur"] == pytest.approx(0.22, abs=0.01)
-    assert uit["eigen_opwek_eur"] == pytest.approx(0.22, abs=0.01)
+    assert uit["eigen_opwek_eur"] == pytest.approx(0.0, abs=0.01)
 
 
 def test_de_kosten_van_een_cyclus_zonder_zon(make_coordinator, hass):
@@ -79,7 +84,8 @@ def test_wat_het_uitstel_opleverde(make_coordinator, hass):
     uit = c.cycluskosten("wasmachine", NU - timedelta(hours=1), NU, 1.0)
 
     assert uit["duurste_moment_eur"] == pytest.approx(0.45, abs=0.02)
-    assert uit["uitstel_leverde_op_eur"] == pytest.approx(0.45, abs=0.02)
+    # v5.74: tegen de kosten mét de zon tegen de kwartierprijs (salderen).
+    assert uit["uitstel_leverde_op_eur"] == pytest.approx(0.23, abs=0.02)
     # het goedkope blok begint om 10:00 (22 ct), dus dat is het
     # goedkoopste venster van die dag
     assert uit["goedkoopste_moment"] == "10:00"
@@ -122,7 +128,8 @@ def test_het_overzicht_telt_per_apparaat(make_coordinator, hass):
 
     assert o["wasmachine"]["beurten"] == 1
     assert o["vaatwasser"]["gemiddeld_eur"] == pytest.approx(0.45, abs=0.02)
-    assert o["wasmachine"]["eigen_opwek_eur_totaal"] > 0
+    # v5.74: onder salderen scheelt de eigen zon niets.
+    assert o["wasmachine"]["eigen_opwek_eur_totaal"] == 0
 
 
 def test_het_overzicht_staat_in_de_export():

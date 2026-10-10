@@ -3376,6 +3376,12 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
         return {
             "history": self._coordinator.reserve_shortfall_history,
             "history_dates": self._coordinator.reserve_shortfall_dates,
+            # v5.74: wat de datum betekent - de ochtend waarop de nacht om
+            # 09:00 afliep. "2026-10-03" is de nacht van 02-10 22:00 tot
+            # 03-10 09:00 (de verbruiksaudit las het als de avond).
+            "datum_betekenis": (
+                "ochtend waarop de nacht afliep (22:00 de dag ervoor tot 09:00)"
+            ),
             # Signaal: één moment netafname >100 W tijdens ontladen. Telt NIET
             # als tekortdag; dat beslist de gemeten netafname met lege accu.
             "detected_today_so_far": self._coordinator._shortfall_detected_today,

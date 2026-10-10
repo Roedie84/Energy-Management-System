@@ -305,6 +305,8 @@ from .const import (
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
     DEFAULT_LOW_SOLAR_THRESHOLD_KWH,
     CYCLUSKOSTEN_LENGTE,
+    CYCLUS_VENSTER_VAN,
+    CYCLUS_VENSTER_TOT,
     DEFAULT_MANUAL_CHARGE_POWER,
     DEFAULT_MANUAL_DISCHARGE_POWER,
     ONTLAADGRENS_MARGE_W,
@@ -336,6 +338,8 @@ from .const import (
     CUSUM_ALARM_THRESHOLD_KW,
     CUSUM_VLOER_BLOK_MINUTEN,
     CUSUM_VLOER_MIN_KW,
+    VLOER_BOOTSTRAP_DAGEN,
+    VLOER_BOOTSTRAP_MIN_KWARTIEREN,
     CUSUM_VLOER_MIN_MONSTERS,
     SLUIPVERBRUIK_METHODE_VERSIE,
     CONF_KNMI_WEATHER_ENTITY,
@@ -2214,6 +2218,12 @@ class EnergyManagementSystemCoordinator:
             self._ruim_pv_uurbias_op()
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de PV-uurverhoudingen niet opruimen")
+
+        # v5.74: de vloerreeks voor de sluipverbruik-detectie.
+        try:
+            await self.async_bootstrap_vloer_uit_recorder()
+        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
+            _LOGGER.debug("Vloerverbruik niet uit de recorder", exc_info=True)
 
         try:
             await self.async_bootstrap_energy_history()
@@ -9731,7 +9741,15 @@ class EnergyManagementSystemCoordinator:
         # het verbruik gelijk over de cyclus verdelen; fijner kan niet,
         # want het EMS bewaart geen vermogensverloop per beurt
         per_kwartier = kwh / len(binnen)
+        # v5.74 (verbruiksaudit 30-09..10-10, akkoord Ruud): eigen opwek is
+        # NIET gratis zolang salderen geldt. Een kWh zon die de wasmachine
+        # gebruikt, had anders tegen dezelfde kwartierprijs het net op
+        # gekund (salderen) - de marginale waarde is die prijs. Na salderen
+        # telt de zon tegen de terugleverwaarde. `netkosten_eur` is wat er
+        # werkelijk van het net kwam (de oude `kosten_eur`).
+        salderen = self._is_salderen_active(start)
         kosten = 0.0
+        netkosten = 0.0
         op_netstroom = 0.0
         uit_de_zon_kwh = 0.0
         for r in binnen:
@@ -9739,7 +9757,10 @@ class EnergyManagementSystemCoordinator:
             overschot_kwh = max(0.0, ((r.get("pv_w") or 0) - (r.get("huis_w") or 0)) / 4000)
             uit_de_zon = min(per_kwartier, overschot_kwh)
             uit_de_zon_kwh += uit_de_zon
-            kosten += (per_kwartier - uit_de_zon) * prijs
+            netkosten += (per_kwartier - uit_de_zon) * prijs
+            kosten += (per_kwartier - uit_de_zon) * prijs + uit_de_zon * self._zonwaarde_eur(
+                prijs, salderen
+            )
             op_netstroom += per_kwartier * prijs
         # hetzelfde verbruik op het duurste en goedkoopste venster
         n = len(binnen)
@@ -9752,26 +9773,108 @@ class EnergyManagementSystemCoordinator:
         ]
         duurste = max(vensters)
         goedkoopste = min(vensters)
+        # v5.74: de eerlijke maatstaf - alleen vensters die haalbaar waren:
+        # start 06:00-23:00, klaar vóór middernacht.
+        haalbaar = [
+            v for i, v in enumerate(vensters)
+            if CYCLUS_VENSTER_VAN <= str(v[1] or "") <= CYCLUS_VENSTER_TOT
+            and i + n <= len(reeks)
+        ] or vensters
+        gemiddeld = sum(v[0] for v in haalbaar) / len(haalbaar)
+        goedkoopst_haalbaar = min(haalbaar)
         return {
             "te_becijferen": True,
             "apparaat": apparaat,
             "moment": start.isoformat(),
+            # v5.74: de looptijd, zodat een beurt later te herberekenen is.
+            "einde": einde.isoformat(),
             "kwh": round(kwh, 3),
             "kosten_eur": round(kosten, 3),
+            "netkosten_eur": round(netkosten, 3),
             "op_netstroom_eur": round(op_netstroom, 3),
             "eigen_opwek_eur": round(op_netstroom - kosten, 3),
             "uit_de_zon_kwh": round(uit_de_zon_kwh, 3),
+            "salderen": salderen,
             "duurste_moment_eur": round(duurste[0] * kwh, 3),
             "duurste_moment": duurste[1],
             "goedkoopste_moment_eur": round(goedkoopste[0] * kwh, 3),
             "goedkoopste_moment": goedkoopste[1],
+            # VEROUDERD (v5.74): tegen het duurste venster van de dag - dat is
+            # altijd positief en zegt niets. Blijft voor oude kaarten.
             "uitstel_leverde_op_eur": round(duurste[0] * kwh - kosten, 3),
+            # v5.74: tegen een gemiddeld haalbaar moment (06:00-23:00).
+            "gemiddeld_moment_eur": round(gemiddeld * kwh, 3),
+            "besparing_tov_gemiddeld_eur": round(gemiddeld * kwh - kosten, 3),
+            # v5.74: tegen het goedkoopste haalbare venster; nul of negatief
+            # (negatief = zoveel is er gemist).
+            "goedkoopste_haalbaar_eur": round(goedkoopst_haalbaar[0] * kwh, 3),
+            "goedkoopste_haalbaar_moment": goedkoopst_haalbaar[1],
+            "verschil_tov_goedkoopste_eur": round(goedkoopst_haalbaar[0] * kwh - kosten, 3),
+            "maatstaf": "v5.74",
             "toelichting": (
-                "Wat deze beurt kostte, wat hij op pure netstroom had gekost, en "
-                "wat dezelfde kWh op het duurste moment van die dag zou hebben "
-                "gekost. Het verbruik is gelijk over de looptijd verdeeld."
+                "Wat deze beurt kostte (zon tegen de kwartierprijs zolang salderen "
+                "geldt), tegenover een gemiddeld moment en het goedkoopste "
+                "haalbare venster van die dag (start 06:00-23:00, klaar voor "
+                "middernacht). Het verbruik is gelijk over de looptijd verdeeld."
             ),
         }
+
+    def _zonwaarde_eur(self, prijs: float, salderen: bool) -> float:
+        """Wat een kWh eigen zon waard is (v5.74).
+
+        Salderen: de kwartierprijs - die kWh had anders tegen dezelfde prijs
+        het net op gekund. Daarna: de terugleverwaarde. Is die (nog) niet te
+        bepalen, dan de kale terugleverpremie - liever te laag dan de oude
+        aanname "gratis".
+        """
+        if salderen:
+            return prijs
+        try:
+            waarde = self._get_feedin_value_per_kwh(self._get_forecast_entries(), dt_util.now())
+        except Exception:  # noqa: BLE001 - kosten mogen nooit de afronding breken
+            waarde = None
+        return waarde if waarde is not None else FEEDIN_PREMIUM_EUR_PER_KWH
+
+    def _herbereken_oude_cyclusbeurten(self) -> int:
+        """Beurten van vóór v5.74 opnieuw becijferen (v5.74).
+
+        Een oude beurt bewaarde geen eindtijd. De looptijd is terug te
+        vinden: `op_netstroom_eur` is kWh x de gemiddelde prijs over de
+        looptijd, en die prijzen staan in het dagverloop. De eerste looptijd
+        (in kwartieren) die hetzelfde bedrag geeft, is het. Lukt dat niet -
+        geen dagverloop meer - dan blijft de beurt zoals hij was, met
+        `maatstaf` "oud". Geeft het aantal herberekende beurten.
+        """
+        aantal = 0
+        for apparaat, beurten in (self.cycluskosten_geschiedenis or {}).items():
+            for i, beurt in enumerate(beurten or []):
+                if not isinstance(beurt, dict) or beurt.get("maatstaf"):
+                    continue
+                start = dt_util.parse_datetime(str(beurt.get("moment") or ""))
+                kwh = beurt.get("kwh")
+                nieuw = None
+                if start is not None and isinstance(kwh, (int, float)) and kwh > 0:
+                    for k in range(1, 49):
+                        kandidaat = self.cycluskosten(
+                            apparaat, start, start + timedelta(minutes=15 * k), kwh
+                        )
+                        if not kandidaat.get("te_becijferen"):
+                            break
+                        # Ook het duurste venster moet kloppen (dat hangt
+                        # van de looptijd af), als de beurt dat bewaarde.
+                        if abs(kandidaat["op_netstroom_eur"] - (beurt.get("op_netstroom_eur") or 0)) <= 0.0015 and (
+                            beurt.get("duurste_moment_eur") is None
+                            or abs(kandidaat["duurste_moment_eur"] - beurt["duurste_moment_eur"]) <= 0.0015
+                        ):
+                            nieuw = kandidaat
+                            break
+                if nieuw is None:
+                    beurt["maatstaf"] = "oud"
+                    continue
+                nieuw["herberekend"] = "v5.74"
+                beurten[i] = nieuw
+                aantal += 1
+        return aantal
 
     def noteer_cycluskosten(
         self, apparaat: str, start: datetime, einde: datetime, kwh: float
@@ -9881,7 +9984,19 @@ class EnergyManagementSystemCoordinator:
 
     def get_cycluskosten_overzicht(self) -> dict:
         """Per apparaat: hoeveel beurten, wat ze kostten, en wat de eigen
-        opwek scheelde (v4.14)."""
+        opwek scheelde (v4.14).
+
+        v5.74: de eerlijke maatstaf - besparing tegenover een gemiddeld
+        haalbaar moment, en wat er gemist is tegenover het goedkoopste
+        haalbare venster. `uitstel_leverde_op_eur_totaal` (tegen het duurste
+        venster, altijd positief) blijft staan maar is verouderd. Beurten
+        van vóór v5.74 tellen in de nieuwe totalen alleen mee als ze uit het
+        dagverloop te herberekenen waren.
+        """
+        try:
+            self._herbereken_oude_cyclusbeurten()
+        except Exception as fout:  # noqa: BLE001 - een overzicht mag niet omvallen
+            self.internal_failures["cycluskosten_herberekenen"] = f"{type(fout).__name__}: {fout}"
         uit = {}
         for apparaat, beurten in (self.cycluskosten_geschiedenis or {}).items():
             if not beurten:
@@ -9898,6 +10013,17 @@ class EnergyManagementSystemCoordinator:
                 "uitstel_leverde_op_eur_totaal": round(
                     sum(b["uitstel_leverde_op_eur"] for b in beurten), 2
                 ),
+                # v5.74: de eerlijke maatstaf.
+                "besparing_tov_gemiddeld_eur_totaal": round(
+                    sum(b.get("besparing_tov_gemiddeld_eur") or 0.0 for b in beurten), 2
+                ),
+                "verschil_tov_goedkoopste_eur_totaal": round(
+                    sum(b.get("verschil_tov_goedkoopste_eur") or 0.0 for b in beurten), 2
+                ),
+                "beurten_met_maatstaf": sum(
+                    1 for b in beurten if b.get("besparing_tov_gemiddeld_eur") is not None
+                ),
+                "verouderd": ["uitstel_leverde_op_eur_totaal"],
                 "laatste": beurten[-1].get("moment"),
             }
         return uit
@@ -10839,7 +10965,9 @@ class EnergyManagementSystemCoordinator:
         uren = 0
         for uur in range(24):
             reeks = self.daytype_consumption_profile.get(f"{soort}-{uur}") or []
-            algemeen = self.learned_hourly_avg_kw(uur)
+            # v5.74: mediaan tegen mediaan - de proefstand vergelijkt het
+            # gewone uur per dagtype, geen energiesom.
+            algemeen = self.learned_hourly_median_kw(uur)
             if len(reeks) < PROEFSTAND_MIN_SAMPLES or algemeen is None:
                 continue
             totaal += statistics.median(reeks) - algemeen
@@ -19733,7 +19861,28 @@ class EnergyManagementSystemCoordinator:
         come through once enough of the recent days reflect them - and
         the separate shortfall self-correction (margin bonus) already
         protects against the median trailing a real change too slowly.
+
+        v5.74 (verbruiksaudit 30-09..10-10, akkoord Ruud): het GEMIDDELDE.
+        Dit getal voedt ENERGIESOMMEN - reserve, verkooptoets,
+        kwartierplanning, Monte Carlo, dagtotaal - en daar telt elke kWh.
+        De mediaan negeerde juist de apparaatpieken (wasmachine,
+        vaatwasser, oven) en onderschatte het dagverbruik met ~0,8 kWh/dag
+        (9%), vooral 12-18 uur (+118 W). Leave-one-day-out over negen
+        volle dagen: dagtotaalfout 0,84 -> 0,65 kWh, bias 0,53 -> 0,00.
+        De avond en nacht (17-07, de basis van de reserve) gaan van 0,016
+        naar 0,088 kWh te hoog: +0,07 kWh, binnen de spreiding (MAE 0,40).
+        Zie tests/test_v574.py. De mediaan blijft beschikbaar als
+        `learned_hourly_median_kw` voor wat geen energiesom is.
         """
+        values = self.hourly_consumption_profile.get(hour)
+        if not values:
+            return None
+        return statistics.mean(values)
+
+    def learned_hourly_median_kw(self, hour: int) -> float | None:
+        """De mediaan van het uurprofiel (v5.74) - het "gewone" uur, zonder
+        apparaatpieken. Voor vergelijkingen met een ander mediaanprofiel
+        (de dagtype-proefstand), niet voor energiesommen."""
         values = self.hourly_consumption_profile.get(hour)
         if not values:
             return None
@@ -19751,7 +19900,8 @@ class EnergyManagementSystemCoordinator:
         if not values or len(values) < 2:
             return None
         previous_values = values[:-1]
-        return statistics.median(previous_values)
+        # v5.74: dezelfde maat als `learned_hourly_avg_kw`.
+        return statistics.mean(previous_values)
 
     def _vacation_adjusted_kwh(self, kwh: float) -> float:
         """Scale down an estimated consumption amount while vacation mode
@@ -30074,6 +30224,18 @@ class EnergyManagementSystemCoordinator:
         for record in self.reserve_daily_records or []:
             if not isinstance(record, dict) or "tekortnacht_kwh" in record:
                 continue
+            # v5.74: eerst de echte meting uit het dagverloop - alleen
+            # netafname terwijl de accu op de vloer stond. Zie
+            # `_tekortnacht_uit_verloop`.
+            gemeten = self._tekortnacht_uit_verloop(record.get("date"), vloer)
+            if gemeten is not None:
+                nieuw = self._telt_als_tekortdag(gemeten)
+                record["tekortnacht_kwh"] = gemeten
+                record["tekortnacht_bron"] = "dagverloop (v5.74)"
+                if bool(record.get("shortfall")) != nieuw:
+                    record["shortfall"] = nieuw
+                    record["herbeoordeeld"] = "v5.74"
+                continue
             soc = record.get("laagste_soc_ochtend")
             netimport = record.get("netimport_nacht_kwh")
             if not isinstance(soc, (int, float)) or not isinstance(netimport, (int, float)):
@@ -30084,6 +30246,49 @@ class EnergyManagementSystemCoordinator:
                 record["herbeoordeeld"] = "v5.33"
         # v5.41: en de tekortnachten zonder soort uit het dagverloop indelen.
         self._herleid_onbekende_tekortnachten()
+
+    def _tekortnacht_uit_verloop(self, datum, vloer: float) -> float | None:
+        """De tekortnacht van een oud dagrecord, uit het dagverloop (v5.74).
+
+        Gemeld bij de verbruiksaudit van 10-10: `reserve_shortfall_days`
+        noemde 03-10 een tekortnacht, terwijl de accu die nacht pas om 07:40
+        op de vloer kwam en er daarna maar ~0,02 kWh van het net kwam. Geen
+        datumverschuiving - de datum is de ochtend waarop de nacht om 09:00
+        afliep (nacht 02-10 22:00 tot 03-10 09:00) - maar een definitiefout
+        in de herbeoordeling van v5.33 voor records zonder `tekortnacht_kwh`:
+        die nam ALLE netafname van de nacht (0,68 kWh) zodra de laagste
+        ochtendstand op de vloer lag, ook de netafname van uren eerder, toen
+        de accu nog vol genoeg was.
+
+        Hier dezelfde definitie als live (`_netimport_is_tekort`): per
+        kwartier van 22:00 tot 09:00 de netafname, alleen als de laadstand op
+        de vloer stond en de reden geen bewuste netafname was. None als het
+        dagverloop van die nacht te dun is (minder dan de helft van de
+        kwartieren); dan blijft de oude benadering.
+        """
+        try:
+            dag = date.fromisoformat(str(datum))
+        except (TypeError, ValueError):
+            return None
+        verloop = self.dagverloop if isinstance(self.dagverloop, dict) else {}
+        rijen = [
+            r for r in (verloop.get((dag - timedelta(days=1)).isoformat()) or [])
+            if isinstance(r, dict) and str(r.get("tijd") or "") >= "22:00"
+        ] + [
+            r for r in (verloop.get(dag.isoformat()) or [])
+            if isinstance(r, dict) and str(r.get("tijd") or "") < "09:00"
+        ]
+        if len(rijen) < 22:
+            return None
+        kwh = 0.0
+        for r in rijen:
+            soc, net_w = r.get("soc"), r.get("net_w")
+            if soc is None or net_w is None or net_w <= 0 or soc > vloer:
+                continue
+            if r.get("reden") in REDENEN_BEWUSTE_NETAFNAME:
+                continue
+            kwh += net_w / 1000 * 0.25
+        return round(kwh, 3)
 
     def tekortnacht_tot_nu(self) -> dict:
         """Hoe de lopende nacht er tot nu toe voor staat (v5.38).
@@ -34016,11 +34221,9 @@ class EnergyManagementSystemCoordinator:
             self._sluit_vloerkwartier()
             self._vloer_blok_start = blok
 
-        if self._cusum_check_date != now.date():
-            if self._cusum_check_date is not None and self._today_min_load_kw is not None:
-                self._finalize_baseline_load_day(self._today_min_load_kw)
-            self._today_min_load_kw = None
-            self._cusum_check_date = now.date()
+        # v5.74: de dag afsluiten per DATUM, niet via één datum + één
+        # minimum in het geheugen - zie `_sluit_vloerdagen_af`.
+        self._sluit_vloerdagen_af(now.date())
 
         self._vloer_blok_monsters.append(household_load_kw)
 
@@ -34033,11 +34236,188 @@ class EnergyManagementSystemCoordinator:
         """
         monsters = self._vloer_blok_monsters
         self._vloer_blok_monsters = []
-        if len(monsters) < CUSUM_VLOER_MIN_MONSTERS:
+        if len(monsters) < CUSUM_VLOER_MIN_MONSTERS or self._vloer_blok_start is None:
             return
         mediaan = max(CUSUM_VLOER_MIN_KW, statistics.median(monsters))
-        if self._today_min_load_kw is None or mediaan < self._today_min_load_kw:
-            self._today_min_load_kw = mediaan
+        # v5.74: per datum van het kwartier (het kwartier van 23:45 hoort
+        # bij de dag waarin het begon).
+        dag = self._vloer_blok_start.date().isoformat()
+        minima = self.vloer_dagminima if isinstance(self.vloer_dagminima, dict) else {}
+        if minima.get(dag) is None or mediaan < minima[dag]:
+            minima[dag] = round(mediaan, 4)
+        self.vloer_dagminima = minima
+        if self._cusum_check_date is None or dag == self._cusum_check_date.isoformat():
+            self._today_min_load_kw = minima[dag]
+
+    # v5.74: per dag het laagste kwartier, en tot welke dag er is afgesloten.
+    vloer_dagminima: dict | None = None
+    vloer_afgesloten_tot: str | None = None
+    vloer_bootstrap: dict | None = None
+
+    def _sluit_vloerdagen_af(self, vandaag: date) -> None:
+        """Elke voorbije dag precies één keer afsluiten (v5.74).
+
+        Gemeld bij de verbruiksaudit van 10-10: na de migratie van v5.46
+        (08-10, terecht: de oude reeks was vervuild) groeide de reeks in
+        twee dagen niet om middernacht maar bij een herstart (08-10 22:02,
+        09-10 22:43), en om middernacht 10-10 helemaal niet - bij 19 tot 21
+        herstarts per dag. De afsluiting hing aan één datum en één minimum
+        (`_cusum_check_date`, `_today_min_load_kw`) die bij elke herstart
+        uit de opslag kwamen en na de sensoren nog eens werden teruggezet
+        (`herstel_de_opslag_na_de_sensoren`); de migratie wiste ze niet.
+        Liep die datum achter, dan sloot een herstart een halve dag af;
+        liep hij voor, dan werd middernacht overgeslagen.
+
+        Nu: per datum het laagste kwartier (`vloer_dagminima`) en de laatst
+        afgesloten dag (`vloer_afgesloten_tot`), allebei bewaard. Elke dag
+        vóór vandaag die nog niet is afgesloten, wordt het - op volgorde,
+        één keer, ook na een herstart of een gemiste middernacht.
+        """
+        minima = self.vloer_dagminima if isinstance(self.vloer_dagminima, dict) else {}
+        # Overgang van vóór v5.74: de lopende dag van het oude model.
+        if (
+            self._cusum_check_date is not None
+            and self._today_min_load_kw is not None
+            and self._cusum_check_date.isoformat() not in minima
+        ):
+            minima[self._cusum_check_date.isoformat()] = round(self._today_min_load_kw, 4)
+        tot = self.vloer_afgesloten_tot
+        for dag in sorted(minima):
+            if dag >= vandaag.isoformat():
+                continue
+            waarde = minima.pop(dag)
+            if tot is not None and dag <= tot:
+                continue  # al afgesloten (bijvoorbeeld uit de recorder)
+            if waarde is not None:
+                self._finalize_baseline_load_day(waarde)
+            tot = dag
+        self.vloer_dagminima = minima
+        self.vloer_afgesloten_tot = tot
+        if self._cusum_check_date != vandaag:
+            self._cusum_check_date = vandaag
+        self._today_min_load_kw = minima.get(vandaag.isoformat())
+
+    async def async_bootstrap_vloer_uit_recorder(self) -> int:
+        """De vloerreeks aanvullen uit de recorder (v5.74).
+
+        Na de migratie van v5.46 begon de reeks opnieuw en duurt het tien
+        dagen voor er een referentie is (`CUSUM_MIN_HISTORY_FOR_REFERENCE`),
+        terwijl de recorder de vijfminutenstatistieken van de P1-meter, de
+        accu en de zon tien dagen bewaart. Dezelfde maat als live: huis =
+        P1 + accu + zon, per kwartier de mediaan van de drie
+        vijfminutengemiddelden (een wisselpiek valt eruit), per dag het
+        laagste kwartier, nooit onder 0 W. Alleen volle dagen (minstens
+        `VLOER_BOOTSTRAP_MIN_KWARTIEREN`) vóór vandaag, en alleen zolang de
+        reeks nog geen referentie heeft. Geeft het aantal ingelezen dagen.
+        """
+        if self.vacation_mode or len(self.baseline_load_history or []) >= CUSUM_MIN_HISTORY_FOR_REFERENCE:
+            return 0
+        p1 = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        if not p1:
+            return 0
+        accu = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        zon = self.config.get(CONF_PV_POWER_SENSOR)
+        ids = {e for e in (p1, accu, zon) if e}
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import (
+                get_metadata,
+                statistics_during_period,
+            )
+        except ImportError:
+            return 0
+        nu = dt_util.now()
+        vandaag = nu.date()
+        start = dt_util.start_of_local_day(vandaag - timedelta(days=VLOER_BOOTSTRAP_DAGEN))
+        einde = dt_util.start_of_local_day(vandaag)
+
+        def _ophalen():
+            return (
+                get_metadata(self.hass, statistic_ids=ids),
+                statistics_during_period(
+                    self.hass, start, einde, ids, "5minute", None, {"mean"}
+                ),
+            )
+
+        try:
+            meta, rijen = await get_instance(self.hass).async_add_executor_job(_ophalen)
+        except Exception as fout:  # noqa: BLE001 - best effort
+            _LOGGER.debug("Vloerverbruik niet uit de recorder: %s", fout)
+            return 0
+        dagen = self._vloer_uit_statistieken(
+            rijen or {}, meta or {}, p1, accu, zon, vandaag
+        )
+        if not dagen:
+            return 0
+        reeks = [w for _d, w in dagen][-CUSUM_BASELINE_HISTORY_DAYS:]
+        self.baseline_load_history = reeks
+        laatste = dagen[-1][0]
+        self.vloer_afgesloten_tot = max(laatste, self.vloer_afgesloten_tot or laatste)
+        if isinstance(self.vloer_dagminima, dict):
+            for d in [d for d in self.vloer_dagminima if d <= laatste]:
+                self.vloer_dagminima.pop(d, None)
+        if len(reeks) >= CUSUM_MIN_HISTORY_FOR_REFERENCE:
+            referentie = (
+                reeks[:-CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS]
+                if len(reeks) > CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS
+                else reeks
+            )
+            self.sluipverbruik_reference_w = round(statistics.median(referentie) * 1000, 1)
+        self.vloer_bootstrap = {
+            "moment": nu.isoformat(),
+            "dagen": [d for d, _w in dagen],
+            "bron": "recorder (5-minutenstatistieken)",
+        }
+        self.schedule_persisted_state_save()
+        return len(dagen)
+
+    def _vloer_uit_statistieken(
+        self, rijen: dict, meta: dict, p1: str, accu: str | None, zon: str | None,
+        vandaag: date,
+    ) -> list[tuple[str, float]]:
+        """Per dag het laagste kwartier uit 5-minutenstatistieken (v5.74).
+        Geeft [(datum, kW)] op volgorde, alleen volle dagen vóór `vandaag`."""
+        def factor(entiteit):
+            eenheid = str(((meta.get(entiteit) or (None, {}))[1] or {}).get("unit_of_measurement") or "W")
+            return 1.0 if eenheid.lower() == "kw" else 0.001
+
+        def reeks(entiteit):
+            uit = {}
+            if not entiteit:
+                return uit
+            f = factor(entiteit)
+            for r in rijen.get(entiteit) or []:
+                moment = r.get("start")
+                if isinstance(moment, (int, float)):
+                    moment = dt_util.utc_from_timestamp(moment)
+                if moment is None or r.get("mean") is None:
+                    continue
+                uit[dt_util.as_local(moment)] = float(r["mean"]) * f
+            return uit
+
+        p1_r, accu_r, zon_r = reeks(p1), reeks(accu), reeks(zon)
+        teken = -1.0 if self.config.get(CONF_INVERT_BATTERY_POWER_SIGN, False) else 1.0
+        kwartieren: dict = {}
+        for moment, net in p1_r.items():
+            if accu and moment not in accu_r:
+                continue
+            if zon and moment not in zon_r:
+                continue
+            huis = net + teken * accu_r.get(moment, 0.0) + zon_r.get(moment, 0.0)
+            kwartier = moment.replace(minute=moment.minute - moment.minute % 15, second=0, microsecond=0)
+            kwartieren.setdefault(kwartier, []).append(huis)
+        per_dag: dict = {}
+        for kwartier, waarden in kwartieren.items():
+            if len(waarden) < 3 or kwartier.date() >= vandaag:
+                continue
+            per_dag.setdefault(kwartier.date().isoformat(), []).append(
+                max(CUSUM_VLOER_MIN_KW, statistics.median(waarden))
+            )
+        return [
+            (dag, round(min(waarden), 4))
+            for dag, waarden in sorted(per_dag.items())
+            if len(waarden) >= VLOER_BOOTSTRAP_MIN_KWARTIEREN
+        ]
 
     def _migreer_sluipverbruik_methode(self) -> None:
         """Wist een vloerreeks van een oudere methode, eenmalig (v5.46).
@@ -34062,6 +34442,10 @@ class EnergyManagementSystemCoordinator:
         self.sluipverbruik_estimated_drift_w = None
         self._today_min_load_kw = None
         self._vloer_blok_monsters = []
+        # v5.74: ook de lopende dag; die kwam anders via de opslag terug.
+        self._cusum_check_date = None
+        self.vloer_dagminima = {}
+        self.vloer_afgesloten_tot = None
         self.sluipverbruik_methode_versie = SLUIPVERBRUIK_METHODE_VERSIE
         opslag = getattr(self, "_geladen_opslag", None)
         if isinstance(opslag, dict):
@@ -34069,6 +34453,11 @@ class EnergyManagementSystemCoordinator:
                 "baseline_load_history",
                 "cusum_accumulator_kw",
                 "sluipverbruik_detected",
+                # v5.74
+                "_today_min_load_kw",
+                "_cusum_check_date",
+                "vloer_dagminima",
+                "vloer_afgesloten_tot",
             ):
                 opslag.pop(sleutel, None)
             opslag["sluipverbruik_methode_versie"] = SLUIPVERBRUIK_METHODE_VERSIE
@@ -36416,12 +36805,8 @@ class EnergyManagementSystemCoordinator:
             return vakantie_factor, list(wandeling), True
         centrum = []
         for hour, fraction_hours, segment_end in segments:
-            samples = self.hourly_consumption_profile.get(hour)
-            kw = (
-                statistics.median(samples)
-                if samples
-                else (self.learned_hourly_avg_kw(hour) or 0.0)
-            )
+            # v5.74: het gemiddelde, net als de wandeling (energiesom).
+            kw = self.learned_hourly_avg_kw(hour) or 0.0
             start = segment_end - timedelta(hours=fraction_hours)
             zon = self._estimate_pv_kwh_for_period(start, segment_end, veilig=True)
             centrum.append(
@@ -36447,7 +36832,10 @@ class EnergyManagementSystemCoordinator:
             samples = self.hourly_consumption_profile.get(hour) or []
             verbruik_fouten = (
                 [
-                    (s - statistics.median(samples)) * fraction_hours * vakantie_factor
+                    # v5.74: afwijking van het GEMIDDELDE - het midden van
+                    # het traject is sinds v5.74 het gemiddelde; tegen de
+                    # mediaan zou de trekking dubbel verschuiven.
+                    (s - statistics.mean(samples)) * fraction_hours * vakantie_factor
                     for s in samples
                 ]
                 if samples

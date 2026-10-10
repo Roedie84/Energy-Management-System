@@ -19,11 +19,15 @@ def test_single_outlier_day_barely_moves_the_consumption_median(make_coordinator
         0.30, 0.31, 0.29, 0.30, 0.32, 0.30, 0.90,
     ]
 
-    median = coordinator.learned_hourly_avg_kw(9)
+    # v5.74 - BEWUST GEWIJZIGD (verbruiksaudit): `learned_hourly_avg_kw`
+    # voedt energiesommen en is nu het gemiddelde - de "uitschieter" is
+    # een wasbeurt die echt kWh kost. De mediaan blijft bestaan.
+    median = coordinator.learned_hourly_median_kw(9)
     mean = sum(coordinator.hourly_consumption_profile[9]) / 7
 
     assert median == 0.30  # the outlier has zero effect
-    assert mean > 0.38  # for comparison: a mean would have been dragged up
+    assert mean > 0.38
+    assert abs(coordinator.learned_hourly_avg_kw(9) - mean) < 1e-9
 
 
 def test_single_outlier_day_barely_moves_the_pv_bias_median(make_coordinator):
@@ -50,7 +54,7 @@ def test_genuine_sustained_change_still_comes_through_in_the_median(make_coordin
         0.30, 0.30, 0.30, 0.60, 0.60, 0.60, 0.60,
     ]
 
-    assert coordinator.learned_hourly_avg_kw(14) == 0.60
+    assert coordinator.learned_hourly_median_kw(14) == 0.60
 
 
 def test_change_not_yet_a_majority_does_not_move_the_median(make_coordinator):
@@ -62,7 +66,7 @@ def test_change_not_yet_a_majority_does_not_move_the_median(make_coordinator):
         0.30, 0.30, 0.30, 0.30, 0.60, 0.60, 0.60,
     ]
 
-    assert coordinator.learned_hourly_avg_kw(14) == 0.30
+    assert coordinator.learned_hourly_median_kw(14) == 0.30
 
 
 def test_previous_hourly_avg_kw_uses_median_too(make_coordinator):
@@ -73,7 +77,9 @@ def test_previous_hourly_avg_kw_uses_median_too(make_coordinator):
         0.30, 0.31, 0.29, 0.30, 0.32, 0.30, 0.90,
     ]
 
-    assert coordinator.previous_hourly_avg_kw(9) == 0.30
+    # v5.74: dezelfde maat als de huidige waarde - nu het gemiddelde.
+    vorige = [0.30, 0.31, 0.29, 0.30, 0.32, 0.30]
+    assert abs(coordinator.previous_hourly_avg_kw(9) - sum(vorige) / 6) < 1e-9
 
 
 def test_night_consumption_outlier_barely_moves_the_median(make_coordinator):

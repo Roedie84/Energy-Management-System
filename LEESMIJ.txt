@@ -1,3 +1,20 @@
+EMS v5.74.0 - verbruiksaudit: eerlijke maatstaven en een vloer die blijft
+
+Installeren: via HACS bijwerken en Home Assistant herstarten. Het
+dashboard (kaart "Wat kostte elke beurt?") is bijgewerkt.
+
+- Witgoedbeurten: besparing tegenover een gemiddeld moment en wat er gemist
+  is tegenover het goedkoopste haalbare venster (start 06:00-23:00). Eigen
+  zon telt zolang salderen geldt tegen de kwartierprijs, niet als gratis.
+  "Uitstel leverde op" (tegen het duurste moment) is verouderd.
+- Het uurprofiel is voor reserve, verkooptoets en planning het gemiddelde
+  in plaats van de mediaan: het dagverbruik werd ~0,8 kWh/dag onderschat.
+  De avond/nacht verandert nauwelijks (+0,07 kWh).
+- Sluipverbruik: elke dag wordt precies een keer afgesloten, ook na een
+  herstart; de reeks wordt bij het opstarten uit de recorder aangevuld.
+- Tekortnachten: oude records worden uit het dagverloop opnieuw beoordeeld
+  (alleen netstroom met een lege accu telt). 03-10 was geen tekortnacht.
+
 EMS v5.73.0 - sparen in het goedkope blok
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

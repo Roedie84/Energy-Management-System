@@ -64,12 +64,16 @@ def test_hourly_consumption_profile_fallback_restore_needs_two_new_samples_for_t
     sensor.async_get_last_state = get_last_state
     asyncio.run(sensor.async_added_to_hass())
 
+    # v5.74 - BEWUST GEWIJZIGD: het profiel is weer een gemiddelde
+    # (verbruiksaudit), dus één nieuwe meting beweegt hem al; de mediaan
+    # bleef bij 2 tegen 1 staan.
     coordinator.hourly_consumption_profile[9].append(0.6)
-    assert coordinator.learned_hourly_avg_kw(9) == 0.497  # unchanged - still 2 vs 1
+    assert coordinator.learned_hourly_median_kw(9) == 0.497  # mediaan: 2 vs 1
+    assert coordinator.learned_hourly_avg_kw(9) != 0.497
 
     coordinator.hourly_consumption_profile[9].append(0.6)
-    assert coordinator.previous_hourly_avg_kw(9) == 0.497
-    assert coordinator.learned_hourly_avg_kw(9) != 0.497  # now 2 vs 2 -> moves
+    assert abs(coordinator.previous_hourly_avg_kw(9) - (0.497 * 2 + 0.6) / 3) < 1e-9
+    assert coordinator.learned_hourly_avg_kw(9) != 0.497
 
 
 def test_pv_hourly_bias_restore_seeds_a_comparable_previous(make_coordinator):

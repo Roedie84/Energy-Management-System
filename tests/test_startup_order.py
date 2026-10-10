@@ -62,6 +62,8 @@ def test_every_bootstrap_is_named_in_this_test():
     bekend = {
         "async_bootstrap_night_consumption_from_history",
         "async_bootstrap_energy_history",
+        # v5.74: de vloerreeks, na het terugzetten van de toestand.
+        "async_bootstrap_vloer_uit_recorder",
     }
 
     assert gevonden == bekend, (

@@ -1824,19 +1824,19 @@ views:
         '
     - type: markdown
       title: Wat kostte elke beurt?
-      content: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''cycluskosten'') or {} %}{% if o %}| Apparaat | Beurten | Gemiddeld | Zon scheelde | Uitstel leverde op |
+      content: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''cycluskosten'') or {} %}{% if o %}| Apparaat | Beurten | Gemiddeld | Zon scheelde | t.o.v. gemiddeld moment | t.o.v. goedkoopste |
 
 
-        |---|---|---|---|---|
+        |---|---|---|---|---|---|
 
 
-        {% for naam, r in o.items() %}| {{ naam }} | {{ r.beurten }} | {{ ''%.2f''|format(r.gemiddeld_eur) }} EUR | {{ ''%.2f''|format(r.eigen_opwek_eur_totaal) }} EUR | {{ ''%.2f''|format(r.uitstel_leverde_op_eur_totaal) }} EUR |
+        {% for naam, r in o.items() %}| {{ naam }} | {{ r.beurten }} | {{ ''%.2f''|format(r.gemiddeld_eur) }} EUR | {{ ''%.2f''|format(r.eigen_opwek_eur_totaal) }} EUR | {{ ''%.2f''|format(r.besparing_tov_gemiddeld_eur_totaal or 0) }} EUR | {{ ''%.2f''|format(r.verschil_tov_goedkoopste_eur_totaal or 0) }} EUR |
 
 
         {% endfor %}
 
 
-        _Wat een beurt kostte, wat hij op pure netstroom had gekost, en wat hetzelfde verbruik op het duurste moment van die dag zou hebben gekost. Het verbruik is gelijk over de looptijd verdeeld._{% else %}Nog geen afgeronde beurten met kosten - die komen erbij zodra de vaatwasser of wasmachine een cyclus afrondt.{% endif %}'
+        _Wat een beurt kostte (eigen zon tegen de kwartierprijs zolang salderen geldt - dan scheelt de zon niets), tegenover een gemiddeld moment en het goedkoopste haalbare venster van die dag (start 06:00-23:00, klaar voor middernacht). Negatief bij goedkoopste = zoveel is er gemist. Het verbruik is gelijk over de looptijd verdeeld._{% else %}Nog geen afgeronde beurten met kosten - die komen erbij zodra de vaatwasser of wasmachine een cyclus afrondt.{% endif %}'
       grid_options:
         columns: 12
         rows: auto

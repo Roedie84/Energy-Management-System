@@ -32353,3 +32353,74 @@ alleen met gemeten getallen, één besluit per kwartier.
   `battery_saved_for_peak`); de huisafname loopt via de kostentelling.
 
 Tests: `test_v573.py` (16).
+
+## v5.74.0 — verbruiksaudit: eerlijke maatstaven en een vloer die blijft
+
+Uit de verbruiksaudit over 30-09..10-10 (akkoord Ruud).
+
+**1. Eerlijke besparingsmaatstaf per witgoedbeurt** (`cycluskosten`,
+`get_cycluskosten_overzicht`). `uitstel_leverde_op_eur` vergeleek met het
+duurste venster van de dag en was dus altijd positief (audit: +€ 8,35 per
+maand). Nieuw per beurt: `besparing_tov_gemiddeld_eur` (tegen de gemiddelde
+vensterprijs van de haalbare starts 06:00-23:00, klaar voor middernacht;
+audit +€ 3,44/mnd) en `verschil_tov_goedkoopste_eur` (tegen het goedkoopste
+haalbare venster; nul of negatief = gemist; audit −€ 1,03/mnd), met
+`gemiddeld_moment_eur`, `goedkoopste_haalbaar_eur/_moment`. Eigen zon is
+niet meer gratis zolang salderen geldt (`_is_salderen_active`, t/m
+2026-12-31): hij telt tegen de kwartierprijs, daarna tegen de
+terugleverwaarde (`_zonwaarde_eur`). `kosten_eur` is daarmee de marginale
+prijs; wat er werkelijk van het net kwam staat in `netkosten_eur`.
+`eigen_opwek_eur` is onder salderen 0. `uitstel_leverde_op_eur(_totaal)`
+blijft bestaan maar staat in `verouderd`. Beurten krijgen een `einde`;
+oude beurten worden eenmalig herberekend als het dagverloop er nog is (de
+looptijd volgt uit het bewaarde netstroombedrag), anders `maatstaf: oud`.
+Overzicht: `besparing_tov_gemiddeld_eur_totaal`,
+`verschil_tov_goedkoopste_eur_totaal`, `beurten_met_maatstaf`. Kaart "Wat
+kostte elke beurt?" toont de nieuwe kolommen.
+
+**2. Uurprofiel: het gemiddelde voor energiesommen**
+(`learned_hourly_avg_kw`). De mediaan negeerde apparaatpieken en
+onderschatte het dagverbruik ~0,8 kWh/dag (9%), vooral 12-18 uur (+118 W).
+Leave-one-day-out op de negen gemeten dagen (`tests/fixtures/
+v574_uurprofiel.json`): dagtotaalfout 0,84 → 0,65 kWh, bias 0,53 → 0,00.
+Avond+nacht 17-07 (basis van de reserve): 0,016 → 0,088 kWh te hoog, dus
+de reserve stijgt ~0,07 kWh - binnen de spreiding (MAE ~0,40, ongewijzigd).
+Per gebruiksplek: reserve, verkooptoets, kwartierplanning, Monte Carlo
+(midden én trekkingen rond het gemiddelde), dagtotaal en
+live-verbruikscorrectie gebruiken het gemiddelde; `previous_hourly_avg_kw`
+volgt. De mediaan blijft als `learned_hourly_median_kw` voor de
+dagtype-proefstand (mediaan tegen mediaan).
+
+**3. Sluipverbruik: de vloerreeks blijft** (`_sluit_vloerdagen_af`,
+`async_bootstrap_vloer_uit_recorder`). Oorzaak: de reeks is op 08-10 07:03
+terecht gewist door de migratie van v5.46 (vervuild met wisselpieken), en
+groeide daarna niet om middernacht maar bij een herstart (08-10 22:02,
+09-10 22:43); om middernacht 10-10 kwam er niets bij. De dagafsluiting hing
+aan één datum en één minimum (`_cusum_check_date`, `_today_min_load_kw`),
+die bij 19-21 herstarts per dag uit de opslag kwamen en na de sensoren nog
+eens werden teruggezet - en die de migratie niet wiste. Nu per datum het
+laagste kwartier (`vloer_dagminima`) en de laatst afgesloten dag
+(`vloer_afgesloten_tot`), allebei bewaard: elke voorbije dag wordt precies
+één keer afgesloten, ook na een gemiste middernacht. De migratie wist ook
+de lopende dag. Bij het opstarten, zolang er nog geen referentie is, wordt
+de reeks aangevuld uit de 5-minutenstatistieken van de recorder (P1 + accu
++ zon, per kwartier de mediaan van drie, per dag het laagste kwartier,
+alleen volle dagen; `vloer_bootstrap`).
+
+**4. Tekortnachten: geen datumverschuiving, wel een definitiefout**
+(`_tekortnacht_uit_verloop`). De datum van een dagrecord is de ochtend
+waarop de nacht om 09:00 afliep (22:00 de dag ervoor tot 09:00); de audit
+las hem als de avond. Gemeten: 02-10 (nacht 01→02, leeg vanaf 22:00, 2,4
+kWh) en 04-10 (leeg vanaf 01:35, 1,4 kWh) zijn echte tekortnachten; 10-10
+(nacht 09→10) komt om middernacht. 03-10 niet: de accu kwam pas om 07:40
+op de vloer, daarna ~0,02 kWh van het net. Records van vóór v5.33 (zonder
+`tekortnacht_kwh`) werden herbeoordeeld met ALLE netafname van de nacht
+(0,68 kWh) zodra de ochtendstand op de vloer lag. Nu eerst uit het
+dagverloop met de live definitie (netafname per kwartier alleen met de
+accu op de vloer en zonder bewuste netafname); te dun dagverloop: de oude
+benadering. De sensor tekortdagen zegt in `datum_betekenis` wat de datum
+is.
+
+Tests: `test_v574.py` (22). Aangepast aan de nieuwe maatstaven:
+`test_cycluskosten.py`, `test_outlier_resistant_learning.py`,
+`test_trend_restore.py`, `test_startup_order.py`.
