@@ -198,3 +198,13 @@ laatste ronde: 09-10 23:40, gemeten t/m 09-10 23:52
 - Hypotheses: H-EMS-2 (bijgesteld), H-EMS-4 (n=5, wacht op prijsreeks), H-EMS-8 (bevestigd n=2 → L-EMS-014).
 
 laatste ronde: 10-10 03:40, gemeten t/m 10-10 03:50
+
+## 10-10 07:40 · tussenronde
+- Geïnstalleerd: v5.69 (v5.69.1 van 03:50 nog niet). Geen HA-herstarts sinds 03:50; logboek 0 EMS-fouten (wel extern: SolarEdge-Modbus 1× verbinding weg 05:21, Solcast-limiet nog van gisteren). Meetlog dekking 100 %.
+- Beslissingen 03:50-07:44 alleen `default_smart` (sinds 22:44), export 0 → 0× verkoop onder de reserve (harde regel gehaald).
+- **Nacht 09→10:** accu leeg sinds 22:34 (7 %, beschikbaar 0). Import 22-07 1,81 kWh (0,15-0,28 per uur), tekort tot nu 2,07 kWh; resterend tot blok 10:30 0,33 → ~2,40 tegen de voorspelling van 23:40 (2,38): **verwacht tekort klopt binnen 0,02 kWh**. MC 22:00 100 % → eerste Brier-paar met tekort om 09:00 (verwacht 0).
+- **Gevonden:** `verwacht_tekort.tekort_soort` sprong van "economisch" (03:50) naar null, omdat de soort op het nog resterende tekort (< 0,5 kWh) wordt bepaald i.p.v. lopend + resterend. De nachtafsluiting van 09:00 rekent met de gemeten nacht → dagrecord niet geraakt. → L-EMS-015 (gepland, rapportage).
+- Toets 11:40: nacht →10-10 ingedeeld als `economisch` (laadbesluit "loont_niet", volging sinds 09-10 09:00 heel), Brier 22u met 2 paren.
+- PV vandaag: Solcast day-ahead 9,1 kWh (nog niet ververst vandaag). H-EMS-2, H-EMS-4, H-EMS-8 ongewijzigd; L-EMS-013/014 open. Geen release (tussenronde, niets acuut).
+
+laatste ronde: 10-10 07:40, gemeten t/m 10-10 07:44

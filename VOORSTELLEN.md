@@ -115,3 +115,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Verwacht effect: voorspelde lege accu valt ~10-20 min eerder samen met de werkelijke; tekort-kWh per tekortnacht ~0,3 kWh nauwkeuriger.
 - Meten na bouw: per nacht met lege accu het verschil tussen voorspeld en werkelijk leeg-tijdstip, en `beschikbaar` vlak vóór de sprong; sprongen ≥ 3 pp blijven geteld (KPI ems_soc_sprong_laag).
 
+
+## L-EMS-015 · live tekortsoort niet laten verdwijnen als het resterende tekort klein wordt
+- Status: **gepland** (zelf bouwen: rapportage; stuurt niets) — bouwen in een dagafsluiting nadat v5.69.1 geïnstalleerd is en de nachtindeling van 09:00 (10-10) getoetst is.
+- Onderbouwing: nacht 09→10. Om 03:50 `verwacht_tekort.tekort_soort` "economisch" (live); om 07:41 null, terwijl `tekortnacht_tot_nu_kwh` 2,07 is (telt als tekortdag). Oorzaak (coordinator `verwacht_tekort` → `_tekort_soort(tekort, …)`): de soort wordt bepaald op het nog resterende tekort tot het blok (0,33 kWh < 0,5-grens), niet op lopend + resterend. De nachtafsluiting om 09:00 (`_deel_afgelopen_nacht_in`) gebruikt wel de gemeten nacht → het dagrecord zelf is niet geraakt.
+- Voorstel: in `verwacht_tekort` de soort bepalen op `tekortnacht_tot_nu + resterend tekort` (zelfde grens), zodat de live weergave tot 09:00 "economisch" blijft zeggen.
+- Verwacht effect: geen soort-wissel economisch → null in de ochtend van een tekortnacht.
+- Meten na bouw: in een tekortnacht blijft `verwacht_tekort.tekort_soort` tussen het eerste tekort en 09:00 gelijk.
