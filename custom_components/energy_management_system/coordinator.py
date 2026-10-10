@@ -721,6 +721,8 @@ from .const import (
     KALMAN_LOAD_MEASUREMENT_NOISE_W2,
     DIGITAL_TWIN_HORIZON_HOURS,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
+    MARGE_TELT_NIET_MEE_SOORTEN,
+    VERKOOP_NA_BLOK_MIN_WINST_EUR,
     SHORTFALL_MIN_NETIMPORT_KWH,
     TEKORT_LEEG_MARGE_PROCENT,
     REDENEN_BEWUSTE_NETAFNAME,
@@ -22096,6 +22098,8 @@ class EnergyManagementSystemCoordinator:
             uitsplitsing = self._reserve_laatste_uitsplitsing
             if sleutel is not None and uitsplitsing is not None:
                 cache[1][sleutel] = (reserve_kwh, uitsplitsing)
+        # v5.70: de uitsplitsing bij DEZE aanvraag, voor de verkoopreserve.
+        self._reserve_gevraagde_uitsplitsing = uitsplitsing
         if bewaar and uitsplitsing is not None:
             self.last_reserve_margin_breakdown = uitsplitsing
             self._lange_horizon_extra_vandaag = max(
@@ -22107,6 +22111,25 @@ class EnergyManagementSystemCoordinator:
     # v5.42: zie `_get_dynamic_discharge_reserve_kwh`.
     _reserve_ronde_cache: tuple | None = None
     _reserve_laatste_uitsplitsing: dict | None = None
+    _reserve_gevraagde_uitsplitsing: dict | None = None
+
+    def marge_tekortnachten(self) -> int:
+        """Tekortnachten die de marge verhogen (v5.70, L-EMS-013).
+
+        Elke tekortnacht telde: ook een economische, waarin de accu bewust
+        niet vol was omdat bijladen uit het net niet loonde. Dat is geen te
+        krappe reserve, en de opslag van 5% hield de accu daarna een week
+        's avonds voller dan nodig. Een nacht zonder soort telt als
+        onbekend en telt mee (huis gaat voor).
+        """
+        return sum(
+            1
+            for r in self.reserve_daily_records or []
+            if isinstance(r, dict)
+            and r.get("shortfall")
+            and (r.get("tekort_soort") or TEKORTSOORT_ONBEKEND)
+            not in MARGE_TELT_NIET_MEE_SOORTEN
+        )
 
     def _voorspelde_buitentemp_c(self, van: datetime, tot: datetime) -> float | None:
         """Gemiddelde voorspelde buitentemperatuur over een venster, met de
@@ -22247,7 +22270,8 @@ class EnergyManagementSystemCoordinator:
         # v5.68: het temperatuurmodel op koude nachten - zie `_temperatuur_extra_kwh`.
         temperatuur = self._temperatuur_extra_kwh(now, cheap_block_start, airco_ochtend["extra_kwh"])
         needed_kwh += temperatuur["extra_kwh"]
-        recent_shortfalls = sum(1 for v in self.reserve_shortfall_history if v)
+        # v5.70 (L-EMS-013): economische tekortnachten tellen niet mee.
+        recent_shortfalls = self.marge_tekortnachten()
         shortfall_bonus_percent = (
             recent_shortfalls * SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY
         )
@@ -22458,7 +22482,34 @@ class EnergyManagementSystemCoordinator:
                 moment, blok, bewaar=False
             )
             cache[sleutel] = max(bodem, reserve or 0.0)
+            # v5.70: voor de verkoopreserve in het plan.
+            cache[sleutel + "|u"] = (
+                (self._reserve_gevraagde_uitsplitsing, blok)
+                if reserve is not None
+                else (None, blok)
+            )
         return cache[sleutel]
+
+    def _planning_verkoopreserve_kwh(
+        self, moment: datetime, cache: dict, entries, prijs: float
+    ) -> float:
+        """De verkoopreserve voor een plankwartier (v5.70).
+
+        Dezelfde regel als de beslissing (`_verkoopreserve_uit`), zodat het
+        plan voorspelt wat de verkooptoets straks doet.
+        """
+        reserve = self._planning_reserve_kwh(moment, cache, entries)
+        sleutels = [k for k in cache if k.startswith(moment.strftime("%Y-%m-%d %H") + "|") and k.endswith("|u")]
+        if not sleutels:
+            return reserve
+        u, blok = cache[sleutels[-1]]
+        if u is None:
+            return reserve
+        blok_eind = (
+            self.last_cheap_block_end if blok == self.last_cheap_block_start else None
+        )
+        info = self._verkoopreserve_uit(reserve, u, blok, blok_eind, prijs, entries)
+        return info["reserve_kwh"] if info.get("reserve_kwh") is not None else reserve
 
     def _volgend_blok_voor(self, entries, moment: datetime) -> datetime | None:
         """Het goedkope blok dat de sturing op `moment` zou kiezen (v5.33).
@@ -22850,11 +22901,13 @@ class EnergyManagementSystemCoordinator:
                 # duurste kwartieren van de dag. Het plan verkocht op volgorde
                 # van de klok - en had morgen om 16:45 en 17:15 (40-43 ct)
                 # niets meer over voor de piek van 51,2 ct.
-                soc > reserve_op(start)
+                # v5.70: de verkoopreserve - zonder wat het volgende blok
+                # goedkoper teruglaadt, net als de verkooptoets.
+                soc > self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs)
                 # v5.27.2: niet op een zonarme dag - net als de beslissing.
                 and not netregels["zonarm"].get(start.date(), False)
                 and self._is_worth_discharging_now(
-                    entries, start, soc - reserve_op(start), ontlaad_w
+                    entries, start, soc - self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs), ontlaad_w
                 )
                 # v5.28.4: geen piekverkoop onder de reserve meer - het huis
                 # gaat voor, net als in de beslissing.
@@ -22862,7 +22915,7 @@ class EnergyManagementSystemCoordinator:
                 modus = "manual (verkopen)"
                 # v5.28.4: alleen wat BOVEN de reserve zit, ook binnen een
                 # kwartier - een vol kwartier verkopen zakte er anders onder.
-                uit = min(soc - reserve_op(start), duur_kwh)
+                uit = min(soc - self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs), duur_kwh)
                 soc -= uit
                 net = round(-(uit - verbruik + zon), 3)
             elif uitstellen:
@@ -25030,13 +25083,15 @@ class EnergyManagementSystemCoordinator:
         # een minuut later (17,96 tegen 13,44). De verkooptoets leest nu
         # dezelfde reserve als de sturing en de planning; wat hij eraan
         # toevoegt is de dode zone en de zonvelden.
+        verkoopinfo: dict = {}
         if blok_start is None or blok_start <= now:
             nodig = 0.0
             veilig = 0.0
         else:
-            reserve = self._get_dynamic_discharge_reserve_kwh(
-                now, blok_start, bewaar=False
-            )
+            # v5.70: de verkoopreserve - het deel na het blok dat het blok
+            # zelf goedkoper teruglaadt, hoeft niet vast te blijven.
+            verkoopinfo = self.verkoopreserve(now, blok_start)
+            reserve = verkoopinfo.get("reserve_kwh")
             if reserve is None:
                 nodig = (
                     self._estimate_consumption_kwh_for_period(now, blok_start) or 0.0
@@ -25096,6 +25151,7 @@ class EnergyManagementSystemCoordinator:
                 "beschikbaar_kwh": round(beschikbaar, 2),
                 "methode": methode,
                 **self._tot_en_na_blok_velden(),
+                **self._verkoopreserve_velden(verkoopinfo),
                 "reden": (
                     f"De woning heeft {veilig:.2f} kWh nodig tot het goedkope "
                     f"blok en er is {beschikbaar:.2f} kWh - verkopen zou het "
@@ -25124,9 +25180,11 @@ class EnergyManagementSystemCoordinator:
             "methode": methode,
             **self._tot_en_na_blok_velden(),
             **self._zonvelden(verwacht_vandaag, al_opgewekt, nog_te_komen),
+            **self._verkoopreserve_velden(verkoopinfo),
             "reden": (
                 f"{beschikbaar - veilig:.2f} kWh vrij te verkopen: de woning "
                 f"houdt {veilig:.2f} kWh over tot het goedkope blok."
+                + self._verkoopreserve_zin(verkoopinfo)
             ),
         }
 
@@ -26335,6 +26393,135 @@ class EnergyManagementSystemCoordinator:
             return None
         return min(blokprijzen) / (rendement / 100) + slijtage_ct / 100
 
+    def _verkoopreserve_uit(
+        self,
+        reserve: float | None,
+        u: dict | None,
+        blok_start: datetime | None,
+        blok_eind: datetime | None,
+        prijs: float | None,
+        entries,
+    ) -> dict:
+        """De reserve bij VERKOPEN: zonder wat het volgende blok terugláádt (v5.70).
+
+        Gevraagd: "economisch moet het winstgevend zijn maar het huis mag
+        nooit te kort komen." De reserve is sinds v3.99.18 het diepste tekort
+        tot het goedkope blok PLUS de lange horizon: wat er NA het blok nog
+        nodig is. Voor het laden klopt dat. Maar bij verkopen hield hij zo
+        ook de energie vast die het blok zelf weer goedkoper bijlaadt.
+        Gemeten in de eigen plantoetsing (30 dagen): mediaan 70% minder
+        verkocht dan gepland, 's ochtends nog 40-58% in de accu op zonnige
+        dagen (04-08 oktober).
+
+        Hier: het deel tot het blok blijft volledig beschermd, met de hele
+        marge en de bodem - het huis gaat voor. Van het deel na het blok
+        mag verkocht worden wat het blok kan terugladen (laadvermogen x
+        blokduur x rendement), en alleen als verkopen nu minstens
+        `VERKOOP_NA_BLOK_MIN_WINST_EUR` meer oplevert dan terugladen kost
+        (goedkoopste blokprijs / rendement + slijtage). Anders de gewone
+        reserve, zoals voorheen.
+        """
+        uit = {"reserve_kwh": reserve, "vrij_na_blok_kwh": 0.0, "toegepast": False}
+        if reserve is None or not u or blok_start is None:
+            uit["reden"] = "geen reserve of blok"
+            return uit
+        lang = max(0.0, float(u.get("lange_horizon_extra_kwh") or 0.0))
+        if lang <= 0.01:
+            uit["reden"] = "niets na het blok"
+            return uit
+        if blok_eind is None or blok_eind <= blok_start:
+            a, b = self.last_cheap_block_start, self.last_cheap_block_end
+            if a is None or b is None or b <= a:
+                uit["reden"] = "blokduur onbekend"
+                return uit
+            blok_eind = blok_start + (b - a)
+        blokprijzen = [
+            p / PRICE_SCALE_FACTOR
+            for begin, _e, p in (entries or [])
+            if blok_start <= begin < blok_eind
+        ]
+        rendement = self.learned_battery_efficiency_percent
+        slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        if not blokprijzen or not rendement or slijtage_ct is None or prijs is None:
+            uit["reden"] = "blokprijs, rendement of slijtage onbekend"
+            return uit
+        terugladen = min(blokprijzen) / (rendement / 100) + slijtage_ct / 100
+        uit["terugladen_eur"] = round(terugladen, 4)
+        uit["prijs_eur"] = round(prijs, 4)
+        if prijs < terugladen + VERKOOP_NA_BLOK_MIN_WINST_EUR:
+            uit["reden"] = "terugladen in het blok kost te veel"
+            return uit
+        laad_kw = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0) / 1000
+        duur_h = (blok_eind - blok_start).total_seconds() / 3600
+        laadbaar = laad_kw * duur_h * rendement / 100
+        vrij = min(lang, laadbaar)
+        if vrij <= 0.01:
+            uit["reden"] = "het blok kan niets terugladen"
+            return uit
+        marge = 1 + float(u.get("total_percent") or 0.0) / 100
+        ongekapt = float(u.get("ongekapt_kwh") or reserve)
+        bodem = float(u.get("bodem_kwh") or self._reserve_bodem_kwh())
+        verkoop = max(bodem, ongekapt - vrij * marge)
+        capaciteit = self.bruikbare_capaciteit_kwh()
+        if capaciteit:
+            verkoop = min(verkoop, capaciteit)
+        verkoop = min(verkoop, reserve)
+        uit.update(
+            {
+                "reserve_kwh": round(verkoop, 3),
+                "vrij_na_blok_kwh": round(max(0.0, reserve - verkoop), 3),
+                "laadbaar_in_blok_kwh": round(laadbaar, 2),
+                "toegepast": verkoop < reserve - 0.001,
+                "reden": "het blok laadt het deel na het blok goedkoper terug",
+            }
+        )
+        return uit
+
+    @staticmethod
+    def _verkoopreserve_velden(info: dict | None) -> dict:
+        """De verkoopreserve als attributen bij de verkooptoets (v5.70)."""
+        info = info or {}
+        if not info:
+            return {}
+        return {
+            "verkoop_na_blok_vrij_kwh": info.get("vrij_na_blok_kwh"),
+            "verkoop_na_blok_toegepast": bool(info.get("toegepast")),
+            "verkoop_na_blok_reden": info.get("reden"),
+            "terugladen_in_blok_eur": info.get("terugladen_eur"),
+        }
+
+    @staticmethod
+    def _verkoopreserve_zin(info: dict | None) -> str:
+        """Eén zin als het deel na het blok verkocht mag worden (v5.70)."""
+        info = info or {}
+        if not info.get("toegepast"):
+            return ""
+        return (
+            f" De {info['vrij_na_blok_kwh']:.2f} kWh die pas na het blok nodig "
+            "is, blijft niet vast: het blok laadt die terug voor "
+            f"{info['terugladen_eur'] * 100:.1f} ct, verkopen levert "
+            f"{info['prijs_eur'] * 100:.1f} ct."
+        )
+
+    def verkoopreserve(
+        self, now: datetime, blok_start: datetime | None, entries=None
+    ) -> dict:
+        """De verkoopreserve van nu (v5.70) - zie `_verkoopreserve_uit`."""
+        if blok_start is None or blok_start <= now:
+            return {"reserve_kwh": None, "vrij_na_blok_kwh": 0.0, "toegepast": False}
+        reserve = self._get_dynamic_discharge_reserve_kwh(now, blok_start, bewaar=False)
+        u = self._reserve_gevraagde_uitsplitsing
+        if entries is None:
+            entries = self._get_forecast_entries()
+        info = self._verkoopreserve_uit(
+            reserve, u, blok_start, self.last_cheap_block_end,
+            self.huidige_prijs_eur_per_kwh(now), entries,
+        )
+        self.last_verkoopreserve = {**info, "moment": now.isoformat()}
+        return info
+
+    last_verkoopreserve: dict | None = None
+
     @staticmethod
     def _duurste_later_alle(
         reeks: list, blok: datetime | None, vervangprijs: float | None
@@ -26534,6 +26721,14 @@ class EnergyManagementSystemCoordinator:
             reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
                 now, cheap_block_start
             )
+            # v5.70: dit is het verkoopvermogen - dus de verkoopreserve, net
+            # als de verkooptoets (`may_sell_now`).
+            if reserve_kwh is not None:
+                _verkoop = self.verkoopreserve(
+                    now, cheap_block_start, entries
+                ).get("reserve_kwh")
+                if _verkoop is not None:
+                    reserve_kwh = _verkoop
             if available_kwh is not None and reserve_kwh is not None:
                 self.last_used_soc_taper_fallback = False
                 headroom_kwh = max(0.0, available_kwh - reserve_kwh)
@@ -30582,10 +30777,20 @@ class EnergyManagementSystemCoordinator:
             delen.append(f"{winst}x na verkoop boven de reserve tegen een hogere prijs")
         if onbekend:
             delen.append(f"{onbekend}x niet meer na te gaan")
+        # v5.70 (L-EMS-013): economische nachten verhogen de marge niet.
+        marge = self.marge_tekortnachten()
+        if marge == 0:
+            slot = "dat verhoogt de veiligheidsmarge niet (economisch telt niet mee)."
+        elif marge < aantal:
+            slot = (
+                f"de veiligheidsmarge is daardoor automatisch verhoogd ({marge} "
+                "tellen mee; economische nachten niet)."
+            )
+        else:
+            slot = "de veiligheidsmarge is daardoor automatisch verhoogd."
         return (
             f"Let op: de afgelopen {LEARNING_HISTORY_DAYS} dagen {aantal} "
-            f"tekortnacht(en): {'; '.join(delen)} - de veiligheidsmarge is "
-            f"daardoor automatisch verhoogd."
+            f"tekortnacht(en): {'; '.join(delen)} - {slot}"
         )
 
     def get_tekortsoorten(self) -> dict:
@@ -42633,6 +42838,13 @@ class EnergyManagementSystemCoordinator:
                 secondary_reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
                     now, cheap_block_start
                 )
+                # v5.70: verkopen - de verkoopreserve.
+                if secondary_reserve_kwh is not None:
+                    _verkoop = self.verkoopreserve(
+                        now, cheap_block_start, entries
+                    ).get("reserve_kwh")
+                    if _verkoop is not None:
+                        secondary_reserve_kwh = _verkoop
                 if secondary_reserve_kwh is not None:
                     secondary_headroom_kwh = max(
                         0.0, secondary_available_kwh - secondary_reserve_kwh

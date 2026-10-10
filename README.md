@@ -5,7 +5,7 @@
 **Home Assistant-integratie die een thuisaccu aanstuurt op dynamische energieprijzen — en zichzelf bijleert.**
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/versie-5.69.1-blue.svg?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/versie-5.70-blue.svg?style=flat-square)](CHANGELOG.md)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6.0%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io)
 [![Tests](https://img.shields.io/badge/tests-5275%20groen-brightgreen.svg?style=flat-square)](tests)
 [![License](https://img.shields.io/badge/licentie-MIT-lightgrey.svg?style=flat-square)](LICENSE)
@@ -276,6 +276,14 @@ anders een reëel tekort ervóór verbergen.
 
 De marge daarop is zelfcorrigerend: elke dag waarop de accu onverwacht
 leeg raakte verhoogt hem, elke dag met structureel overschot verlaagt hem.
+Een economische tekortnacht (bijladen loonde niet, bewust bijgekocht)
+verhoogt hem niet (v5.70).
+
+Bij **verkopen** blijft het deel tot het volgende goedkope blok volledig
+beschermd, met marge en bodem. Wat pas ná dat blok nodig is, mag verkocht
+worden als het blok het terug kan laden en terugladen (blokprijs /
+rendement + slijtage) minstens 2 ct per kWh goedkoper is dan verkopen nu
+(v5.70).
 
 ### Vermogensbegrenzing
 

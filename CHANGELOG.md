@@ -32131,3 +32131,51 @@ indeling; laden, ontladen, reserve en marges ongewijzigd.
   bewust (economisch), na verkoop boven de reserve, of niet meer na te gaan.
   De marge-opslag telt nog steeds elke tekortnacht.
 
+
+## v5.70 — winstgevend verkopen, het huis gaat voor
+
+Gevraagd (10-10): "economisch moet het winstgevend zijn maar het huis mag
+nooit te kort komen." Akkoord op L-EMS-013 en op het uitzoeken waarom
+geplande verkoop 's avonds vervalt.
+
+**Oorzaak.** De reserve is sinds v3.99.18 het diepste tekort tot het
+goedkope blok PLUS de lange horizon: wat er ná het blok nog nodig is
+(tot het eind van de bekende prijzen). Voor laden klopt dat. Maar de
+verkooptoets, het verkoopvermogen, de tweede laag en het plan lazen
+dezelfde reserve, en hielden zo ook de energie vast die het blok zelf
+weer goedkoper bijlaadt. Zodra 's middags de prijzen van morgen er zijn,
+schuift de horizon een etmaal op en telt de avond van morgen mee: op
+10-10 tot het blok ~3,0 kWh, na het blok ~3,1, met 35% marge 8,2 kWh -
+gekapt op de accu (7,78). Er werd niets verkocht. De plantoetsing (30
+dagen): mediaan 70% minder verkocht dan gepland; op zonnige dagen
+04-08 oktober was de laagste stand 's ochtends 38-58%.
+
+**1. De verkoopreserve** (`_verkoopreserve_uit`, `verkoopreserve`).
+Het deel tot het blok blijft volledig beschermd: diepste tekort maal de
+hele marge, de bodem, de kap. Van het deel na het blok mag verkocht
+worden:
+- alleen wat het blok kan terugladen (laadvermogen × blokduur × rendement);
+- alleen als verkopen nu minstens `VERKOOP_NA_BLOK_MIN_WINST_EUR` (2 ct)
+  meer oplevert dan terugladen kost (goedkoopste blokprijs / rendement +
+  slijtage);
+- nooit boven de gewone reserve; zonder blokprijs, rendement of slijtage
+  geldt de gewone reserve, zoals voorheen.
+Gebruikt door de verkooptoets (`may_sell_now`), het verkoopvermogen
+(`_get_soc_scaled_discharge_power`), de tweede laag en de kwartierplanning
+(`_planning_verkoopreserve_kwh`), zodat het plan voorspelt wat de sturing
+doet. De reserve zelf (laden, brug, Monte Carlo, meldingen) is ongewijzigd.
+Waarom het huis niet tekortkomt: wat verkocht wordt, is pas nodig nadat
+het blok heeft kunnen laden; het laadbesluit in het blok (`_laadregel`)
+laadt bij voor latere dure kwartieren zoals altijd. Loont dat laden niet,
+dan koopt het huis later goedkoper dan er verkocht is.
+De verkooptoets toont `verkoop_na_blok_vrij_kwh`, `verkoop_na_blok_toegepast`,
+`verkoop_na_blok_reden` en `terugladen_in_blok_eur`.
+
+**2. L-EMS-013: economische tekortnachten verhogen de marge niet**
+(`marge_tekortnachten`). Een economische nacht betekent: bijkopen was
+goedkoper dan vooraf laden - geen te krappe reserve. Onbekend, planning,
+capaciteit en verkocht-met-winst tellen mee zoals voorheen (huis gaat
+voor). De "Let op"-zin zegt of de nachten de marge verhoogden.
+
+Tests: `test_v570_verkoopreserve.py` (14). `test_v528_meetlaag` volgt de
+nieuwe verkoopregel in het plan.

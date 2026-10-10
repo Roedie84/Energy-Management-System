@@ -1,12 +1,13 @@
-EMS v5.69.1 - uitleg klopt: ontharder, lopend blok, soort tekortnacht
+EMS v5.70 - winstgevend verkopen, het huis gaat voor
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-- De nachtelijke regeneratie van de waterontharder heet in het
-  waterlogboek nu ook zo (bron "waterontharder").
-- Loopt het goedkoopste blok nog, dan zegt de tekortkans niet meer dat de
-  prijzen van morgen onbekend zijn.
-- De "Let op"-zin over tekortnachten noemt per soort wat er gebeurde: een
-  bewuste (economische) nacht heet niet meer "onverwacht".
+- 's Avonds wordt de energie die pas na het volgende goedkope blok nodig
+  is niet meer vastgehouden als dat blok hem goedkoper teruglaadt dan
+  verkopen nu oplevert (minstens 2 ct per kWh, na rendement en slijtage).
+  De energie tot het blok blijft volledig beschermd, met marge en bodem.
+- Economische tekortnachten (bijladen loonde niet) verhogen de
+  veiligheidsmarge niet meer (L-EMS-013).
+- De verkooptoets laat zien hoeveel er vrijkwam en waarom.
 
-Laden, ontladen, reserve en marges ongewijzigd.
+Laden, de nachtreserve tot het blok, de bodem en de piekregel ongewijzigd.

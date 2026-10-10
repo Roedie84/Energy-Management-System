@@ -2057,6 +2057,21 @@ DIGITAL_TWIN_HORIZON_HOURS = 48
 # multi-day low-solar margin): naturally bounded by the rolling window.
 SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY = 5.0
 
+# v5.70 (L-EMS-013, akkoord Ruud 10-10): welke tekortnachten de marge
+# verhogen. Een ECONOMISCHE tekortnacht is geen te krappe reserve: de accu
+# was niet vol omdat bijladen uit het net niet loonde, en het tekort is
+# bewust goedkoper bijgekocht. Die nacht de marge laten verhogen hield de
+# accu de week erna 's avonds voller dan nodig. Onbekend telt wel mee
+# (voorzichtig: huis gaat voor), net als planning, capaciteit en verkocht.
+MARGE_TELT_NIET_MEE_SOORTEN = ("economisch",)
+
+# v5.70: verkopen van de energie die pas NA het volgende goedkope blok nodig
+# is (de lange horizon). Die wordt in dat blok goedkoper teruggeladen, dus
+# vasthouden kost geld. Alleen als verkopen nu minstens zoveel per kWh meer
+# oplevert dan terugladen in het blok kost (blokprijs / rendement +
+# slijtage), en nooit meer dan het blok kan terugladen.
+VERKOOP_NA_BLOK_MIN_WINST_EUR = 0.02
+
 # Fallback threshold (kWh) for the emergency low-battery charge trigger,
 # used only when no SoC sensor is configured (SoC% is preferred - see
 # _is_emergency_low_battery). Keeps a small buffer above absolute zero.
