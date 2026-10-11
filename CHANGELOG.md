@@ -32729,3 +32729,37 @@ beide niet nog eens. Zichtbaar in de uitsplitsing: `airco_gebruik_extra_kwh`
 en `airco_gebruik_uren` (uur, kans, kWh, zeker).
 
 Tests: `test_v583.py` (8).
+
+## v5.84.0 — de luchtreiniger zelf meelezen (lokaal Tuya-protocol)
+
+Gevraagd 11-10: "Ik wil dat je het EMS de luchtreiniger zelf laat uitlezen,
+zonder integratie van derden" - en daarna sturen (laag/midden/hoog/auto).
+Stap 1, zoals bij Zendure (v5.50): ALLEEN LEZEN en vergelijken met de cloud.
+
+**`tuya_lokaal.py`**: het lokale Tuya-protocol, zelf geschreven - frames
+55AA (CRC32/HMAC-SHA256) en 6699 (AES-GCM), versleuteling 3.3 (AES-ECB),
+3.4 (ECB met sessiesleutel) en 3.5 (GCM met sessiesleutel), de
+sessie-onderhandeling, statusvraag/hartslag en de UDP-aankondigingen. Alleen
+`cryptography`, dat Home Assistant zelf meelevert. Getoetst tegen tinytuya
+1.20.0 als apparaat-kant (byte-gelijke frames, gedeelde sessiesleutels);
+die vectoren staan vast in de toetsen, tinytuya is geen afhankelijkheid.
+
+**`luchtreiniger_lokaal.py`**: vindt de luchtreiniger (Tuya-categorie "kj")
+in de officiële Tuya-integratie, met local key en de betekenis van elk
+datapunt (`local_strategy`); de sleutel komt nergens in attributen of
+diagnose. IP-adres en protocolversie uit de UDP-aankondigingen (6666, 6667,
+7000), bewaard voor na een herstart. Blijvende TCP-verbinding (6668), elke
+10 s een statusvraag plus de meldingen die het apparaat zelf stuurt.
+Vergelijkt per datapunt met de cloud, meet wie een wijziging eerst ziet, en
+toont ook de datapunten die de cloud niet kent (daar zou een
+ventilatorsnelheid kunnen zitten - de cloud kent alleen auto/slaap).
+22-tekens-apparaten op 3.3 die "data unvalid" geven, krijgen de statusvraag
+in de vorm die ze verwachten. Stuurt nooit iets dat het apparaat verandert
+(broncodetoets).
+
+**Zichtbaar**: `sensor.woonkamer_energy_management_system_luchtreiniger_lokaal`
+(verzamelt / gelijk / wijkt af / geen verbinding / zoekt adres / geen sleutel
+/ niet gevonden) met een kaart op de Proefstand-pagina; ook in de diagnose.
+
+Tests: `test_v584.py` (16), waaronder een volledige ronde tegen een
+nep-apparaat op localhost.

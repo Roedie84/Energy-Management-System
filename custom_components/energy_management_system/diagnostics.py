@@ -472,6 +472,7 @@ async def async_get_config_entry_diagnostics(
         ),
         # v5.50: de Zendure-accu zelf meelezen (alleen lezen).
         "zendure_lokaal": _veilig("zendure_lokaal", lambda: _zendure_lokaal(coordinator)),
+        "luchtreiniger_lokaal": _veilig("luchtreiniger_lokaal", lambda: _luchtreiniger_lokaal(coordinator)),
         # v3.89.0: welke voorwaarden tot de beslissing leidden.
         "afwegingen": _veilig("get_afwegingen", coordinator.get_afwegingen),
         # v3.90.0: het juiste soort entiteit, en de prijsreeks.
@@ -1608,6 +1609,14 @@ def _json_veilig(waarde: Any) -> Any:
     if isinstance(waarde, (list, tuple, set)):
         return [_json_veilig(x) for x in waarde]
     return str(waarde)
+
+
+def _luchtreiniger_lokaal(coord) -> dict:
+    """v5.84: de luchtreiniger zelf meelezen (alleen lezen). Zonder sleutel."""
+    meelezer = getattr(coord, "luchtreiniger_lokaal", None)
+    if meelezer is None:
+        return {"modus": "niet gestart"}
+    return meelezer.attributen() | {"oordeel": meelezer.status()}
 
 
 def _zendure_lokaal(coord) -> dict:

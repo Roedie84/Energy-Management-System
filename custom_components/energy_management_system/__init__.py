@@ -20,6 +20,7 @@ from .const import CONF_BATTERY_POWER_SENSOR, CONF_INVERT_BATTERY_POWER_SIGN
 from .coordinator import EnergyManagementSystemCoordinator
 from .solar_forecast import SolarForecastAccuracyTracker
 from .zendure_lokaal import ZendureLokaalMeelezer
+from .luchtreiniger_lokaal import LuchtreinigerLokaalMeelezer
 
 # v3.81.0: de lijst staat in const.py, zodat de platformcontrole er
 # niet naast kan zitten. Twee lijsten met dezelfde inhoud is precies de
@@ -212,6 +213,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(meelezer.async_stop)
     except Exception as err:  # noqa: BLE001
         _LOGGER.warning("Zendure-meelezen niet gestart: %s", err)
+    # v5.84: de luchtreiniger zelf meelezen via het lokale Tuya-protocol.
+    # Alleen lezen; een fout hier mag het EMS nooit tegenhouden.
+    try:
+        luchtreiniger = LuchtreinigerLokaalMeelezer(hass)
+        await luchtreiniger.async_start()
+        coordinator.luchtreiniger_lokaal = luchtreiniger
+        entry.async_on_unload(luchtreiniger.async_stop)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Luchtreiniger-meelezen niet gestart: %s", err)
     await hass.async_add_executor_job(_copy_dashboard_template, hass)
     await hass.async_add_executor_job(_copy_overview_background, hass)
     # v5.71: de cockpit (kaart en strategie) aan de frontend geven.

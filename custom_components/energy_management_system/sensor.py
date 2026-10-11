@@ -173,6 +173,7 @@ async def async_setup_entry(
         DiagnoseLerenSensor(coordinator, entry.entry_id),
         # v5.50: de Zendure-accu zelf meelezen (alleen lezen).
         ZendureLokaalSensor(coordinator, entry.entry_id),
+        LuchtreinigerLokaalSensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -5346,6 +5347,36 @@ class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
         except Exception:  # noqa: BLE001 - meelezen mag de sensor niet breken
             return {"modus": "fout bij samenvatten"}
 
+
+
+class LuchtreinigerLokaalSensor(_CoordinatorDiagnosticSensor):
+    """Wat het EMS zelf van de luchtreiniger leest via het lokale
+    Tuya-protocol (v5.84). Alleen lezen - stuurt niets. Toestand: verzamelt /
+    gelijk / wijkt af / geen verbinding / zoekt adres / geen sleutel / niet
+    gevonden."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Luchtreiniger lokaal"
+    _attr_icon = "mdi:air-purifier"
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "luchtreiniger_lokaal")
+
+    @property
+    def native_value(self) -> str:
+        meelezer = getattr(self._coordinator, "luchtreiniger_lokaal", None)
+        return meelezer.status() if meelezer is not None else "uit"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        meelezer = getattr(self._coordinator, "luchtreiniger_lokaal", None)
+        if meelezer is None:
+            return {"modus": "niet gestart"}
+        try:
+            return meelezer.attributen()
+        except Exception:  # noqa: BLE001 - meelezen mag de sensor niet breken
+            return {"modus": "fout bij samenvatten"}
 
 
 class DashboardBronnenSensor(_CoordinatorDiagnosticSensor):

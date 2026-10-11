@@ -1,3 +1,16 @@
+EMS v5.84.0 - de luchtreiniger zelf meelezen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het EMS leest de luchtreiniger (PureFlow70Pro) rechtstreeks uit over je
+  eigen netwerk, met een eigen implementatie van het lokale Tuya-protocol.
+  Geen integratie van derden; de sleutel komt uit de Tuya-integratie.
+- Alleen lezen: het vergelijkt elke waarde met de Tuya-cloud en meet wie
+  een wijziging het eerst ziet. Sturen (laag/midden/hoog/auto) komt pas als
+  het lezen bewezen goed is.
+- Nieuwe sensor "Luchtreiniger lokaal" met een kaart op de Proefstand-pagina.
+  Datapunten die de cloud niet kent staan er apart bij.
+
 EMS v5.83.0 - verwacht airco-gebruik in de reserve
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
