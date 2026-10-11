@@ -1,3 +1,18 @@
+EMS v5.81.1 - reserve-plafond, zelfcontrole en uitleg
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De reserve wordt begrensd op wat de accu boven de minimum-SoC kan bevatten
+  (~7,8 kWh) in plaats van de volle 8,64 kWh. Een volle accu geldt dan als
+  "genoeg"; zou de reserve meer vragen dan de accu kan bevatten, dan wordt
+  er niets verkocht.
+- De zelfcontrole "Eén reserve" vergelijkt de verkooptoets met de
+  verkoopreserve en meldt geen valse afwijking meer.
+- De uitleg bij de reserve zegt nu waar het getal voor is: tot het goedkope
+  blok plus de uren daarna, met marge.
+- De tweede prijslaag telt de beschikbare energie op dezelfde manier als de
+  rest (module leeg = 0).
+
 EMS v5.81.0 - verkooptoets en spaarplan per kwartier in het dagverloop
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

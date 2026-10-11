@@ -22388,6 +22388,22 @@ class EnergyManagementSystemCoordinator:
             return SELL_RESERVE_DEEPEST_SAFETY_FACTOR
         return 1.0 + totaal / 100
 
+    def _reserve_plafond_kwh(self) -> float | None:
+        """Het hoogste dat een reserve kan zijn (v5.81.1, akkoord Ruud 11-10).
+
+        De reserve werd afgekapt op de TOTALE capaciteit (8,64 kWh), maar
+        wordt vergeleken met de beschikbare energie, en die telt pas vanaf de
+        minimum-laadstand en loopt tot de bovengrens: hooguit 7,78 kWh (8,64
+        x 0,90). Bond het plafond - 10-10 19:30: (5,42 + 4,20) x 1,25 = 12,03
+        -> 8,64 - dan zei de brug structureel "niet genoeg", ook met een
+        volle accu. Nu: wat er tussen de grenzen past
+        (`bruikbaar_tussen_grenzen_kwh`); zonder die waarde de capaciteit.
+        """
+        tussen = self.bruikbaar_tussen_grenzen_kwh()
+        if tussen:
+            return tussen
+        return self.bruikbare_capaciteit_kwh()
+
     def _reserve_bodem_kwh(self) -> float:
         """De ondergrens onder elke reserve (v3.74.0, één plek v3.92.3).
 
@@ -22719,6 +22735,9 @@ class EnergyManagementSystemCoordinator:
         # daarop volgde - "haalt de nacht niet", bijladen - vergeleek een
         # voorraad met een getal dat nooit gehaald kan worden.
         ongekapt_kwh = reserve_kwh
+        # v5.81.1: het plafond is wat er tussen de grenzen past, niet de
+        # totale accu - zie `_reserve_plafond_kwh`.
+        capaciteit = self._reserve_plafond_kwh() or capaciteit
         boven_capaciteit = bool(capaciteit) and reserve_kwh > capaciteit
         if boven_capaciteit:
             reserve_kwh = capaciteit
@@ -25713,7 +25732,15 @@ class EnergyManagementSystemCoordinator:
         # nodig" in een accu van 8,64. v3.99.2 kapte de reserve, maar deze
         # toets rekent `veilig` zelf uit - de vierde berekening uit
         # v3.92.3, en de enige die de kap miste.
-        capaciteit = self.bruikbare_capaciteit_kwh()
+        # v5.81.1: het plafond tussen de grenzen (`_reserve_plafond_kwh`).
+        # Bindt het plafond, dan heeft de woning méér nodig dan er in de
+        # accu past: dan is er niets vrij te verkopen, hoe vol hij ook is.
+        capaciteit = self._reserve_plafond_kwh()
+        ongekapt = verkoopinfo.get("ongekapt_kwh")
+        plafond_bindt = bool(capaciteit) and (
+            veilig > capaciteit + 0.001
+            or (ongekapt is not None and float(ongekapt) > capaciteit + 0.001)
+        )
         if capaciteit:
             veilig = min(veilig, capaciteit)
 
@@ -25734,7 +25761,7 @@ class EnergyManagementSystemCoordinator:
             < SELL_REOPEN_MIN_MINUTES
         )
         self._schaduw_na_de_verkooptoets(now, beschikbaar, veilig)
-        if beschikbaar <= drempel or te_snel:
+        if beschikbaar <= drempel or te_snel or plafond_bindt:
             if not self._verkoop_geblokkeerd_door_reserve:
                 self._verkoop_dicht_sinds = now
             self._verkoop_geblokkeerd_door_reserve = True
@@ -27089,6 +27116,9 @@ class EnergyManagementSystemCoordinator:
         reserve, zoals voorheen.
         """
         uit = {"reserve_kwh": reserve, "vrij_na_blok_kwh": 0.0, "toegepast": False}
+        # v5.81.1: de reserve vóór het plafond, zodat de verkooptoets ziet of
+        # de woning meer nodig heeft dan er in de accu past.
+        uit["ongekapt_kwh"] = (u or {}).get("ongekapt_kwh")
         if reserve is None or not u or blok_start is None:
             uit["reden"] = "geen reserve of blok"
             return uit
@@ -27129,7 +27159,9 @@ class EnergyManagementSystemCoordinator:
         ongekapt = float(u.get("ongekapt_kwh") or reserve)
         bodem = float(u.get("bodem_kwh") or self._reserve_bodem_kwh())
         verkoop = max(bodem, ongekapt - vrij * marge)
-        capaciteit = self.bruikbare_capaciteit_kwh()
+        uit["ongekapt_kwh"] = round(verkoop, 3)
+        # v5.81.1: het plafond tussen de grenzen (`_reserve_plafond_kwh`).
+        capaciteit = self._reserve_plafond_kwh()
         if capaciteit:
             verkoop = min(verkoop, capaciteit)
         verkoop = min(verkoop, reserve)
@@ -27878,6 +27910,12 @@ class EnergyManagementSystemCoordinator:
                 # between ~0 and slightly negative) causes rapid,
                 # unhealthy switching back and forth every tick.
                 buffer_kwh = max(0.15, needed_kwh * 0.10)
+                # v5.81.1: is de reserve op het plafond afgekapt (de woning
+                # vraagt meer dan erin past), dan pas "genoeg" als de accu
+                # echt vol is - zonder marge eronder, anders stopt het
+                # bijvullen een paar procent te vroeg.
+                if (self._reserve_gevraagde_uitsplitsing or {}).get("boven_capaciteit"):
+                    buffer_kwh = min(buffer_kwh, 0.05)
                 if self.last_has_enough_energy is True:
                     # Was postponing - only give up once clearly short.
                     has_enough = available_kwh >= needed_kwh - buffer_kwh
@@ -42577,6 +42615,18 @@ class EnergyManagementSystemCoordinator:
         moment = getattr(self, "_forecast_cache_ronde", None)
         return moment.isoformat() if moment is not None else None
 
+    def _verwachte_verkoopreserve(self, sturing: float) -> float:
+        """Wat de verkooptoets bij deze sturingsreserve hoort te lezen
+        (v5.81.1): de verkoopreserve van deze ronde (`last_verkoopreserve`,
+        v5.70) of anders de sturingsreserve, minstens de bodem en hooguit het
+        plafond - precies zoals `may_sell_now` hem afrondt."""
+        info = self.last_verkoopreserve or {}
+        reserve = info.get("reserve_kwh")
+        verwacht = float(reserve) if reserve is not None else float(sturing)
+        verwacht = max(verwacht, self._reserve_bodem_kwh())
+        plafond = self._reserve_plafond_kwh()
+        return min(verwacht, plafond) if plafond else verwacht
+
     def zelfcontrole_een_reserve(self) -> dict:
         """Zien de brug, de verkooptoets en de sturing hetzelfde getal?"""
         # v4.9: is er geen goedkoop blok in zicht, dan is er geen reserve
@@ -42622,9 +42672,18 @@ class EnergyManagementSystemCoordinator:
         if len(aanwezig) < 2:
             return {"in_orde": True, "lezers": lezers, "uitleg": "Nog niet alle lezers hebben gerekend."}
         referentie = aanwezig.get("sturing", next(iter(aanwezig.values())))
+        # v5.81.1: de verkooptoets leest sinds v5.70 de VERKOOPreserve - de
+        # sturingsreserve min wat het goedkope blok terugláádt, met de bodem
+        # en het plafond. Dat is dezelfde definitie met een bewuste
+        # aftrek, geen tweede. Tegen dat getal toetsen; anders meldde de
+        # controle elke avond een "tweede reservedefinitie" (11-10 04:45:
+        # verkooptoets 1,41 tegen sturing 5,87, zelfctl 1/2).
+        verwacht = {k: referentie for k in aanwezig}
+        if "verkooptoets" in aanwezig:
+            verwacht["verkooptoets"] = self._verwachte_verkoopreserve(referentie)
         afwijkend = [
             k for k, v in aanwezig.items()
-            if abs(v - referentie) > ZELFCONTROLE_RESERVE_TOLERANTIE_KWH
+            if abs(v - verwacht[k]) > ZELFCONTROLE_RESERVE_TOLERANTIE_KWH
         ]
         return {
             "in_orde": not afwijkend,
@@ -43423,10 +43482,14 @@ class EnergyManagementSystemCoordinator:
                     else "onbekend"
                 )
                 parts.append(
+                    # v5.81.1: het getal is de reserve tot het goedkope
+                    # blok PLUS de lange horizon (wat er na het blok nog
+                    # nodig is), met marge - niet "de dure kwartieren van
+                    # vandaag".
                     f"De accu heeft niet genoeg beschikbare energie "
-                    f"({avail_txt} kWh) om zowel het basisverbruik als de "
-                    f"nog-komende dure kwartieren van vandaag te overbruggen "
-                    f"(geschat nodig: {needed_txt} kWh). Daarom wordt er "
+                    f"({avail_txt} kWh) voor de reserve tot het goedkope "
+                    f"blok en de uren daarna tot de prijzen ophouden, met "
+                    f"marge (geschat nodig: {needed_txt} kWh). Daarom wordt er "
                     f"niet verkocht en regelt de Zendure het zelf "
                     f"(smart-modus: laden bij zonoverschot, ontladen voor "
                     f"het huis)."
@@ -44044,7 +44107,9 @@ class EnergyManagementSystemCoordinator:
                 else None
             )
             secondary_available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
-            secondary_available_kwh = (
+            # v5.81.1: met de modulesprong (L-EMS-014), net als elke andere
+            # lezer van de beschikbare energie.
+            secondary_available_kwh = self._na_module_leeg(
                 self._read_sensor_float(secondary_available_entity)
                 if secondary_available_entity
                 else None

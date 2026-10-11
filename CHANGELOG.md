@@ -32642,3 +32642,34 @@ kleinste marge vast over de rondes van het kwartier waarin minstens 100 W
 (~20 W) telt niet. Negatief = onder de reserve verkocht (harde regel).
 
 Tests: `test_v581.py` (5).
+
+
+## v5.81.1 — reserve-plafond op de bruikbare energie, zelfcontrole en uitleg
+
+Controle 11-10 04:45 (alleen lezen), akkoord Ruud 11-10 07:56. Gevraagd als
+v5.80.1; v5.81.0 stond al op main, dus deze patch is 5.81.1.
+
+**Reserve-plafond** (`_reserve_plafond_kwh`): de reserve werd begrensd op de
+volle capaciteit (8,64 kWh), maar de beschikbare energie telt boven de
+minimum-SoC (max ~7,78 kWh). Bond het plafond, dan zeiden de brug en de
+verkooptoets structureel "niet genoeg". Nu is het plafond
+`bruikbaar_tussen_grenzen_kwh()` (terugval: bruikbare capaciteit). Een volle
+accu is dan "genoeg"; de buffer van de brug gaat naar 0,05 kWh als het plafond
+bindt. Bindt het plafond (reserve vóór het plafond groter dan wat de accu kan
+bevatten), dan is er niets vrij om te verkopen (`plafond_bindt`); de
+verkoopreserve toont `ongekapt_kwh`.
+
+**Zelfcontrole "Eén reserve"**: vergelijkt de verkooptoets nu met de
+verkoopreserve (`_verwachte_verkoopreserve`) in plaats van met de
+sturingsreserve; die verschillen bewust sinds v5.70, dus de melding was vals.
+
+**Uitlegtekst** van de sturingsreserve: zegt nu wat het getal is (tot het
+goedkope blok plus de uren daarna tot de prijzen ophouden, met marge) in plaats
+van "nog-komende dure kwartieren van vandaag".
+
+**Tweede prijslaag**: de beschikbare energie gaat nu ook door `_na_module_leeg`.
+
+Gouden scenario `middag_16u_vol` wijkt bewust af (volle accu 7,7 boven het
+plafond 7,34 bij min-SoC 15: ontladen in het venster, geen verkoop).
+
+Tests: `test_v5811.py` (10).
