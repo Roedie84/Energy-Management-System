@@ -41,3 +41,11 @@
 | Meetlog kwartieren gemeten na L-EMS-009 | 93/96 (22 herstarts, 20 over herstart) · pv_onbekend 0 | 09-10 | 10-10 03:40 |
 | SoC-sprong vlak boven leeg | 2× in 10 d (4-5 pp ≈ 0,35 kWh) | 30-09..09-10 | 10-10 03:40 |
 | MC 22:00 Brier (tot blok) | 0 (n=1) | avond 08-10 | 10-10 03:40 |
+| PV-voorspelling MAE (dag, day-ahead tracker) | 10,5 % (30 d) · 8,2 % (14 d) · 12,4 % (7 d); bias −8,0 / −6,2 / −8,9 | 11-09..10-10 | 11-10 03:40 |
+| Nabeschouwing: accu leverde / had kunnen (realisatie) | € 3,10 / € 6,51 (48 %) 7 d · € 3,77 / € 11,60 (32 %) 14 d | 27-09..10-10 | 11-10 03:40 |
+| Nabeschouwing: gemist door reserve / voorspelling | € 0,48 / € 2,91 (7 d) | 04..10-10 | 11-10 03:40 |
+| Besparing t.o.v. zonder accu-sturing (sensor, per dag) | −0,26..+1,06 €; 10-10 € 1,06 | 05..10-10 | 11-10 03:40 |
+| Export op een minder duur kwartier dan de dagtop | 10,95 kWh, ~€ 0,41 in 13 d (momentopname) | 28-09..10-10 | 11-10 03:40 |
+| Dagrapport-dekking meetlog | 99,2 % (95/96, 12 over herstart) | 10-10 | 11-10 03:40 |
+| MC 22:00 Brier (tot blok) | 0 (n=2: 0 %/geen tekort, 100 %/tekort) | avonden 08-10, 09-10 | 11-10 03:40 |
+| Tekortnachten | 2 / 7 (04-10 onbekend, 10-10 economisch 2,36 kWh) | 04..10-10 | 11-10 03:40 |

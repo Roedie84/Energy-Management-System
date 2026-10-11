@@ -254,3 +254,16 @@ laatste ronde: 10-10 19:40, gemeten t/m 10-10 19:45
 - Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-4 (achteraf-optimum, dagafsluiting 11-10), H-EMS-9 (behoefte tot blok). Geen release (tussenronde, niets acuut: de verkoopfout is al opgelost in v5.79).
 
 laatste ronde: 10-10 23:40, gemeten t/m 10-10 23:45
+
+## 11-10 03:40 · dagafsluiting 10-10
+- Dag 10-10: PV 9,35 kWh (day-ahead tracker 10,00 → **−6,5 %**, bewolking 52 %; Solcast-vandaag 9,05 → +3,3 %), import 9,10 (netladen blok 6,50), export 1,71, accu 8,96 in / 4,76 uit, huis 12,5 kWh, piek 8451 W (record). 12 HA-herstarts, logboek 0 EMS-fouten. Verkoop onder de reserve: **1 kwartier** (18:45, 0,56 kWh, opgelost v5.79); 22:45 en de nacht tot 04:05 niet (alleen `default_smart`).
+- PV 30 d MAE 10,5 % (bias −8,0), 14 d 8,2 % (−6,2), 7 d 12,4 % (−8,9; de −48 % van 09-10 telt mee). H-EMS-2 (donkere dagen te hoog) ongewijzigd n=1; integratie houdt de biascorrectie bewust in (twee soorten dagen).
+- **H-EMS-4 afgerond (meetbaar):** de integratie rekent het achteraf-optimum zelf (`nabeschouwingen`, 31 dagen). 10-10: leverde € 0,39 van € 0,48 (gemist 0,09, alles reserve). 7 d: € 3,10 van € 6,51 (**48 %**), gemist 3,39 = reserve 0,48 + voorspelling 2,91; 14 d 32 % → beter. Besparing t.o.v. zonder accu 10-10 € 1,06 (05-09: −0,26..+0,30). Dagrapport-schaduw 4,22 ct: kosten € 0,26.
+- Toets verkooptiming (dagverloop, 13 d): export in een minder duur kwartier dan de dagtop kostte maar ~€ 0,41 (10,95 kWh); waar de rest van het gemiste bedrag zit, is met momentopnamen niet te ontleden → meetbaarheid **L-EMS-019** (gepland).
+- Nacht 09→10 in het dagrecord: tekort 2,363 kWh `economisch`, MC 22:00 100 % → Brier 0 (n=2). Tekortnachten 7 d: 2 (onbekend + economisch); reserve te hoog 0. Dekking dagrapport 99,2 %.
+- **H-EMS-9 (nacht 10→11 loopt):** 23:41 nodig tot blok 2,40 bij 3,11; 04:03 nodig 1,29 bij 2,16 (marge 0,87, was 0,71). Accu 23:40→03:39 −0,95 kWh (~237 W DC). Uitslag na het blok (10:45) in de ronde van 11:40.
+- v5.80 eerste avond: kostprijsmodel +€ 0,37 (20:29→03:39); vergelijking met eigen afrekening over ≥ 3 dagen.
+- **Gebouwd v5.81.0 (L-EMS-018):** verkooptoets en spaarplan per kwartier in het dagverloop + kleinste marge bij export (negatief = onder de reserve). Alleen meten; 5 tests, suite 5519 groen, workflow groen, HACS ververst.
+- Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-9 (behoefte tot blok, uitslag 11:40). Open voor Ruud: L-EMS-017.
+
+laatste ronde: 11-10 03:40, gemeten t/m 11-10 04:05
