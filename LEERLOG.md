@@ -304,3 +304,14 @@ laatste ronde: 11-10 15:40, gemeten t/m 11-10 15:40
 - Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-10 (springende behoefte). Geen release (tussenronde, niets acuut). Open voor Ruud: L-EMS-017.
 
 laatste ronde: 11-10 19:40, gemeten t/m 11-10 19:56
+
+## 11-10 23:40 · tussenronde
+- 8 HA-herstarts 21:02-23:31 (supervisor); actief **v5.86.0** sinds 23:31 (L-EMS-021, chatsessie), **leermodus aan tot 12-10 05:00** (eenmalig, Ruud). 0 EMS-fouten.
+- Beslissingen 19:56-23:40: `default_smart`, één verkoopkwartier `expensive_quarter` **20:08:48-20:13:48: 0,11 kWh** (beschikbaar 5,96 → 5,79). Avond totaal 0,34 kWh verkocht. Rest: export 0,095 (regelruis), import 0,056.
+- **Harde regel:** 20:09 niet direct toetsbaar (de kwartiermarge van L-EMS-018 staat alleen in de diagnostics, niet via de MCP). Terugrekening: nodig tot blok 23:35 2,28 + huisverbruik 20:14-23:35 1,64 = 3,92 × 1,25 = 4,90 < 5,79 → **0× onder de reserve** (afgeleid). Kwartiermarge bevestigen in de dagafsluiting.
+- **H-EMS-10 bevestigd in omvang:** 9 sprongen ≥ 0,6 kWh in 4 u (grootste 21:42 +1,87, 4,98 → 6,85), zonder verbruiksstap; de 4,99 van 19:56 die de verkoop stopte, past niet bij 3,9 die terugrekening om 20:14 geeft. L-EMS-020 (meetbaarheid) blijft eerste stap.
+- Nacht 11→12: beschikbaar 4,15, nodig tot blok (11:30) 2,28 → marge 1,87; MC 22:00 0 % (beschikbaar 4,67). Dagrecord 11-10 (nacht 10→11, MC 10-10) komt na middernacht in de kalibratie → nachten 2 is nu correct (code nagelezen).
+- L-EMS-021: plan toont 6 laadkwartieren, maar leermodus tot 05:00 → effect pas vanaf de nacht 12→13 meetbaar.
+- Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-10 (springende behoefte). Geen release (tussenronde, niets acuut). L-EMS-017 akkoord → bouwen in de dagafsluiting.
+
+laatste ronde: 11-10 23:40, gemeten t/m 11-10 23:45
