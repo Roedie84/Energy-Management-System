@@ -282,6 +282,9 @@ CLOUD_INVOER_CONFIRM_MINUTES = 60
 # alleen door meerdere exports samen te voegen. Eén dag is 96 compacte
 # regels, dus veertig dagen is nog geen 4000 regels.
 DAGVERLOOP_DAGEN = 40
+# v5.81 (L-EMS-018): vanaf dit terugleververmogen telt een ronde als export
+# in `marge_bij_export_min_kwh` (de regelverschuiving van ~20 W niet).
+EXPORT_MEETDREMPEL_W = 100
 
 # Hoeveel dagen er minstens nodig zijn voordat de zonpersistentie een
 # richting noemt. Bij acht dagen was r=0,69 een aanwijzing en geen

@@ -208,6 +208,7 @@ from .const import (
     CLOUD_INVOER_INSTELLINGEN,
     DAGTELLER_INSTELLINGEN,
     DAGVERLOOP_DAGEN,
+    EXPORT_MEETDREMPEL_W,
     NABESCHOUWING_MIN_KWARTIEREN,
     NACHTLAST_MIN_NACHTEN,
     NACHTLAST_MIN_STIJGING_FRACTIE,
@@ -24370,7 +24371,14 @@ class EnergyManagementSystemCoordinator:
             # is of er teruggeleverd werd terwijl het niet mocht.
             "mag_verkopen": (self.last_sell_check or {}).get("mag_verkopen"),
         }
+        # v5.81 (L-EMS-018): de getallen van de verkooptoets en het
+        # spaarplan erbij, zodat achteraf vast te stellen is of een verkoop
+        # onder de reserve tot het blok zakte, en of spaarplan en
+        # verkooptoets hetzelfde zagen. Alleen meten; stuurt niets.
+        regel.update(self._dagverloop_verkoopvelden(regel))
         reeks = self.dagverloop.setdefault(dag, [])
+        vorige = reeks[-1] if reeks and reeks[-1].get("tijd") == regel["tijd"] else None
+        regel["marge_bij_export_min_kwh"] = self._kleinste_marge_bij_export(regel, vorige)
         # v5.72: reserve en laadstand ALTIJD in het dagverloop, zodat een
         # tekortnacht achteraf te duiden is - zie `_vul_reserve_en_laadstand_aan`.
         self._vul_reserve_en_laadstand_aan(regel, reeks)
@@ -24381,6 +24389,66 @@ class EnergyManagementSystemCoordinator:
         self.noteer_meting_gevuld("dagverloop")
         for oud in sorted(self.dagverloop)[:-DAGVERLOOP_DAGEN]:
             self.dagverloop.pop(oud, None)
+
+    def _dagverloop_verkoopvelden(self, regel: dict) -> dict:
+        """Verkooptoets en spaarplan van dit moment, voor het dagverloop
+        (v5.81, L-EMS-018).
+
+        Leerronde 10-10 19:40: de verkoop van 18:45-19:00 was achteraf niet
+        na te rekenen - sinds v5.76 staan de attributen niet meer in de
+        recorder en het dagverloop had alleen `mag_verkopen`. Het spaarplan
+        zag om 18:34 8,1 kWh nodig tot het blok, de verkooptoets <= 5,5.
+        Nu staan beide getallen per kwartier vast. Alleen meten.
+        """
+        toets = self.last_sell_check or {}
+        plan = self.last_spaarplan or {}
+
+        def _getal(waarde):
+            try:
+                return None if waarde is None else round(float(waarde), 3)
+            except (TypeError, ValueError):
+                return None
+
+        verkoopreserve = _getal(toets.get("nodig_voor_woning_kwh"))
+        vrij = _getal(toets.get("vrij_te_verkopen_kwh"))
+        if vrij is None and toets.get("mag_verkopen") is False:
+            vrij = 0.0
+        beschikbaar = regel.get("beschikbaar_kwh")
+        return {
+            "verkoopreserve_kwh": verkoopreserve,
+            "vrij_kwh": vrij,
+            "nodig_tot_blok_kwh": _getal(toets.get("nodig_tot_blok_kwh")),
+            "nodig_na_blok_kwh": _getal(toets.get("nodig_na_blok_kwh")),
+            "spaarplan_nodig_tot_blok_kwh": _getal(plan.get("nodig_tot_blok_kwh")),
+            "marge_kwh": (
+                round(beschikbaar - verkoopreserve, 3)
+                if isinstance(beschikbaar, (int, float)) and verkoopreserve is not None
+                else None
+            ),
+        }
+
+    @staticmethod
+    def _kleinste_marge_bij_export(regel: dict, vorige: dict | None) -> float | None:
+        """De kleinste marge (beschikbaar min verkoopreserve) in de rondes
+        van dit kwartier waarin teruggeleverd werd (v5.81, L-EMS-018).
+
+        De laatste ronde van het kwartier wint in het dagverloop; een
+        verkoop die halverwege het kwartier onder de reserve zakte en daarna
+        stopte, was dan niet meer te zien. Negatief = onder de reserve
+        teruggeleverd (harde regel: huis gaat voor). Teruglevering telt vanaf
+        100 W, zodat de bewuste regelverschuiving (~20 W) niet meetelt.
+        """
+        eerder = (vorige or {}).get("marge_bij_export_min_kwh")
+        net_w = regel.get("net_w")
+        marge = regel.get("marge_kwh")
+        nu = (
+            marge
+            if isinstance(net_w, (int, float)) and net_w <= -EXPORT_MEETDREMPEL_W
+            and isinstance(marge, (int, float))
+            else None
+        )
+        kandidaten = [m for m in (eerder, nu) if isinstance(m, (int, float))]
+        return round(min(kandidaten), 3) if kandidaten else None
 
     def _vul_reserve_en_laadstand_aan(self, regel: dict, reeks: list) -> None:
         """Een regel van het dagverloop nooit zonder reserve of laadstand

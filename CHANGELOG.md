@@ -32615,3 +32615,30 @@ ernaast, met `rekenwijze` en `verschil_met_besparing_zonder_sturing` als
 uitleg in de attributen.
 
 Tests: `test_v580.py` (6).
+
+
+## v5.81.0 — verkooptoets en spaarplan per kwartier in het dagverloop
+
+L-EMS-018 (leerronde 11-10 03:40, zelf gebouwd: meetbaarheid, stuurt niets).
+
+Aanleiding 10-10 18:45-19:00: de beschikbare energie zakte van 6,91 naar 6,22
+kWh tegen een reserve tot het blok van 6,78 (opgelost in v5.79). Achteraf was
+de verkoop niet na te rekenen: sinds v5.76 staan de attributen niet meer in de
+recorder en het dagverloop bewaarde alleen `mag_verkopen`. Het spaarplan zag om
+18:34 8,1 kWh nodig tot het blok, de verkooptoets <= 5,5 - die twee stonden
+nergens naast elkaar (H-EMS-9, L-EMS-017).
+
+**Nieuw in elke regel van het dagverloop** (`_dagverloop_verkoopvelden`):
+`verkoopreserve_kwh` (wat de verkooptoets voor de woning vasthoudt, incl.
+marge), `vrij_kwh` (0 als de toets nee zegt), `nodig_tot_blok_kwh`,
+`nodig_na_blok_kwh`, `spaarplan_nodig_tot_blok_kwh` en `marge_kwh`
+(beschikbaar min verkoopreserve).
+
+**`marge_bij_export_min_kwh`** (`_kleinste_marge_bij_export`): de laatste ronde
+van een kwartier wint in het dagverloop, dus een verkoop die halverwege onder
+de reserve zakte en daarna stopte, was niet meer te zien. Dit veld houdt de
+kleinste marge vast over de rondes van het kwartier waarin minstens 100 W
+(`EXPORT_MEETDREMPEL_W`) werd teruggeleverd; de bewuste regelverschuiving
+(~20 W) telt niet. Negatief = onder de reserve verkocht (harde regel).
+
+Tests: `test_v581.py` (5).
