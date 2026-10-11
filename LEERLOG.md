@@ -267,3 +267,12 @@ laatste ronde: 10-10 23:40, gemeten t/m 10-10 23:45
 - Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-9 (behoefte tot blok, uitslag 11:40). Open voor Ruud: L-EMS-017.
 
 laatste ronde: 11-10 03:40, gemeten t/m 11-10 04:05
+
+## 11-10 07:40 · tussenronde
+- **v5.81.0 door HACS gedownload om 04:59, maar nog niet actief**: geen HA-herstart sinds 10-10 20:26, `diagnose_gezondheid` meldt nog v5.80.0 → L-EMS-018-velden pas na de volgende herstart. Logboek 0 EMS-fouten (wel Solcast API-limiet 10/10 om 00:05, extern).
+- Beslissingen 04:05-07:45: alleen `default_smart`; accu 35 → 24 %, beschikbaar 2,16 → 1,30 kWh (~236 W). P1 04-07 u import 0,045 / export 0,068 kWh (alleen regelruis), **0× verkoop, 0× onder de reserve**, geen netimport in dure kwartieren (prijs 28 ct < drempel 36,8).
+- **Spaarplan-verloop getoetst:** 04:03 nodig tot blok 1,29 → 07:42 0,40; voorspeld verbruik 04:03→07:42 **0,89 kWh, werkelijk 0,86 (−3 %)**. Marge tot het blok 0,90 kWh (04:03: 0,87). MC tot blok 0 % (p90 0,77 kWh < 1,30).
+- **H-EMS-9 tussenstand** (uitslag 11:40): huisverbruik uit de accu 18:45 → 07:42 = 6,91 − 1,30 − 1,38 verkocht = **4,23 kWh**; + 0,40 tot het blok ≈ **4,6 kWh** tegen spaarplan 18:34 **8,1** en verkooptoets ≤ 5,5. Eerste beeld: de behoefte werd 's avonds niet onderschat; het spaarplan van 18:34 zat ~3,5 kWh te hoog. Bevestigt de richting van L-EMS-017 (één behoefte), niet een te krappe verkooptoets.
+- Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-9 (uitslag 11:40). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 11-10 07:40, gemeten t/m 11-10 07:45
