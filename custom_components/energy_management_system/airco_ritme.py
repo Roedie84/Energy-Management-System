@@ -510,6 +510,91 @@ def nacht_extra_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, temp
     }
 
 
+# --- v5.83: het verwachte airco-gebruik buiten de ochtendverwarming ---------
+
+AAN_UUR_KWH = 0.05
+MIN_DAGEN_UUR = 3
+
+
+def _ochtenduur(uur: datetime) -> bool:
+    m = uur.hour * 60
+    return OCHTEND_VAN <= m < OCHTEND_TOT
+
+
+def gebruik_kwh(
+    ritme: dict,
+    van: datetime,
+    tot: datetime,
+    *,
+    zonder_ochtend: bool = False,
+    loopt_nu: bool = False,
+    loopt_tot: datetime | None = None,
+) -> dict:
+    """Wat de airco in dit venster naar verwachting gebruikt, bovenop wat het
+    gewone verbruiksprofiel al meeneemt (v5.83, akkoord Ruud 11-10).
+
+    Gevraagd: "als verwacht wordt dat de airco aangaat zeker meenemen, eigen
+    verbruik is belangrijker dan verkoop". Het verbruiksprofiel neemt per uur
+    de mediaan van de laatste dagen; een airco die op 2 van de 5 avonden
+    draait, valt daar weg. Hier per klokuur, uit het eigen uurverbruik:
+
+    - kans = op hoeveel van de gemeten dagen de airco in dat uur draaide
+      (minstens AAN_UUR_KWH), vanaf MIN_DAGEN_UUR dagen;
+    - typisch = de mediaan van die uren met gebruik;
+    - verwacht = typisch als de kans minstens KANS_MINIMAAL is, anders
+      kans x typisch;
+    - draait de airco nu, dan telt elk uur tot `loopt_tot` (de vaste
+      uit-tijd) als zeker.
+
+    Extra = verwacht min de mediaan (wat het profiel al heeft), per uur, nooit
+    negatief. Met `zonder_ochtend` blijven de ochtenduren (04-11) buiten:
+    die rekent `nacht_extra_kwh` al als ochtendverwarming.
+    """
+    reeksen = ritme.get("uurverbruik") or {}
+    alle_aan = [v for r in reeksen.values() for v in (r or []) if v >= AAN_UUR_KWH]
+    typisch_alles = statistics.median(alle_aan) if alle_aan else None
+    extra = verwacht_tot = profiel = 0.0
+    uren: list[dict] = []
+    uur = van.replace(minute=0, second=0, microsecond=0)
+    for _ in range(72):
+        if uur >= tot:
+            break
+        volgende = uur + timedelta(hours=1)
+        deel = _overlap_uren(uur, volgende, van, tot)
+        if deel <= 0 or (zonder_ochtend and _ochtenduur(uur)):
+            uur = volgende
+            continue
+        reeks = reeksen.get(str(uur.hour)) or []
+        zeker = loopt_nu and loopt_tot is not None and uur < loopt_tot
+        if len(reeks) < MIN_DAGEN_UUR and not zeker:
+            uur = volgende
+            continue
+        aan = [v for v in reeks if v >= AAN_UUR_KWH]
+        kans = 1.0 if zeker else len(aan) / len(reeks)
+        typisch = statistics.median(aan) if aan else typisch_alles
+        if typisch is None or kans <= 0:
+            uur = volgende
+            continue
+        verwacht = typisch if kans >= KANS_MINIMAAL else kans * typisch
+        al = statistics.median(reeks) if reeks else 0.0
+        bij = max(verwacht - al, 0.0) * deel
+        extra += bij
+        verwacht_tot += verwacht * deel
+        profiel += al * deel
+        if bij > 0.001:
+            uren.append({
+                "uur": uur.strftime("%H:00"), "kans": round(kans, 2),
+                "kwh": round(bij, 3), "zeker": zeker,
+            })
+        uur = volgende
+    return {
+        "extra_kwh": round(extra, 3),
+        "verwacht_kwh": round(verwacht_tot, 3),
+        "al_in_profiel_kwh": round(profiel, 3),
+        "uren": uren,
+    }
+
+
 def minuten_uit_klok(waarde) -> int | None:
     """'22:00' of '22:00:00' -> 1320; leeg of onzin -> None (v5.67.1)."""
     try:

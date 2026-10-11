@@ -32703,3 +32703,29 @@ op de kaart.
 
 Tests: `test_v582.py` (9); `test_de_sturing_leest_alleen_via_de_terugval`
 vervangt de oude toets dat de coordinator niets uit de meelezer las.
+
+## v5.83.0 — verwacht airco-gebruik in de reserve
+
+Akkoord Ruud 11-10 10:57: "als verwacht wordt dat de airco aangaat zeker
+meenemen, eigen verbruik is belangrijker dan verkoop". Aanleiding: de
+woonkamer-airco gebruikte 09-10 1,8 kWh (15-22 uur) en 10-10 1,6 kWh (19-22
+uur). Het verbruiksprofiel neemt per uur de mediaan van de laatste dagen, dus
+een airco die niet op de meeste dagen in hetzelfde uur draait, viel weg; de
+reserve en de verkooptoets rekenden de avond te ruim.
+
+**`airco_ritme.gebruik_kwh`**: per klokuur uit het eigen uurverbruik (sinds
+v5.67): de kans (dagen met minstens 0,05 kWh, vanaf 3 gemeten dagen) en het
+typische verbruik (mediaan van die uren). Kans ≥ 50%: het volle typische
+verbruik; anders kans × typisch. Minus wat het profiel al heeft (de mediaan),
+nooit negatief. Draait de airco nu (≥ 150 W), dan telt elk uur tot de vaste
+uit-tijd (`airco_uit_om`, 22:00) als zeker.
+
+**In de reserve** (`_bereken_dynamische_reserve_kwh`): het extra komt bij
+`needed_kwh`, vóór de marge, dus het werkt door in het ontladen, de
+verkooptoets en de planning. Ook met de knop Airco automaat uit (dan bedienen
+jullie hem zelf). Met de knop aan blijven de ochtenduren (04-11) bij de
+ochtendverwarming (`_airco_ochtend_extra_kwh`); het temperatuurmodel telt
+beide niet nog eens. Zichtbaar in de uitsplitsing: `airco_gebruik_extra_kwh`
+en `airco_gebruik_uren` (uur, kans, kWh, zeker).
+
+Tests: `test_v583.py` (8).

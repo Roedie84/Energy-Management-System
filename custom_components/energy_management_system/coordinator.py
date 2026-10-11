@@ -22666,8 +22666,15 @@ class EnergyManagementSystemCoordinator:
         # nog niet meeneemt - zie `_airco_ochtend_extra_kwh`.
         airco_ochtend = self._airco_ochtend_extra_kwh(now, cheap_block_start)
         needed_kwh += airco_ochtend["extra_kwh"]
+        # v5.83: en het airco-gebruik buiten die ochtend (de avond als jullie
+        # hem zelf aanzetten) - zie `airco_ritme.gebruik_kwh`. Eigen verbruik
+        # gaat voor verkoop.
+        airco_gebruik = self._airco_gebruik_extra_kwh(now, cheap_block_start)
+        needed_kwh += airco_gebruik["extra_kwh"]
         # v5.68: het temperatuurmodel op koude nachten - zie `_temperatuur_extra_kwh`.
-        temperatuur = self._temperatuur_extra_kwh(now, cheap_block_start, airco_ochtend["extra_kwh"])
+        temperatuur = self._temperatuur_extra_kwh(
+            now, cheap_block_start, airco_ochtend["extra_kwh"] + airco_gebruik["extra_kwh"]
+        )
         needed_kwh += temperatuur["extra_kwh"]
         # v5.70 (L-EMS-013): economische tekortnachten tellen niet mee.
         recent_shortfalls = self.marge_tekortnachten()
@@ -22784,6 +22791,8 @@ class EnergyManagementSystemCoordinator:
             "regelverschuiving_w": round(self.regelverschuiving_kw() * 1000),
             "lange_horizon_extra_kwh": round(lange_horizon_extra, 3),
             "airco_ochtend_extra_kwh": airco_ochtend["extra_kwh"],
+            "airco_gebruik_extra_kwh": airco_gebruik["extra_kwh"],
+            "airco_gebruik_uren": airco_gebruik.get("uren", []),
             "temperatuur_extra_kwh": temperatuur["extra_kwh"],
             "temperatuur_model_kw": temperatuur["model_kw"],
             "reserve_kwh_after_margin": round(reserve_kwh, 3),
@@ -46046,6 +46055,35 @@ class EnergyManagementSystemCoordinator:
         return airco_ritme.nacht_extra_kwh(
             self._airco_ritme(), now, tot, self._woonkamer_verwacht_op, self._airco_opwarmtempo()
         )
+
+    def _airco_gebruik_extra_kwh(self, now: datetime, tot: datetime) -> dict:
+        """Het verwachte airco-gebruik in de reserve (v5.83) - zie
+        `airco_ritme.gebruik_kwh`. Ook met de knop Airco automaat uit: dan
+        zetten jullie hem zelf aan, en dat verbruik is er net zo goed. Met de
+        knop aan blijft de ochtend bij `_airco_ochtend_extra_kwh`."""
+        leeg = {"extra_kwh": 0.0, "verwacht_kwh": 0.0, "al_in_profiel_kwh": 0.0, "uren": []}
+        if tot is None or tot <= now:
+            return leeg
+        try:
+            vermogen = self._airco_vermogen_w()
+            loopt = vermogen is not None and vermogen >= airco_ritme.VERMOGEN_AAN_W
+            loopt_tot = None
+            if loopt:
+                m = airco_ritme.minuten_uit_klok(
+                    self.instelling(CONF_AIRCO_UIT_OM, DEFAULT_AIRCO_UIT_OM)
+                )
+                if m is not None:
+                    grens = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=m)
+                    loopt_tot = grens if grens > now else now.replace(
+                        minute=0, second=0, microsecond=0
+                    ) + timedelta(hours=1)
+            return airco_ritme.gebruik_kwh(
+                self._airco_ritme(), now, tot,
+                zonder_ochtend=bool(self.airco_automaat_aan),
+                loopt_nu=loopt, loopt_tot=loopt_tot,
+            )
+        except Exception:  # noqa: BLE001 - de reserve mag hier nooit op breken
+            return leeg
 
     def _airco_ritme_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
         """Het dagritme naast het gewone besluit (v5.65) - zie `airco_ritme`.

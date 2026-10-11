@@ -1,3 +1,16 @@
+EMS v5.83.0 - verwacht airco-gebruik in de reserve
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het EMS rekent het verwachte airco-verbruik mee in de reserve, ook als
+  jullie de airco zelf aanzetten. Per uur uit het eigen gemeten verbruik:
+  draait hij in dat uur op minstens de helft van de dagen, dan telt het volle
+  verbruik; anders naar kans.
+- Draait de airco nu, dan telt het verbruik tot 22:00 als zeker.
+- Eigen verbruik gaat voor verkoop: wat de airco nodig heeft, wordt niet
+  verkocht.
+- Zichtbaar in de uitsplitsing van de reserve (airco_gebruik_extra_kwh).
+
 EMS v5.82.0 - terugval op de eigen Zendure-lezing
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
