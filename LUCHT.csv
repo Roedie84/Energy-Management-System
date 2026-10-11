@@ -1,0 +1,33 @@
+datumtijd,kpi,waarde,n,opmerking
+2026-10-08,pm25_gem,2.79,264,UltimateSensor 5-min statistiek vanaf 02:00
+2026-10-08,pm25_mediaan,0.65,264,
+2026-10-08,pm25_p95,3.77,264,
+2026-10-08,pm25_max,189.8,264,kookpiek 17:00
+2026-10-08,pm25_uren_gt15,0.50,264,
+2026-10-08,pm25_uren_gt25,0.42,264,
+2026-10-09,pm25_gem,2.27,288,
+2026-10-09,pm25_mediaan,0.62,288,
+2026-10-09,pm25_p95,10.11,288,
+2026-10-09,pm25_max,30.2,288,piek 21:40 zonder kookplaat/oven
+2026-10-09,pm25_uren_gt15,0.75,288,
+2026-10-09,pm25_uren_gt25,0.17,288,
+2026-10-10,pm25_gem,0.92,288,
+2026-10-10,pm25_mediaan,0.84,288,
+2026-10-10,pm25_p95,1.79,288,
+2026-10-10,pm25_max,3.4,288,kookplaat 16:51-17:32 met keukenraam deels open
+2026-10-10,pm25_uren_gt15,0,288,
+2026-10-10,pm25_uren_gt25,0,288,
+2026-10-11 12:15,pm25_gem,0.71,148,00:00-12:15
+2026-10-11 12:15,pm25_max,2.0,148,
+2026-10-08 17:00,piek_max,189.8,1,kookplaat run 16:26-17:16; stand onbekend
+2026-10-08 17:00,piek_halveringstijd_min,5,1,na kookplaat uit (117-51-25-14 per 5 min); fit incl. koken 8.5
+2026-10-08 17:00,piek_tot_onder_10_min,25,1,vanaf 5-min max 17:10
+2026-10-09 21:40,piek_max,30.2,1,geen kookplaat/oven; ramen onbekend (sensor unavailable); stand onbekend
+2026-10-09 21:40,piek_halveringstijd_min,22.6,1,log-fit boven achtergrond 5
+2026-10-09 21:40,piek_tot_onder_10_min,65,1,
+2026-10-09,co2_uren_gt1200,6,24,uurgemiddelden; max 1549 ppm
+2026-10-10,co2_uren_gt1200,0,24,max 1270
+2026-10-11 12:15,co2_gem,623,12,uurgemiddelden t/m 12:00
+2026-10-11 12:23,lokaal_mislukt,0,198,rondes sinds 11:48; uitval 0; sturen 4/4 bevestigd
+2026-10-11 12:23,filtergebruik_pct,0,1,sensor.pureflow70pro_filtergebruik
+2026-10-11 12:23,automation_traces_fout,0,5,alle 5 runs stopped/finished
