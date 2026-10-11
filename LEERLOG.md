@@ -276,3 +276,13 @@ laatste ronde: 11-10 03:40, gemeten t/m 11-10 04:05
 - Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-9 (uitslag 11:40). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 11-10 07:40, gemeten t/m 11-10 07:45
+
+## 11-10 11:40 · tussenronde
+- HA-herstarts 08:40 en 10:15 → actief **v5.81.1** (L-EMS-018-velden nu live; nog geen verkoopkwartier om te toetsen). v5.82.0/v5.83.0 (chatsessies, 10:28/11:02) gedownload, niet actief. Logboek 0 EMS-fouten (Zendure 2× ServerDisconnected, extern).
+- Beslissingen 07:45-11:40: `default_smart` → `sparen_in_blok` 10:45 → `grid_charging_profitable` 11:30. **0× verkoop, 0× onder de reserve**; P1-import 07-10 u 0,06 kWh (regelruis), geen netimport in dure kwartieren.
+- **H-EMS-9 uitslag (verworpen):** accu haalde het blok met **0,95 kWh** beschikbaar (laagste punt 08:49-10:45, daarna dekte PV het huis). Behoefte uit de accu 18:45 → 10:45 = 6,91 − 0,95 − 1,38 verkocht = **4,58 kWh** tegen verkooptoets ≤ 5,46 en spaarplan 18:34 **8,1 (+77 %)**. De avondbehoefte werd dus niet onderschat; het spaarplan overschatte. Geen tekortnacht (MC 22:00 0,1 % → klopt).
+- Gevolg L-EMS-017: de oorspronkelijke richting (verkoop blokkeren als het spaarplan "haalt het niet" zegt) had hier ~1 kWh terecht verkochte energie tegengehouden → voorstel bijgesteld: spaarplan laten rekenen met de behoefte van de verkooptoets (één functie), niet andersom.
+- Opgemerkt: sturingsreserve springt kort +1,4 kWh (09:14-09:24 4,91 → 6,33; 10:39-10:44 4,99 → 6,13) en keert terug; geen gevolg (geen verkoop), volgen of dit witgoed-/airco-verwachting is (v5.83 nog niet actief).
+- Hypotheses: H-EMS-2 (PV donkere dagen). H-EMS-9 gesloten. Geen release (tussenronde, niets acuut; vandaag al 3 releases via chat).
+
+laatste ronde: 11-10 11:40, gemeten t/m 11-10 11:40

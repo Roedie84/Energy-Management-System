@@ -303,3 +303,8 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-11 07:45,TUSSEN,ems_behoefte_1845_tot_blok_kwh,4.63,1,"tussenstand H-EMS-9: 4.23 uit accu t/m 07:42 + 0.40 voorspeld; spaarplan 18:34 8.1, verkooptoets <=5.5"
 2026-10-11 07:45,TUSSEN,ems_verkoop_onder_reserve,0,0,"04:05-07:45 alleen default_smart; P1 import 0.045 / export 0.068 kWh 04-07 u"
 2026-10-11 07:45,TUSSEN,ems_herstarts,0,0,"v5.81.0 gedownload 04:59, niet actief (geen herstart)"
+2026-10-11 11:40,TUSSEN,ems_beschikbaar_bij_blok_kwh,0.95,1,"10:45 start blok; laagste 0.95 (08:49-10:45, PV dekte het huis); geen tekort"
+2026-10-11 11:40,TUSSEN,ems_behoefte_1845_tot_blok_kwh,4.58,1,"H-EMS-9 uitslag: uit accu 6.91-0.95-1.38 verkocht; spaarplan 18:34 8.1 (+77%), verkooptoets <=5.46"
+2026-10-11 11:40,TUSSEN,ems_import_voor_blok_kwh,0.06,3,"P1 07-10 u 0.020/0.015/0.027 (regelruis); 10-11 u 0.304 (blok, sparen_in_blok)"
+2026-10-11 11:40,TUSSEN,ems_verkoop_onder_reserve,0,0,"07:45-11:40 default_smart -> sparen_in_blok 10:45 -> grid_charging_profitable 11:30; export 07-11 u 0.12 kWh"
+2026-10-11 11:40,TUSSEN,ems_herstarts,2,0,"08:40 en 10:15; actief v5.81.1 (v5.82/5.83 gedownload, niet actief); 0 EMS-fouten"
