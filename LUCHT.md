@@ -28,4 +28,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 1,4 u > 1.200 en schimmelindicator 80: ventileren 's avonds; geen luchtreinigerzaak.
 - Hypotheses: H1 koken met raam/afzuiging → nauwelijks piek (n=3; avond 18:20 mogelijk kookmoment zonder PM-piek, onbevestigd). H2 auto halveert kookpiek ~5 min (n=1, geen nieuwe piek). H3 niet-kookbronnen dalen trager (n=2, geen nieuwe toets).
 
-laatste ronde: 11-10 20:25, gemeten t/m 20:20
+## 12-10 00:25 (ronde 4, eerste na middernacht)
+- Dag 11-10: gem 1,08 µg/m³, max 13, 0 uur > 15. 7d 2,6 (nulmeting okt 2025 9,1; stookseizoen 2025 vóór reiniger 16,0).
+- PM2.5 20:20-00:20: gem 0,9, mediaan 0,9, P95 1,4, max 1,7 (n=48); geen piek > 25. Auto 165 min (gem 1,0), mid 66 min (gem 0,6, vooral nacht): geen standvergelijking mogelijk.
+- Werking: auto bleef aan zolang de tv aan stond (21:24-23:16), mid 6 min na tv uit. Na herstart 22:18 2 min mid terwijl tv aan (tv-status unknown). Lokaal 3006/3006, sturen 20/20, filter 0%. Apparaat-PM2.5 vast op 2.
+- HA-herstarts weer terug: 8 tussen 21:01 en 23:30 (~70 s elk). Kookplaat/oven-status sinds 17:19 unavailable.
+- CO₂ gem 1.240, 2,75 u > 1.200 (dag 11-10: 4,2 u, max 1.741); daalt pas na 23:00. Avond ventileren.
+- Hypotheses: H1 (n=3), H2 (n=1), H3 (n=2): geen nieuwe pieken, geen toets.
+
+laatste ronde: 12-10 00:25, gemeten t/m 00:20
