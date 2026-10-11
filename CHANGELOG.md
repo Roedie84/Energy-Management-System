@@ -32673,3 +32673,33 @@ Gouden scenario `middag_16u_vol` wijkt bewust af (volle accu 7,7 boven het
 plafond 7,34 bij min-SoC 15: ontladen in het venster, geen verkoop).
 
 Tests: `test_v5811.py` (10).
+
+## v5.82.0 — terugval bij lezen: de eigen Zendure-lezing als reservebron
+
+Akkoord Ruud 11-10 10:22, na het advies over stap 2 (zelf schrijven: nog
+niet). Onderbouwing uit 2,7 dagen meelezen (8–11 oktober): 114.071 rondes,
+5 mislukt (99,996%), 99,9% overeenkomst over 36 velden, latentie 15 ms
+(mediaan), tegen de stekker gelijkwaardig aan de Zendure-integratie
+(12,9 W tegen 13,2 W gemiddelde afwijking) en een sprong eerder gezien
+(1,1 s tegen 1,6 s).
+
+**Terugval** (`ZendureLokaalMeelezer.vervanging`, `_lokale_vervanging`): leest
+het EMS een Zendure-entiteit die onbeschikbaar of onbekend is, dan krijgt het
+de eigen lezing van hetzelfde veld, mits die hooguit 10 s oud is
+(`VERVANG_MAX_LEEFTIJD_S`). Dat geldt voor alle velden die het meelezen kent:
+accustand, temperatuur, min-/max-SoC, vermogens en per module SoC,
+temperatuur en celspanningen. Heeft de Zendure-entiteit een waarde, dan blijft
+die leidend. Niet vervangen: `acMode` en `smartMode` (standen van de
+integratie), en wat het meelezen niet kent (beschikbare kWh, de
+Zendure-manager, de stekker).
+
+**Alleen lezen.** Het schrijven blijft bij de Zendure-integratie; de sturing
+weigert al als die onbeschikbaar is (`_aansturing_bereikbaar`). De
+meeleesmodule schrijft nog steeds nooit (broncodetoets).
+
+**Zichtbaar**: `sensor.…_zendure_lokaal_meelezen` krijgt het attribuut
+`terugval` (actief, keer, laatst, per entiteit, te oud geweigerd) en een regel
+op de kaart.
+
+Tests: `test_v582.py` (9); `test_de_sturing_leest_alleen_via_de_terugval`
+vervangt de oude toets dat de coordinator niets uit de meelezer las.

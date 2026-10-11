@@ -196,8 +196,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_setup()
     await solar_tracker.async_setup()
     # v5.50: de Zendure-accu zelf meelezen, naast de Zendure-integratie.
-    # Alleen lezen en vergelijken; de sturing leest hier niets uit. Een
-    # fout hier mag het EMS nooit tegenhouden.
+    # Alleen lezen en vergelijken. v5.82: ook terugval - is een
+    # Zendure-entiteit onbeschikbaar, dan leest het EMS de eigen lezing
+    # (`_lokale_vervanging`). Een fout hier mag het EMS nooit tegenhouden.
     try:
         # v5.52: de accuvermogensensor (HomeWizard-stekker) is de
         # onafhankelijke meting waartegen beide bronnen worden gelegd.

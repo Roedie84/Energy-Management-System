@@ -29,7 +29,15 @@ Wat deze module doet:
 
 Wat deze module NOOIT doet: schrijven naar de accu. Geen POST, geen
 `properties/write`, geen dienstaanroep. Een broncodetoets bewaakt dat.
-De sturing van het EMS leest niets uit deze module.
+
+v5.82: terugval bij lezen. Is een Zendure-entiteit die het EMS leest
+onbeschikbaar (de Zendure-integratie herstart, verliest de verbinding of
+laadt niet), dan geeft `vervanging()` de eigen lezing van dezelfde waarde,
+mits die hooguit VERVANG_MAX_LEEFTIJD_S oud is. Alleen dan: zolang de
+Zendure-entiteit een waarde heeft, blijft die leidend. Onderbouwing: 2,7
+dagen meelezen (8-11 oktober) gaf 99,996% geslaagde rondes, 99,9%
+overeenkomst over 36 velden en gelijkwaardige nauwkeurigheid tegen de
+stekker. Het schrijven blijft bij de Zendure-integratie.
 
 Het adres van de accu wordt niet ingesteld maar afgeleid, zoals de
 Zendure-integratie dat zelf ook doet: `zendure-<model zonder spaties>-<serienummer>.local`,
@@ -60,6 +68,12 @@ DREMPEL_GELIJK = 0.95
 # Na zoveel mislukte rondes op rij: geen verbinding.
 MISLUKT_OP_RIJ_GEEN_VERBINDING = 3
 LATENTIE_STEEKPROEF = 200
+# v5.82: een eigen lezing mag een onbeschikbare Zendure-entiteit vervangen
+# als hij hooguit zo oud is (5 rondes van 2 s).
+VERVANG_MAX_LEEFTIJD_S = 10.0
+# Niet vervangen: tekst in de Zendure-integratie, of een stand die alleen
+# met de integratie zelf betekenis heeft.
+NIET_VERVANGEN = frozenset({"acMode", "smartMode"})
 
 # veld: (eenheid, omrekening, marge). Omrekening van de ruwe ZenSDK-waarde
 # naar wat de Zendure-integratie toont (entity.py, createEntity).
@@ -825,6 +839,34 @@ def beste_bron(s: dict) -> tuple[str | None, str]:
 SCHEMA = 3
 
 
+def lokale_waarde(laatste: dict | None, sleutel: tuple[str | None, str]) -> float | None:
+    """De eigen lezing van één veld (v5.82). `sleutel` = (None|module-sn, veld)."""
+    if not laatste:
+        return None
+    sn, veld = sleutel
+    if veld in NIET_VERVANGEN:
+        return None
+    bron = laatste.get("apparaat") if sn is None else (laatste.get("modules") or {}).get(sn)
+    waarde = (bron or {}).get(veld)
+    return float(waarde) if isinstance(waarde, (int, float)) and not isinstance(waarde, bool) else None
+
+
+def lege_terugval() -> dict:
+    return {"keer": 0, "per_entiteit": {}, "laatst": None, "geweigerd_te_oud": 0}
+
+
+def terugval_samenvatting(t: dict, nu: float) -> dict:
+    laatst = t.get("laatst")
+    return {
+        "actief": laatst is not None and nu - laatst < 120,
+        "keer": t.get("keer", 0),
+        "laatst": _tijd(laatst),
+        "geweigerd_te_oud": t.get("geweigerd_te_oud", 0),
+        "per_entiteit": dict(t.get("per_entiteit") or {}),
+        "max_leeftijd_s": VERVANG_MAX_LEEFTIJD_S,
+    }
+
+
 def lege_tellingen() -> dict:
     return {
         "schema": SCHEMA,
@@ -942,7 +984,7 @@ def samenvatting(tellingen: dict, host: str | None) -> dict:
     lat = list(tellingen.get("latentie_ms") or [])
     lat_s = sorted(lat)
     return {
-        "modus": "alleen lezen - stuurt niets",
+        "modus": "alleen lezen - stuurt niets; terugval bij lezen (v5.82)",
         "adres": host,
         "rondes": tellingen.get("rondes", 0),
         "gelukt": tellingen.get("gelukt", 0),
@@ -1053,6 +1095,15 @@ def tekst(status: str, a: dict) -> str:
             f"⚠️ {v['veld']}: {str(v['overeenkomst_procent']).replace('.', ',')}% gelijk "
             f"(lokaal {laatst.get('lokaal')}, Zendure {laatst.get('zendure')})"
         )
+    terug = a.get("terugval") or {}
+    if terug.get("keer"):
+        regels.append(
+            f"Terugval: {'**actief**' if terug.get('actief') else 'niet actief'} · "
+            f"{terug['keer']}× een onbeschikbare Zendure-waarde vervangen "
+            f"(laatst {terug.get('laatst') or '-'})"
+        )
+    else:
+        regels.append("Terugval: paraat, nog niet nodig geweest")
     fout = a.get("laatste_fout")
     if status == "geen verbinding" and fout:
         regels.append(f"Laatste fout: {fout.get('fout')}")
@@ -1083,6 +1134,10 @@ class ZendureLokaalMeelezer:
         self._relais_gewijzigd = False
         # v5.56: per bron hoe lang elk snel vermogensveld stabiel is.
         self._stabiliteit: dict = {"lokaal": {}, "zendure": {}}
+        # v5.82: wanneer de laatste eigen lezing binnenkwam (monotoon), en
+        # hoe vaak die een onbeschikbare Zendure-entiteit verving.
+        self.laatste_t: float | None = None
+        self.terugval: dict = lege_terugval()
 
     # adres en entiteiten uit de registers ---------------------------------
 
@@ -1324,6 +1379,7 @@ class ZendureLokaalMeelezer:
             raise ValueError("geen ZenSDK-rapport")
         lokaal = normaliseer(rapport)
         self.laatste = lokaal
+        self.laatste_t = time.monotonic()
         nu = time.time()
         r = self.tellingen.setdefault("reactie", lege_reactie())
         verwerk_ronde(self.tellingen, zonder_lopende_wijzigingen(
@@ -1341,6 +1397,35 @@ class ZendureLokaalMeelezer:
         lokaal_netto = netto_ac(lokaal["apparaat"])
         bron_waarneming(ref, "lokaal", nu, lokaal_netto)
         steekproef(ref, nu, {"lokaal": lokaal_netto, "zendure": self._zendure_netto()})
+
+    # terugval (v5.82) -------------------------------------------------------
+
+    def vervanging(self, entity_id: str | None) -> float | None:
+        """De eigen lezing voor een ONBESCHIKBARE Zendure-entiteit, of None.
+
+        Alleen als de lezing vers is (VERVANG_MAX_LEEFTIJD_S) en de entiteit
+        bij een veld hoort dat dit meelezen kent. De waarde is al omgerekend
+        naar de eenheid van de Zendure-integratie. Mag nooit een fout geven.
+        """
+        try:
+            if not entity_id or not self.laatste or self.laatste_t is None:
+                return None
+            sleutel = next((k for k, e in self._entiteiten.items() if e == entity_id), None)
+            if sleutel is None:
+                return None
+            if time.monotonic() - self.laatste_t > VERVANG_MAX_LEEFTIJD_S:
+                self.terugval["geweigerd_te_oud"] = self.terugval.get("geweigerd_te_oud", 0) + 1
+                return None
+            waarde = lokale_waarde(self.laatste, sleutel)
+            if waarde is None:
+                return None
+            self.terugval["keer"] = self.terugval.get("keer", 0) + 1
+            per = self.terugval.setdefault("per_entiteit", {})
+            per[entity_id] = per.get(entity_id, 0) + 1
+            self.terugval["laatst"] = time.time()
+            return waarde
+        except Exception:  # noqa: BLE001 - de terugval mag het EMS nooit raken
+            return None
 
     # weergave --------------------------------------------------------------
 
@@ -1363,5 +1448,6 @@ class ZendureLokaalMeelezer:
             f"zelf, elke seconde ({self.referentie_adres})" if self.referentie_adres
             else "via Home Assistant"
         )
+        uit["terugval"] = terugval_samenvatting(self.terugval, time.time())
         uit["tekst"] = tekst(self.status(), uit)
         return uit

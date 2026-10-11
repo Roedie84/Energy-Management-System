@@ -3446,7 +3446,7 @@ class EnergyManagementSystemCoordinator:
             return None
         state = self.hass.states.get(entity_id)
         if state is None or state.state in (None, "unknown", "unavailable"):
-            return None
+            return self._lokale_vervanging(entity_id)
         try:
             value = float(state.state)
         except (TypeError, ValueError):
@@ -3458,6 +3458,23 @@ class EnergyManagementSystemCoordinator:
         if unit == "mwh":
             return value * 1000
         return value
+
+    def _lokale_vervanging(self, entity_id: str) -> float | None:
+        """Terugval bij lezen (v5.82): is een Zendure-entiteit onbeschikbaar,
+        dan de eigen lezing van de accu (zendure_lokaal), mits vers.
+
+        Alleen lezen; het schrijven blijft bij de Zendure-integratie, en die
+        weigert de sturing al als zijn entiteiten onbeschikbaar zijn
+        (`_aansturing_bereikbaar`). Geeft None als er niets te vervangen is,
+        zoals voorheen.
+        """
+        meelezer = getattr(self, "zendure_lokaal", None)
+        if meelezer is None:
+            return None
+        try:
+            return meelezer.vervanging(entity_id)
+        except Exception:  # noqa: BLE001 - de terugval mag nooit iets breken
+            return None
 
     def _read_water_volume_l(
         self, entity_id: str | None, standaard: str = "l"

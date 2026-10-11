@@ -1,3 +1,14 @@
+EMS v5.82.0 - terugval op de eigen Zendure-lezing
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Valt een Zendure-entiteit weg (integratie herstart of verliest verbinding),
+  dan leest het EMS dezelfde waarde rechtstreeks van de accu, als die lezing
+  hooguit 10 s oud is. Accustand, temperaturen en moduledata lopen zo door.
+- Zolang de Zendure-integratie een waarde heeft, blijft die leidend.
+- Alleen lezen: het sturen blijft via de Zendure-integratie.
+- Zichtbaar op de kaart "Zendure lokaal meelezen" (regel Terugval).
+
 EMS v5.81.1 - reserve-plafond, zelfcontrole en uitleg
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

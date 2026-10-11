@@ -133,9 +133,12 @@ def test_schrijft_nooit_naar_de_accu():
     assert "sessie.get(" in code
 
 
-def test_de_sturing_leest_niets_uit_de_meelezer():
+def test_de_sturing_leest_alleen_via_de_terugval():
+    """v5.82: de coordinator leest de meelezer op precies één plek: de
+    terugval bij een onbeschikbare Zendure-entiteit. Zie test_v582.py."""
     coord = (MAP / "coordinator.py").read_text()
-    assert "zendure_lokaal" not in coord
+    assert coord.count('getattr(self, "zendure_lokaal", None)') == 1
+    assert "meelezer.vervanging(entity_id)" in coord
 
 
 def test_ronde_vangt_elke_fout_af():
