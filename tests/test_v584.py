@@ -131,13 +131,14 @@ def test_herstel_na_herstart():
     assert t["rondes"] == 12 and t["ip"] == "192.168.2.55" and t["mislukt_op_rij"] == 0 and "onzin" not in t
 
 
-def test_stuurt_nooit():
-    """Alleen statusvragen en hartslagen - nooit STURING met data."""
+def test_stuurt_alleen_aan_uit_en_stand():
+    """v5.85: sturen mag, maar alleen switch en mode, via `async_zet_stand`."""
     code = (MAP / "luchtreiniger_lokaal.py").read_text()
     code = re.sub(r'"""[\s\S]*?"""', "", code)
-    for verboden in ("tl.STURING,", "STURING)", "async_call", "services.call", '"dps": {'):
+    assert code.count("tl.sturing_inhoud(") == 1
+    assert 'STUURBAAR = frozenset({"switch", "mode"})' in code
+    for verboden in ("async_call", "services.call"):
         assert verboden not in code, verboden
-    assert "_device22" in code  # de enige STURING_NIEUW is de statusvraag van 22-tekens-apparaten
 
 
 def test_geen_sleutel_in_attributen():

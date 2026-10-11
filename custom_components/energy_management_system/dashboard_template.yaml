@@ -2731,15 +2731,13 @@ views:
       grid_options:
         columns: 12
         rows: auto
-    - type: custom:mushroom-template-card
-      entity: sensor.woonkamer_energy_management_system_luchtreiniger_lokaal
-      primary: Luchtreiniger lokaal
-      secondary: '{{ states(''sensor.woonkamer_energy_management_system_luchtreiniger_lokaal'') }}'
-      icon: mdi:air-purifier
-      tap_action:
-        action: more-info
+    - type: tile
+      entity: select.woonkamer_energy_management_system_luchtreiniger_stand
+      name: Luchtreiniger stand
+      features:
+      - type: select-options
     - type: markdown
-      title: Luchtreiniger lokaal (alleen lezen)
+      title: Luchtreiniger lokaal
       content: '{{ state_attr(''sensor.woonkamer_energy_management_system_luchtreiniger_lokaal'', ''tekst'') or ''_Nog geen gegevens._'' }}'
       grid_options:
         columns: 12

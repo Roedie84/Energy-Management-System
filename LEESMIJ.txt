@@ -1,3 +1,15 @@
+EMS v5.85.0 - de luchtreiniger sturen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Nieuwe keuzelijst "Luchtreiniger stand": uit, low, mid, high, turbo, auto
+  en sleep. Het EMS zet de stand zelf over je eigen netwerk, zonder cloud.
+- Een stand geldt pas als gelukt als de luchtreiniger hem zelf bevestigt;
+  lukt dat niet binnen 5 seconden, dan zie je een melding.
+- De keuzelijst volgt ook wijzigingen met de knop of de app, meteen.
+- De Tuya-cloud kent alleen auto en sleep; daarom telt een stand als low of
+  turbo niet meer als afwijking tegenover de cloud.
+
 EMS v5.84.0 - de luchtreiniger zelf meelezen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

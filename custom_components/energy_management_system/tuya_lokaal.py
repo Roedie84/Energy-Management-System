@@ -348,6 +348,16 @@ def vraag_inhoud(versie: str, dev_id: str, opdracht: int = DP_VRAAG, dps: dict |
     return opdracht, json.dumps(data, separators=(",", ":")).encode()
 
 
+def sturing_inhoud(versie: str, dev_id: str, dps: dict) -> tuple[int, bytes]:
+    """De JSON om datapunten te zetten (v5.85): 3.4/3.5 met STURING_NIEUW en
+    `{"protocol":5,"t":..,"data":{"dps":..}}`, 3.3 met STURING."""
+    if versie in ("3.4", "3.5"):
+        data: dict = {"protocol": 5, "t": int(time.time()), "data": {"dps": dps}}
+        return STURING_NIEUW, json.dumps(data, separators=(",", ":")).encode()
+    data = {"devId": dev_id, "uid": dev_id, "t": str(int(time.time())), "dps": dps}
+    return STURING, json.dumps(data, separators=(",", ":")).encode()
+
+
 def dps_uit(inhoud: bytes) -> dict | None:
     """De datapunten uit een antwoord of melding ({"dps": {...}} of
     {"data": {"dps": {...}}}), of None."""

@@ -22,8 +22,12 @@ Wat deze module doet:
 - ALLE datapunten tonen, ook die de cloud niet kent - daar zou een
   ventilatorsnelheid kunnen zitten, wat nodig is voor laag/midden/hoog.
 
-Wat deze module NOOIT doet: iets naar de luchtreiniger sturen dat hem
-verandert. Alleen statusvragen en hartslagen. Een broncodetoets bewaakt dat.
+v5.85 - sturen. Gemeten 11 oktober (57 rondes, 0 mislukt): de modus kent
+lokaal low, mid, high, turbo, auto en sleep; de cloud beschrijft alleen auto
+en sleep en blijft bij de andere hangen. Het EMS zet nu zelf de stand, via
+`async_zet_stand`, en ALLEEN aan/uit (code "switch") en de modus (code
+"mode") - een broncodetoets bewaakt dat. Een opdracht telt als gelukt als
+het apparaat de nieuwe waarde binnen BEVESTIG_S zelf terugmeldt.
 """
 from __future__ import annotations
 
@@ -55,6 +59,11 @@ LATENTIE_STEEKPROEF = 200
 REACTIE_STEEKPROEF = 200
 REACTIE_MAX_S = 120.0
 MISLUKT_OP_RIJ_GEEN_VERBINDING = 3
+SCHEMA = 2
+BEVESTIG_S = 5.0
+# Gezien op 11 oktober, in deze volgorde op het apparaat.
+STANDEN = ("uit", "low", "mid", "high", "turbo", "auto", "sleep")
+STUURBAAR = frozenset({"switch", "mode"})
 
 
 # --- zuiver: vergelijken en tellen ----------------------------------------------
@@ -75,7 +84,8 @@ def lege_tellingen() -> dict:
         "verbindingen": 0, "uitval": 0, "meldingen": 0, "aankondigingen": 0,
         "latenties": [], "per_code": {}, "reactie": [], "sinds": None,
         "laatste_gelukt": None, "laatste_fout": None,
-        "ip": None, "versie": None,
+        "ip": None, "versie": None, "schema": SCHEMA,
+        "opdrachten": 0, "bevestigd": 0, "bevestiging_s": [],
     }
 
 
@@ -88,15 +98,32 @@ def herstel(bewaard: Any) -> dict:
             standaard = basis[k]
             if standaard is None or isinstance(v, type(standaard)):
                 basis[k] = v
+    # v5.85: vergelijken buiten het bereik van de cloud telt niet meer; de
+    # oude telling van de modus (waar de cloud bij low/mid/high/turbo bleef
+    # hangen) begint opnieuw.
+    if not isinstance(bewaard, dict) or bewaard.get("schema") != SCHEMA:
+        basis["per_code"] = {}
+        basis["schema"] = SCHEMA
     basis["mislukt_op_rij"] = 0
     return basis
 
 
-def vergelijk(tellingen: dict, lokaal: dict, cloud: dict, strategie: dict[str, str]) -> None:
-    """Per code: lokaal tegen cloud, alleen waar beide een waarde hebben."""
+def vergelijk(
+    tellingen: dict, lokaal: dict, cloud: dict, strategie: dict[str, str],
+    bereik: dict[str, set] | None = None,
+) -> None:
+    """Per code: lokaal tegen cloud, alleen waar beide een waarde hebben.
+
+    v5.85: staat de lokale waarde buiten wat de cloud voor die code kent
+    (`bereik`), dan kan de cloud hem niet tonen - niet vergelijkbaar."""
     per = tellingen.setdefault("per_code", {})
     for dp, code in strategie.items():
         if dp not in lokaal or code not in cloud or cloud[code] is None:
+            continue
+        toegestaan = (bereik or {}).get(code)
+        if toegestaan and lokaal[dp] not in toegestaan:
+            r = per.setdefault(code, {"n": 0, "gelijk": 0})
+            r["buiten_cloud"] = r.get("buiten_cloud", 0) + 1
             continue
         r = per.setdefault(code, {"n": 0, "gelijk": 0})
         r["n"] += 1
@@ -199,6 +226,8 @@ def samenvatting(t: dict) -> dict:
         n_tot += n
         g_tot += g
         per[code] = {"overeenkomst_procent": round(100 * g / n, 1) if n else None, "n": n}
+        if r.get("buiten_cloud"):
+            per[code]["buiten_cloud"] = r["buiten_cloud"]
         if r.get("laatst") and n and g / n < DREMPEL_GELIJK:
             per[code]["laatst"] = r["laatst"]
     lat = t.get("latenties") or []
@@ -241,6 +270,13 @@ def tekst(status: str, a: dict) -> str:
         regels.append(
             "Datapunten die de cloud niet kent: "
             + " · ".join(f"dp {k} = {v}" for k, v in extra.items())
+        )
+    st = a.get("sturen") or {}
+    if st.get("opdrachten"):
+        regels.append(
+            f"Sturen: {st['opdrachten']} opdrachten, {st.get('bevestigd', 0)} bevestigd door het apparaat"
+            + (f" (mediaan {str(st['bevestiging_mediaan_s']).replace('.', ',')} s)"
+               if st.get("bevestiging_mediaan_s") is not None else "")
         )
     r = a.get("reactiesnelheid") or {}
     if r.get("metingen"):
@@ -300,6 +336,11 @@ class LuchtreinigerLokaalMeelezer:
         self._vorige = {"lokaal": {}, "cloud": {}}
         self._buffer = b""
         self._device22 = False
+        self.bereik: dict[str, set] = {}
+        self._writer = None
+        self._sessie: tl.Sessie | None = None
+        self._wachters: list = []
+        self._luisteraars: list = []
 
     # apparaat en sleutel uit de Tuya-integratie ------------------------------
 
@@ -319,6 +360,7 @@ class LuchtreinigerLokaalMeelezer:
                 sleutel = getattr(dev, "local_key", None)
                 self._sleutel = sleutel if isinstance(sleutel, str) and len(sleutel) == 16 else None
                 self.strategie = strategie_uit(getattr(dev, "local_strategy", None))
+                self.bereik = bereik_uit(getattr(dev, "local_strategy", None))
                 return True
         return False
 
@@ -454,7 +496,9 @@ class LuchtreinigerLokaalMeelezer:
                 writer.write(sessie.antwoord(await self._lees_frame(reader, TIMEOUT_S)))
                 await writer.drain()
             self.verbonden = True
+            self._writer, self._sessie = writer, sessie
             self.tellingen["verbindingen"] = self.tellingen.get("verbindingen", 0) + 1
+            self._meld()
             while True:
                 opdracht, inhoud = self._vraag(versie)
                 verstuurd = time.monotonic()
@@ -486,14 +530,20 @@ class LuchtreinigerLokaalMeelezer:
                     if not beantwoord:
                         beantwoord = True
                         verwerk_ronde(self.tellingen, nu, (time.monotonic() - verstuurd) * 1000)
-                        vergelijk(self.tellingen, self.dps, self._cloud_status(), self.strategie)
+                        vergelijk(self.tellingen, self.dps, self._cloud_status(), self.strategie, self.bereik)
                         if self.tellingen["rondes"] % BEWAAR_ELKE_RONDES == 0:
                             await self._bewaar()
                     elif b.opdracht == tl.STATUS:
                         self.tellingen["meldingen"] = self.tellingen.get("meldingen", 0) + 1
         finally:
             self.verbonden = False
+            self._writer = self._sessie = None
+            for _dp, _w, toekomst in self._wachters:
+                if not toekomst.done():
+                    toekomst.set_result(False)
+            self._wachters = []
             writer.close()
+            self._meld()
 
     def _vraag(self, versie: str) -> tuple[int, bytes]:
         if self._device22:
@@ -502,14 +552,69 @@ class LuchtreinigerLokaalMeelezer:
         return tl.vraag_inhoud(versie, self.dev_id)
 
     def _verwerk_dps(self, dps: dict, nu: float) -> None:
+        gewijzigd = False
         for dp, waarde in dps.items():
             dp = str(dp)
             if self.dps.get(dp, object()) != waarde:
+                gewijzigd = True
                 code = self.strategie.get(dp)
                 if code is not None and dp in self.dps:
                     reactie_waarneming(self._open, self.tellingen, "lokaal", code, waarde, nu)
             self.dps[dp] = waarde
         self.dps_t = nu
+        for item in list(self._wachters):
+            dp, waarde, toekomst = item
+            if self.dps.get(dp) == waarde and not toekomst.done():
+                toekomst.set_result(True)
+                self._wachters.remove(item)
+        if gewijzigd:
+            self._meld()
+
+    # sturen (v5.85) -------------------------------------------------------------
+
+    def luister(self, terugroep) -> callable:
+        """Een terugroep bij elke wijziging (de keuzelijst ververst meteen)."""
+        self._luisteraars.append(terugroep)
+        return lambda: self._luisteraars.remove(terugroep) if terugroep in self._luisteraars else None
+
+    def _meld(self) -> None:
+        for terugroep in list(self._luisteraars):
+            try:
+                terugroep()
+            except Exception:  # noqa: BLE001
+                pass
+
+    @property
+    def stand(self) -> str | None:
+        return stand_uit(self.dps, self.strategie)
+
+    async def async_zet_stand(self, stand: str) -> bool:
+        """De stand zetten over het lokale netwerk. True als het apparaat de
+        nieuwe waarde binnen BEVESTIG_S zelf terugmeldt."""
+        if not self.verbonden or self._writer is None or self._sessie is None:
+            raise ConnectionError("geen lokale verbinding met de luchtreiniger")
+        dps = opdracht_voor(stand, self.dps, self.strategie)
+        versie = self.tellingen.get("versie") or "3.3"
+        opdracht, inhoud = tl.sturing_inhoud(versie, self.dev_id, dps)
+        lus = asyncio.get_running_loop()
+        laatste_dp, laatste_waarde = list(dps.items())[-1]
+        toekomst = lus.create_future()
+        self._wachters.append((laatste_dp, laatste_waarde, toekomst))
+        begin = time.monotonic()
+        self.tellingen["opdrachten"] = self.tellingen.get("opdrachten", 0) + 1
+        self._writer.write(self._sessie.pak(opdracht, inhoud))
+        await self._writer.drain()
+        try:
+            gelukt = await asyncio.wait_for(toekomst, BEVESTIG_S)
+        except asyncio.TimeoutError:
+            gelukt = False
+        if gelukt:
+            self.tellingen["bevestigd"] = self.tellingen.get("bevestigd", 0) + 1
+            r = self.tellingen.setdefault("bevestiging_s", [])
+            r.append(round(time.monotonic() - begin, 2))
+            del r[:-LATENTIE_STEEKPROEF]
+        self._wachters = [w for w in self._wachters if w[2] is not toekomst]
+        return bool(gelukt)
 
     def _volg_cloud(self, _nu=None) -> None:
         """Elke 2 s: welke cloudwaarden zijn veranderd (voor de reactiesnelheid)."""
@@ -530,7 +635,14 @@ class LuchtreinigerLokaalMeelezer:
 
     def attributen(self) -> dict:
         uit = samenvatting(self.tellingen)
-        uit["modus"] = "alleen lezen - stuurt niets"
+        uit["modus"] = "leest en stuurt lokaal (aan/uit en stand)"
+        uit["stand"] = self.stand
+        bev = self.tellingen.get("bevestiging_s") or []
+        uit["sturen"] = {
+            "opdrachten": self.tellingen.get("opdrachten", 0),
+            "bevestigd": self.tellingen.get("bevestigd", 0),
+            "bevestiging_mediaan_s": round(statistics.median(bev), 2) if bev else None,
+        }
         uit["apparaat"] = self.naam
         uit["apparaat_id"] = f"…{self.dev_id[-6:]}" if self.dev_id else None
         uit["ip"] = self.tellingen.get("ip")
@@ -545,6 +657,53 @@ class LuchtreinigerLokaalMeelezer:
         uit["waarden_van"] = _tijd(self.dps_t)
         uit["tekst"] = tekst(self.status(), uit)
         return uit
+
+
+def bereik_uit(local_strategy: Any) -> dict[str, set]:
+    """code -> de waarden die de cloud kent (alleen keuzelijsten)."""
+    import json as _json
+
+    uit: dict[str, set] = {}
+    if isinstance(local_strategy, dict):
+        for s in local_strategy.values():
+            if not isinstance(s, dict):
+                continue
+            item = s.get("config_item") or {}
+            if item.get("valueType") != "Enum":
+                continue
+            try:
+                waarden = _json.loads(item.get("valueDesc") or "{}").get("range") or []
+            except (TypeError, ValueError):
+                continue
+            if s.get("status_code") and waarden:
+                uit[str(s["status_code"])] = set(waarden)
+    return uit
+
+
+def stand_uit(dps: dict, strategie: dict[str, str]) -> str | None:
+    """De stand zoals de keuzelijst hem toont: "uit" of de modus."""
+    code_dp = {code: dp for dp, code in strategie.items()}
+    aan = dps.get(code_dp.get("switch", ""))
+    if aan is False:
+        return "uit"
+    modus = dps.get(code_dp.get("mode", ""))
+    return str(modus) if modus is not None and aan is not None else None
+
+
+def opdracht_voor(stand: str, dps: dict, strategie: dict[str, str]) -> dict:
+    """Welke datapunten gezet moeten worden voor deze stand. Alleen switch en
+    mode; aanzetten alleen als hij uit staat."""
+    if stand not in STANDEN:
+        raise ValueError(f"onbekende stand {stand}")
+    code_dp = {code: dp for dp, code in strategie.items() if code in STUURBAAR}
+    if "switch" not in code_dp or "mode" not in code_dp:
+        raise ValueError("aan/uit of modus onbekend bij dit apparaat")
+    if stand == "uit":
+        return {code_dp["switch"]: False}
+    uit = {code_dp["mode"]: stand}
+    if dps.get(code_dp["switch"]) is not True:
+        uit = {code_dp["switch"]: True, **uit}
+    return uit
 
 
 def strategie_uit(local_strategy: Any) -> dict[str, str]:

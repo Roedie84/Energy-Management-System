@@ -7148,12 +7148,13 @@ HANDMATIGE_STAND_VOL_PROCENT = 100.0
 # waren geweest.
 # De platforms die deze integratie opzet. Stond in __init__.py; hier
 # ook, zodat de platformcontrole er niet naast kan zitten (v3.81.0).
-PLATFORMS = ["switch", "sensor", "button"]
+PLATFORMS = ["switch", "sensor", "button", "select"]
 
 PLATFORM_MINIMUM_ENTITEITEN = {
     "sensor": 20,
     "switch": 5,
     "button": 1,
+    "select": 1,
 }
 
 # Waarschuwen als de prijs stijgt terwijl er handmatig geladen wordt

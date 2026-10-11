@@ -5351,7 +5351,8 @@ class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
 
 class LuchtreinigerLokaalSensor(_CoordinatorDiagnosticSensor):
     """Wat het EMS zelf van de luchtreiniger leest via het lokale
-    Tuya-protocol (v5.84). Alleen lezen - stuurt niets. Toestand: verzamelt /
+    Tuya-protocol (v5.84; sturen sinds v5.85 via de keuzelijst
+    "Luchtreiniger stand"). Toestand: verzamelt /
     gelijk / wijkt af / geen verbinding / zoekt adres / geen sleutel / niet
     gevonden."""
 

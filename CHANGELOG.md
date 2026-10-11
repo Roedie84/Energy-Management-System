@@ -32763,3 +32763,30 @@ in de vorm die ze verwachten. Stuurt nooit iets dat het apparaat verandert
 
 Tests: `test_v584.py` (16), waaronder een volledige ronde tegen een
 nep-apparaat op localhost.
+
+## v5.85.0 — de luchtreiniger sturen over het lokale netwerk
+
+Gevraagd 11-10: "Dan kan ik de luchtreiniger ook sturen low-med-high-auto."
+Gemeten dezelfde ochtend, terwijl Ruud hem met de hand langs alle standen
+zette: v5.84 las 57 rondes zonder één fout, lokaal steeds eerder dan de
+cloud (mediaan 1,4 s). De modus kent lokaal `low`, `mid`, `high`, `turbo`,
+`auto` en `sleep`; de cloud beschrijft alleen auto en sleep en blijft bij de
+andere standen op de vorige waarde hangen.
+
+**Sturen** (`async_zet_stand`, `tuya_lokaal.sturing_inhoud`): STURING_NIEUW
+met `{"protocol":5,"t":..,"data":{"dps":..}}` (3.4/3.5) of STURING (3.3),
+over de bestaande verbinding. Alleen aan/uit (`switch`) en de modus
+(`mode`); aanzetten alleen als hij uit staat. Gelukt = het apparaat meldt
+de nieuwe waarde binnen 5 s zelf terug; anders een duidelijke fout in HA.
+
+**Keuzelijst** `select.woonkamer_energy_management_system_luchtreiniger_stand`
+(uit, low, mid, high, turbo, auto, sleep), nieuw platform `select`. Ververst
+meteen bij elke wijziging op het apparaat, ook met de knop of de app.
+Onbeschikbaar zonder lokale verbinding. Op de Proefstand-pagina als tegel
+met keuzeknoppen.
+
+**Vergelijken**: een lokale waarde buiten wat de cloud voor die code kent,
+telt niet meer als afwijking maar als `buiten_cloud`. De oude modustelling
+(met de valse "wijkt af") begint daarom opnieuw (schema 2).
+
+Tests: `test_v585.py` (8), waaronder stand zetten tegen een nep-apparaat.
