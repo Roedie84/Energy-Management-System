@@ -31,3 +31,25 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-11 12:23,lokaal_mislukt,0,198,rondes sinds 11:48; uitval 0; sturen 4/4 bevestigd
 2026-10-11 12:23,filtergebruik_pct,0,1,sensor.pureflow70pro_filtergebruik
 2026-10-11 12:23,automation_traces_fout,0,5,alle 5 runs stopped/finished
+2026-10-11 16:20,pm25_gem,2.44,49,12:15-16:20 5-min statistiek
+2026-10-11 16:20,pm25_mediaan,1.21,49,
+2026-10-11 16:20,pm25_p95,9.82,49,
+2026-10-11 16:20,pm25_max,13.1,49,5-min max 13:25; 5-min gem max 11.8
+2026-10-11 16:20,pm25_uren_gt15,0,49,
+2026-10-11 16:20,pm25_uren_gt25,0,49,
+2026-10-11 16:20,stand_auto_min,183,1,12:15-16:20
+2026-10-11 16:20,stand_mid_min,23,1,
+2026-10-11 16:20,stand_unavailable_min,39,20,20 HA-herstarts van ~70 s
+2026-10-11 16:20,pm25_gem_auto,2.66,39,5-min blokken
+2026-10-11 16:20,pm25_gem_mid,0.99,5,
+2026-10-11 16:20,pm25_gem_aanwezig,3.73,27,occupancy >=50% van blok; incl. bult 13:25
+2026-10-11 16:20,pm25_gem_afwezig,0.86,22,
+2026-10-11 13:25,bult_max,13.1,1,geen kookplaat/oven; ramen dicht; stand auto; CO2 en vocht stegen mee
+2026-10-11 13:25,bult_halveringstijd_min,9.5,1,log-fit 13:35-14:15 boven achtergrond 1.2
+2026-10-11 13:25,bult_tot_onder_2_min,50,1,vanaf 5-min max 13:35
+2026-10-11 16:20,co2_gem,777,48,5-min gem 12:15-16:20; max 1007
+2026-10-11 16:20,co2_uren_gt1200,0,4,
+2026-10-11 16:20,lokaal_mislukt,0,741,rondes sinds 11:48; uitval 0; sturen 7/7 bevestigd
+2026-10-11 16:20,filtergebruik_pct,0,1,
+2026-10-11 16:20,ha_herstarts,20,1,select/ramen/occupancy elk ~70 s unavailable; uptime-sensor bevestigt laatste 16:19
+2026-10-11 16:20,automation_traces_fout,0,5,traces wissen bij herstart; alleen 5 zichtbaar
