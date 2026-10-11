@@ -20732,6 +20732,15 @@ class EnergyManagementSystemCoordinator:
                 regels.append(blok_tekst)
             return regels
         besluit = self.last_laadbesluit or {}
+        if besluit.get("verdringt_zon") and besluit.get("exportprijs_eur") is not None:
+            # v5.86 (L-EMS-021)
+            vol = dt_util.parse_datetime(besluit.get("zon_vol_om") or "")
+            return [
+                f"stroom kost nu {besluit['prijs_nu_eur'] * 100:.1f} ct",
+                (f"de zon heeft de accu om {vol:%H:%M} vol" if vol else "de zon vult de accu vanzelf")
+                + f"; die zon gaat dan voor {besluit['exportprijs_eur'] * 100:.1f} ct het net op",
+                "nu laden en straks die zon terugleveren loont",
+            ]
         regels = []
         if besluit.get("prijs_nu_eur") is not None:
             regels.append(f"stroom kost nu {besluit['prijs_nu_eur'] * 100:.1f} ct")
@@ -20761,6 +20770,49 @@ class EnergyManagementSystemCoordinator:
         if segmenten is None:
             return None
         return sum(max(0.0, zon - verbruik) for verbruik, zon in segmenten)
+
+    def _zon_vol_om(
+        self,
+        start: datetime,
+        beschikbaar: float,
+        ruimte: float,
+        eind: datetime,
+    ) -> datetime | None:
+        """Wanneer de zon de accu vanzelf vol heeft (v5.86, L-EMS-021).
+
+        Gemeld op 11 oktober: "Waarom manueel laden vannacht? Is toch niet
+        gezien de zonvoorspelling morgen?" Het plan laadde 02:30-04:30 van
+        47 naar 100 % tegen 33 ct om om 08:00 te verkopen tegen 47 ct - maar
+        de accu was om 11:30 toch vol van de zon, en het middagoverschot ging
+        tegen 30-32 ct het net op. Elke kWh die na de ochtend nog in de accu
+        zat, verdrong een kWh zon.
+
+        Per uur hetzelfde verbruik en dezelfde zon als het tekort en het
+        zonoverschot (`_segmenten_verbruik_zon`), zonder laden of verkopen:
+        de vrije ruimte groeit met het verbruik en krimpt met de zon. Altijd
+        de VOORZICHTIGE zon: een te vroeg vol-moment houdt laden tegen dat
+        nodig was, een te laat moment laat hooguit wat oude winst liggen.
+        None als de accu binnen de horizon niet vol raakt of het geleerde
+        verbruik ontbreekt.
+        """
+        if eind <= start:
+            return None
+        segmenten = self._segmenten_verbruik_zon(start, eind, veilig=True)
+        if not segmenten:
+            return None
+        capaciteit = max(0.0, beschikbaar) + max(0.0, ruimte)
+        vrij = max(0.0, ruimte)
+        cursor = start
+        for verbruik, zon in segmenten:
+            uur_eind = cursor.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            segment_eind = min(uur_eind, eind)
+            netto = zon - verbruik
+            if netto > 0 and vrij <= netto:
+                deel = vrij / netto if netto else 0.0
+                return cursor + (segment_eind - cursor) * deel
+            vrij = min(capaciteit, max(0.0, vrij - netto))
+            cursor = segment_eind
+        return None
 
     def _goedkoopste_laadmomenten(
         self,
@@ -20961,16 +21013,18 @@ class EnergyManagementSystemCoordinator:
                 return 0.0
             return self._verwacht_zonoverschot_kwh(now, moment, veilig=salderen)
 
+        beschikbaar = self.beschikbare_energie_kwh() or 0.0
         uit.update(
             self._laadregel(
                 prijs_nu=prijs_nu,
-                beschikbaar=self.beschikbare_energie_kwh() or 0.0,
+                beschikbaar=beschikbaar,
                 ruimte=ruimte,
                 later=later,
                 rendement=rendement,
                 slijtage_ct=slijtage_ct,
                 per_kwartier=per_kwartier,
                 zonoverschot=zonoverschot_tot,
+                vol_om=self._zon_vol_om(now, beschikbaar, ruimte, horizon_eind),
             )
         )
         uit["voorzichtige_zon"] = salderen
@@ -21032,6 +21086,7 @@ class EnergyManagementSystemCoordinator:
         slijtage_ct: float,
         per_kwartier: float,
         zonoverschot,
+        vol_om: datetime | None = None,
     ) -> dict:
         """De kern van het laadbesluit, zonder live gegevens (v5.22).
 
@@ -21042,6 +21097,49 @@ class EnergyManagementSystemCoordinator:
         `later` is een lijst (prijs, moment) van hoog naar laag;
         `zonoverschot(tot)` geeft het verwachte zonoverschot tot `tot`.
         """
+        # v5.86 (L-EMS-021): na het moment dat de zon de accu vanzelf vol
+        # heeft, levert de ZON die kwartieren. Lading van nu is alleen iets
+        # waard in de kwartieren DAARVOOR; wat dan nog in de accu zit,
+        # verdringt zon die het net op gaat. Zo'n kWh is precies de
+        # exportprijs van dat moment waard (de zon-kWh die anders was
+        # opgeslagen), zonder rendement of slijtage - die gelden voor
+        # beide kWh's gelijk.
+        if vol_om is not None:
+            tot_vol = sorted(
+                ((moment, p) for p, moment in later if moment <= vol_om),
+                key=lambda paar: paar[0],
+            )
+            voor_vol = [(p, moment) for p, moment in later if moment < vol_om]
+            k = int(beschikbaar // per_kwartier) + 1
+            if k > len(voor_vol):
+                exportprijs = tot_vol[-1][1] if tot_vol else None
+                uit = {
+                    "laden": False,
+                    "prijs_nu_eur": round(prijs_nu, 4),
+                    "ruimte_kwh": round(ruimte, 2),
+                    "zon_vol_om": vol_om.isoformat(),
+                    "verdringt_zon": True,
+                    "gat_kwh": round(ruimte, 2),
+                    "nodig_vanaf": vol_om.isoformat(),
+                }
+                if exportprijs is None:
+                    uit["reden"] = "de zon vult de accu vanzelf; laden verdringt alleen zon"
+                    return uit
+                uit.update(
+                    {
+                        "exportprijs_eur": round(exportprijs, 4),
+                        "waarde_eur": round(exportprijs, 4),
+                        "marge_ct": round((exportprijs - prijs_nu) * 100, 1),
+                        "laden": exportprijs > prijs_nu,
+                        "reden": (
+                            "loont: goedkoper dan de zon die er straks door het net op gaat"
+                            if exportprijs > prijs_nu
+                            else f"de zon vult de accu om {vol_om:%H:%M}; laden verdringt alleen zon"
+                        ),
+                    }
+                )
+                return uit
+            later = voor_vol
         # Het kwartier waarin de VOLGENDE kWh terechtkomt: na de kwartieren
         # die de lading van nu al vult.
         k = int(beschikbaar // per_kwartier) + 1
@@ -23107,6 +23205,9 @@ class EnergyManagementSystemCoordinator:
             slijtage_ct=netregels["slijtage_ct"],
             per_kwartier=per_kwartier,
             zonoverschot=zonoverschot_tot,
+            vol_om=self._zon_vol_om(
+                einde, soc, max(0.0, bruikbaar - soc), einde + timedelta(hours=24)
+            ),
         )
         regel = self._laad_op_goedkoopste(einde - timedelta(minutes=15), regel)
         if not regel.get("laden"):
@@ -30824,7 +30925,10 @@ class EnergyManagementSystemCoordinator:
         """
         besluit = self.last_laadbesluit or {}
         if isinstance(besluit, dict):
-            if besluit.get("waarde_eur") is not None and besluit.get("prijs_nu_eur") is not None:
+            if besluit.get("verdringt_zon") and not besluit.get("laden"):
+                # v5.86: niet geladen omdat de zon de accu vult - `zon`.
+                self._laadbesluit_stand = "zon"
+            elif besluit.get("waarde_eur") is not None and besluit.get("prijs_nu_eur") is not None:
                 if not (besluit.get("soort") == "dip" and self._laadbesluit_stand == "zon"):
                     self._laadbesluit_stand = (
                         "loont" if besluit["waarde_eur"] > besluit["prijs_nu_eur"] else "loont_niet"

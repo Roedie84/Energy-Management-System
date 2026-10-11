@@ -32802,3 +32802,26 @@ zich nooit meer aan. De automation zag daardoor geen stand en stuurde niet.
 
 Nu kijkt de keuzelijst elke 10 s of het meelezen er is, meldt zich dan aan
 en ververst daarna meteen bij elke wijziging.
+
+## v5.86.0 — nachtladen alleen als het meer oplevert dan de zon die het verdringt (L-EMS-021)
+
+Gemeld 11-10 23:00: "Waarom manueel laden vannacht? Is toch niet gezien de
+zonvoorspelling morgen?" Het plan laadde 02:30-04:30 van 47 naar 100 % tegen
+~33 ct om om 08:00 te verkopen tegen 47 ct. De accu was om 11:30 toch vol van
+de zon, en het middagoverschot ging voor 30-32 ct het net op. De laadregel
+waardeerde de lading tegen de duurste kwartieren van de komende 24 uur - ook
+de avondpiek, die de zon al dekt.
+
+Nu rekent de laadregel (beslissing én kwartierplan, één functie) eerst uit
+wanneer de zon de accu vanzelf vol heeft (`_zon_vol_om`, voorzichtige zon,
+hetzelfde verbruik als de reserve). Lading van nu telt alleen in de
+kwartieren daarvóór. Blijft de volgende kWh tot dat moment in de accu, dan
+verdringt hij zon: hij is dan precies de exportprijs van dat moment waard, en
+wordt alleen geladen als stroom nu goedkoper is dan dat (bv. een negatieve of
+heel goedkope nacht). Nieuw in het laadbesluit: `zon_vol_om`,
+`verdringt_zon`, `exportprijs_eur`.
+
+Narekening van 11-10: de volgende kWh valt nu in 43,8 ct (31,8 ct waard na
+rendement en slijtage) tegen 33,1 ct nu → niet laden.
+
+Tests: `test_v586_zon_verdringt.py` (8).

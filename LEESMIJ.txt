@@ -1,3 +1,12 @@
+EMS v5.86.0 - geen nachtladen meer als de zon de accu toch vult
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Laden van het net loont alleen nog als de lading wordt gebruikt of
+  verkocht vóór de zon de accu vanzelf vol heeft. Wat daarna nog in de accu
+  zit, verdringt zon die het net op gaat; dat wordt alleen nog geladen als
+  stroom nu goedkoper is dan die teruglevering.
+
 EMS v5.85.1 - keuzelijst luchtreiniger na een herstart
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
