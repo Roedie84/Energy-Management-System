@@ -295,3 +295,12 @@ laatste ronde: 11-10 11:40, gemeten t/m 11-10 11:40
 - Hypotheses: H-EMS-2 (PV donkere dagen). Geen release (tussenronde, niets acuut). Open voor Ruud: L-EMS-017.
 
 laatste ronde: 11-10 15:40, gemeten t/m 11-10 15:40
+
+## 11-10 19:40 · tussenronde
+- 10 HA-herstarts 15:49-18:09 (supervisor, geen crash), daarna rustig; actief v5.85.1, 0 EMS-fouten. Sturing liep door (per herstart ~30 s `unknown`).
+- Beslissingen 15:40-19:56: `default_smart` → `grid_charging_profitable` 16:14-16:45 (accu 99 %) → `discharging_window`/`expensive_quarter_soc_protected` 17:01-19:45 zonder export (accu dekt huis, 99 → 86 %) → **`expensive_quarter` 19:45:06-19:53:06** → `default_smart`. P1 15:40-19:44 export 0,80 kWh (0,73 PV-overschot vóór 17:30, daarna 0,08 regelruis), import 0,08.
+- **Eerste avondverkoop onder v5.81 (L-EMS-018):** 19:45 verkooptoets nodig tot blok 4,18 (×1,25 = 5,23), beschikbaar 6,57 → 1,34 kWh vrij (deel na het blok, terugladen 39,8 ct < verkoop 42,1 ct); plan 19:45-20:15 verkopen. Verkocht **0,23 kWh** (P1, 8 min ~1,85 kW). 19:56: nodig tot blok **4,99** (+0,81 in 11 min terwijl de accu 0,35 leverde) → 6,24 nodig bij 6,22 → gestopt. Grens geraakt op −0,02 kWh = binnen de stap van `beschikbaar` (~0,09 kWh) → **geen schending**; marge per kwartier toetsen in de dagafsluiting (L-EMS-018-velden).
+- **H-EMS-10 (nieuw):** de reserve/behoefte springt binnen minuten ±0,6-1,0 kWh (17:04-19:56 9×: 6,3-6,8 ↔ 7,78 = plafond), zonder verbruiksstap. Vermoeden: een live-invoer die × ~15 u tot het blok gaat, waarschijnlijk `regelverschuiving_kw` (regel-P1 − P1 per ronde; 50 W × 15,6 u × 1,25 ≈ 1 kWh). Niet te toetsen: uitsplitsing (`regelverschuiving_w`, `ongekapt_kwh`) staat niet in een attribuut met historie en beide P1-sensoren zijn uitgesloten van de recorder → meetbaarheid **L-EMS-020** (gepland, dagafsluiting). Gevolg vanavond: ~1,1 kWh minder verkocht dan toegestaan (~€ 0,03; huis niet geraakt).
+- Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-10 (springende behoefte). Geen release (tussenronde, niets acuut). Open voor Ruud: L-EMS-017.
+
+laatste ronde: 11-10 19:40, gemeten t/m 11-10 19:56
