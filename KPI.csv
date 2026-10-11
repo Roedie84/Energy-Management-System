@@ -308,3 +308,8 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-11 11:40,TUSSEN,ems_import_voor_blok_kwh,0.06,3,"P1 07-10 u 0.020/0.015/0.027 (regelruis); 10-11 u 0.304 (blok, sparen_in_blok)"
 2026-10-11 11:40,TUSSEN,ems_verkoop_onder_reserve,0,0,"07:45-11:40 default_smart -> sparen_in_blok 10:45 -> grid_charging_profitable 11:30; export 07-11 u 0.12 kWh"
 2026-10-11 11:40,TUSSEN,ems_herstarts,2,0,"08:40 en 10:15; actief v5.81.1 (v5.82/5.83 gedownload, niet actief); 0 EMS-fouten"
+2026-10-11 15:40,TUSSEN,ems_herstarts,20,0,"11:47-15:33 via supervisor (geen crash; fault-log n.v.t.); actief v5.85.1; 0 EMS-fouten; sturing liep door (SoC 23->100 gelijkmatig)"
+2026-10-11 15:40,TUSSEN,ems_pv_fout_intraday_pct,0.5,7,"08-15 u Modbus 5.81 tegen Solcast-intraday 5.79 kWh; 08-12 -7.5 %, 12-15 +5.2 %; MAE 0.09 kWh/uur"
+2026-10-11 15:40,TUSSEN,ems_netladen_blok_kwh,7.49,4,"P1-import 11-15 u (0.96/2.13/2.71/1.69); accu 23 % (11:30) -> 100 % om 15:29, blok tot 15:30"
+2026-10-11 15:40,TUSSEN,ems_export_kwh,0.20,4,"P1-export 11-15 u; na 15:29 PV-overschot bij volle accu (accu 0 W), geen accuverkoop"
+2026-10-11 15:40,TUSSEN,ems_verkoop_onder_reserve,0,0,"11:40-15:40 grid_charging_profitable/sparen_in_blok -> default_smart 15:29; 0 verkoopkwartieren"

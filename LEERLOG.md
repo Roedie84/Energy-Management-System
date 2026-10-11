@@ -286,3 +286,12 @@ laatste ronde: 11-10 07:40, gemeten t/m 11-10 07:45
 - Hypotheses: H-EMS-2 (PV donkere dagen). H-EMS-9 gesloten. Geen release (tussenronde, niets acuut; vandaag al 3 releases via chat).
 
 laatste ronde: 11-10 11:40, gemeten t/m 11-10 11:40
+
+## 11-10 15:40 · tussenronde
+- **20 HA-herstarts 11:47-15:33** (supervisor "Restarting homeassistant", elke 5-15 min; geen crash) → actief **v5.85.1** (luchtreiniger, chatsessies). Logboek 0 EMS-fouten. Sturing liep door: SoC 23 % (11:30) → 100 % (15:29) zonder hapering; per herstart ~30 s `unknown`.
+- Beslissingen 11:40-15:40: `grid_charging_profitable`/`sparen_in_blok` tot 15:29, daarna `default_smart`. Netladen 11-15 u **7,49 kWh**, accu vol 1 min vóór het einde van het blok (15:30) → goed getimed. **0× verkoop, 0× onder de reserve**; export 11-15 u 0,20 kWh, daarna PV-overschot bij volle accu (accu 0 W).
+- PV 08-15 u 5,81 kWh (Modbus) tegen Solcast-intraday 5,79 → **+0,5 %** (ochtend −7,5 %, middag +5,2 %; MAE 0,09 kWh/uur). Zelfde patroon als 10-10 (ochtend te hoog, middag te laag), kleiner. Day-ahead → dagafsluiting.
+- L-EMS-018-velden: nog geen verkoopkwartier sinds activering → eerste toets bij de avondverkoop (19:40/23:40).
+- Hypotheses: H-EMS-2 (PV donkere dagen). Geen release (tussenronde, niets acuut). Open voor Ruud: L-EMS-017.
+
+laatste ronde: 11-10 15:40, gemeten t/m 11-10 15:40
