@@ -32790,3 +32790,15 @@ telt niet meer als afwijking maar als `buiten_cloud`. De oude modustelling
 (met de valse "wijkt af") begint daarom opnieuw (schema 2).
 
 Tests: `test_v585.py` (8), waaronder stand zetten tegen een nep-apparaat.
+
+## v5.85.1 — keuzelijst luchtreiniger bleef na een herstart onbeschikbaar
+
+Gemeld 11-10 12:42: "Ik zie de luchtreiniger nu helemaal niet meer, en ben in
+de woonkamer, hij blijft op medium staan." Na de herstart van 12:40 stond
+`select.…_luchtreiniger_stand` op onbeschikbaar, terwijl het lokaal meelezen
+gewoon verbonden was. Oorzaak: de platforms worden opgezet vóór het meelezen
+start, dus de keuzelijst vond bij het aanmelden nog geen meelezer en meldde
+zich nooit meer aan. De automation zag daardoor geen stand en stuurde niet.
+
+Nu kijkt de keuzelijst elke 10 s of het meelezen er is, meldt zich dan aan
+en ververst daarna meteen bij elke wijziging.

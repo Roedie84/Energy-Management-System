@@ -6,6 +6,7 @@ zelf (`luchtreiniger_lokaal`) - geen cloud, geen integratie van derden.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -17,6 +18,12 @@ from .const import DEFAULT_NAME, DOMAIN, GEEN_ATTRIBUTEN_IN_RECORDER
 from .luchtreiniger_lokaal import STANDEN
 
 _LOGGER = logging.getLogger(__name__)
+
+# v5.85.1: de keuzelijst wordt opgezet vóór het meelezen start (de platforms
+# komen eerst). Bleef na een herstart "onbeschikbaar". Nu kijkt hij elke 10 s
+# of het meelezen er is en meldt zich dan aan; daarna ververst hij meteen bij
+# elke wijziging.
+SCAN_INTERVAL = timedelta(seconds=10)
 
 
 async def async_setup_entry(
@@ -33,7 +40,7 @@ class LuchtreinigerStandSelect(SelectEntity):
     _attr_name = "Luchtreiniger stand"
     _attr_icon = "mdi:air-purifier"
     _attr_options = list(STANDEN)
-    _attr_should_poll = False
+    _attr_should_poll = True
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -47,9 +54,15 @@ class LuchtreinigerStandSelect(SelectEntity):
         return getattr(self._coordinator, "luchtreiniger_lokaal", None)
 
     async def async_added_to_hass(self) -> None:
+        self._meld_aan()
+
+    def _meld_aan(self) -> None:
         meelezer = self._meelezer
-        if meelezer is not None:
+        if meelezer is not None and self._afmelden is None:
             self._afmelden = meelezer.luister(self.async_write_ha_state)
+
+    async def async_update(self) -> None:
+        self._meld_aan()
 
     async def async_will_remove_from_hass(self) -> None:
         afmelden, self._afmelden = self._afmelden, None

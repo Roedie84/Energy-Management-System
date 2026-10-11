@@ -137,3 +137,15 @@ def test_zonder_verbinding_een_duidelijke_fout():
     except ConnectionError:
         return
     raise AssertionError("geen fout zonder verbinding")
+
+
+def test_keuzelijst_meldt_zich_ook_later_aan():
+    """v5.85.1: na een herstart start het meelezen pas na de platforms; de
+    keuzelijst bleef dan onbeschikbaar. Nu kijkt hij elke 10 s opnieuw."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "select.py").read_text()
+    assert "_attr_should_poll = True" in bron
+    assert "async def async_update" in bron and "self._meld_aan()" in bron

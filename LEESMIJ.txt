@@ -1,3 +1,10 @@
+EMS v5.85.1 - keuzelijst luchtreiniger na een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De keuzelijst "Luchtreiniger stand" bleef na een herstart onbeschikbaar,
+  waardoor de automation de luchtreiniger niet meer stuurde. Opgelost.
+
 EMS v5.85.0 - de luchtreiniger sturen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
