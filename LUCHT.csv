@@ -53,3 +53,27 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-11 16:20,filtergebruik_pct,0,1,
 2026-10-11 16:20,ha_herstarts,20,1,select/ramen/occupancy elk ~70 s unavailable; uptime-sensor bevestigt laatste 16:19
 2026-10-11 16:20,automation_traces_fout,0,5,traces wissen bij herstart; alleen 5 zichtbaar
+2026-10-11 20:20,pm25_gem,0.96,48,16:20-20:20 5-min statistiek
+2026-10-11 20:20,pm25_mediaan,0.89,48,
+2026-10-11 20:20,pm25_p95,1.80,48,
+2026-10-11 20:20,pm25_max,2.58,48,5-min max 19:45; 5-min gem max 2.22
+2026-10-11 20:20,pm25_uren_gt15,0,48,
+2026-10-11 20:20,pm25_uren_gt25,0,48,
+2026-10-11 20:20,stand_auto_min,174,1,16:20-20:20
+2026-10-11 20:20,stand_mid_min,57,1,
+2026-10-11 20:20,stand_unavailable_min,9,7,7 HA-herstarts 16:27-18:09; daarna geen
+2026-10-11 20:20,pm25_gem_auto,1.16,34,5-min blokken; auto vooral avond 18:15-20:20
+2026-10-11 20:20,pm25_gem_mid,0.47,14,mid alleen 16:20-18:15
+2026-10-11 20:20,pm25_gem_aanwezig,1.26,29,occupancy >=50% van blok
+2026-10-11 20:20,pm25_gem_afwezig,0.51,19,
+2026-10-11 20:20,pm25_dag_gem_tot_nu,1.09,1,dagstatistiek 11-10 t/m 20:20
+2026-10-11 20:20,pm25_7d_gem,2.58,7,daggemiddelden 05-10 t/m 11-10
+2026-10-11 20:20,co2_gem,922,48,5-min gem 16:20-20:20
+2026-10-11 20:20,co2_max,1741,1,5-min max ~19:50; stijging vanaf 18:20
+2026-10-11 20:20,co2_uren_gt1200,1.42,48,
+2026-10-11 20:20,voc_index_max,492,48,vanaf 18:30 van ~50 naar ~490; samen met CO2/temp/vocht
+2026-10-11 20:20,schimmel_indicator_max,80,48,van 67 (17:00) naar 80 (19:50); buiten 99% RV 11.8 C
+2026-10-11 20:20,lokaal_mislukt,0,1878,rondes sinds 11:48; uitval 0; sturen 18/18 bevestigd
+2026-10-11 20:20,filtergebruik_pct,0,1,
+2026-10-11 20:20,ha_herstarts,7,1,16:27/16:41/17:01/17:19/17:25/17:33/18:09; daarna stabiel
+2026-10-11 20:20,automation_traces_fout,0,5,laatste 20:15; stored_traces=5
