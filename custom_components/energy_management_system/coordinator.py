@@ -25532,6 +25532,29 @@ class EnergyManagementSystemCoordinator:
             return None
         return sum(prijzen) / len(prijzen)
 
+    @staticmethod
+    def _zonuitstel_te_weinig(ruimte: float, ruimst: tuple | None) -> str:
+        """Waarom uitstellen niet kan, met de getallen erbij (v5.91.1).
+
+        Gemeld met een schermafdruk: "Nog 12,4 kWh vandaag" naast "Te weinig
+        zon verwacht om 5,6 kWh voor 16:00 op te vangen". Beide klopten, maar
+        de tweede zei niet waarmee hij rekende: alleen de zon tussen het
+        eerste hele uur en 16:00, gecorrigeerd voor hoe Solcast hier
+        gewoonlijk uitpakt, min het verbruik in die uren - en met marge.
+        """
+        basis = f"Te weinig zon verwacht om {ruimte:.1f} kWh vóór {SOLAR_DEFER_TARGET_FULL_HOUR}:00 nog veilig op te vangen"
+        if not ruimst:
+            return basis + "."
+        start, zon, verbruik, haalbaar, drempel = ruimst
+        return (
+            f"{basis}: tussen {start:%H:%M} en {SOLAR_DEFER_TARGET_FULL_HOUR}:00 "
+            f"verwacht het EMS {zon:.1f} kWh zon (gecorrigeerd voor de "
+            f"afwijking van Solcast) en {verbruik:.1f} kWh verbruik, dus "
+            f"{haalbaar:.1f} kWh om op te vangen. Met de veiligheidsmarge is "
+            f"{drempel:.1f} kWh nodig. De rest van de zon vandaag valt vóór "
+            f"{start:%H:%M} of na {SOLAR_DEFER_TARGET_FULL_HOUR}:00."
+        )
+
     def _verkoop_loont_na_saldering(self, now: datetime) -> dict | None:
         """Weegt verkopen nu tegen zelf gebruiken straks (v3.42.0).
 
@@ -26569,7 +26592,7 @@ class EnergyManagementSystemCoordinator:
         # kwartierplanning zette.
         laad_w = abs(self.config.get(CONF_MANUAL_CHARGE_POWER) or 0)
 
-        beste_uur = None
+        beste_uur = ruimst = None
         for uur in range(min(SOLAR_DEFER_LATEST_HOUR, deadline.hour), now.hour, -1):
             start = now.replace(hour=uur, minute=0, second=0, microsecond=0)
             if start <= now or start >= deadline:
@@ -26610,15 +26633,13 @@ class EnergyManagementSystemCoordinator:
             if haalbaar >= drempel:
                 beste_uur = uur
                 break
+            # v5.91.1: het ruimste venster dat getoetst is, voor de uitleg
+            ruimst = (start, zon, verbruik, haalbaar, drempel)
 
         if beste_uur is None:
             return {
                 "uitstellen": False,
-                "reden": (
-                    f"Te weinig zon verwacht om {ruimte:.1f} kWh vóór "
-                    f"{SOLAR_DEFER_TARGET_FULL_HOUR}:00 nog veilig op te "
-                    "vangen."
-                ),
+                "reden": self._zonuitstel_te_weinig(ruimte, ruimst),
             }
 
         huidige_prijs = self.huidige_prijs_eur_per_kwh()

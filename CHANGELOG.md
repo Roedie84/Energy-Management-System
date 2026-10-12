@@ -32946,3 +32946,14 @@ afwijking), een zin met de oorzaak, en gepland, gemeten en verschil naast
 elkaar, plus de dagscore.
 
 Tests: `test_v591_planvolging.py` (15). Op de YAML-pagina Kwartierplanning staat de planvolging onder "Laadplanning gewijzigd".
+
+## v5.91.1 — zon opvangen uitstellen: de reden noemt zijn getallen
+
+Gemeld met een schermafdruk: "Nog 12,4 kWh vandaag" naast "Te weinig zon
+verwacht om 5,6 kWh vóór 16:00 nog veilig op te vangen". Beide klopten, maar
+de reden zei niet waarmee hij rekende. Nu staat erbij: het venster (eerste
+hele uur tot 16:00), de zon in dat venster na correctie voor de afwijking van
+Solcast, het verbruik in die uren, wat er dus op te vangen is, en hoeveel er
+met de veiligheidsmarge nodig is. Het besluit zelf is ongewijzigd.
+
+Tests: `test_v5911_zonuitstel_uitleg.py` (2).
