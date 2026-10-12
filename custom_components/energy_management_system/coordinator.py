@@ -22728,6 +22728,7 @@ class EnergyManagementSystemCoordinator:
             "had_kunnen_opleveren_eur", "gemist_eur", "gemist_door_reserve_eur",
             "gemist_door_voorspelling_eur", "te_veel_vastgehouden_kwh",
             "te_veel_ontladen_kwh", "kwartieren", "handmatige_kwartieren",
+            "per_dagdeel",
         )
         nabeschouwing = [
             {k: n.get(k) for k in na_velden if k in n}

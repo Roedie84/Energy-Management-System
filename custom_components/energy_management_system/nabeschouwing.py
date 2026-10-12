@@ -262,6 +262,7 @@ def nabeschouwing(
                 }
             )
     verschillen.sort(key=lambda r: -abs(r["verschil_eur"]))
+    per_dagdeel = _per_dagdeel(kwartieren, beste["acties"], tijdstippen)
     # v4.1: de gerichte som, voor het zelflerende deel. Positief: de
     # beste planning ontlaadde meer dan wij (wij hielden te veel vast).
     # Negatief: wij ontlaadden meer dan de beste planning (te veel
@@ -300,6 +301,7 @@ def nabeschouwing(
             max(0.0, beste["kosten_eur"] - met_arbitrage["kosten_eur"]), 2
         ),
         "grootste_verschillen": verschillen[:8],
+        "per_dagdeel": per_dagdeel,
         "toelichting": (
             "Best mogelijk laadt alleen uit OVERSCHOT - geen netarbitrage, "
             "want die is uit de integratie gehaald. Wat netarbitrage zou "
@@ -310,4 +312,68 @@ def nabeschouwing(
             "kijken en van de regels die de integratie volgde. De "
             "grootste verschillen zeggen waar."
         ),
+    }
+
+
+# v5.89 (L-EMS-019): het gemiste bedrag per dagdeel. Bewust GEEN
+# kwartierregels met huisverbruik in de export (privacykeuze v5.28: daaruit
+# valt aanwezigheid af te leiden) - alleen sommen per dagdeel.
+DAGDELEN = (
+    ("nacht", 0, 7),
+    ("ochtendpiek", 7, 10),
+    ("middag", 10, 17),
+    ("avondpiek", 17, 24),
+)
+
+
+def _dagdeel(tijd: str) -> str | None:
+    try:
+        uur = int(str(tijd)[:2])
+    except (TypeError, ValueError):
+        return None
+    for naam, van, tot in DAGDELEN:
+        if van <= uur < tot:
+            return naam
+    return None
+
+
+def _per_dagdeel(kwartieren: list[Kwartier], acties: list[dict], tijdstippen: list[str]) -> dict:
+    """Per dagdeel: wat de beste planning anders deed en wat dat waard was.
+
+    `verschil_eur` positief: de beste planning ontlaadde in dat dagdeel meer
+    (of laadde minder) dan wij - daar hielden we te veel vast of laadden we
+    te veel. Negatief: wij ontlaadden meer dan de beste planning.
+    `vastgehouden_kwh` en `te_veel_ontladen_kwh` zijn dezelfde maten als in
+    de dagtotalen, maar per dagdeel.
+    """
+    uit = {
+        naam: {
+            "kwartieren": 0, "verschil_eur": 0.0, "verschil_abs_eur": 0.0,
+            "accu_werkelijk_kwh": 0.0, "accu_beste_kwh": 0.0,
+            "vastgehouden_kwh": 0.0, "te_veel_ontladen_kwh": 0.0,
+        }
+        for naam, _v, _t in DAGDELEN
+    }
+    for k, a, t in zip(kwartieren, acties, tijdstippen):
+        naam = _dagdeel(t)
+        if naam is None:
+            continue
+        d = uit[naam]
+        best_net = a["ontladen_kwh"] - a["laden_kwh"]
+        v = (best_net - k.accu_kwh) * k.prijs_eur
+        d["kwartieren"] += 1
+        d["verschil_eur"] += v
+        d["verschil_abs_eur"] += abs(v)
+        d["accu_werkelijk_kwh"] += k.accu_kwh
+        d["accu_beste_kwh"] += best_net
+        if a["ontladen_kwh"] > a["laden_kwh"]:
+            d["vastgehouden_kwh"] += max(0.0, best_net - max(0.0, k.accu_kwh))
+        if k.accu_kwh > 0:
+            d["te_veel_ontladen_kwh"] += max(0.0, k.accu_kwh - max(0.0, best_net))
+    return {
+        naam: {
+            sleutel: (round(w, 3) if isinstance(w, float) else w)
+            for sleutel, w in d.items()
+        }
+        for naam, d in uit.items()
     }

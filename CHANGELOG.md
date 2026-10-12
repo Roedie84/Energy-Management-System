@@ -32874,3 +32874,19 @@ In de Energiecockpit staat onder de planningsgrafiek: "Laadplanning gewijzigd:
 `sensor.…_kwartierplanning` en in het YAML-dashboard (pagina Kwartierplanning), en in de diagnostiek-export.
 
 Tests: `test_v588_laadplan_gewijzigd.py` (7).
+
+## v5.89.0 — nabeschouwing per dagdeel (L-EMS-019)
+
+Het gemiste bedrag van de nabeschouwing (wat de accu met perfecte kennis
+achteraf had kunnen doen) staat nu ook per dagdeel: nacht (00-07),
+ochtendpiek (07-10), middag (10-17) en avondpiek (17-24). Per dagdeel:
+`verschil_eur` (positief = te veel vastgehouden, negatief = te veel
+ontladen), `verschil_abs_eur`, accu werkelijk/beste in kWh,
+`vastgehouden_kwh` en `te_veel_ontladen_kwh`. In de nabeschouwing zelf en in
+`nabeschouwing_7d` op `sensor.…_diagnose_sturing`, vanaf de eerstvolgende
+dagafsluiting.
+
+Bewust geen kwartierregels met huisverbruik in de export: de privacykeuze
+van v5.28 (uit verbruik per kwartier valt aanwezigheid af te leiden) blijft.
+
+Tests: `test_v589_dagdelen.py` (3).
