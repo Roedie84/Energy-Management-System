@@ -554,6 +554,8 @@ async def async_get_config_entry_diagnostics(
         "laadplan_gewijzigd": _veilig(
             "get_laadplan_gewijzigd", coordinator.get_laadplan_gewijzigd
         ),
+        # v5.91: gepland tegen gemeten accuvermogen.
+        "planvolging": _veilig("get_planvolging", coordinator.get_planvolging),
         "weerbron_overzicht": _veilig(
             "get_weather_source_overview", coordinator.get_weather_source_overview
         ),

@@ -3477,6 +3477,7 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "niet_ontladen_history": {"type": "plain"},
     "mpc_vergelijking_history": {"type": "plain"},
     "vooruitplan_history": {"type": "plain"},
+    "planvolging_dagen": {"type": "plain"},
     "handmatige_ingrepen": {"type": "plain"},
     "moduswissels": {"type": "plain"},
     "bijkoop_history": {"type": "plain"},

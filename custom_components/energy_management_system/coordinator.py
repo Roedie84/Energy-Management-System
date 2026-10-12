@@ -60,7 +60,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
-from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan
+from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging
 from .const import (
     RESERVE_SPRONG_DREMPEL_KWH,
     RESERVE_SPRONGEN_MAX,
@@ -1505,7 +1505,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, []
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, []
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -23549,6 +23549,74 @@ class EnergyManagementSystemCoordinator:
                 begin = vorig = t
         return ", ".join(blokken)
 
+    def _volg_plan(self, now: datetime) -> None:
+        """Legt het accuvermogen naast het plan van dit kwartier (v5.91).
+
+        Bij het begin van elk kwartier wordt vastgelegd wat de planning
+        voor dat kwartier verwachtte - de planning daarna rekent vanaf de
+        echte stand en kan dus niet meer als maat dienen. Elke ronde komt er
+        een meting bij; bij de kwartierwissel wordt het kwartier beoordeeld,
+        bij de dagwissel de dag samengevat.
+        """
+        kwartier = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
+        vorig = self._planvolging or {}
+        if vorig.get("begin") != kwartier.isoformat():
+            oordeel = planvolging.sluit_kwartier(vorig.get("gepland"), vorig.get("monsters") or [])
+            if oordeel:
+                self._planvolging_kwartieren.append({**oordeel, "dag": vorig["begin"][:10]})
+            self._planvolging_dagwissel(kwartier.date().isoformat())
+            self._planvolging = {"begin": kwartier.isoformat(), "gepland": self._planvolging_gepland(now, kwartier), "monsters": []}
+        meting = {
+            "accu_w": self._read_corrected_battery_power(),
+            "zon_w": self._live_pv_w(),
+            "huis_w": self._read_corrected_consumption_power(),
+        }
+        if meting["accu_w"] is not None:
+            self._planvolging["monsters"].append(meting)
+
+    def _planvolging_gepland(self, now: datetime, kwartier: datetime) -> dict | None:
+        """De planregel van dit kwartier, in watt (v5.91)."""
+        capaciteit = self._read_sensor_float(self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR))
+        beschikbaar = self.beschikbare_energie_kwh()
+        if capaciteit is None or beschikbaar is None:
+            return None
+        bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
+        for rij in self.get_quarter_plan(now) or []:
+            if dt_util.parse_datetime(rij.get("start") or "") == kwartier:
+                return planvolging.gepland_uit_plan(rij, min(beschikbaar, bruikbaar))
+        return None
+
+    def _planvolging_dagwissel(self, vandaag: str) -> None:
+        """Vat de voorbije dagen samen en houdt alleen vandaag over (v5.91).
+
+        Per kwartier staat er ook het huisverbruik in; dat blijft vluchtig.
+        Alleen de dagsamenvatting wordt bewaard (privacykeuze van v5.28).
+        """
+        oud = sorted({k["dag"] for k in self._planvolging_kwartieren if k["dag"] < vandaag})
+        for dag in oud:
+            samen = planvolging.dagsamenvatting(dag, [k for k in self._planvolging_kwartieren if k["dag"] == dag])
+            if samen and all(d.get("dag") != dag for d in self.planvolging_dagen):
+                self.planvolging_dagen.append(samen)
+        self.planvolging_dagen = self.planvolging_dagen[-planvolging.DAGEN_BEWAREN:]
+        self._planvolging_kwartieren = [k for k in self._planvolging_kwartieren if k["dag"] >= vandaag][-planvolging.KWARTIEREN_BEWAREN:]
+
+    def get_planvolging(self) -> dict:
+        """Live: gepland tegen gemeten, plus vandaag en de voorbije dagen (v5.91)."""
+        lopend = self._planvolging or {}
+        monsters = lopend.get("monsters") or []
+        laatste = monsters[-1] if monsters else {}
+        vandaag = dt_util.now().date().isoformat()
+        return {
+            "nu": planvolging.beoordeel(lopend.get("gepland"), laatste.get("accu_w"), laatste.get("zon_w"), laatste.get("huis_w")),
+            "kwartier": planvolging.sluit_kwartier(lopend.get("gepland"), monsters),
+            "vandaag": planvolging.dagsamenvatting(vandaag, [k for k in self._planvolging_kwartieren if k["dag"] == vandaag]),
+            "laatste_kwartieren": [
+                {k: v for k, v in r.items() if k in ("van", "gepland_accu_w", "gemeten_accu_w", "oorzaak", "status")}
+                for r in self._planvolging_kwartieren[-8:]
+            ],
+            "dagen": list(self.planvolging_dagen[-14:]),
+        }
+
     def get_laadplan_gewijzigd(self) -> dict:
         """Voor het dashboard: wanneer de laadplanning veranderde (v5.88)."""
         return dict(self.laadplan_gewijzigd or {})
@@ -44273,6 +44341,8 @@ class EnergyManagementSystemCoordinator:
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
             # v5.90: optimum MET nachtreserve tegen het plan, nu en na de saldering.
             ("vooruitplan", lambda: self._meet_vooruitplan(now)),
+            # v5.91: het accuvermogen naast het plan van dit kwartier.
+            ("planvolging", lambda: self._volg_plan(now)),
             # v3.60.0: wat het kost dat de accu bijspringt in een
             # goedkoop kwartier.
             (

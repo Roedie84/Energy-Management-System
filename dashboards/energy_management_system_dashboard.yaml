@@ -2858,7 +2858,10 @@ views:
       content: '{% set w = state_attr(''sensor.woonkamer_energy_management_system_kwartierplanning'', ''laadplan_gewijzigd'') or {} %}Laadplanning gewijzigd: {{ w.get(''om_tekst'', ''-'') }}, {{ w.get(''blokken'') }}
 
 
-        {% set p = state_attr(''sensor.woonkamer_energy_management_system_kwartierplanning'', ''kwartierplanning'') or [] %}{% if p | length == 0 %}Nog geen planning beschikbaar - hiervoor zijn prijsgegevens en een accustand nodig.{% else %}| Tijd | ct | Zon | Modus | SoC | Totaal |
+        {% set v = (state_attr(''sensor.woonkamer_energy_management_system_kwartierplanning'', ''planvolging'') or {}).get(''nu'') or {} %}Planvolging: {{ v.get(''tekst'', ''-'') }}
+
+
+        {% set p = state_attr(''sensor.woonkamer_energy_management_system_kwartierplanning'', ''kwartierplanning'') or [] %}{% if p | length == 0 %}Nog geen planning: prijzen of accustand ontbreken.{% else %}| Tijd | ct | Zon | Modus | SoC | Totaal |
 
         |---|---|---|---|---|---|
 
@@ -2867,7 +2870,7 @@ views:
         {% endfor %}{% endif %}
 
 
-        _**!** = de accu kan in dat kwartier niets meer leveren en het huis hangt aan het net. **Rood** = van plan veranderd sinds de eerste voorspelling. Voorbije kwartieren verdwijnen; er wordt gekeken zover als er prijzen zijn ({{ p | length }} kwartieren nu)._'
+        _**!** = accu leeg, het huis hangt aan het net. **Rood** = gewijzigd sinds de eerste voorspelling. {{ p | length }} kwartieren vooruit._'
       grid_options:
         columns: 12
         rows: auto

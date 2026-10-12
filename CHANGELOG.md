@@ -32917,3 +32917,32 @@ Eén meting per dag (`vooruitplan_history`, overleeft een herstart). Stuurt
 niets.
 
 Tests: `test_v590_vooruitplan.py` (14).
+
+## v5.91.0 — planvolging en een vernieuwde Energiestroom-kaart
+
+Gevraagd (12-10): "Wordt er ook rekening gehouden met hoeveel W de accu nu al
+laadt ten opzichte van de planning en of dit verwacht was?" — en de kaart
+professionaliseren.
+
+**Planvolging** (`planvolging.py`). Het EMS plant elke minuut opnieuw vanaf de
+echte stand, dus een afwijking werd stilzwijgend opgevangen. Nu wordt bij het
+begin van elk kwartier vastgelegd wat de planning voor dat kwartier
+verwachtte, en elke ronde het gemeten accuvermogen daarnaast gelegd. Het
+verschil krijgt een oorzaak: meer/minder zon dan voorspeld, meer/minder
+verbruik dan verwacht (beide verklaard: in de slimme standen volgt de accu het
+overschot), of de accu die zelf afwijkt. In handmatige standen ligt het
+vermogen vast en is elke afwijking van de accu zelf. Per kwartier een oordeel,
+per dag een samenvatting (percentage volgens plan, hoe vaak de accu zelf
+afweek, mediaan verschil). Alleen de dagsamenvatting wordt bewaard; de
+kwartierregels met huisverbruik blijven vluchtig (privacykeuze van v5.28).
+Op `sensor.…_kwartierplanning` als attribuut `planvolging` en in de
+diagnostiek-export. Stuurt niets.
+
+**Energiestroom-kaart** in de Energiecockpit: knooppunten met een
+icoonbadge en een accentlijn die oplicht als er stroom loopt, stroomlijnen die
+dikker worden met het vermogen en als lichtpunten bewegen, een laadstandbalk
+bij de accu, en daaronder de planvolging: status (volgens plan / verklaard /
+afwijking), een zin met de oorzaak, en gepland, gemeten en verschil naast
+elkaar, plus de dagscore.
+
+Tests: `test_v591_planvolging.py` (15). Op de YAML-pagina Kwartierplanning staat de planvolging onder "Laadplanning gewijzigd".

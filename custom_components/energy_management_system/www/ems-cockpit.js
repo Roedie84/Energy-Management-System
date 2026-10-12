@@ -534,26 +534,52 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .zin { font-size: 13px; color: var(--tekst2); line-height: 1.5; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); }
 .zin b { color: var(--tekst); }
 
-/* ---- energiestroom ---- */
-.stroom { position: relative; width: 100%; max-width: 560px; margin: 0 auto; aspect-ratio: 1.35 / 1; }
+/* ---- energiestroom (v5.91) ---- */
+.stroom { position: relative; width: 100%; max-width: 600px; margin: 0 auto; aspect-ratio: 1.12 / 1; }
 .stroom svg.lijnen { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.lijn { fill: none; stroke: rgba(255,255,255,.08); stroke-width: 3; }
-.loop { fill: none; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 2 12; animation: loop var(--snel, 1.6s) linear infinite; }
-.loop.terug { animation-direction: reverse; }
-@keyframes loop { to { stroke-dashoffset: -28; } }
-@media (prefers-reduced-motion: reduce) { .loop { animation: none; stroke-dasharray: none; opacity: .6; } }
-.knoop {
-  position: absolute; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 2px;
-  width: 31%; padding: 10px 6px 9px; border-radius: 16px; text-align: center;
-  background: rgba(8, 14, 26, .78); border: 1px solid var(--rand2);
-  box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 10px 26px rgba(0,0,0,.35), 0 0 22px var(--gloed, transparent);
+.spoor { fill: none; stroke: rgba(255,255,255,.07); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.loop {
+  fill: none; stroke-linecap: round; vector-effect: non-scaling-stroke;
+  stroke-dasharray: 0.1 13; animation: loop var(--snel, 1.6s) linear infinite;
+  filter: drop-shadow(0 0 4px var(--kl, transparent));
 }
-.knoop .ic { width: 24px; height: 24px; color: var(--k, var(--tekst2)); }
+.loop.terug { animation-direction: reverse; }
+@keyframes loop { to { stroke-dashoffset: -26.2; } }
+@media (prefers-reduced-motion: reduce) { .loop { animation: none; stroke-dasharray: none; opacity: .55; } }
+.knoop {
+  position: absolute; transform: translate(-50%, -50%); width: 32%; min-height: 25%;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  padding: 10px 12px; border-radius: 16px; text-align: left;
+  background: linear-gradient(160deg, rgba(22, 34, 56, .92), rgba(8, 13, 25, .92));
+  border: 1px solid var(--rand2);
+  box-shadow: 0 10px 26px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.05), 0 0 26px var(--gloed, transparent);
+}
+.knoop::before { content: ""; position: absolute; left: 12px; right: 12px; top: 0; height: 2px; border-radius: 0 0 2px 2px; background: var(--k); opacity: var(--actief, .25); }
+.knoop .kk { display: flex; align-items: center; gap: 7px; }
+.knoop .badge { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--k) 16%, transparent); }
+.knoop .badge .ic { width: 16px; height: 16px; color: var(--k); }
 .knoop .n { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--tekst2); }
-.knoop .v { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.knoop .v { font-size: 22px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .knoop .v small { font-size: 11px; }
-.knoop .s { font-size: 11.5px; color: var(--tekst2); white-space: nowrap; }
-.hub { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%,-50%); background: var(--amber); box-shadow: 0 0 16px var(--amber); }
+.knoop .s { font-size: 11.5px; color: var(--tekst2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.knoop .soc { height: 4px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 2px; }
+.knoop .soc i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--groen), #6ee7b7); }
+.hub {
+  position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; border-radius: 50%; transform: translate(-50%,-50%);
+  background: radial-gradient(circle at 35% 35%, #fff7d6, var(--amber) 55%, #b45309);
+  box-shadow: 0 0 0 4px rgba(251,191,36,.12), 0 0 18px rgba(251,191,36,.7);
+}
+.planvolg {
+  display: grid; grid-template-columns: auto 1fr; gap: 10px 12px; align-items: center;
+  padding: 11px 13px; border-radius: 13px; background: rgba(255,255,255,.035); border: 1px solid var(--rand);
+}
+.planvolg .zinpv { font-size: 13px; color: var(--tekst); line-height: 1.4; min-width: 0; }
+.planvolg .rij3 { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.planvolg .cel { padding: 7px 9px; border-radius: 10px; background: rgba(0,0,0,.18); border: 1px solid var(--rand); min-width: 0; }
+.planvolg .cel .l { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--tekst3); }
+.planvolg .cel .s { font-size: 11px; color: var(--tekst2); }
+.planvolg .cel .w { font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.planvolg .dag { grid-column: 1 / -1; font-size: 11.5px; color: var(--tekst3); }
 
 /* ---- planning ---- */
 .pl-legenda { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--tekst2); }
@@ -730,7 +756,7 @@ const AFHANKELIJK = {
   meldingen: ["status", "tekort"],
   hero: ["soc", "beschikbaar", "capaciteit", "accu_vermogen", "gacs", "reden", "verwacht", "prijs", "uitleg",
     "blok", "besparing", "zelfvoorziening", "inkoop_vandaag", "teruglever_vandaag", "schema", "modus", "zon_werkelijk"],
-  stroom: ["pv", "net", "accu_vermogen", "huis", "soc"],
+  stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan"],
   planning: ["plan", "schema", "uitleg", "blok"],
   verkoop: ["gacs", "mc", "tekort", "uitleg"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
@@ -1215,7 +1241,7 @@ class EmsCockpitCard extends HTMLElement {
     );
   }
 
-  /* ---- energiestroom ---- */
+  /* ---- energiestroom (v5.91) ---- */
 
   _stroom() {
     const pv = Math.max(0, getal(this._s("pv")) || 0);
@@ -1225,40 +1251,76 @@ class EmsCockpitCard extends HTMLElement {
     const soc = getal(this._s("soc"));
 
     // Coordinaten in procenten van het vlak
-    const P = { zon: [50, 15], net: [16, 50], huis: [84, 50], accu: [50, 85] };
-    const lijn = (van, naar) => `M${van[0]} ${van[1]} L50 50 L${naar[0]} ${naar[1]}`;
-    const tak = (punt) => `M${punt[0]} ${punt[1]} L50 50`;
-    const snel = (w) => `${Math.max(0.5, 2.4 - Math.min(Math.abs(w || 0), 4000) / 2000).toFixed(2)}s`;
-    const loop = (punt, w, kleur, naarHub) => {
+    const P = { zon: [50, 15], net: [17, 50], huis: [83, 50], accu: [50, 85] };
+    const tak = (p) => `M${p[0]} ${p[1]} L50 50`;
+    const snel = (w) => `${Math.max(0.45, 2.2 - Math.min(Math.abs(w || 0), 4000) / 2200).toFixed(2)}s`;
+    const dikte = (w) => (3 + Math.min(Math.abs(w || 0), 3000) / 1000).toFixed(1);
+    // w > 0: stroomt naar het midden
+    const loop = (p, w, kleur) => {
       if (w == null || Math.abs(w) < 20) return "";
-      const terug = naarHub ? w < 0 : w > 0;
-      return `<path class="loop${terug ? " terug" : ""}" d="${tak(punt)}" stroke="${kleur}" style="--snel:${snel(w)}"/>`;
+      return `<path class="loop${w < 0 ? " terug" : ""}" d="${tak(p)}" stroke="${kleur}" ` +
+        `style="--snel:${snel(w)};--kl:${kleur};stroke-width:${dikte(w)}"/>`;
     };
-    // Zon stroomt naar het midden; net: import naar het midden; huis: van het midden;
-    // accu: ontladen naar het midden, laden van het midden.
+    const netKleur = net != null && net < 0 ? "var(--cyaan)" : "var(--rood)";
+    const accuKleur = accu != null && accu < 0 ? "var(--groen)" : "var(--amber)";
     const lijnen =
       `<svg class="lijnen" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
-      `<path class="lijn" d="${tak(P.zon)}"/><path class="lijn" d="${tak(P.net)}"/>` +
-      `<path class="lijn" d="${tak(P.huis)}"/><path class="lijn" d="${tak(P.accu)}"/>` +
-      loop(P.zon, pv, "var(--amber)", true) +
-      loop(P.net, net, net != null && net < 0 ? "var(--cyaan)" : "var(--rood)", true) +
-      loop(P.huis, huis == null ? null : -huis, "var(--blauw)", true) +
-      loop(P.accu, accu, accu != null && accu < 0 ? "var(--groen)" : "var(--amber)", true) +
+      Object.values(P).map((p) => `<path class="spoor" d="${tak(p)}"/>`).join("") +
+      loop(P.zon, pv, "var(--amber)") +
+      loop(P.net, net, netKleur) +
+      loop(P.huis, huis == null ? null : -huis, "var(--blauw)") +
+      loop(P.accu, accu, accuKleur) +
       `</svg>`;
-    const knoop = (pos, ic, naam, waarde, sub, kleur, gloed) =>
-      `<div class="knoop" style="left:${pos[0]}%;top:${pos[1]}%;--k:${kleur};--gloed:${gloed || "transparent"}">` +
-      `${icoon(ic)}<div class="n">${naam}</div><div class="v">${waarde}</div><div class="s">${sub}</div></div>`;
+    const knoop = (pos, ic, naam, waarde, sub, kleur, actief, extra = "") =>
+      `<div class="knoop" style="left:${pos[0]}%;top:${pos[1]}%;--k:${kleur};--actief:${actief ? 1 : 0.25};` +
+      `--gloed:${actief ? `color-mix(in srgb, ${kleur} 22%, transparent)` : "transparent"}">` +
+      `<div class="kk"><span class="badge">${icoon(ic)}</span><span class="n">${naam}</span></div>` +
+      `<div class="v">${waarde}</div><div class="s">${sub}</div>${extra}</div>`;
 
-    const netSub = net == null ? STREEP : net < -20 ? "teruglevering" : net > 20 ? "afname" : "in balans";
+    const netSub = net == null ? STREEP : net < -20 ? "teruglevering" : net > 20 ? "afname van het net" : "in balans";
     const accuSub = accu == null ? STREEP : accu < -20 ? "laadt" : accu > 20 ? "ontlaadt" : "in rust";
+    const socBalk = soc == null ? "" : `<div class="soc" title="Laadstand ${fmt(soc)}%"><i style="width:${Math.max(0, Math.min(100, soc))}%"></i></div>`;
     return (
       paneelKop("pulse", "Energiestroom", chip("live", "ok")) +
       `<div class="pb"><div class="stroom">${lijnen}<div class="hub"></div>` +
-      knoop(P.zon, "zon", "Zon", watt(pv), pv > 20 ? "wekt op" : "geen opwek", "var(--amber)", pv > 20 ? "rgba(251,191,36,.25)" : "") +
-      knoop(P.net, "net", "Net", watt(net == null ? null : Math.abs(net)), netSub, net != null && net < -20 ? "var(--cyaan)" : "var(--rood)") +
-      knoop(P.huis, "huis", "Huis", watt(huis), "verbruik", "var(--blauw)") +
-      knoop(P.accu, "accu", "Accu", watt(accu == null ? null : Math.abs(accu)), `${accuSub}${soc != null ? PUNT + fmt(soc) + "%" : ""}`, "var(--groen)", accu != null && accu < -20 ? "rgba(52,211,153,.25)" : "") +
-      `</div></div>`
+      knoop(P.zon, "zon", "Zon", watt(pv), pv > 20 ? "wekt op" : "geen opwek", "var(--amber)", pv > 20) +
+      knoop(P.net, "net", "Net", watt(net == null ? null : Math.abs(net)), netSub, netKleur, net != null && Math.abs(net) > 20) +
+      knoop(P.huis, "huis", "Huis", watt(huis), "verbruik", "var(--blauw)", huis != null && huis > 20) +
+      knoop(P.accu, "accu", "Accu", watt(accu == null ? null : Math.abs(accu)),
+        `${accuSub}${soc != null ? PUNT + fmt(soc) + "%" : ""}`, accuKleur, accu != null && Math.abs(accu) > 20, socBalk) +
+      `</div>${this._planvolgingRegel()}</div>`
+    );
+  }
+
+  /* Gepland tegen gemeten accuvermogen (v5.91) */
+  _planvolgingRegel() {
+    const pv = attr(this._s("plan"), "planvolging");
+    const nu = pv && pv.nu;
+    if (!nu || !nu.beschikbaar) return "";
+    const kl = nu.status === "volgens plan" ? "ok" : nu.status === "verklaard" ? "" : "let";
+    const label = nu.status === "volgens plan" ? "volgens plan" : nu.status === "verklaard" ? "verklaard" : "afwijking";
+    // Teken zoals het EMS: positief ontladen, negatief laden
+    const rw = (w) => {
+      const n = num(w);
+      if (n == null) return `<div class="w">${STREEP}</div>`;
+      if (Math.abs(n) < 50) return `<div class="w">0<small>W</small></div><div class="s">in rust</div>`;
+      return `<div class="w">${watt(Math.abs(n))}</div><div class="s">${n < 0 ? "laden" : "ontladen"}</div>`;
+    };
+    const verschil = num(nu.verschil_w);
+    const dag = pv.vandaag;
+    return (
+      `<div class="planvolg">` +
+      chip(label, kl) +
+      `<div class="zinpv">${esc(nu.tekst || "")}</div>` +
+      `<div class="rij3">` +
+      `<div class="cel"><div class="l">Gepland</div><div class="w">${rw(nu.gepland_accu_w)}</div></div>` +
+      `<div class="cel"><div class="l">Gemeten</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
+      `<div class="cel"><div class="l">Verschil</div><div class="w">${verschil == null ? STREEP : watt(Math.abs(verschil))}</div>` +
+      `<div class="s">${verschil == null || Math.abs(verschil) < 50 ? "geen" : verschil < 0 ? "meer laden" : "meer ontladen"}</div></div>` +
+      `</div>` +
+      (dag ? `<div class="dag">Vandaag ${fmt(dag.volgens_plan_procent)}% van ${dag.kwartieren} kwartieren volgens plan` +
+        `${dag.afwijking_accu ? `${PUNT}${dag.afwijking_accu}\u00d7 wijkt de accu zelf af` : ""}</div>` : "") +
+      `</div>`
     );
   }
 

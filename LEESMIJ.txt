@@ -1,3 +1,12 @@
+EMS v5.91.0 - planvolging en vernieuwde Energiestroom-kaart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna de
+Energiecockpit één keer verversen (cache).
+
+- Per kwartier: gepland tegen gemeten accuvermogen, met de oorzaak van een
+  verschil (zon, verbruik of de accu zelf).
+- De Energiestroom-kaart is vernieuwd en toont de planvolging eronder.
+
 EMS v5.90.0 - vooruitplannen met de nachtreserve, saldering doorgerekend
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
