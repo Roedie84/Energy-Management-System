@@ -182,7 +182,8 @@ def test_verkooptoets_plan_en_vermogen_gebruiken_de_verkoopreserve():
     # verkooptoets
     assert "verkoopinfo = self.verkoopreserve(now, blok_start)" in bron
     # plan
-    assert "soc > self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs)" in bron
+    # v5.93.3: in `_plan_verkoopruimte`
+    assert "ruimte = soc - self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs)" in bron
     # verkoopvermogen en de tweede laag
     assert bron.count("_verkoop = self.verkoopreserve(") == 2
 

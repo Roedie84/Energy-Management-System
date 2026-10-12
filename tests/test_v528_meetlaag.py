@@ -730,8 +730,10 @@ def test_het_plan_verkoopt_alleen_boven_de_reserve():
     bron = (MAP / "coordinator.py").read_text()
     # v5.70: boven de VERKOOPreserve - het deel tot het blok blijft beschermd,
     # zie test_v570_verkoopreserve.py.
+    # v5.93.3: de ruimte komt uit `_plan_verkoopruimte`.
     assert (
-        "uit = min(soc - self._planning_verkoopreserve_kwh(start, reserve_cache, "
-        "entries, prijs), duur_kwh)" in bron
+        "ruimte = soc - self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs)"
+        in bron
     )
+    assert "uit = min(ruimte, duur_kwh)" in bron
     assert 'prijs > netregels["duurste_tot_blok"]' not in bron

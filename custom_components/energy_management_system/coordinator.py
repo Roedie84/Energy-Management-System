@@ -23252,6 +23252,44 @@ class EnergyManagementSystemCoordinator:
             )
         return cache[sleutel]
 
+    def _plan_verkoopruimte(
+        self, entries, start: datetime, prijs: float, duur_kwartier: bool,
+        soc: float, duur_kwh: float, reserve_cache: dict, netregels: dict,
+        ontlaad_w: float,
+    ) -> float | None:
+        """Verkoopt het plan in dit kwartier? Zo ja: de ruimte boven de
+        verkoopreserve in kWh, anders None (v5.93.3).
+
+        Gemeld 12-10 20:56: "Waarom ontlaadt accu nu? Niet te zien in de
+        planning." Het plan zette 20:45 (40,3 ct) op smart, de sturing
+        verkocht op 2,4 kW via de secundaire laag (top 45%, alleen met ruimte
+        boven de verkoopreserve). Het plan kende alleen de primaire drempel.
+        Nu dezelfde twee lagen als de beslissing:
+
+        - primair (v5.26.4): boven de reserve, niet op een zonarme dag
+          (v5.27.2), en alleen de duurste kwartieren van de dag
+          (`_is_worth_discharging_now`).
+        - secundair (v0.58.0 in de beslissing): dezelfde reserve- en
+          zonarm-poort als de verkooptoets (`_secundaire_laag_toegestaan`),
+          daarna `_is_worth_discharging_at_secondary_tier` met de ruimte.
+        """
+        if netregels["zonarm"].get(start.date(), False):
+            return None
+        # v5.70: de verkoopreserve - zonder wat het volgende blok goedkoper
+        # teruglaadt, net als de verkooptoets.
+        ruimte = soc - self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs)
+        if ruimte <= 0:
+            return None
+        if duur_kwartier:
+            if soc >= duur_kwh * 0.5 and self._is_worth_discharging_now(
+                entries, start, ruimte, ontlaad_w
+            ):
+                return ruimte
+            return None
+        if self._is_worth_discharging_at_secondary_tier(entries, start, ruimte, ontlaad_w):
+            return ruimte
+        return None
+
     def _planning_verkoopreserve_kwh(
         self, moment: datetime, cache: dict, entries, prijs: float
     ) -> float:
@@ -23834,27 +23872,16 @@ class EnergyManagementSystemCoordinator:
             # het net hangt. Dat is geen gewone regel in de tabel maar
             # een waarschuwing.
             tekort = False
-            if duur_kwartier and soc >= duur_kwh * 0.5 and (
-                # v5.26.4: boven de reserve dezelfde toets als de beslissing
-                # (`_is_worth_discharging_now`): de ruimte gaat naar de
-                # duurste kwartieren van de dag. Het plan verkocht op volgorde
-                # van de klok - en had morgen om 16:45 en 17:15 (40-43 ct)
-                # niets meer over voor de piek van 51,2 ct.
-                # v5.70: de verkoopreserve - zonder wat het volgende blok
-                # goedkoper teruglaadt, net als de verkooptoets.
-                soc > self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs)
-                # v5.27.2: niet op een zonarme dag - net als de beslissing.
-                and not netregels["zonarm"].get(start.date(), False)
-                and self._is_worth_discharging_now(
-                    entries, start, soc - self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs), ontlaad_w
-                )
-                # v5.28.4: geen piekverkoop onder de reserve meer - het huis
-                # gaat voor, net als in de beslissing.
-            ):
+            # v5.93.3: de verkooptoets van het plan in een eigen functie, nu
+            # met de secundaire laag erbij - zie `_plan_verkoopruimte`.
+            if (ruimte := self._plan_verkoopruimte(
+                entries, start, prijs, duur_kwartier, soc, duur_kwh,
+                reserve_cache, netregels, ontlaad_w,
+            )) is not None:
                 modus = "manual (verkopen)"
                 # v5.28.4: alleen wat BOVEN de reserve zit, ook binnen een
                 # kwartier - een vol kwartier verkopen zakte er anders onder.
-                uit = min(soc - self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs), duur_kwh)
+                uit = min(ruimte, duur_kwh)
                 soc -= uit
                 net = round(-(uit - verbruik + zon), 3)
             elif uitstellen:

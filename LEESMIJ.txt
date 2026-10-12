@@ -1,3 +1,12 @@
+EMS v5.93.3 - secundaire verkooplaag zichtbaar in het kwartierplan
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De accu verkocht in een kwartier dat net onder de "dure" drempel lag
+  (secundaire laag, top 45% van de dagprijsrange, alleen met ruimte boven de
+  verkoopreserve), terwijl het kwartierplan daar "smart" toonde. Het plan
+  rekent nu met dezelfde twee prijslagen als de sturing.
+
 EMS v5.93.2 - plan en sturing gelijk in het laadblok
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

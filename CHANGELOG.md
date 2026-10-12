@@ -33056,3 +33056,25 @@ zei "Netladen volgt in dit blok (13:15)", maar de accu laadde alleen de zon
   een ander besluit. De werkelijke stand wordt per meting vastgelegd.
 
 Tests: `test_v5932_plan_en_sturing.py` (11).
+
+## v5.93.3 — de secundaire verkooplaag in het kwartierplan
+
+Gemeld 12-10 20:56: "Waarom ontlaadt accu nu? Niet te zien in de planning."
+Om 20:45 (40,3 ct) ontlaadde de accu op 2,4 kW (1,4 kW naar het net), het
+kwartierplan toonde smart met ~0,5 kW voor het huis en de planvolging meldde
+"de sturing koos handmatig in plaats van slim".
+
+- **Oorzaak.** De sturing verkocht via de secundaire laag (top 45% van de
+  dagprijsrange, v0.58.0): de verkooptoets gaf "mag verkopen" (0,02 kWh vrij
+  boven de verkoopreserve; het deel na het blok laadt het blok goedkoper
+  terug, v5.70) en er bleef ruimte over na de duurste kwartieren van de dag.
+  Het plan kende alleen de primaire drempel en zette zulke kwartieren op
+  smart.
+- **Plan gelijk aan de beslissing.** De verkooptoets van het plan staat nu in
+  `_plan_verkoopruimte` en kent beide lagen: primair zoals voorheen, en
+  secundair met dezelfde reserve- en zonarm-poort als de verkooptoets en
+  `_is_worth_discharging_at_secondary_tier`. Het plan verkoopt ook daar alleen
+  wat boven de verkoopreserve zit.
+
+Tests: `test_v5933_plan_secundaire_laag.py` (7), `test_v5272.py`,
+`test_v528_meetlaag.py`, `test_v570_verkoopreserve.py` (bronregels aangepast).
