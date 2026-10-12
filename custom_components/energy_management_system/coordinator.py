@@ -60,7 +60,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
-from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen
+from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan
 from .const import (
     RESERVE_SPRONG_DREMPEL_KWH,
     RESERVE_SPRONGEN_MAX,
@@ -1505,7 +1505,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, []
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -12785,6 +12785,94 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _vooruitplan_invoer(self, now: datetime, na_saldering: bool) -> dict | None:
+        """De kwartieren van de planning, klaar voor `vooruitplan` (v5.90).
+
+        Dezelfde kwartieren, dezelfde startstand en dezelfde grenzen als het
+        plan. Per kwartier de nachtreserve van de beslissing: daaronder mag
+        het optimum niet verkopen. Na de saldering is teruglevering alleen
+        het kale tarief plus de premie waard, minus terugleverkosten.
+        """
+        plan = self.get_quarter_plan(now)
+        capaciteit = self._read_sensor_float(self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR))
+        beschikbaar = self.beschikbare_energie_kwh()
+        slijtage = self.get_wear_cost_overview()
+        if not plan or capaciteit is None or beschikbaar is None or not slijtage.get("beschikbaar"):
+            return None
+        bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
+        rendement = (self.learned_battery_efficiency_percent or float(self.instelling(
+            CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT
+        ))) / 100
+        aftrek = (self._gemeten_belastingdeel_eur_per_kwh() + float(self.instelling(
+            CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH) or 0.0)) if na_saldering else 0.0
+        try:
+            entries = self._get_forecast_entries()
+        except Exception:  # noqa: BLE001
+            entries = []
+        cache: dict = {}
+        kwartieren = []
+        for r in plan:
+            moment = dt_util.parse_datetime(r.get("start") or "")
+            prijs = r["prijs_ct"] / 100
+            kwartieren.append({
+                "verbruik_kwh": r["verbruik_kwh"],
+                "zon_kwh": r["zon_kwh"],
+                "import_eur": prijs,
+                "export_eur": prijs - aftrek + FEEDIN_PREMIUM_EUR_PER_KWH,
+                "reserve_kwh": self._planning_reserve_kwh(moment, cache, entries) if moment else 0.0,
+            })
+        slijtage_eur = slijtage["slijtage_ct_per_kwh"] / 100
+        return {
+            "kwartieren": kwartieren,
+            "start_kwh": min(beschikbaar, bruikbaar),
+            "plan_standen_kwh": [r["soc_kwh"] for r in plan],
+            "bruikbaar_kwh": bruikbaar,
+            "laad_kwh": abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)) / 4000,
+            "ontlaad_kwh": abs(self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)) / 4000,
+            "rendement": rendement,
+            "slijtage_eur": slijtage_eur,
+            # wat er aan het eind nog in zit, bespaart later een gewone kWh
+            "eindwaarde_eur": max(0.0, statistics.median(k["import_eur"] for k in kwartieren) - slijtage_eur),
+        }
+
+    def _meet_vooruitplan(self, now: datetime) -> None:
+        """Een keer per dag: het optimum tegen het plan (v5.90).
+
+        Twee keer dezelfde rekensom - met de huidige waardering en met die
+        van na de saldering. De eerste is wat vooruitplannen MET de
+        nachtreserve oplevert; de tweede wat meebewegen met de nieuwe regels
+        waard is. De geschiedenis zelf zegt of vandaag al gemeten is, zodat
+        een herstart geen tweede meting oplevert (zie v3.72.0).
+        """
+        vandaag = now.date().isoformat()
+        if any(r.get("dag") == vandaag for r in self.vooruitplan_history):
+            return
+        meting = {"dag": vandaag}
+        for sleutel, na in (("nu", False), ("na_saldering", True)):
+            invoer = self._vooruitplan_invoer(now, na)
+            uitkomst = vooruitplan.vergelijk(**invoer) if invoer else {}
+            if not uitkomst.get("beschikbaar"):
+                return
+            meting[sleutel] = uitkomst
+        self.vooruitplan_history = (self.vooruitplan_history + [meting])[-PROEFSTAND_LEDGER_DAYS:]
+
+    @staticmethod
+    def _vooruitplan_opbrengst(reeks: list[dict], sleutel: str) -> dict:
+        """De dagmetingen van `_meet_vooruitplan` als proefstandcijfers."""
+        rijen = [r[sleutel] for r in reeks if sleutel in r]
+        winsten = [r["verschil_eur"] for r in rijen]
+        verschoven = sum(r["verschoven_kwh"] for r in rijen)
+        mediaan = statistics.median(winsten) if winsten else 0.0
+        return {
+            "te_becijferen": True,
+            "bedrag_per_dag_eur": round(mediaan, 3),
+            "bedrag_per_jaar_eur": round(mediaan * 365, 2),
+            "dagen": len(rijen),
+            "aandeel_gunstig_procent": round(100 * sum(1 for w in winsten if w > 0.01) / len(winsten), 1) if winsten else None,
+            "metingen": sum(r["kwartieren_anders"] for r in rijen),
+            "mediaan_voordeel_ct_per_kwh": round(100 * sum(winsten) / verschoven, 1) if verschoven > 0.05 else None,
+        }
+
     def _meet_mpc(self, now: datetime) -> None:
         """Legt een keer per dag de twee verwachtingen naast elkaar
         (v3.68.0).
@@ -13389,30 +13477,24 @@ class EnergyManagementSystemCoordinator:
         }
 
     def _kandidaat_mpc(self) -> dict:
-        """11. Zou vooruitplannen over 24 uur beter zijn? (v3.68.0)
+        """11. Zou vooruitplannen over de horizon beter zijn? (v3.68.0, v5.90)
 
-        Gevraagd: "Het EMS zou niet meer alleen reageren op 'is dit een
-        goedkoop of duur kwartier?', maar op 'welke actie levert over de
-        komende 24 uur het beste resultaat op?'"
+        v5.90, gevraagd: "Vooruitplannen over 24 uur eerst laten rekenen met
+        de nachtreserve, zodat we zien wat het echt oplevert."
 
-        De vier modules uit dat voorstel bestaan alle vier al: het
-        uurprofiel, de PV-voorspelling met bias per bewolkingsvak, de
-        energiebalans in `_build_forecast_timeline`, en de besluitboom.
-        Wat ontbrak was de OPTIMALISATIE over het geheel - de besluitboom
-        kiest per kwartier lokaal, en de reserve is een randvoorwaarde,
-        geen doelfunctie.
+        Tot v5.90 stond hier de winst van de greedy koppeling naast de netto
+        uitkomst van het plan. Dat zijn twee verschillende grootheden: de
+        eerste is alleen arbitragewinst, de tweede is alles wat het huis van
+        het net haalt. Vandaar "+2,50 euro per dag" tegen 0,56 als
+        theoretisch maximum uit de nabeschouwing.
 
-        Deze kandidaat legt de winst van het MPC-plan naast wat de
-        planning zelf verwacht. Het verschil is wat vooruitplannen zou
-        opleveren.
-
-        Let op wat deze meting NIET weet: het MPC-plan mag de accu
-        leegtrekken waar de beslisboom dat weigert, want het beschermt de
-        nachtreserve niet. Een positief verschil is dus deels
-        "optimalisatie" en deels "minder voorzichtig". Dat onderscheid is
-        precies waarom dit meet en niet stuurt.
+        Nu rekent `vooruitplan` beide met dezelfde kwartieren, dezelfde
+        natuurkunde (rendement, slijtage, vermogensgrenzen) en de
+        nachtreserve als harde grens voor verkopen. Het verschil is wat
+        optimaliseren met DEZELFDE voorspelling had opgeleverd. De oude
+        metingen tellen niet mee: die vergeleken appels met peren.
         """
-        reeks = self.mpc_vergelijking_history
+        reeks = [r for r in self.vooruitplan_history if "nu" in r]
         if len(reeks) < MPC_MIN_METINGEN:
             return {
                 "naam": "Vooruitplannen over 24 uur",
@@ -13420,43 +13502,35 @@ class EnergyManagementSystemCoordinator:
                 "waarde": None,
                 "zou_hebben_opgeleverd": {
                     "te_becijferen": False,
-                    "reden": f"{len(reeks)} van {MPC_MIN_METINGEN} dagen gemeten.",
+                    "reden": (
+                        f"{len(reeks)} van {MPC_MIN_METINGEN} dagen gemeten sinds "
+                        "v5.90 - de rekensom met de nachtreserve. De metingen "
+                        "daarvoor vergeleken twee verschillende grootheden en "
+                        "tellen niet mee."
+                    ),
                 },
                 "betrouwbaarheid": (
-                    "Legt de winst van het MPC-plan naast wat de planning "
-                    "zelf verwacht. Sinds v3.68.0 rekent dat plan mét "
-                    "verbruik en zon; daarvoor was het pure "
-                    "prijsarbitrage en dus een bovengrens. Stuurt niets."
+                    "Het beste laadverloop over de bekende prijzen, met de "
+                    "nachtreserve als harde grens voor verkopen, tegen het "
+                    "plan - beide met dezelfde voorspelling, rendement en "
+                    "slijtage. Stuurt niets."
                 ),
             }
-
-        verschillen = [r["verschil_eur"] for r in reeks]
-        gunstig = [v for v in verschillen if v > 0]
-        mediaan = statistics.median(verschillen)
+        opbrengst = self._vooruitplan_opbrengst(reeks, "nu")
+        opbrengst["reden"] = (
+            "Het optimum houdt dezelfde nachtreserve aan als de beslissing, "
+            "dus dit verschil is betere planning en geen minder "
+            "voorzichtigheid. Het kent wel de voorspelling van de hele "
+            "horizon vooraf - in bedrijf haal je hier een deel van."
+        )
         return {
             "naam": "Vooruitplannen over 24 uur",
-            "waarde": f"{mediaan:+.2f} euro per dag",
+            "waarde": f"{opbrengst['bedrag_per_dag_eur']:+.2f} euro per dag",
             "status": RELIABILITY_RELIABLE,
-            "zou_hebben_opgeleverd": {
-                "te_becijferen": True,
-                "bedrag_per_dag_eur": round(mediaan, 3),
-                "bedrag_per_jaar_eur": round(mediaan * 365, 2),
-                "dagen": len(reeks),
-                "aandeel_gunstig_procent": round(
-                    100 * len(gunstig) / len(verschillen), 1
-                ),
-                "reden": (
-                    "Het MPC-plan beschermt de nachtreserve niet, dus een "
-                    "deel van dit verschil is minder voorzichtigheid en "
-                    "geen betere planning. Dat onderscheid valt pas te "
-                    "maken zodra het plan die reserve ook aanhoudt."
-                ),
-            },
+            "zou_hebben_opgeleverd": opbrengst,
             "betrouwbaarheid": (
-                "Het MPC-plan is een greedy koppeling van het goedkoopste "
-                "aan het duurste kwartier - een goede heuristiek, geen "
-                "echte optimalisatie. De uitkomst is dus een ondergrens "
-                "van wat vooruitplannen kan."
+                "Dynamisch programmeren over de laadstand, per kwartier, met "
+                "dezelfde kwartieren als het plan. Geen greedy koppeling meer."
             ),
         }
 
@@ -13757,7 +13831,7 @@ class EnergyManagementSystemCoordinator:
             sum(r["prijs_ct"] for r in plan) / len(plan) / 100
         )
         kaal = max(0.0, gemiddelde_prijs - belastingdeel)
-        return {
+        uit = {
             "naam": "Opbrengst na de saldering",
             "waarde": f"€ {nu_totaal - verschil:.2f} in plaats van € {nu_totaal:.2f}",
             "status": RELIABILITY_INDICATIVE,
@@ -13781,18 +13855,43 @@ class EnergyManagementSystemCoordinator:
                 "waard dan nu. Dat raakt het uitstelplan, de verkooptoets en "
                 "de vraag hoe vol de accu 's avonds moet zijn."
             ),
-            "zou_hebben_opgeleverd": {
+            "zou_hebben_opgeleverd": self._saldering_opbrengst(verschil),
+        }
+        if uit["zou_hebben_opgeleverd"].get("te_becijferen"):
+            uit["status"] = RELIABILITY_RELIABLE
+        return uit
+
+    def _saldering_opbrengst(self, kosten_vandaag: float) -> dict:
+        """Wat meebewegen met de nieuwe regels oplevert (v5.90).
+
+        Gevraagd: "Opbrengst na de saldering als eerste klaarmaken, want die
+        wordt per 1 januari echt belangrijk."
+
+        Elke dag rekent `_meet_vooruitplan` het plan door onder de waardering
+        van na de saldering, en zoekt met dezelfde nachtreserve het beste
+        laadverloop onder die waardering. Het verschil is wat de sturing
+        oplevert als ze meebeweegt: minder verkopen tegen het kale tarief,
+        meer bewaren voor eigen gebruik in dure kwartieren.
+        """
+        reeks = [r for r in self.vooruitplan_history if "na_saldering" in r]
+        if len(reeks) < MPC_MIN_METINGEN:
+            return {
                 "te_becijferen": False,
                 "reden": (
-                    f"Het bedrag hierboven is wat de nieuwe regels KOSTEN "
-                    f"(€ {verschil:.2f} vandaag), niet wat sturen zou "
-                    "opleveren. Dat laatste vraagt om het plan opnieuw door "
-                    "te rekenen onder de nieuwe waardering, en dat is de "
-                    "volgende stap."
+                    f"De nieuwe regels kosten vandaag € {kosten_vandaag:.2f} als de "
+                    f"sturing niet meebeweegt. Wat meebewegen oplevert: "
+                    f"{len(reeks)} van {MPC_MIN_METINGEN} dagen doorgerekend."
                 ),
-            },
-        }
-
+            }
+        opbrengst = self._vooruitplan_opbrengst(reeks, "na_saldering")
+        opbrengst["reden"] = (
+            "Het beste laadverloop onder de waardering van na de saldering, "
+            "met dezelfde nachtreserve, tegen het plan van vandaag onder "
+            "diezelfde waardering. De regels voor na de saldering staan al "
+            "klaar en gaan op 1 januari vanzelf aan; dit getal zegt hoeveel "
+            "er met meebewegen te halen is."
+        )
+        return opbrengst
     def _gemeten_belastingdeel_eur_per_kwh(self) -> float:
         """Energiebelasting plus BTW per kWh, gemeten (v1.75.0).
 
@@ -44172,6 +44271,8 @@ class EnergyManagementSystemCoordinator:
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
+            # v5.90: optimum MET nachtreserve tegen het plan, nu en na de saldering.
+            ("vooruitplan", lambda: self._meet_vooruitplan(now)),
             # v3.60.0: wat het kost dat de accu bijspringt in een
             # goedkoop kwartier.
             (

@@ -32890,3 +32890,30 @@ Bewust geen kwartierregels met huisverbruik in de export: de privacykeuze
 van v5.28 (uit verbruik per kwartier valt aanwezigheid af te leiden) blijft.
 
 Tests: `test_v589_dagdelen.py` (3).
+
+## v5.90.0 — vooruitplannen met de nachtreserve, en de saldering doorgerekend
+
+Twee proefstandkandidaten klaargemaakt (gevraagd 12-10).
+
+**Vooruitplannen over 24 uur** rekent nu eerlijk. De oude vergelijking legde
+de winst van een greedy koppeling (alleen arbitrage, zonder tijdvolgorde en
+zonder reserve) naast de netto uitkomst van het plan (inclusief alle
+netstroom van het huis) — twee verschillende grootheden, vandaar "+2,50 euro
+per dag" tegen 0,56 als theoretisch maximum. Nieuw: `vooruitplan.py` zoekt met
+dynamisch programmeren het beste laadverloop over dezelfde kwartieren als het
+plan, met rendement, slijtage, vermogensgrenzen en de nachtreserve als harde
+grens voor verkopen uit de accu. Plan en optimum worden met dezelfde rekensom
+gewaardeerd. De oude metingen tellen niet meer mee; de kandidaat meet vanaf
+vandaag opnieuw (14 dagen).
+
+**Opbrengst na de saldering** wordt nu becijferd: elke dag dezelfde rekensom
+onder de waardering van na de saldering (kaal tarief plus premie, min
+terugleverkosten). Het verschil is wat meebewegen met de nieuwe regels
+oplevert. Na 14 dagen staan bedrag per dag, aandeel gunstig, metingen en
+voordeel per kWh op de proefstand. De regels voor na de saldering zelf staan
+al klaar en gaan op 1 januari vanzelf aan.
+
+Eén meting per dag (`vooruitplan_history`, overleeft een herstart). Stuurt
+niets.
+
+Tests: `test_v590_vooruitplan.py` (14).

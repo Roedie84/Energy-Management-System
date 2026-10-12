@@ -136,9 +136,14 @@ def test_a_deficit_shows_as_a_negative_balance(make_coordinator, hass):
 # --- de kandidaat ----------------------------------------------------
 
 
+def _meting(verschil):
+    uitkomst = {"verschil_eur": verschil, "verschoven_kwh": 1.0, "kwartieren_anders": 4}
+    return {"dag": "x", "nu": uitkomst, "na_saldering": uitkomst}
+
+
 def test_the_candidate_waits_for_enough_days(make_coordinator, hass):
     c = make_coordinator({})
-    c.mpc_vergelijking_history = [{"verschil_eur": 0.5}] * 3
+    c.vooruitplan_history = [_meting(0.5)] * 3
 
     kandidaat = c._kandidaat_mpc()
 
@@ -150,9 +155,7 @@ def test_the_candidate_reports_the_median_difference(
     make_coordinator, hass
 ):
     c = make_coordinator({})
-    c.mpc_vergelijking_history = [
-        {"verschil_eur": v} for v in ([0.40] * 12 + [-0.10] * 4)
-    ]
+    c.vooruitplan_history = [_meting(v) for v in ([0.40] * 12 + [-0.10] * 4)]
 
     opbrengst = c._kandidaat_mpc()["zou_hebben_opgeleverd"]
 
@@ -163,19 +166,26 @@ def test_the_candidate_reports_the_median_difference(
 def test_the_candidate_admits_what_it_does_not_know(
     make_coordinator, hass
 ):
-    """Het MPC-plan beschermt de nachtreserve niet, dus een deel van het
-
-    verschil is minder voorzichtigheid en geen betere planning. Dat hoort
-    erbij te staan, anders leest het als gratis winst.
+    """v5.90: het optimum houdt de nachtreserve aan, maar kent de
+    voorspelling van de hele horizon vooraf. Dat hoort erbij te staan,
+    anders leest het als gratis winst.
     """
     c = make_coordinator({})
-    c.mpc_vergelijking_history = [
-        {"verschil_eur": 0.4} for _ in range(MPC_MIN_METINGEN)
-    ]
+    c.vooruitplan_history = [_meting(0.4) for _ in range(MPC_MIN_METINGEN)]
 
     reden = c._kandidaat_mpc()["zou_hebben_opgeleverd"]["reden"]
 
     assert "nachtreserve" in reden
+    assert "vooraf" in reden
+
+
+def test_old_greedy_measurements_no_longer_count(make_coordinator, hass):
+    """v5.90: de greedy metingen vergeleken arbitragewinst met de netto
+    uitkomst van het plan - appels met peren."""
+    c = make_coordinator({})
+    c.mpc_vergelijking_history = [{"verschil_eur": 2.5}] * 30
+
+    assert c._kandidaat_mpc()["status"] == "onvoldoende_data"
 
 
 def test_it_is_measured_once_a_day(make_coordinator, hass):

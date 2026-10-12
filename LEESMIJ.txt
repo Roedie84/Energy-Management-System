@@ -1,3 +1,12 @@
+EMS v5.90.0 - vooruitplannen met de nachtreserve, saldering doorgerekend
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Proefstand "Vooruitplannen over 24 uur" rekent nu met de nachtreserve en
+  vergelijkt eerlijk met het plan (meet opnieuw, 14 dagen).
+- Proefstand "Opbrengst na de saldering" rekent elke dag door wat meebewegen
+  met de regels van 2027 oplevert.
+
 EMS v5.89.0 - nabeschouwing per dagdeel
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
