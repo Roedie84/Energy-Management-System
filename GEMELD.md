@@ -23,3 +23,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 12-10 15:51 | dashboard tablet oud + plotly-resource/hacs opruimen
 12-10 16:51 | buienradar-sensoren unknown (integratie herladen)
 12-10 20:51 | luchtreiniger turbo bij koken (automation)
+12-10 23:51 | gold scalper afgewezen orders toch open, limiet overschreden, afstemming broker-posities
+12-10 23:51 | gold scalper opzet per positie als attribuut (L-GS-019)
