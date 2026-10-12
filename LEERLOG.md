@@ -339,3 +339,14 @@ laatste ronde: 12-10 03:40, gemeten t/m 12-10 03:55
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde; meetfout niet acuut, sturing raakt hij niet; vandaag al v5.87 + v5.88).
 
 laatste ronde: 12-10 07:40, gemeten t/m 12-10 07:42
+
+## 12-10 11:40 · tussenronde
+- 7 HA-herstarts (08:26-10:53) voor v5.89-v5.92 (andere sessie); actief **v5.92.0**. 0 EMS-fouten (1× trage logboeksensor 2,0 s, 09:40). Solcast 429 sinds 10:54 (extern; laatste verversing 07:52).
+- 07:40-11:45: import 0,099 kWh, export 0,119 kWh (regelruis); accu laadt in het blok vanaf 11:30 (57 %, 4,06 kWh beschikbaar). Geen echte verkoopkwartieren → harde regel niet geraakt.
+- L-EMS-022: 10:45 opnieuw valse vlag (−1,01 kWh bij 14 Wh export) → 9 van 9 vals.
+- PV t/m 11:45 2,80 kWh tegen Solcast 2,58 voor dezelfde uren (+8,5 %, intraday, verouderd door 429) → vandaag tot nu géén overschatting (H-EMS-2 tegenvoorbeeld, n=1 halve dag).
+- Nieuw meetbaar (v5.91 planvolging): 3 kwartieren, 66,7 % volgens plan. Classificatiefout gevonden: 11:15 oorzaak "accu" met status "verklaard" → **L-EMS-023** (zelf bouwen, dagafsluiting).
+- H-EMS-10: `reserve_sprongen` 0 (ochtend); avond 12-10 blijft de toets.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde; niets acuut; vandaag al v5.87-v5.92).
+
+laatste ronde: 12-10 11:40, gemeten t/m 12-10 11:45

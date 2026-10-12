@@ -168,3 +168,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing (12-10 07:40): `marge_bij_export_min_kwh` neemt de marge van elke ronde met net ≤ −100 W. Eén regelpiek of een herstart (12-10 06:15, accu kort offline) is genoeg. 11-10/12-10: 8 kwartieren met negatieve marge (tot −1,51 kWh) bij 6-18 Wh teruglevering per kwartier (P1-teller) = 0 echte verkoop; de 2 echte verkoopkwartieren (230 en 114 Wh) stonden goed (+0,47 / +0,035). Een lezer van `verkoopkwartieren` ziet nu 8 valse "onder de reserve verkocht".
 - Bouw: per kwartier `export_kwh` (P1-tellerverschil of geïntegreerd net_w) in het dagverloop; de marge telt pas als het kwartier ≥ 25 Wh (= 100 W gemiddeld) terugleverde, of als ≥ 2 opeenvolgende rondes ≤ −100 W. `verkoopkwartieren` toont `export_kwh`. Daarnaast `netarbitrage_eur` (bestaat al in de nabeschouwing) in `nabeschouwing_7d`, zodat "gemist" op netlaaddagen te duiden is (11-10: −0,26).
 - Meten na bouw: 0 kwartieren met negatieve marge bij < 25 Wh export; echte verkoopkwartieren ongewijzigd.
+- 12-10 11:40: 9e valse vlag: 12-10 10:45 marge_bij_export_min −1,01 bij 14 Wh export (P1) → 9 van 9 negatieve vlaggen vals.
+
+## L-EMS-023 · planvolging: oorzaak en status spreken elkaar tegen (classificatie)
+- Status: **gepland** (zelf bouwen: rapportage/classificatie, stuurt niets) — bouwen in de dagafsluiting van 13-10, samen met L-EMS-022.
+- Onderbouwing (12-10 11:40, v5.91 `planvolging` op `sensor.…_kwartierplanning`): kwartier 11:15 kreeg `oorzaak` "accu" met `status` "verklaard" (gepland −1322 W, gemeten −1477 W). In `planvolging.beoordeel()` is `oorzaak` het grootste van zon/verbruik/rest, terwijl `status` alleen naar de rest (≥ 150 W) kijkt. Gevolg: "verklaard" met de tekst "de accu wijkt zelf … af", of omgekeerd "afwijking accu" met oorzaak zon/verbruik. De dagtelling `oorzaken` telt zo verkeerd.
+- Bouw: oorzaak volgt de status — "afwijking accu" → oorzaak accu; "verklaard" → grootste van zon/verbruik. Test met beide randgevallen.
+- Meten na bouw: 0 kwartieren met oorzaak accu én status verklaard (of omgekeerd) in `laatste_kwartieren`/dagsamenvatting.
