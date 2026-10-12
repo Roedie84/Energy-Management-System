@@ -1505,7 +1505,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, []
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, [], []
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -23562,10 +23562,23 @@ class EnergyManagementSystemCoordinator:
         vorig = self._planvolging or {}
         if vorig.get("begin") != kwartier.isoformat():
             oordeel = planvolging.sluit_kwartier(vorig.get("gepland"), vorig.get("monsters") or [])
+            # v5.93.1: na een herstart de beoordeelde kwartieren van vandaag
+            # terugzetten (stand, oorzaak en accuverschil; geen huisverbruik).
+            if not self._planvolging_kwartieren and self.planvolging_vandaag:
+                self._planvolging_kwartieren = [dict(k) for k in self.planvolging_vandaag]
             if oordeel:
                 self._planvolging_kwartieren.append({**oordeel, "dag": vorig["begin"][:10]})
             self._planvolging_dagwissel(kwartier.date().isoformat())
+            self.planvolging_vandaag = [
+                {k: r.get(k) for k in ("dag", "van", "status", "oorzaak", "verschil_w")}
+                for r in self._planvolging_kwartieren
+            ]
             self._planvolging = {"begin": kwartier.isoformat(), "gepland": self._planvolging_gepland(now, kwartier), "monsters": []}
+        elif self._planvolging.get("gepland") is None:
+            # v5.93.1: direct na een herstart is het kwartierplan er soms nog
+            # niet; dan bleef de planvolging het hele kwartier leeg. Elke
+            # ronde opnieuw proberen tot het plan er is.
+            self._planvolging["gepland"] = self._planvolging_gepland(now, kwartier)
         meting = {
             "accu_w": self._read_corrected_battery_power(),
             "zon_w": self._live_pv_w(),
@@ -39680,6 +39693,109 @@ class EnergyManagementSystemCoordinator:
             self.internal_failures["zelfcontroles"] = f"{type(fout).__name__}: {fout}"
         return uit
 
+    def _meld_module_temperatuur(
+        self, spreiding: dict, aandachtspunten: list, informatief: list
+    ) -> None:
+        """Het temperatuurverschil tussen accumodules duiden en melden
+        (v1.15.8, v1.16.4; v5.93.1 los uit get_diagnostic_summary)."""
+        temp_spreiding = spreiding.get("temperatuur_c")
+        if (
+            temp_spreiding is not None
+            and temp_spreiding >= BATTERY_MODULE_TEMPERATURE_SPREAD_ATTENTION_C
+        ):
+            # v1.15.8: de melding trok één conclusie terwijl er twee
+            # even goede verklaringen zijn. Bij deze installatie is de
+            # warmste module ook de zwakste (32 °C bij 542 W tegen 27 °C
+            # bij 602 W), wat inderdaad bij hogere inwendige weerstand
+            # past. Maar een module die bovenaan de stapel of tegen een
+            # muur staat, wordt óók warmer - en dát kan de integratie
+            # niet zien.
+            #
+            # Het VERMOGEN erbij zetten maakt het onderscheid wél
+            # mogelijk: levert de warmste module ook minder, dan wijst
+            # het op de accu; levert hij evenveel, dan eerder op de
+            # plaatsing.
+            warmste = max(
+                (m for m in self.battery_module_live
+                 if m.get("temperatuur_c") is not None),
+                key=lambda m: m["temperatuur_c"],
+                default=None,
+            )
+            vermogens = [
+                m["vermogen_w"] for m in self.battery_module_live
+                if m.get("vermogen_w") is not None
+            ]
+            duiding = ""
+            # v5.93.1: alleen een aandachtspunt als het op de module zelf
+            # wijst (warmste en minste vermogen, verschil groeit met de
+            # belasting) of als de warmste module zelf te warm wordt.
+            # Gemeld 12-10: "Accu temp is normaal, deze accu zit direct
+            # onder de omvormer" - dan is de plaatsing de verklaring en
+            # hoort het niet op "Let op".
+            op_de_module = False
+            if warmste and len(vermogens) > 1:
+                gemiddeld = sum(vermogens) / len(vermogens)
+                eigen = warmste.get("vermogen_w")
+                if eigen is not None and eigen < gemiddeld:
+                    # v1.16.4, gemeld: "Ik vermoed dat de accu 1 direct
+                    # onder de omvormer zit."
+                    #
+                    # Dat is een derde verklaring die ik in v1.15.8 niet
+                    # meenam, en ze keert het beeld om: een warmere cel
+                    # heeft juist LAGERE inwendige weerstand, dus minder
+                    # vermogen bij hogere temperatuur past eerder bij een
+                    # BMS dat terugregelt om de cel te beschermen. Dan is
+                    # de warmte de OORZAAK van het lagere vermogen, niet
+                    # het gevolg van een zwakke module.
+                    #
+                    # Het onderscheid zit in het RUSTVERSCHIL. Externe
+                    # warmte werkt dag en nacht; eigen verlies alleen
+                    # onder belasting. Groeit het verschil met de
+                    # belasting, dan ligt het aan de module.
+                    rust = self._module_temperature_spread_at_rest()
+                    if rust is not None and rust >= temp_spreiding * 0.6:
+                        duiding = (
+                            f" Module {warmste['module']} is de warmste én "
+                            f"levert het minste ({eigen:.0f} W tegen "
+                            f"{gemiddeld:.0f} W gemiddeld). In rust "
+                            f"verschillen ze al {rust:.1f} °C, dus dit komt "
+                            "waarschijnlijk van buiten - staat er iets warms "
+                            "boven of naast, zoals de omvormer?"
+                        )
+                    else:
+                        op_de_module = True
+                        duiding = (
+                            f" Module {warmste['module']} is de warmste én "
+                            f"levert het minste ({eigen:.0f} W tegen "
+                            f"{gemiddeld:.0f} W gemiddeld)"
+                            + (
+                                f", terwijl ze in rust maar {rust:.1f} °C "
+                                "verschillen"
+                                if rust is not None
+                                else ""
+                            )
+                            + " - dat past bij een hogere inwendige "
+                            "weerstand."
+                        )
+                else:
+                    duiding = (
+                        f" Module {warmste['module']} is de warmste maar "
+                        "levert niet minder - dan ligt het eerder aan de "
+                        "plaatsing (bovenaan de stapel, tegen een muur) "
+                        "dan aan de module zelf."
+                    )
+            te_warm = bool(
+                warmste
+                and warmste["temperatuur_c"] >= BATTERY_MODULE_TEMPERATURE_ATTENTION_C
+            )
+            # Zonder vermogens per module is er geen duiding: dan blijft het
+            # een aandachtspunt (niet te zeggen of het de plaatsing is).
+            zonder_duiding = not (warmste and len(vermogens) > 1)
+            (aandachtspunten if op_de_module or te_warm or zonder_duiding else informatief).append(
+                f"Accumodules verschillen {temp_spreiding:.1f} °C in "
+                f"celtemperatuur.{duiding}"
+            )
+
     def get_diagnostic_summary(self) -> dict:
         """Snelle gezondheidscheck-samenvatting (v0.63.91, gevraagd:
         "zijn er nog zaken om de integratie te verbeteren, bijvoorbeeld
@@ -39857,88 +39973,7 @@ class EnergyManagementSystemCoordinator:
                 )
 
         spreiding = self.battery_module_spread or {}
-        temp_spreiding = spreiding.get("temperatuur_c")
-        if (
-            temp_spreiding is not None
-            and temp_spreiding >= BATTERY_MODULE_TEMPERATURE_SPREAD_ATTENTION_C
-        ):
-            # v1.15.8: de melding trok één conclusie terwijl er twee
-            # even goede verklaringen zijn. Bij deze installatie is de
-            # warmste module ook de zwakste (32 °C bij 542 W tegen 27 °C
-            # bij 602 W), wat inderdaad bij hogere inwendige weerstand
-            # past. Maar een module die bovenaan de stapel of tegen een
-            # muur staat, wordt óók warmer - en dát kan de integratie
-            # niet zien.
-            #
-            # Het VERMOGEN erbij zetten maakt het onderscheid wél
-            # mogelijk: levert de warmste module ook minder, dan wijst
-            # het op de accu; levert hij evenveel, dan eerder op de
-            # plaatsing.
-            warmste = max(
-                (m for m in self.battery_module_live
-                 if m.get("temperatuur_c") is not None),
-                key=lambda m: m["temperatuur_c"],
-                default=None,
-            )
-            vermogens = [
-                m["vermogen_w"] for m in self.battery_module_live
-                if m.get("vermogen_w") is not None
-            ]
-            duiding = ""
-            if warmste and len(vermogens) > 1:
-                gemiddeld = sum(vermogens) / len(vermogens)
-                eigen = warmste.get("vermogen_w")
-                if eigen is not None and eigen < gemiddeld:
-                    # v1.16.4, gemeld: "Ik vermoed dat de accu 1 direct
-                    # onder de omvormer zit."
-                    #
-                    # Dat is een derde verklaring die ik in v1.15.8 niet
-                    # meenam, en ze keert het beeld om: een warmere cel
-                    # heeft juist LAGERE inwendige weerstand, dus minder
-                    # vermogen bij hogere temperatuur past eerder bij een
-                    # BMS dat terugregelt om de cel te beschermen. Dan is
-                    # de warmte de OORZAAK van het lagere vermogen, niet
-                    # het gevolg van een zwakke module.
-                    #
-                    # Het onderscheid zit in het RUSTVERSCHIL. Externe
-                    # warmte werkt dag en nacht; eigen verlies alleen
-                    # onder belasting. Groeit het verschil met de
-                    # belasting, dan ligt het aan de module.
-                    rust = self._module_temperature_spread_at_rest()
-                    if rust is not None and rust >= temp_spreiding * 0.6:
-                        duiding = (
-                            f" Module {warmste['module']} is de warmste én "
-                            f"levert het minste ({eigen:.0f} W tegen "
-                            f"{gemiddeld:.0f} W gemiddeld). In rust "
-                            f"verschillen ze al {rust:.1f} °C, dus dit komt "
-                            "waarschijnlijk van buiten - staat er iets warms "
-                            "boven of naast, zoals de omvormer?"
-                        )
-                    else:
-                        duiding = (
-                            f" Module {warmste['module']} is de warmste én "
-                            f"levert het minste ({eigen:.0f} W tegen "
-                            f"{gemiddeld:.0f} W gemiddeld)"
-                            + (
-                                f", terwijl ze in rust maar {rust:.1f} °C "
-                                "verschillen"
-                                if rust is not None
-                                else ""
-                            )
-                            + " - dat past bij een hogere inwendige "
-                            "weerstand."
-                        )
-                else:
-                    duiding = (
-                        f" Module {warmste['module']} is de warmste maar "
-                        "levert niet minder - dan ligt het eerder aan de "
-                        "plaatsing (bovenaan de stapel, tegen een muur) "
-                        "dan aan de module zelf."
-                    )
-            aandachtspunten.append(
-                f"Accumodules verschillen {temp_spreiding:.1f} °C in "
-                f"celtemperatuur.{duiding}"
-            )
+        self._meld_module_temperatuur(spreiding, aandachtspunten, informatief)
         soc_spreiding = spreiding.get("soc_percent")
         if (
             soc_spreiding is not None
@@ -46902,6 +46937,10 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001 - alleen weergave
             return {"beschikbaar": False}
         uren = list(gebruik.get("uren") or [])
+        try:
+            basis = airco_ritme.verwachting_basis(self._airco_ritme(), now, tot)
+        except Exception:  # noqa: BLE001 - alleen weergave
+            basis = {}
         reserve_som = (ochtend.get("extra_kwh") or 0.0) + (gebruik.get("extra_kwh") or 0.0)
         verwacht_som = (ochtend.get("verwacht_kwh") or 0.0) + (gebruik.get("verwacht_kwh") or 0.0)
         loopt = any(u.get("zeker") for u in uren)
@@ -46926,6 +46965,9 @@ class EnergyManagementSystemCoordinator:
             "verwacht_kwh": round(verwacht_som, 2),
             "ochtend_kwh": round(ochtend.get("extra_kwh") or 0.0, 2),
             "uren": uren,
+            # v5.93.1: waar dat op rust
+            "basis": basis,
+            "knop_automaat": bool(self.airco_automaat_aan),
         }
 
     def _airco_vooruitblik(self) -> dict:

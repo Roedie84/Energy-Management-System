@@ -3478,6 +3478,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "mpc_vergelijking_history": {"type": "plain"},
     "vooruitplan_history": {"type": "plain"},
     "planvolging_dagen": {"type": "plain"},
+    # v5.93.1: de beoordeelde kwartieren van vandaag over een herstart -
+    # dag, tijd, stand, oorzaak en accuverschil; geen huisverbruik (v5.28).
+    "planvolging_vandaag": {"type": "plain"},
     "handmatige_ingrepen": {"type": "plain"},
     "moduswissels": {"type": "plain"},
     "bijkoop_history": {"type": "plain"},

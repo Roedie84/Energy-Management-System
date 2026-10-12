@@ -32998,3 +32998,36 @@ terwijl er 3,72 kWh beschikbaar was tegen 1,30 nodig.
   `sensor.…_airco_besluit`.
 
 Tests: `test_v5930_cockpit_blok_airco.py` (14).
+
+## v5.93.1 — planvolging over een herstart, temperatuurmelding accumodules
+
+Gemeld 12-10 12:43 met een schermafdruk van de Energiestroom-kaart: na de
+herstart van 12:38 was het blok met gepland en gemeten accuvermogen weg tot
+12:45. En om 12:45: "Accu temp is normaal, deze accu zit direct onder de
+omvormer" bij de melding "Accumodules verschillen 5.0 °C in celtemperatuur".
+
+- **Planvolging direct na een herstart.** Bij de eerste ronde was het
+  kwartierplan er nog niet; het geplande vermogen bleef dan leeg tot de
+  volgende kwartierwissel. Nu probeert elke ronde het opnieuw tot het plan
+  er is.
+- **Kwartieren van vandaag over een herstart.** Ze gingen bij elke herstart
+  verloren, waardoor "Vandaag x% volgens plan" opnieuw begon. Nu bewaard in
+  `planvolging_vandaag`: dag, tijd, stand, oorzaak en het verschil in
+  accuvermogen. Huisverbruik en zon blijven vluchtig (privacykeuze v5.28).
+- **Temperatuurverschil accumodules.** Levert de warmste module niet minder
+  (plaatsing, zoals module 1 onder de omvormer), of is het verschil in rust
+  al even groot (warmte van buiten), dan staat het onder "informatief" en
+  niet meer als aandachtspunt ("Let op"). Een aandachtspunt blijft het als
+  de warmste module ook minder levert terwijl ze in rust weinig verschillen
+  (wijst op de module), als de warmste module 40 °C of meer haalt, of als er
+  geen vermogens per module zijn om het te duiden.
+
+- **Airco: waar "niet verwacht" op rust** (gevraagd 12:54). De regel Airco
+  op Huis en apparaten noemt nu de basis: over hoeveel dagen het eigen
+  uurverbruik van de airco gemeten is en hoe vaak hij in de uren tot het
+  volgende blok aan was ("9 dagen gemeten, in deze uren nooit aan"), welke
+  uren nog te weinig metingen hebben (minder dan 3 dagen tellen niet mee),
+  en of de knop Airco automaat uit staat (dan geen ochtendverwarming in de
+  verwachting). Attribuut `verwachting.basis` op `sensor.…_airco_besluit`.
+
+Tests: `test_v5931_planvolging_herstart.py` (8), `test_module_temperature_warning.py` (+1, aangepast), `test_battery_module_health.py` (aangepast).

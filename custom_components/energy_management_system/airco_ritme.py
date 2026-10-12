@@ -595,6 +595,44 @@ def gebruik_kwh(
     }
 
 
+def verwachting_basis(ritme: dict, van: datetime, tot: datetime) -> dict:
+    """Waar "verwacht of niet" op rust (v5.93.1, gevraagd 12-10: "Airco niet
+    verwacht... waar op gebaseerd?").
+
+    Per klokuur in het venster het eigen uurverbruik van de airco: over
+    hoeveel dagen er gemeten is, en op hoeveel daarvan de airco in dat uur
+    draaide (minstens AAN_UUR_KWH). Uren met minder dan MIN_DAGEN_UUR dagen
+    tellen niet mee in de verwachting.
+    """
+    reeksen = ritme.get("uurverbruik") or {}
+    uren = met_data = aan_uren = 0
+    dagen = 0
+    meeste_aan = 0
+    uur = van.replace(minute=0, second=0, microsecond=0)
+    for _ in range(72):
+        if uur >= tot:
+            break
+        reeks = reeksen.get(str(uur.hour)) or []
+        uren += 1
+        dagen = max(dagen, len(reeks))
+        if len(reeks) >= MIN_DAGEN_UUR:
+            met_data += 1
+            aan = sum(1 for v in reeks if v >= AAN_UUR_KWH)
+            aan_uren += 1 if aan else 0
+            meeste_aan = max(meeste_aan, aan)
+        uur += timedelta(hours=1)
+    if not met_data:
+        tekst = "nog te weinig gemeten (minder dan 3 dagen per uur)"
+    elif meeste_aan == 0:
+        tekst = f"{dagen} dagen gemeten, in deze uren nooit aan"
+    else:
+        tekst = f"{dagen} dagen gemeten, hooguit {meeste_aan}x aan in hetzelfde uur"
+    if met_data and met_data < uren:
+        tekst += f"; {uren - met_data} van {uren} uur nog te weinig gemeten"
+    return {"dagen": dagen, "uren": uren, "uren_met_data": met_data,
+            "uren_met_gebruik": aan_uren, "meeste_dagen_aan": meeste_aan, "tekst": tekst}
+
+
 def minuten_uit_klok(waarde) -> int | None:
     """'22:00' of '22:00:00' -> 1320; leeg of onzin -> None (v5.67.1)."""
     try:

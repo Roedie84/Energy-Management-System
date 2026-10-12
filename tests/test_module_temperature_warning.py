@@ -25,11 +25,17 @@ def _met_modules(make_coordinator, modules, spreiding):
 
 
 def _melding(c):
+    # v5.93.1: door de plaatsing verklaard staat onder "informatief"
+    samenvatting = c.get_diagnostic_summary()
     return next(
         p
-        for p in c.get_diagnostic_summary()["aandachtspunten"]
+        for p in samenvatting["aandachtspunten"] + samenvatting["informatief"]
         if "celtemperatuur" in p
     )
+
+
+def _is_aandachtspunt(c):
+    return any("celtemperatuur" in p for p in c.get_diagnostic_summary()["aandachtspunten"])
 
 
 # --- het gerapporteerde geval ----------------------------------------
@@ -70,6 +76,27 @@ def test_warmest_but_not_weakest_points_at_placement(make_coordinator, hass):
 
     assert "plaatsing" in melding
     assert "inwendige weerstand" not in melding
+    # v5.93.1 (12-10: "deze accu zit direct onder de omvormer"): door de
+    # plaatsing verklaard is geen "Let op" meer
+    assert not _is_aandachtspunt(c)
+
+
+def test_te_warme_module_blijft_aandachtspunt(make_coordinator, hass):
+    """Ook als de plaatsing het verklaart: boven de grens blijft het tellen."""
+    from custom_components.energy_management_system.const import (
+        BATTERY_MODULE_TEMPERATURE_ATTENTION_C,
+    )
+
+    heet = BATTERY_MODULE_TEMPERATURE_ATTENTION_C + 1
+    c = _met_modules(
+        make_coordinator,
+        [
+            {"module": 1, "temperatuur_c": heet, "vermogen_w": 620.0},
+            {"module": 2, "temperatuur_c": heet - 5, "vermogen_w": 542.0},
+        ],
+        5.0,
+    )
+    assert _is_aandachtspunt(c)
 
 
 # --- grenzen ---------------------------------------------------------

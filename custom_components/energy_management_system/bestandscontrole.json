@@ -1,6 +1,6 @@
 {
   "__init__.py": "5a8700a3968d4d3f",
-  "airco_ritme.py": "46dc801e5155cc06",
+  "airco_ritme.py": "f6b1ff34d5126e4f",
   "airco_sturing.py": "3e4af52be7c19a26",
   "brand/icon.png": "07df281da7da0080",
   "brand/icon@2x.png": "0d2e1d114f877501",
@@ -8,8 +8,8 @@
   "cockpit_bronnen.py": "7c2974a6ecca4287",
   "cockpit_frontend.py": "6db90436952bb889",
   "config_flow.py": "b633ea7637fa4a16",
-  "const.py": "2b315e08b50fd434",
-  "coordinator.py": "a0da603f16dd304f",
+  "const.py": "2e655c04a1c8d4f9",
+  "coordinator.py": "c194d75539e51c8a",
   "dashboard_template.yaml": "737ccaae5e59b20d",
   "diagnostics.py": "792d73e4adc12f26",
   "grootverbruikers.py": "c1364b66c908464b",
@@ -17,7 +17,7 @@
   "klimaat_zon.py": "0bb96b0caec895ec",
   "kwartierenergie.py": "f1394966051ad8d5",
   "luchtreiniger_lokaal.py": "26752fea69813a33",
-  "manifest.json": "eaccf40c26475ab2",
+  "manifest.json": "0f51557e1f719be9",
   "meetlaag.py": "624d6d7ddac60d50",
   "meetlog.py": "59b3129b541a19ac",
   "nabeschouwing.py": "37f659720466b8b5",
@@ -39,7 +39,7 @@
   "translations/nl.json": "1b7542afc5a3c5d9",
   "tuya_lokaal.py": "e1c2c8b25c5f7ce8",
   "vooruitplan.py": "cbdec7f812bd9029",
-  "www/ems-cockpit.js": "45587963214c8bd1",
+  "www/ems-cockpit.js": "fb4be52175970907",
   "zendure_lokaal.py": "9e738ca68a4b14ca",
   "zendure_status.py": "6cd688d4695f6dff"
 }

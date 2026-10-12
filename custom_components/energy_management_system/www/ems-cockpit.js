@@ -1708,7 +1708,10 @@ class EmsCockpitCard extends HTMLElement {
       if (vw.beschikbaar) {
         const res = num(vw.in_reserve_kwh);
         uit.push(
-          regel("airco", "Airco", `${esc(vw.tekst || "")}${vw.tot_tekst ? `${PUNT}tot ${esc(vw.tot_tekst)}` : ""}`,
+          regel("airco", "Airco",
+            // v5.93.1: tot wanneer, en waar de verwachting op rust
+            `tot ${esc(vw.tot_tekst || "")}${vw.basis && vw.basis.tekst ? `${PUNT}${esc(vw.basis.tekst)}` : ""}` +
+              (vw.knop_automaat === false ? `${PUNT}knop automaat uit` : ""),
             res != null && res > 0 ? `${fmt(res, 2)}<small>kWh</small> <span class="leeg">in reserve</span>` : vw.verwacht ? "verwacht" : "niet verwacht",
             vw.verwacht ? "var(--oranje)" : "")
         );

@@ -1,3 +1,16 @@
+EMS v5.93.1 - planvolging over een herstart, temperatuurmelding, airco-basis
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het blok gepland/gemeten op de Energiestroom-kaart bleef na een herstart
+  leeg tot het volgende kwartier; nu verschijnt het zodra het plan er is.
+- De beoordeelde kwartieren van vandaag blijven over een herstart bewaard.
+- Temperatuurverschil tussen accumodules dat door de plaatsing komt (de
+  warmste module levert niet minder) is geen "Let op" meer, alleen nog
+  informatief.
+- Airco-regel: waar "verwacht/niet verwacht" op rust (dagen gemeten, hoe
+  vaak aan in die uren, knop automaat).
+
 EMS v5.93.0 - cockpit tijdens het laadblok, apparaatstanden en airco
 
 Installeren: via HACS bijwerken en Home Assistant herstarten; daarna de
