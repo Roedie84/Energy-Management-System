@@ -315,3 +315,15 @@ laatste ronde: 11-10 19:40, gemeten t/m 11-10 19:56
 - Hypotheses: H-EMS-2 (PV donkere dagen), H-EMS-10 (springende behoefte). Geen release (tussenronde, niets acuut). L-EMS-017 akkoord → bouwen in de dagafsluiting.
 
 laatste ronde: 11-10 23:40, gemeten t/m 11-10 23:45
+
+## 12-10 03:40 · dagafsluiting 11-10
+- Dag 11-10: PV 7,49 kWh (day-ahead tracker 9,07 → **−17,4 %** bij 13 % bewolking: een heldere dag te hoog, niet alleen donkere dagen), import 8,66 (netladen 11-15 u 7,49), export 1,90, accu 7,40 in / 5,36 uit, huis 12,2 kWh. **40 HA-herstarts** (supervisor, 08:40-23:31; 12-10 03:33 nog 1), logboek 0 EMS-fouten. Besparing t.o.v. zonder accu € 1,09 (10-10 € 1,06).
+- PV 30 d MAE 10,7 % (bias −8,2), 14 d 8,8 % (−6,9), 7 d 14,7 % (−11,6) → slechter (09-10 −48, 11-10 −17). H-EMS-2 verbreed: ook heldere dagen te hoog (11-10); n=2 in 7 d, nog geen voorstel.
+- **Harde regel 11-10: 0× onder de reserve** (afgeleid): 19:45-19:53 0,23 kWh (stop 19:56 op −0,02 = binnen de stap van `beschikbaar`), 20:09-20:14 0,11 kWh (terugrekening 4,90 < 5,79). `marge_bij_export_min_kwh` zat alleen in de diagnostiek → nu als attribuut `verkoopkwartieren` (v5.87).
+- Nacht 10→11 geen tekort (MC 22:00 0,1 %) → Brier 0, n=3. Tekortnachten 7 d: 1 (10-10 economisch). Nacht 11→12 03:45: nodig tot blok 1,28 bij 3,28 (marge 2,00), MC 0 %; 23:45-03:55 alleen `default_smart`, export 0,07 (regelruis).
+- H-EMS-10 opnieuw gezien: sturingsreserve 19:40-19:42 6,68 → 7,70 → 7,04 → 6,65 en 20:07-20:19 7,78 → 7,22 → 7,56 zonder verbruiksstap. Toetsen met de nieuwe `reserve_sprongen` na installatie van v5.87.
+- Niet gemeten: dagrapport-dekking (`laatste_dagrapport` leeg na de herstart van 03:33), nabeschouwing 11-10 en 7 d (alleen in de diagnostiek; vanaf v5.87 `nabeschouwing_7d` als attribuut).
+- **Gebouwd v5.87.0** (03:53, workflow groen, HACS ververst; niet geïnstalleerd): L-EMS-017 (spaarplan tot het blok = behoefte van de verkooptoets, verkooptoets ongewijzigd) + L-EMS-020 (reservesprongen met uitsplitsing) + meetattributen op Diagnose sturing. 10 nieuwe tests, suite 5599 groen. L-EMS-019 niet gebouwd: botst met de privacykeuze van v5.28 (geen kwartierverbruik in de export) → open voor Ruud.
+- Hypotheses: H-EMS-2 (PV te hoog, nu ook heldere dag), H-EMS-10 (springende reserve; meetbaar na installatie). Open voor Ruud: L-EMS-019.
+
+laatste ronde: 12-10 03:40, gemeten t/m 12-10 03:55

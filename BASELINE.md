@@ -49,3 +49,9 @@
 | Dagrapport-dekking meetlog | 99,2 % (95/96, 12 over herstart) | 10-10 | 11-10 03:40 |
 | MC 22:00 Brier (tot blok) | 0 (n=2: 0 %/geen tekort, 100 %/tekort) | avonden 08-10, 09-10 | 11-10 03:40 |
 | Tekortnachten | 2 / 7 (04-10 onbekend, 10-10 economisch 2,36 kWh) | 04..10-10 | 11-10 03:40 |
+| PV-voorspelling MAE (dag, day-ahead tracker) | 10,7 % (30 d) · 8,8 % (14 d) · 14,7 % (7 d); bias −8,2 / −6,9 / −11,6 | 12-09..11-10 | 12-10 03:40 |
+| MC 22:00 Brier (tot blok) | 0 (n=3) | avonden 08..10-10 | 12-10 03:40 |
+| Tekortnachten | 1 / 7 (10-10 economisch 2,36 kWh) | 05..11-10 | 12-10 03:40 |
+| Besparing t.o.v. zonder accu-sturing (sensor, per dag) | € 1,09 (11-10) · € 1,06 (10-10) | 10..11-10 | 12-10 03:40 |
+| HA-herstarts per dag | 40 (11-10, supervisor) · 12 (10-10) | 10..11-10 | 12-10 03:40 |
+| Spaarplan vs verkooptoets tot blok (vóór v5.87) | 8,1 vs ≤ 5,5 kWh, werkelijk 4,58 | avond 10-10 | 12-10 03:40 |
