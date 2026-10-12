@@ -191,4 +191,15 @@ def test_de_kaart_toont_de_planvolging():
     js = (Path(pkg.__file__).parent / "www" / "ems-cockpit.js").read_text(encoding="utf-8")
     assert "_planvolgingRegel" in js
     assert '"planvolging"' in js
-    assert 'stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan"]' in js
+    assert 'stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan"' in js
+
+
+def test_de_kaart_toont_de_resterende_laadtijd():
+    """v5.92: "zou hier nog wel graag de resterende laad/ontlaadtijd willen zien"."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    js = (Path(pkg.__file__).parent / "www" / "ems-cockpit.js").read_text(encoding="utf-8")
+    assert "_accuResttijd" in js
+    assert '"beschikbaar", "capaciteit"],' in js

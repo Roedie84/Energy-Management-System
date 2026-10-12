@@ -562,6 +562,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .knoop .v { font-size: 22px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .knoop .v small { font-size: 11px; }
 .knoop .s { font-size: 11.5px; color: var(--tekst2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.knoop .s.rest { color: var(--tekst3); font-size: 11px; white-space: normal; }
 .knoop .soc { height: 4px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 2px; }
 .knoop .soc i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--groen), #6ee7b7); }
 .hub {
@@ -756,7 +757,7 @@ const AFHANKELIJK = {
   meldingen: ["status", "tekort"],
   hero: ["soc", "beschikbaar", "capaciteit", "accu_vermogen", "gacs", "reden", "verwacht", "prijs", "uitleg",
     "blok", "besparing", "zelfvoorziening", "inkoop_vandaag", "teruglever_vandaag", "schema", "modus", "zon_werkelijk"],
-  stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan"],
+  stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan", "beschikbaar", "capaciteit"],
   planning: ["plan", "schema", "uitleg", "blok"],
   verkoop: ["gacs", "mc", "tekort", "uitleg"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
@@ -1280,6 +1281,7 @@ class EmsCockpitCard extends HTMLElement {
     const netSub = net == null ? STREEP : net < -20 ? "teruglevering" : net > 20 ? "afname van het net" : "in balans";
     const accuSub = accu == null ? STREEP : accu < -20 ? "laadt" : accu > 20 ? "ontlaadt" : "in rust";
     const socBalk = soc == null ? "" : `<div class="soc" title="Laadstand ${fmt(soc)}%"><i style="width:${Math.max(0, Math.min(100, soc))}%"></i></div>`;
+    const resttijd = this._accuResttijd(accu, soc);
     return (
       paneelKop("pulse", "Energiestroom", chip("live", "ok")) +
       `<div class="pb"><div class="stroom">${lijnen}<div class="hub"></div>` +
@@ -1287,9 +1289,34 @@ class EmsCockpitCard extends HTMLElement {
       knoop(P.net, "net", "Net", watt(net == null ? null : Math.abs(net)), netSub, netKleur, net != null && Math.abs(net) > 20) +
       knoop(P.huis, "huis", "Huis", watt(huis), "verbruik", "var(--blauw)", huis != null && huis > 20) +
       knoop(P.accu, "accu", "Accu", watt(accu == null ? null : Math.abs(accu)),
-        `${accuSub}${soc != null ? PUNT + fmt(soc) + "%" : ""}`, accuKleur, accu != null && Math.abs(accu) > 20, socBalk) +
+        `${accuSub}${soc != null ? PUNT + fmt(soc) + "%" : ""}`, accuKleur, accu != null && Math.abs(accu) > 20,
+        socBalk + (resttijd ? `<div class="s rest" title="Bij het huidige vermogen">${resttijd}</div>` : "")) +
       `</div>${this._planvolgingRegel()}</div>`
     );
+  }
+
+  /* Hoe lang nog tot vol of leeg bij het huidige vermogen (v5.92) */
+  _accuResttijd(accu, soc) {
+    if (accu == null || Math.abs(accu) < 50) return "";
+    const kw = Math.abs(accu) / 1000;
+    let kwh = null;
+    if (accu < 0) {
+      // laden: wat er nog in past tot 100%
+      const cap = getal(this._s("capaciteit"));
+      if (cap == null || soc == null) return "";
+      kwh = cap * Math.max(0, 100 - soc) / 100;
+    } else {
+      // ontladen: wat er boven de ondergrens nog in zit
+      kwh = getal(this._s("beschikbaar"));
+    }
+    if (kwh == null) return "";
+    const uren = kwh / kw;
+    if (!(uren > 0) || uren > 24) return "";
+    const klaar = new Date(Date.now() + uren * 3600000);
+    const u = Math.floor(uren);
+    const m = Math.round((uren - u) * 60);
+    const duur = u ? `${u}u${String(m).padStart(2, "0")}` : `${Math.max(1, m)} min`;
+    return `${accu < 0 ? "vol" : "leeg"} om ${klaar.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })} (${duur})`;
   }
 
   /* Gepland tegen gemeten accuvermogen (v5.91) */

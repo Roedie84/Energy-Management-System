@@ -32957,3 +32957,13 @@ Solcast, het verbruik in die uren, wat er dus op te vangen is, en hoeveel er
 met de veiligheidsmarge nodig is. Het besluit zelf is ongewijzigd.
 
 Tests: `test_v5911_zonuitstel_uitleg.py` (2).
+
+## v5.92.0 — resterende laad- en ontlaadtijd op de Energiestroom-kaart
+
+Gevraagd: "zou hier nog wel graag de resterende laad/ontlaadtijd willen zien".
+Onder de laadstandbalk van de accu staat nu "vol om 15:27 (5u09)" bij laden
+(wat er nog tot 100% in past) of "leeg om 22:40 (3u12)" bij ontladen (wat er
+boven de ondergrens nog in zit), gerekend met het vermogen van dit moment.
+Niet getoond in rust (onder 50 W) of als het langer dan een etmaal zou duren.
+
+Tests: in `test_v591_planvolging.py` (1).
