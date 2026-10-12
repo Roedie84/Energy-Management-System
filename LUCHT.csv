@@ -142,3 +142,25 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-12 08:20,ha_herstarts,2,1,06:14/06:48; raamsensoren ook 07:13 en 07:32 kort unavailable (geen herstart)
 2026-10-12 08:20,automation_traces_fout,0,5,laatste 08:20
 2026-10-12 08:20,stand_naar_mid_na_vertrek_min,15,2,07:00:59->07:15:59 en 08:05:29->08:20:28; wachttijd 12-10 naar 15 min
+2026-10-12 12:20,pm25_gem,0.96,48,08:20-12:20 5-min statistiek
+2026-10-12 12:20,pm25_mediaan,0.86,48,
+2026-10-12 12:20,pm25_p95,1.62,48,
+2026-10-12 12:20,pm25_max,1.85,48,5-min max 08:20; daarna dalend
+2026-10-12 12:20,pm25_uren_gt15,0,48,
+2026-10-12 12:20,pm25_uren_gt25,0,48,
+2026-10-12 12:20,stand_auto_min,56,1,08:20-12:20; niemand aanwezig (occupancy off sinds 08:05; tv uit)
+2026-10-12 12:20,stand_mid_min,176,1,
+2026-10-12 12:20,stand_unavailable_min,8,7,7 HA-herstarts
+2026-10-12 12:20,pm25_gem_auto,1.14,11,5-min blokken; auto zonder aanwezigheid
+2026-10-12 12:20,pm25_gem_mid,0.91,37,
+2026-10-12 12:20,pm25_gem_afwezig,0.96,48,hele periode afwezig
+2026-10-12 12:20,stand_auto_zonder_aanwezigheid_n,6,1,08:30/08:45/09:45/10:15/10:45/11:00 elk na HA-herstart; 0.5-15 min
+2026-10-12 12:20,pm25_dag_gem_tot_nu,0.67,1,dagstatistiek 12-10
+2026-10-12 12:20,pm25_7d_gem,2.32,7,daggemiddelden 06-10 t/m 12-10 (12-10 deels)
+2026-10-12 12:20,co2_gem,589,48,5-min gem; 672 -> 537
+2026-10-12 12:20,co2_uren_gt1200,0,48,
+2026-10-12 12:20,schimmel_indicator_max,73,48,daalt naar 63
+2026-10-12 12:20,lokaal_mislukt,0,7008,rondes sinds 11-10 11:48; uitval 0; 30 verbindingen; sturen 36/36
+2026-10-12 12:20,filtergebruik_pct,0,1,
+2026-10-12 12:20,ha_herstarts,7,1,08:26/08:43/09:29/09:59/10:10/10:33/10:53; daarna stabiel
+2026-10-12 12:20,automation_traces_fout,0,5,laatste 12:15

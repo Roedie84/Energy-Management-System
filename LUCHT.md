@@ -52,4 +52,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ gem 584, max 739: in orde. Schimmelindicator 72-74.
 - Hypotheses: H1 (n=3), H2 (n=1), H3 (n=2): geen nieuwe pieken, geen toets.
 
-laatste ronde: 12-10 08:25, gemeten t/m 08:20
+## 12-10 12:25 (ronde 7)
+- PM2.5 08:20-12:20: gem 0,96, mediaan 0,86, P95 1,62, max 1,85 (n=48); 0 uur > 15. Dag t/m nu 0,67; 7d 2,3 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven-status nog steeds unavailable sinds 11-10 17:19). Ramen dicht.
+- Hele periode niemand aanwezig (sinds 08:05), tv uit. Toch 6x auto (56 min): steeds direct na een HA-herstart. Trace toont oorzaak: de 'uit voor 15 min'-voorwaarde op aanwezigheid begint opnieuw te tellen als de sensor unavailable → off gaat. Onschadelijk voor PM2.5 (auto 1,14 vs mid 0,91), wel onnodige wissels.
+- Werking: 5/5 traces zonder fout. 7 HA-herstarts 08:26-10:53, daarna stabiel. Lokaal 7008/7008, uitval 0, sturen 36/36, filter 0%. Apparaat-PM2.5 vast op 2.
+- CO₂ gem 589, max 672; schimmelindicator 73 → 63: in orde.
+- Hypotheses: H1 (n=3), H2 (n=1), H3 (n=2): geen nieuwe pieken, geen toets.
+
+laatste ronde: 12-10 12:25, gemeten t/m 12:20
