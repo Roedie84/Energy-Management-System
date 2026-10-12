@@ -214,3 +214,33 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-12 20:20,filtergebruik_pct,0,1,
 2026-10-12 20:20,ha_herstarts,1,1,18:34
 2026-10-12 20:20,automation_traces_fout,0,5,laatste 20:20
+2026-10-12,pm25_gem,3.51,1,dagstatistiek hele dag; kookpiek 17:11
+2026-10-12,pm25_max,134.7,1,kookpiek 17:11 (ramen dicht; auto)
+2026-10-12,pm25_uren_gt15,0.83,288,
+2026-10-12,pm25_uren_gt25,0.67,288,
+2026-10-12,co2_gem,791,1,dagstatistiek; max 1543
+2026-10-12,co2_uren_gt1200,3.83,288,1.08 (16:20-20:20) + 2.75 (20:20-00:20)
+2026-10-13 00:20,pm25_gem,2.90,48,20:20-00:20 5-min statistiek
+2026-10-13 00:20,pm25_mediaan,3.18,48,
+2026-10-13 00:20,pm25_p95,4.00,48,
+2026-10-13 00:20,pm25_max,4.36,48,5-min max ~21:20 (tv-avond; geen kookplaat/oven)
+2026-10-13 00:20,pm25_uren_gt15,0,48,
+2026-10-13 00:20,pm25_uren_gt25,0,48,
+2026-10-13 00:20,stand_auto_min,173,1,20:20-00:20; tv aan tot 23:00
+2026-10-13 00:20,stand_mid_min,61,1,vooral 23:15-00:20; plus 21:54-21:56 na herstart
+2026-10-13 00:20,stand_unavailable_min,5,4,4 HA-herstarts
+2026-10-13 00:20,pm25_gem_auto,3.38,35,5-min blokken
+2026-10-13 00:20,pm25_gem_mid,1.37,11,na vertrek (dalende staart)
+2026-10-13 00:20,pm25_gem_aanwezig,3.46,32,tv aan tot 23:00
+2026-10-13 00:20,pm25_gem_afwezig,1.77,16,
+2026-10-13 00:20,pm25_7d_gem,2.72,7,daggemiddelden 06-10 t/m 12-10
+2026-10-13 00:20,co2_gem,1281,48,5-min gem; 1510 (20:30) -> 914
+2026-10-13 00:20,co2_uren_gt1200,2.75,48,ramen dicht
+2026-10-13 00:20,schimmel_indicator_max,76,48,daalt naar 72
+2026-10-13 00:20,mid_na_vertrek_min,15,1,tv uit 23:00:15 -> mid 23:15:54
+2026-10-13 00:20,stand_auto_zonder_aanwezigheid_n,1,1,23:30-23:33 na herstart 23:17 (tv unknown->off reset 15-min-timer)
+2026-10-13 00:20,stand_mid_terwijl_aanwezig_min,2,1,21:54-21:56 na herstart (tv unknown)
+2026-10-13 00:20,lokaal_mislukt,0,10947,rondes sinds 11-10 11:48; uitval 0; 42 verbindingen; sturen 53/53
+2026-10-13 00:20,filtergebruik_pct,0,1,
+2026-10-13 00:20,ha_herstarts,4,1,21:10/21:52/22:38/23:17
+2026-10-13 00:20,automation_traces_fout,0,5,laatste 00:15
