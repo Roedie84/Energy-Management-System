@@ -350,3 +350,13 @@ laatste ronde: 12-10 07:40, gemeten t/m 12-10 07:42
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde; niets acuut; vandaag al v5.87-v5.92).
 
 laatste ronde: 12-10 11:40, gemeten t/m 12-10 11:45
+
+## 12-10 15:40 · tussenronde
+- 6 HA-herstarts (12:38, 13:06, 13:29, 14:45, 15:02, 15:43); actief **v5.93.2** (andere sessie, 13:27). 0 EMS-fouten in het systeemlog; Solcast 429 (extern, laatste verversing 07:52).
+- Accu 57 % (11:44) → **100 % om 14:29** (7,78 kWh) alleen op zon; daarna zon naar het net: export 14-15 u 1,06 kWh, import 11:45-15:00 ~0,05 kWh. Verkoopkwartieren 12:30-15:15 hadden marge +4,3..+6,5 kWh → **0× onder de reserve**. Geen nieuwe negatieve vlag sinds 10:45 (L-EMS-022: 9 van 9 vals).
+- **PV t/m 15:45 10,22 kWh tegen Solcast 10,36** voor dezelfde uren (dag 12,69 − rest 2,33) → −1,4 % (ochtend +8,5 %). Vandaag goed voorspeld; H-EMS-2 (te hoog) krijgt een tegenvoorbeeld (n=1 dag, verouderde Solcast-run).
+- **Planvolging** (v5.93.1 bewaart over herstarts): 10 kwartieren, 50 % volgens plan; `oorzaken` geen 5 / verbruik 4 / accu 1, maar `afwijking_accu` 2 → nog een tegenstrijdig kwartier (status "afwijking accu", oorzaak verbruik). v5.93.2 voegde "sturing" toe; `oorzaak = max(zon, verbruik, rest)` staat nog los van de status (code 524c2e2 nagelezen) → L-EMS-023 blijft nodig.
+- Nacht 12→13: MC 0 %, accu vol → geen tekort in zicht. H-EMS-10: `reserve_sprongen` leeg (nog geen avond sinds installatie) → toets in de ronden van 19:40/23:40.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde, niets acuut; vandaag al v5.87-v5.93.2). L-EMS-022/023 in de dagafsluiting.
+
+laatste ronde: 12-10 15:40, gemeten t/m 12-10 15:45
