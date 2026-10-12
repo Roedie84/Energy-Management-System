@@ -1361,7 +1361,9 @@ class EmsCockpitCard extends HTMLElement {
     const nu = pv && pv.nu;
     if (!nu || !nu.beschikbaar) return "";
     const kl = nu.status === "volgens plan" ? "ok" : nu.status === "verklaard" ? "" : "let";
-    const label = nu.status === "volgens plan" ? "volgens plan" : nu.status === "verklaard" ? "verklaard" : "afwijking";
+    // v5.93.2: "andere keuze" als de sturing iets anders koos dan het plan
+    const label = nu.status === "volgens plan" ? "volgens plan" : nu.status === "verklaard" ? "verklaard"
+      : nu.status === "afwijking sturing" ? "andere keuze" : "afwijking";
     // Teken zoals het EMS: positief ontladen, negatief laden
     const rw = (w) => {
       const n = num(w);
@@ -1379,7 +1381,7 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="cel"><div class="l">Gepland</div><div class="w">${rw(nu.gepland_accu_w)}</div></div>` +
       `<div class="cel"><div class="l">Gemeten</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
       `<div class="cel"><div class="l">Verschil</div><div class="w">${verschil == null ? STREEP : watt(Math.abs(verschil))}</div>` +
-      `<div class="s">${verschil == null || Math.abs(verschil) < 50 ? "geen" : verschil < 0 ? "meer laden" : "meer ontladen"}</div></div>` +
+      `<div class="s">${nu.verschil_tekst ? esc(nu.verschil_tekst) : verschil == null || Math.abs(verschil) < 50 ? "geen" : verschil < 0 ? "meer laden" : "meer ontladen"}</div></div>` +
       `</div>` +
       (dag ? `<div class="dag">Vandaag ${fmt(dag.volgens_plan_procent)}% van ${dag.kwartieren} kwartieren volgens plan` +
         `${dag.afwijking_accu ? `${PUNT}${dag.afwijking_accu}\u00d7 wijkt de accu zelf af` : ""}</div>` : "") +

@@ -13,7 +13,12 @@ gemeten vermogen en wijst een oorzaak aan:
   verklaarde afwijking.
 - **verbruik**: het huis gebruikt meer of minder dan verwacht - idem.
 - **accu**: wat overblijft na zon en verbruik. Dan doet de accu zelf iets
-  anders: vol, leeg, begrensd, of een andere stand dan bedoeld.
+  anders: vol, leeg of begrensd.
+- **sturing** (v5.93.2): de stand die het EMS koos is een andere soort dan
+  het plan (handmatig laden/verkopen tegenover slim). Dan volgt de accu
+  gewoon de sturing; het verschil komt van een ander besluit, niet van de
+  accu. Gemeld 12-10 13:16: "de accu wijkt zelf 0,6 kW af" terwijl de
+  sturing sparen koos en het plan laden van het net.
 
 In de handmatige standen (laden, verkopen) ligt het vermogen vast; daar gaan
 zon en verbruik naar het net en is elke afwijking van de accu zelf.
@@ -54,8 +59,15 @@ def gepland_uit_plan(rij: dict, start_kwh: float) -> dict:
     }
 
 
-def beoordeel(gepland: dict, accu_w: float | None, zon_w: float | None, huis_w: float | None) -> dict:
-    """Gemeten tegen gepland, met de oorzaak van het verschil."""
+def beoordeel(
+    gepland: dict, accu_w: float | None, zon_w: float | None, huis_w: float | None,
+    stand: str | None = None,
+) -> dict:
+    """Gemeten tegen gepland, met de oorzaak van het verschil.
+
+    `stand` is de werkelijke stand van de accu (de operation-select); is die
+    een andere soort dan het plan, dan is de oorzaak de sturing (v5.93.2).
+    """
     if not gepland or accu_w is None:
         return {"beschikbaar": False}
     verschil = accu_w - gepland["accu_w"]
@@ -74,8 +86,14 @@ def beoordeel(gepland: dict, accu_w: float | None, zon_w: float | None, huis_w: 
     rest = verschil - verklaard
     bijdragen["accu"] = rest
 
+    andere_stand = (
+        stand is not None and gepland.get("modus") is not None
+        and _handmatig(stand) != _handmatig(gepland.get("modus"))
+    )
     if abs(verschil) < DREMPEL_W:
         oorzaak, status = "geen", "volgens plan"
+    elif andere_stand:
+        oorzaak, status = "sturing", "afwijking sturing"
     else:
         oorzaak = max(bijdragen, key=lambda k: abs(bijdragen[k]))
         status = "afwijking accu" if abs(rest) >= DREMPEL_W else "verklaard"
@@ -84,13 +102,16 @@ def beoordeel(gepland: dict, accu_w: float | None, zon_w: float | None, huis_w: 
         "gepland_accu_w": gepland["accu_w"],
         "gemeten_accu_w": round(accu_w),
         "verschil_w": round(verschil),
+        "verschil_tekst": verschil_tekst(gepland["accu_w"], accu_w),
         "zon_verschil_w": None if zon_d is None else round(zon_d),
         "verbruik_verschil_w": None if huis_d is None else round(huis_d),
         "onverklaard_w": round(rest),
         "oorzaak": oorzaak,
         "status": status,
         "modus": gepland.get("modus"),
-        "tekst": tekst(gepland["accu_w"], accu_w, oorzaak, zon_d, huis_d, rest),
+        "stand": stand,
+        "tekst": tekst(gepland["accu_w"], accu_w, oorzaak, zon_d, huis_d, rest,
+                       stand=stand, plan_modus=gepland.get("modus")),
     }
 
 
@@ -106,7 +127,21 @@ def _richting(w: float) -> str:
     return "in rust"
 
 
-def tekst(gepland_w: float, gemeten_w: float, oorzaak: str, zon_d, huis_d, rest) -> str:
+def verschil_tekst(gepland_w: float, gemeten_w: float) -> str:
+    """Het verschil in woorden (v5.93.2): "minder laden" in plaats van
+    "meer ontladen" als de accu wel laadt, maar minder dan gepland."""
+    verschil = gemeten_w - gepland_w
+    if abs(verschil) < 50:
+        return "geen"
+    if gepland_w <= -50 and gemeten_w <= -50:
+        return "minder laden" if verschil > 0 else "meer laden"
+    if gepland_w >= 50 and gemeten_w >= 50:
+        return "meer ontladen" if verschil > 0 else "minder ontladen"
+    return "meer ontladen" if verschil > 0 else "meer laden"
+
+
+def tekst(gepland_w: float, gemeten_w: float, oorzaak: str, zon_d, huis_d, rest,
+          stand: str | None = None, plan_modus: str | None = None) -> str:
     """Een zin voor het dashboard: wat er gebeurt, wat er gepland was, waarom."""
     plan = _richting(gepland_w).replace("laadt", "laden").replace("ontlaadt", "ontladen")
     kop = f"Accu {_richting(gemeten_w)}, gepland {plan}"
@@ -116,9 +151,28 @@ def tekst(gepland_w: float, gemeten_w: float, oorzaak: str, zon_d, huis_d, rest)
         reden = f"{'meer' if zon_d > 0 else 'minder'} zon dan voorspeld ({'+' if zon_d > 0 else '-'}{_kw(zon_d)})"
     elif oorzaak == "verbruik":
         reden = f"huis verbruikt {'meer' if huis_d > 0 else 'minder'} dan verwacht ({'+' if huis_d > 0 else '-'}{_kw(huis_d)})"
+    elif oorzaak == "sturing":
+        reden = f"de sturing koos {_stand_tekst(stand)} in plaats van {_stand_tekst(plan_modus)}"
     else:
         reden = f"de accu wijkt zelf {_kw(rest)} af"
     return f"{kop} – {reden}"
+
+
+def _stand_tekst(stand: str | None) -> str:
+    t = str(stand or "")
+    if t.startswith("manual (laden)"):
+        return "laden van het net"
+    if t.startswith("manual (verkopen)"):
+        return "verkopen"
+    if t.startswith("manual"):
+        return "handmatig"
+    if "smart_charging" in t:
+        return "sparen (alleen zon laden)"
+    if "smart_discharging" in t:
+        return "ontladen naar het huis"
+    if t.startswith("smart"):
+        return "slim"
+    return t or "onbekend"
 
 
 def sluit_kwartier(gepland: dict, monsters: list[dict]) -> dict | None:
@@ -130,7 +184,9 @@ def sluit_kwartier(gepland: dict, monsters: list[dict]) -> dict | None:
         reeks = [m[sleutel] for m in monsters if m.get(sleutel) is not None]
         return sum(reeks) / len(reeks) if reeks else None
 
-    oordeel = beoordeel(gepland, gem("accu_w"), gem("zon_w"), gem("huis_w"))
+    standen = [m.get("stand") for m in monsters if m.get("stand")]
+    stand = max(set(standen), key=standen.count) if standen else None
+    oordeel = beoordeel(gepland, gem("accu_w"), gem("zon_w"), gem("huis_w"), stand=stand)
     if not oordeel.get("beschikbaar"):
         return None
     return {

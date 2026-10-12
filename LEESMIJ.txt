@@ -1,3 +1,15 @@
+EMS v5.93.2 - plan en sturing gelijk in het laadblok
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het kwartierplan toonde in het lopende goedkope blok "Laden van net" terwijl
+  de sturing (terecht) niet van het net laadde omdat de zon de accu vanzelf
+  vult. Het plan rekent nu met dezelfde latere kwartieren als de sturing.
+- "Netladen volgt in dit blok" noemt niet meer het lopende kwartier.
+- Planvolging: "minder laden" in plaats van "meer ontladen", en "andere
+  keuze" (de sturing koos iets anders dan het plan) in plaats van "de accu
+  wijkt zelf af".
+
 EMS v5.93.1 - planvolging over een herstart, temperatuurmelding, airco-basis
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

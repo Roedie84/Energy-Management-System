@@ -33031,3 +33031,28 @@ omvormer" bij de melding "Accumodules verschillen 5.0 °C in celtemperatuur".
   verwachting). Attribuut `verwachting.basis` op `sensor.…_airco_besluit`.
 
 Tests: `test_v5931_planvolging_herstart.py` (8), `test_module_temperature_warning.py` (+1, aangepast), `test_battery_module_health.py` (aangepast).
+
+## v5.93.2 — plan en sturing gelijk in het laadblok
+
+Gemeld 12-10 13:16-13:19 met schermafdrukken: het kwartierplan zette
+13:15-13:30 op "Laden van net" (2,4 kW, 30,2 ct) en "Wat doet het EMS nu"
+zei "Netladen volgt in dit blok (13:15)", maar de accu laadde alleen de zon
+(1,8 kW, net ~0 W) en de sturing stond op sparen. De planvolging noemde dat
+"604 W meer ontladen" en "de accu wijkt zelf 0,6 kW af".
+
+- **Plan tegen beslissing.** Het laadbesluit zei terecht nee: "de zon vult de
+  accu vanzelf (vol om 15:03); laden verdringt alleen zon". Beide gebruiken
+  dezelfde rekenregel, maar het plan nam de goedkope blokkwartieren na het
+  lopende kwartier (13:30-16:15, ~30,3 ct) mee als "latere" kwartieren vóór
+  het vol-moment. Die waren net iets duurder dan nu, dus "loont: goedkoper
+  dan de zon die er straks het net op gaat". De beslissing rekent pas vanaf
+  het blokeinde. Nu doet het plan in het bekende blok hetzelfde.
+- **"Netladen volgt in dit blok"** telt het lopende kwartier niet meer: als
+  de beslissing daar komt, is laden van het net nu al afgevallen.
+- **Planvolging.** Het verschil in woorden klopt met de richting ("minder
+  laden" als de accu laadt maar minder dan gepland). Staat de accu in een
+  andere soort stand dan het plan (handmatig tegenover slim), dan is de
+  oorzaak "sturing" en het label "andere keuze": de accu volgt dan gewoon
+  een ander besluit. De werkelijke stand wordt per meting vastgelegd.
+
+Tests: `test_v5932_plan_en_sturing.py` (11).

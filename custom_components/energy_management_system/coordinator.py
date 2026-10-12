@@ -23348,6 +23348,10 @@ class EnergyManagementSystemCoordinator:
             "rendement": rendement,
             "slijtage_ct": (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh"),
             "salderen": self._is_salderen_active(now),
+            # v5.93.2: het lopende/volgende goedkope blok, zodat het plan in
+            # dat blok met dezelfde "latere" kwartieren rekent als de
+            # beslissing (vanaf het blokeinde, niet vanaf het kwartiereinde).
+            "blok": (self.last_cheap_block_start, self.last_cheap_block_end),
             "reeks": reeks,
             "duurste_tot_blok": duurste_tot_blok,
             # v5.25: de kwartieren die het spaarplan van het net laat komen.
@@ -23430,11 +23434,23 @@ class EnergyManagementSystemCoordinator:
         # beslissing (`_laad_uit_het_net_als_nodig`).
         if netregels.get("slijtage_ct") is None or per_kwartier <= 0:
             return 0.0
+        # v5.93.2: binnen het bekende goedkope blok tellen, net als in
+        # `laadbesluit_uit_het_net`, alleen de kwartieren NA het blok als
+        # "later". Gemeld 12-10 13:16: het plan zette 13:15 op "Laden van
+        # net" terwijl de beslissing niet laadde ("de zon vult de accu om
+        # 15:03; laden verdringt alleen zon"). Het plan nam de goedkope
+        # blokkwartieren 13:30-15:00 mee als latere kwartieren vóór het
+        # vol-moment; de beslissing begint pas bij het blokeinde (16:15).
+        vanaf = einde
+        blok_start, blok_eind = netregels.get("blok") or (None, None)
+        begin_kwartier = einde - timedelta(minutes=15)
+        if blok_start is not None and blok_eind is not None and blok_start <= begin_kwartier < blok_eind:
+            vanaf = max(einde, blok_eind)
         later = sorted(
             (
                 (p, b)
                 for b, p in netregels["reeks"]
-                if einde <= b < einde + timedelta(hours=24)
+                if vanaf <= b < einde + timedelta(hours=24)
             ),
             key=lambda paar: paar[0],
             reverse=True,
@@ -23583,9 +23599,20 @@ class EnergyManagementSystemCoordinator:
             "accu_w": self._read_corrected_battery_power(),
             "zon_w": self._live_pv_w(),
             "huis_w": self._read_corrected_consumption_power(),
+            # v5.93.2: de werkelijke stand, om "de sturing koos iets anders"
+            # te onderscheiden van "de accu wijkt zelf af"
+            "stand": self._planvolging_stand(),
         }
         if meting["accu_w"] is not None:
             self._planvolging["monsters"].append(meting)
+
+    def _planvolging_stand(self) -> str | None:
+        """De stand van de accu nu (operation-select), voor de planvolging."""
+        entity_id = self.config.get(CONF_OPERATION_SELECT)
+        staat = self.hass.states.get(entity_id) if entity_id else None
+        if staat is None or staat.state in ("unavailable", "unknown"):
+            return None
+        return staat.state
 
     def _planvolging_gepland(self, now: datetime, kwartier: datetime) -> dict | None:
         """De planregel van dit kwartier, in watt (v5.91)."""
@@ -23620,7 +23647,7 @@ class EnergyManagementSystemCoordinator:
         laatste = monsters[-1] if monsters else {}
         vandaag = dt_util.now().date().isoformat()
         return {
-            "nu": planvolging.beoordeel(lopend.get("gepland"), laatste.get("accu_w"), laatste.get("zon_w"), laatste.get("huis_w")),
+            "nu": planvolging.beoordeel(lopend.get("gepland"), laatste.get("accu_w"), laatste.get("zon_w"), laatste.get("huis_w"), stand=laatste.get("stand")),
             "kwartier": planvolging.sluit_kwartier(lopend.get("gepland"), monsters),
             "vandaag": planvolging.dagsamenvatting(vandaag, [k for k in self._planvolging_kwartieren if k["dag"] == vandaag]),
             "laatste_kwartieren": [
@@ -45489,7 +45516,11 @@ class EnergyManagementSystemCoordinator:
         laden = None
         for regel in plan:
             begin = dt_util.parse_datetime(str(regel.get("start") or ""))
-            if begin is None or begin < kwartier or begin >= blok_eind:
+            # v5.93.2: het lopende kwartier telt niet. Hier komt de beslissing
+            # pas als laden uit het net NU al is afgevallen; een laadregel
+            # voor dit kwartier is dan geen netladen dat "volgt" (gemeld
+            # 12-10 13:19: "Netladen volgt in dit blok (13:15)" om 13:17).
+            if begin is None or begin <= kwartier or begin >= blok_eind:
                 continue
             if str(regel.get("modus") or "").startswith("manual (laden)"):
                 laden = (begin, regel.get("prijs_ct"))
