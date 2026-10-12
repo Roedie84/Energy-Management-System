@@ -1,3 +1,16 @@
+EMS v5.87.0 - spaarplan en verkooptoets rekenen met dezelfde behoefte
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het spaarplan ("de accu haalt het goedkope blok niet") rekent tot het blok
+  nu met dezelfde behoefte als de verkooptoets. Op 10-10 zei het spaarplan
+  8,1 kWh nodig terwijl er 4,6 kWh werd gebruikt; de accu dekte daardoor
+  's avonds onnodig alleen de duurste kwartieren. Verkopen verandert niet.
+- Sprongen in de reserve worden vastgelegd met hun oorzaak, zodat te zien
+  is waarom de reserve soms binnen een minuut 1 kWh verandert.
+- De sensor "Diagnose sturing" toont nu ook de verkoopkwartieren, de
+  reservesprongen en de nabeschouwing van de laatste 7 dagen.
+
 EMS v5.86.0 - geen nachtladen meer als de zon de accu toch vult
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -1068,6 +1068,10 @@ async def async_get_config_entry_diagnostics(
             # had kunnen doen.
             "dagverloop": _veilig("dagverloop", lambda: coordinator.dagverloop),
             "nabeschouwingen": _veilig("nabeschouwingen", lambda: coordinator.nabeschouwingen),
+            # v5.87 (L-EMS-020): sprongen in de reserve met hun uitsplitsing.
+            "reserve_sprongen": _veilig(
+                "reserve_sprongen", lambda: list(coordinator.reserve_sprongen)
+            ),
             "nabeschouwing_vandaag": _veilig(
                 "get_nabeschouwing", lambda: coordinator.get_nabeschouwing(
                     dt_util.now().date().isoformat()

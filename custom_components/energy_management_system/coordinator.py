@@ -62,6 +62,8 @@ from homeassistant.helpers.storage import Store
 
 from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen
 from .const import (
+    RESERVE_SPRONG_DREMPEL_KWH,
+    RESERVE_SPRONGEN_MAX,
     DIAGNOSE_REGEL_MAX_TEKENS,
     DASHBOARD_ONBEKEND_IS_NORMAAL,
     GACS_TRAAG_MS,
@@ -22593,12 +22595,163 @@ class EnergyManagementSystemCoordinator:
         # v5.70: de uitsplitsing bij DEZE aanvraag, voor de verkoopreserve.
         self._reserve_gevraagde_uitsplitsing = uitsplitsing
         if bewaar and uitsplitsing is not None:
+            # v5.87 (L-EMS-020): een sprong in de reserve vastleggen met de
+            # onderdelen ervoor en erna. Alleen meten; stuurt niets.
+            self._noteer_reserve_sprong(
+                now, cheap_block_start, self.last_reserve_margin_breakdown, uitsplitsing
+            )
             self.last_reserve_margin_breakdown = uitsplitsing
             self._lange_horizon_extra_vandaag = max(
                 self._lange_horizon_extra_vandaag,
                 uitsplitsing.get("lange_horizon_extra_kwh") or 0.0,
             )
         return reserve_kwh
+
+    # v5.87 (L-EMS-020): de onderdelen van de reserve die bij een sprong
+    # worden vastgelegd.
+    _RESERVE_SPRONG_VELDEN = (
+        "reserve_kwh_after_margin",
+        "needed_kwh_before_margin",
+        "lange_horizon_extra_kwh",
+        "regelverschuiving_w",
+        "total_percent",
+        "airco_ochtend_extra_kwh",
+        "airco_gebruik_extra_kwh",
+        "temperatuur_extra_kwh",
+        "ongekapt_kwh",
+        "bodem_bindend",
+        "boven_capaciteit",
+    )
+
+    def _noteer_reserve_sprong(
+        self,
+        now: datetime,
+        blok: datetime | None,
+        oud: dict | None,
+        nieuw: dict | None,
+    ) -> None:
+        """Een sprong in de reserve vastleggen, met de uitsplitsing ervoor
+        en erna (v5.87, L-EMS-020; meetbaarheid, stuurt niets).
+
+        Leerronde 11-10 19:40/23:40: de reserve en de behoefte tot het blok
+        sprongen binnen minuten 0,6-1,9 kWh heen en weer zonder
+        verbruiksstap (H-EMS-10). Om 19:56 stopte zo een geplande verkoop.
+        De oorzaak was niet te achterhalen: de uitsplitsing staat alleen
+        live in het geheugen en de P1-sensoren staan niet in de recorder.
+        Nu: verandert de reserve of de behoefte zonder marge meer dan
+        RESERVE_SPRONG_DREMPEL_KWH tussen twee rondes, dan een regel met
+        tijd, blok, uren tot het blok en per onderdeel oud/nieuw. Begrensd
+        tot de laatste RESERVE_SPRONGEN_MAX.
+        """
+        if not isinstance(oud, dict) or not isinstance(nieuw, dict) or not oud:
+            return
+        try:
+            def _f(d: dict, k: str):
+                v = d.get(k)
+                return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+            delta = 0.0
+            for k in ("reserve_kwh_after_margin", "needed_kwh_before_margin"):
+                a, b = _f(oud, k), _f(nieuw, k)
+                if a is not None and b is not None:
+                    delta = max(delta, abs(b - a))
+            if delta <= RESERVE_SPRONG_DREMPEL_KWH:
+                return
+            regel: dict = {
+                "tijd": now.isoformat(timespec="seconds"),
+                "blok": blok.isoformat() if blok is not None else None,
+                "uren_tot_blok": (
+                    round((blok - now).total_seconds() / 3600, 2)
+                    if blok is not None else None
+                ),
+                "ronde_oud": oud.get("ronde"),
+                "ronde_nieuw": nieuw.get("ronde"),
+            }
+            for k in self._RESERVE_SPRONG_VELDEN:
+                regel[k] = [oud.get(k), nieuw.get(k)]
+            # Het onderdeel met de grootste verandering (kWh-velden; de
+            # regelverschuiving omgerekend over de uren tot het blok).
+            bijdragen: dict = {}
+            for k in (
+                "lange_horizon_extra_kwh", "airco_ochtend_extra_kwh",
+                "airco_gebruik_extra_kwh", "temperatuur_extra_kwh",
+            ):
+                a, b = _f(oud, k), _f(nieuw, k)
+                if a is not None and b is not None:
+                    bijdragen[k] = round(b - a, 3)
+            a, b = _f(oud, "regelverschuiving_w"), _f(nieuw, "regelverschuiving_w")
+            if a is not None and b is not None and regel["uren_tot_blok"] is not None:
+                bijdragen["regelverschuiving_x_uren_kwh"] = round(
+                    (b - a) / 1000 * max(0.0, regel["uren_tot_blok"]), 3
+                )
+            regel["bijdragen_kwh"] = bijdragen
+            if bijdragen:
+                regel["grootste_onderdeel"] = max(
+                    bijdragen, key=lambda k: abs(bijdragen[k])
+                )
+            sprongen = self.reserve_sprongen
+            sprongen.append(regel)
+            del sprongen[:-RESERVE_SPRONGEN_MAX]
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Reservesprong niet vastgelegd", exc_info=True)
+
+    def sturing_meetattributen(self) -> dict:
+        """Meetgegevens voor de sensor "Diagnose sturing" (v5.87).
+
+        - `reserve_sprongen` (L-EMS-020): de laatste sprongen in de reserve
+          met hun uitsplitsing, zie `_noteer_reserve_sprong`.
+        - `verkoopkwartieren`: de kwartieren van vandaag en gisteren uit het
+          dagverloop waarin teruggeleverd werd (`marge_bij_export_min_kwh`
+          gevuld, v5.81/L-EMS-018), met verkoopreserve, beschikbaar, marge
+          en de behoefte van verkooptoets en spaarplan. Negatieve marge =
+          onder de reserve verkocht (harde regel).
+        Alleen meten; stuurt niets.
+        """
+        velden = (
+            "tijd", "beschikbaar_kwh", "verkoopreserve_kwh", "vrij_kwh",
+            "marge_kwh", "marge_bij_export_min_kwh", "nodig_tot_blok_kwh",
+            "nodig_na_blok_kwh", "spaarplan_nodig_tot_blok_kwh", "prijs_ct",
+            "mag_verkopen",
+        )
+        verkoop: list = []
+        for dag in sorted(self.dagverloop or {})[-2:]:
+            for regel in self.dagverloop.get(dag) or []:
+                if isinstance(regel, dict) and regel.get("marge_bij_export_min_kwh") is not None:
+                    verkoop.append(
+                        {"dag": dag, **{k: regel.get(k) for k in velden}}
+                    )
+        plan = self.last_spaarplan or {}
+        # De nabeschouwing per dag (laatste 7), zonder de kwartierlijsten:
+        # zo is de realisatie te volgen zonder de diagnostiek te downloaden.
+        na_velden = (
+            "datum", "te_becijferen", "accu_leverde_op_eur",
+            "had_kunnen_opleveren_eur", "gemist_eur", "gemist_door_reserve_eur",
+            "gemist_door_voorspelling_eur", "te_veel_vastgehouden_kwh",
+            "te_veel_ontladen_kwh", "kwartieren", "handmatige_kwartieren",
+        )
+        nabeschouwing = [
+            {k: n.get(k) for k in na_velden if k in n}
+            for n in (self.nabeschouwingen or [])[-7:]
+            if isinstance(n, dict)
+        ]
+        return {
+            "nabeschouwing_7d": nabeschouwing,
+            # De laatste 24 (de diagnostiek heeft er 48): attribuut klein houden.
+            "reserve_sprongen": list(self.reserve_sprongen)[-24:],
+            "reserve_sprongen_aantal": len(self.reserve_sprongen),
+            "verkoopkwartieren": verkoop[-48:],
+            "spaarplan_behoefte_bron": plan.get("behoefte_bron"),
+            "spaarplan_eigen_tot_blok_kwh": plan.get("spaarplan_eigen_tot_blok_kwh"),
+            "spaarplan_nodig_tot_blok_kwh": plan.get("nodig_tot_blok_kwh"),
+        }
+
+    @property
+    def reserve_sprongen(self) -> list:
+        """De laatste reservesprongen (v5.87, L-EMS-020)."""
+        lijst = self.__dict__.get("_reserve_sprongen")
+        if lijst is None:
+            lijst = self.__dict__["_reserve_sprongen"] = []
+        return lijst
 
     # v5.42: zie `_get_dynamic_discharge_reserve_kwh`.
     _reserve_ronde_cache: tuple | None = None
@@ -44684,6 +44837,10 @@ class EnergyManagementSystemCoordinator:
         if kwartieren is None:
             uit["reden"] = "geen verbruiksinschatting"
             return uit
+        # v5.87 (L-EMS-017, akkoord Ruud 11-10): tot het blok dezelfde
+        # behoefte als de verkooptoets - één bron.
+        kwartieren, bron = self._spaarkwartieren_op_verkooptoets(kwartieren, blok)
+        uit.update(bron)
         nodig = sum(k[3] for k in kwartieren)
         uit.update(
             {
@@ -44749,6 +44906,60 @@ class EnergyManagementSystemCoordinator:
             }
         )
         return uit
+
+    def _spaarkwartieren_op_verkooptoets(
+        self, kwartieren: list, blok: datetime
+    ) -> tuple[list, dict]:
+        """Het tekort tot het blok uit dezelfde bron als de verkooptoets
+        (v5.87, L-EMS-017, akkoord Ruud 11-10 20:18).
+
+        Leerronde 10-10/11-10: om 18:34 zag het spaarplan 8,1 kWh nodig tot
+        het blok van 10:45, de verkooptoets <= 5,5. Werkelijk kwam er 4,58
+        kWh uit de accu tot het blok - de verkooptoets klopte, het spaarplan
+        zat 77 % te hoog en dekte daardoor 's avonds alleen de duurste
+        kwartieren. Nu rekent het spaarplan tot het blok met hetzelfde
+        getal als de verkooptoets (`_nodig_tot_en_na_blok_kwh`: de reserve
+        zonder marge, zonder het deel na het blok). De verdeling over de
+        kwartieren blijft die van het eigen profiel (verbruik min zon per
+        kwartier); alleen het totaal tot het blok volgt de verkooptoets.
+        Na het blok verandert niets. De verkooptoets zelf verandert niet:
+        er wordt geen kWh meer verkocht.
+
+        Zonder bruikbaar getal (geen uitsplitsing, ander blok) blijft de
+        eigen schatting staan; `behoefte_bron` zegt welke het is.
+        """
+        eigen = sum(k[3] for k in kwartieren if k[0] < blok)
+        velden = {
+            "spaarplan_eigen_tot_blok_kwh": round(eigen, 2),
+            "behoefte_bron": "spaarplan (eigen schatting)",
+        }
+        if self.last_cheap_block_start != blok:
+            return kwartieren, velden
+        try:
+            doel, _na = self._nodig_tot_en_na_blok_kwh()
+        except Exception:  # noqa: BLE001 - het plan mag nooit omvallen
+            doel = None
+        if doel is None:
+            return kwartieren, velden
+        doel = max(0.0, float(doel))
+        voor = [k for k in kwartieren if k[0] < blok]
+        if not voor:
+            return kwartieren, velden
+        if eigen > 0.001:
+            factor = doel / eigen
+            nieuw = [
+                (b, e, p, t * factor) if b < blok else (b, e, p, t)
+                for b, e, p, t in kwartieren
+            ]
+        else:
+            # Geen profiel om naar te schalen: gelijk over de kwartieren.
+            deel = doel / len(voor)
+            nieuw = [
+                (b, e, p, deel) if b < blok else (b, e, p, t)
+                for b, e, p, t in kwartieren
+            ]
+        velden["behoefte_bron"] = "verkooptoets"
+        return nieuw, velden
 
     @staticmethod
     def _spaarplan_tot_en_na_blok(kwartieren: list, blok: datetime) -> dict:

@@ -7090,6 +7090,11 @@ MPC_MIN_METINGEN = 14
 # verkooptoets en de kwartierplanning tegelijk.
 RESERVE_BODEM_FRACTIE = 0.15
 
+# v5.87 (L-EMS-020): een reservesprong vastleggen vanaf deze verandering
+# tussen twee rondes, en hoeveel sprongen bewaard blijven. Alleen meten.
+RESERVE_SPRONG_DREMPEL_KWH = 0.3
+RESERVE_SPRONGEN_MAX = 48
+
 # Hoeveel handmatige ingrepen er bewaard worden, en hoeveel er nodig
 # zijn voordat er van een patroon gesproken kan worden (v3.75.0).
 #

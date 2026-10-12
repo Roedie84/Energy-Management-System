@@ -32825,3 +32825,36 @@ Narekening van 11-10: de volgende kWh valt nu in 43,8 ct (31,8 ct waard na
 rendement en slijtage) tegen 33,1 ct nu → niet laden.
 
 Tests: `test_v586_zon_verdringt.py` (8).
+
+## v5.87.0 — spaarplan rekent met de behoefte van de verkooptoets (L-EMS-017), reservesprongen vastleggen (L-EMS-020)
+
+**Spaarplan en verkooptoets: één behoefte tot het blok (L-EMS-017, akkoord
+Ruud 11-10 20:18).** Op 10-10 18:34 zag het spaarplan 8,1 kWh nodig tot het
+blok van 10:45, de verkooptoets ≤ 5,5. Werkelijk kwam er tot het blok 4,58
+kWh uit de accu: de verkooptoets klopte, het spaarplan zat 77 % te hoog en
+dekte daardoor 's avonds alleen de duurste kwartieren. Nu neemt het spaarplan
+het totaal tot het blok over van de verkooptoets (`_nodig_tot_en_na_blok_kwh`:
+de reserve zonder marge, zonder het deel na het blok); de verdeling over de
+kwartieren blijft die van het eigen profiel. Na het blok verandert niets. De
+verkooptoets zelf verandert niet - er wordt geen kWh meer verkocht. Zonder
+uitsplitsing, of bij een ander blok, blijft de eigen schatting staan. Nieuw
+in het spaarplan: `behoefte_bron` en `spaarplan_eigen_tot_blok_kwh` (de oude
+schatting, om het verschil te blijven meten).
+
+**Reservesprongen vastleggen (L-EMS-020, meetbaarheid).** De reserve en de
+behoefte tot het blok sprongen op 11-10 binnen minuten 0,6-1,9 kWh heen en
+weer zonder verbruiksstap (H-EMS-10); om 19:56 stopte zo een geplande
+verkoop. Verandert de reserve of de behoefte zonder marge meer dan 0,3 kWh
+tussen twee rondes, dan komt er nu een regel in `reserve_sprongen` (laatste
+48): tijd, blok, uren tot het blok en per onderdeel oud/nieuw
+(regelverschuiving, lange horizon, airco, temperatuur, marge, ongekapt), met
+de bijdrage per onderdeel en het grootste onderdeel. Stuurt niets.
+
+**Meetattributen op "Diagnose sturing".** De sensor heeft nu attributen
+(niet in de recorder): `reserve_sprongen` (laatste 24), `verkoopkwartieren`
+(de kwartieren van vandaag en gisteren met teruglevering, met verkoopreserve,
+marge en `marge_bij_export_min_kwh` uit v5.81), `nabeschouwing_7d` (de
+nabeschouwing per dag zonder kwartierlijsten) en de spaarplanbehoefte met
+bron. Zo zijn deze getallen te lezen zonder de diagnostiek te downloaden.
+
+Tests: `test_v587.py` (10).

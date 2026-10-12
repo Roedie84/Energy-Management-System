@@ -5306,6 +5306,17 @@ class DiagnoseSturingSensor(DiagnoseSensor):
 
     _attr_name = "Diagnose sturing"
     _soort = "sturing"
+    # v5.87 (L-EMS-020): reservesprongen en verkoopkwartieren als attribuut,
+    # zodat de leerronde ze leest zonder de diagnostiek te downloaden. Niet
+    # in de recorder (zoals sinds v5.76 alle grote attributen).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        try:
+            return self._coordinator.sturing_meetattributen()
+        except Exception:  # noqa: BLE001 - meten mag de sensor niet breken
+            return {}
 
 
 class DiagnoseLerenSensor(DiagnoseSensor):
