@@ -121,3 +121,24 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-12 04:20,filtergebruik_pct,0,1,
 2026-10-12 04:20,ha_herstarts,1,1,03:33
 2026-10-12 04:20,automation_traces_fout,0,5,laatste 04:15
+2026-10-12 08:20,pm25_gem,0.71,48,04:20-08:20 5-min statistiek
+2026-10-12 08:20,pm25_mediaan,0.47,48,
+2026-10-12 08:20,pm25_p95,1.58,48,
+2026-10-12 08:20,pm25_max,1.86,48,5-min max ~08:15; stijging vanaf 06:35 (ochtendactiviteit)
+2026-10-12 08:20,pm25_uren_gt15,0,48,
+2026-10-12 08:20,pm25_uren_gt25,0,48,
+2026-10-12 08:20,stand_auto_min,122,1,04:20-08:20
+2026-10-12 08:20,stand_mid_min,115,1,
+2026-10-12 08:20,stand_unavailable_min,2,2,HA-herstarts 06:14 en 06:48
+2026-10-12 08:20,pm25_gem_auto,1.06,24,5-min blokken; auto = aanwezig (ochtend)
+2026-10-12 08:20,pm25_gem_mid,0.37,24,mid = afwezig (vroege ochtend)
+2026-10-12 08:20,pm25_dag_gem_tot_nu,0.48,1,dagstatistiek 12-10 t/m 08:20
+2026-10-12 08:20,pm25_7d_gem,2.29,7,daggemiddelden 06-10 t/m 12-10 (12-10 deels)
+2026-10-12 08:20,co2_gem,584,48,5-min gem; max 739 om 07:55
+2026-10-12 08:20,co2_uren_gt1200,0,48,
+2026-10-12 08:20,schimmel_indicator_max,74,48,
+2026-10-12 08:20,lokaal_mislukt,0,5844,rondes sinds 11-10 11:48; uitval 0; 23 verbindingen; sturen 28/28
+2026-10-12 08:20,filtergebruik_pct,0,1,
+2026-10-12 08:20,ha_herstarts,2,1,06:14/06:48; raamsensoren ook 07:13 en 07:32 kort unavailable (geen herstart)
+2026-10-12 08:20,automation_traces_fout,0,5,laatste 08:20
+2026-10-12 08:20,stand_naar_mid_na_vertrek_min,15,2,07:00:59->07:15:59 en 08:05:29->08:20:28; wachttijd 12-10 naar 15 min
