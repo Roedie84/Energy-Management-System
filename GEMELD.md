@@ -25,3 +25,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 12-10 20:51 | luchtreiniger turbo bij koken (automation)
 12-10 23:51 | gold scalper afgewezen orders toch open, limiet overschreden, afstemming broker-posities
 12-10 23:51 | gold scalper opzet per positie als attribuut (L-GS-019)
+13-10 00:51 | gold scalper herkansing na afwijzing zonder force open (netting IG)
+13-10 00:51 | gold scalper netting-trades buiten t-toets en oordeel
