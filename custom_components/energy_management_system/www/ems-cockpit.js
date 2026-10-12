@@ -271,6 +271,31 @@ const APPARAAT_STATUS = {
   bezig: "bezig",
   draait: "draait",
   gepland: "gepland",
+  // v5.93.0: de standen van fietsladers en steelstofzuiger
+  test_aan: "kijkt of er iets aan hangt",
+  wacht_op_apparaat: "niets aangesloten",
+  aan_het_laden: "laadt",
+  voltooid: "opgeladen",
+  voltooid_vandaag: "vandaag al geladen",
+  overruled: "handmatig (overrule)",
+};
+/* v5.93.0: een kleur per stand (gevraagd 12-10 11:50). Groen = bezig of
+   laden, amber = wacht op het goedkope blok, cyaan = test, blauw = klaar,
+   violet = handmatig, grijs = niets aangesloten of uit. */
+const APPARAAT_KLEUR = [
+  [/^(laadt|aan_het_laden|bezig|draait|running|run)$/, "var(--groen)"],
+  [/^test_aan$/, "var(--cyaan)"],
+  [/^wacht_op_apparaat$/, "var(--tekst3)"],
+  [/wacht|gepland|delayed/, "var(--amber)"],
+  [/^(klaar|vol|voltooid|voltooid_vandaag|finished|ready)$/, "var(--blauw)"],
+  [/^overruled$/, "var(--violet)"],
+  [/^(uit|idle|off|inactive)$/, "var(--tekst3)"],
+];
+const apparaatKleur = (s) => {
+  if (!bruikbaar(s)) return "";
+  const st = String(s.state).toLowerCase();
+  const hit = APPARAAT_KLEUR.find(([re]) => re.test(st));
+  return hit ? hit[1] : "";
 };
 const apparaatTekst = (s) => {
   if (!bruikbaar(s)) return STREEP;
@@ -759,7 +784,7 @@ const AFHANKELIJK = {
     "blok", "besparing", "zelfvoorziening", "inkoop_vandaag", "teruglever_vandaag", "schema", "modus", "zon_werkelijk"],
   stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan", "beschikbaar", "capaciteit"],
   planning: ["plan", "schema", "uitleg", "blok"],
-  verkoop: ["gacs", "mc", "tekort", "uitleg"],
+  verkoop: ["gacs", "mc", "tekort", "uitleg", "blok"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
   zon: ["gacs", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk", "pvNauw", "bewolking", "pv"],
   huis: ["fietsen", "stofzuiger", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis"],
@@ -1077,6 +1102,17 @@ class EmsCockpitCard extends HTMLElement {
   _blokken() {
     const t = attr(this._s("schema"), "transitions");
     return Array.isArray(t) ? t : [];
+  }
+
+  /* Loopt het goedkope laadblok nu? Geeft {eind: "16:15"} of null (v5.93.0). */
+  _blokLoopt() {
+    const b = this._s("blok");
+    if (!bruikbaar(b)) return null;
+    const begin = Date.parse(b.state);
+    const eind = Date.parse(attr(b, "end") || "");
+    const nu = Date.now();
+    if (!(begin <= nu) || !(eind > nu)) return null;
+    return { eind: new Date(eind).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) };
   }
 
   _gacs(naam) {
@@ -1518,7 +1554,9 @@ class EmsCockpitCard extends HTMLElement {
     const nodig = num(toets.nodig_voor_woning_kwh);
     const tot = num(toets.nodig_tot_blok_kwh);
     const na = num(toets.nodig_na_blok_kwh);
-    const vrij = num(toets.verkoop_na_blok_vrij_kwh);
+    // v5.93.0: tijdens het laadblok staat alleen vrij_te_verkopen_kwh
+    const vrij = num(toets.verkoop_na_blok_vrij_kwh) ?? num(toets.vrij_te_verkopen_kwh);
+    const blokLoopt = this._blokLoopt();
     const terug = num(toets.terugladen_in_blok_eur);
 
     const rechts = chip(mag ? "verkopen mag" : "houdt vast", mag ? "ok" : "");
@@ -1531,8 +1569,11 @@ class EmsCockpitCard extends HTMLElement {
         : "";
     const cijfers =
       `<div class="trio">` +
-      mini("Tot het blok", tot == null ? STREEP : `${fmt(tot, 2)}<small>kWh</small>`, "altijd beschermd") +
-      mini("Na het blok", na == null ? STREEP : `${fmt(na, 2)}<small>kWh</small>`, "laadt het blok bij") +
+      (blokLoopt
+        ? mini("Tot het blok", "nu", `laadblok loopt${blokLoopt.eind ? " tot " + blokLoopt.eind : ""}`) +
+          mini("Na het blok", STREEP, "volgend blok nog niet bepaald")
+        : mini("Tot het blok", tot == null ? STREEP : `${fmt(tot, 2)}<small>kWh</small>`, "altijd beschermd") +
+          mini("Na het blok", na == null ? STREEP : `${fmt(na, 2)}<small>kWh</small>`, "laadt het blok bij")) +
       mini("Vrij te verkopen", vrij == null ? STREEP : `${fmt(vrij, 2)}<small>kWh</small>`, terug != null ? `terugladen ${ct(terug)} ct` : toets.verkoop_na_blok_reden ? esc(toets.verkoop_na_blok_reden) : "", vrij ? "var(--oranje)" : "") +
       `</div>`;
 
@@ -1633,11 +1674,7 @@ class EmsCockpitCard extends HTMLElement {
     const regel = (ic, naam, sub, waarde, kleur = "") =>
       `<div class="regel"${kleur ? ` style="--rk:${kleur}"` : ""}><div class="ric">${icoon(ic)}</div>` +
       `<div><div class="rn">${esc(naam)}</div>${sub ? `<div class="rs">${sub}</div>` : ""}</div><div class="rw">${waarde}</div></div>`;
-    const status = (s) => {
-      const t = apparaatTekst(s);
-      const kl = bruikbaar(s) && /laadt|bezig|draait/.test(s.state) ? "var(--groen)" : bruikbaar(s) && /wacht/.test(s.state) ? "var(--amber)" : "";
-      return [t, kl];
-    };
+    const status = (s) => [apparaatTekst(s), apparaatKleur(s)];
     const uit = [];
     const fiets = this._s("fietsen");
     if (fiets) {
@@ -1665,6 +1702,17 @@ class EmsCockpitCard extends HTMLElement {
       const sub = advies.advies
         ? `Warmte nu: ${advies.advies === "airco" ? "airco" : "cv"} goedkoopst${num(advies.airco_eur_per_kwh_warmte) != null ? ` (${ct(advies.airco_eur_per_kwh_warmte)} tegen ${ct(advies.gas_eur_per_kwh_warmte)} ct/kWh warmte)` : ""}`
         : esc(attr(besluit, "tekst") || "");
+      // v5.93.0: gaat de airco naar verwachting aan tot het volgende blok,
+      // en hoeveel rekent de reserve daarvoor mee?
+      const vw = attr(besluit, "verwachting") || {};
+      if (vw.beschikbaar) {
+        const res = num(vw.in_reserve_kwh);
+        uit.push(
+          regel("airco", "Airco", `${esc(vw.tekst || "")}${vw.tot_tekst ? `${PUNT}tot ${esc(vw.tot_tekst)}` : ""}`,
+            res != null && res > 0 ? `${fmt(res, 2)}<small>kWh</small> <span class="leeg">in reserve</span>` : vw.verwacht ? "verwacht" : "niet verwacht",
+            vw.verwacht ? "var(--oranje)" : "")
+        );
+      }
       uit.push(
         regel("airco", "Klimaat", sub,
           `${binnen != null ? fmt(binnen, 1) + GRAAD : STREEP}${buiten != null ? ` <span class="leeg">/ ${fmt(buiten, 1)}${GRAAD}</span>` : ""}`,

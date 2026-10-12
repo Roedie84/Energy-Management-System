@@ -37393,7 +37393,14 @@ class EnergyManagementSystemCoordinator:
         self.monte_carlo_deterministisch_tot_blok_kwh = None
         self.monte_carlo_simulations_run, self.monte_carlo_hours_simulated = 0, 0
 
-        cheap_block_start = self._monte_carlo_horizon_kiezen(now, cheap_block_start)
+        # v5.93.0: loopt het goedkope blok nu, dan begint de simulatie aan
+        # het EINDE van dat blok, met de geplande accustand daar. Gemeld
+        # 12-10 11:32: tijdens het blok (11:30-16:15) sprong de tekortkans
+        # van 0% naar 99%, omdat de simulatie vanaf nu rekende zonder het
+        # bijladen in het blok mee te nemen.
+        start, extra_beschikbaar, cheap_block_start = self._monte_carlo_vanaf(
+            now, cheap_block_start
+        )
 
         efficiency_percent = self.learned_battery_efficiency_percent
         if efficiency_percent is None:
@@ -37403,7 +37410,7 @@ class EnergyManagementSystemCoordinator:
         efficiency_factor = efficiency_percent / 100
 
         segments = []
-        cursor = now
+        cursor = start
         while cursor < cheap_block_start:
             hour_end = cursor.replace(
                 minute=0, second=0, microsecond=0
@@ -37424,7 +37431,7 @@ class EnergyManagementSystemCoordinator:
         # (`_segmenten_verbruik_zon`, voorzichtige zon) - zie
         # `_monte_carlo_centrum`. Alleen de geleerde spreiding komt erbij.
         vakantie_factor, centrum, uit_de_wandeling = self._monte_carlo_centrum(
-            now, cursor, segments, efficiency_factor
+            start, cursor, segments, efficiency_factor
         )
         self.monte_carlo_extra_kwh = round(
             self._monte_carlo_extras(segments, centrum, vakantie_factor), 3
@@ -37470,6 +37477,9 @@ class EnergyManagementSystemCoordinator:
         available_kwh = self._na_module_leeg(
             self._read_sensor_float(available_entity) if available_entity else None
         )
+        if available_kwh is not None and start > now:
+            # v5.93.0: wat er aan het eind van het laadblok gepland in zit
+            available_kwh += extra_beschikbaar
         if available_kwh is not None:
             # v5.36: dezelfde drempel als een tekortdag. Een tekortdag is pas
             # meer dan SHORTFALL_MIN_NETIMPORT_KWH bijgekocht; een tekort van
@@ -37483,7 +37493,8 @@ class EnergyManagementSystemCoordinator:
             self.monte_carlo_kans_incl_lange_horizon_pct = round(
                 100 * sum(1 for d in deepest_deficits if d > grens) / n, 1
             )
-            self._leg_mc_22u_vast(now, available_kwh)
+            if start <= now:
+                self._leg_mc_22u_vast(now, available_kwh)
 
         self.monte_carlo_note = (
             "Adviserend - de tekortkans (stand) gaat over NU TOT het goedkope "
@@ -37773,6 +37784,55 @@ class EnergyManagementSystemCoordinator:
                 0.0, verbruik_kwh - avg_kw * fraction_hours * vakantie_factor
             )
         return totaal
+
+    def _monte_carlo_vanaf(
+        self, now: datetime, cheap_block_start: datetime | None
+    ) -> tuple[datetime, float, datetime]:
+        """Start, extra geplande kWh en horizon van de simulatie (v5.93.0)."""
+        start, extra = self._monte_carlo_start(now, cheap_block_start)
+        horizon = self._monte_carlo_horizon_kiezen(now, cheap_block_start)
+        if start > now:
+            self.monte_carlo_horizon_basis += (
+                f"; gesimuleerd vanaf het einde van het laadblok "
+                f"({dt_util.as_local(start):%H:%M}, +{extra:.2f} kWh gepland)"
+            )
+        return start, extra, horizon
+
+    def _monte_carlo_start(
+        self, now: datetime, cheap_block_start: datetime | None
+    ) -> tuple[datetime, float]:
+        """Vanaf wanneer Monte Carlo simuleert, en wat er dan extra in de accu
+        zit ten opzichte van nu (v5.93.0).
+
+        Buiten een laadblok: nu, 0. Loopt het goedkope blok: het einde van
+        het blok, met het verschil tussen de geplande stand aan het blokeinde
+        (kwartierplan) en de stand nu, nooit negatief. Zonder plan, stand of
+        capaciteit blijft het nu (zoals voorheen).
+        """
+        blok_eind = getattr(self, "last_cheap_block_end", None)
+        if (cheap_block_start is None or blok_eind is None
+                or not cheap_block_start <= now < blok_eind):
+            return now, 0.0
+        soc_nu = self.accustand_procent()
+        capaciteit = self.bruikbare_capaciteit_kwh()
+        if soc_nu is None or not capaciteit:
+            return now, 0.0
+        soc_eind = None
+        try:
+            rijen = self.get_quarter_plan(now) or []
+        except Exception:  # noqa: BLE001 - zonder plan blijft het nu
+            rijen = []
+        for rij in rijen:
+            begin = dt_util.parse_datetime(str(rij.get("start") or ""))
+            if begin is None or rij.get("soc_procent") is None:
+                continue
+            if begin + timedelta(minutes=15) <= blok_eind:
+                soc_eind = float(rij["soc_procent"])
+            else:
+                break
+        if soc_eind is None:
+            return now, 0.0
+        return blok_eind, round(max(0.0, (soc_eind - soc_nu) / 100 * capaciteit), 3)
 
     def _monte_carlo_horizon_kiezen(
         self, now: datetime, cheap_block_start: datetime | None
@@ -46822,6 +46882,51 @@ class EnergyManagementSystemCoordinator:
     def get_airco_ritme(self) -> dict:
         """Wat er van jullie dagritme geleerd is (v5.65)."""
         return airco_ritme.overzicht(self._airco_ritme())
+
+    def get_airco_verwachting(self, now: datetime | None = None) -> dict:
+        """Gaat de airco naar verwachting aan tot het volgende goedkope blok,
+        en hoeveel daarvan rekent de reserve mee? (v5.93.0)
+
+        Gevraagd 12-10: op de cockpit bij "Huis en apparaten" zien of de
+        airco verwacht wordt, omdat dat de accu raakt. Dezelfde getallen als
+        de reserve (`_airco_ochtend_extra_kwh` + `_airco_gebruik_extra_kwh`),
+        tot het volgende blok; loopt het blok nu of is er geen, tot 09:00.
+        """
+        now = now or dt_util.now()
+        tot = self.last_cheap_block_start
+        if tot is None or tot <= now:
+            tot = self._monte_carlo_terugval_horizon(now)
+        try:
+            ochtend = self._airco_ochtend_extra_kwh(now, tot)
+            gebruik = self._airco_gebruik_extra_kwh(now, tot)
+        except Exception:  # noqa: BLE001 - alleen weergave
+            return {"beschikbaar": False}
+        uren = list(gebruik.get("uren") or [])
+        reserve_som = (ochtend.get("extra_kwh") or 0.0) + (gebruik.get("extra_kwh") or 0.0)
+        verwacht_som = (ochtend.get("verwacht_kwh") or 0.0) + (gebruik.get("verwacht_kwh") or 0.0)
+        loopt = any(u.get("zeker") for u in uren)
+        if loopt:
+            tekst = "airco draait"
+        elif uren:
+            eerste, laatste = uren[0]["uur"], uren[-1]["uur"]
+            kans = max(u.get("kans") or 0 for u in uren)
+            span = eerste if eerste == laatste else f"{eerste[:2]}-{int(laatste[:2]) + 1:02d} u"
+            tekst = f"verwacht rond {span} (kans {round(kans * 100)}%)"
+        elif (ochtend.get("extra_kwh") or 0) > 0:
+            tekst = "ochtendverwarming verwacht"
+        else:
+            tekst = "niet verwacht"
+        return {
+            "beschikbaar": True,
+            "tot": tot.isoformat(),
+            "tot_tekst": dt_util.as_local(tot).strftime("%H:%M"),
+            "verwacht": bool(uren) or (ochtend.get("extra_kwh") or 0) > 0,
+            "tekst": tekst,
+            "in_reserve_kwh": round(reserve_som, 2),
+            "verwacht_kwh": round(verwacht_som, 2),
+            "ochtend_kwh": round(ochtend.get("extra_kwh") or 0.0, 2),
+            "uren": uren,
+        }
 
     def _airco_vooruitblik(self) -> dict:
         """De woonkamertemperatuur over een uur volgens de projectie, en of

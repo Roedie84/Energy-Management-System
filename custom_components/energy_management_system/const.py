@@ -5586,6 +5586,11 @@ APPLIANCE_STATE_LABELS = {
     "wacht_op_goedkoop_blok": "wacht op goedkoop blok",
     "voltooid_vandaag": "vandaag al geladen",
     "aan_het_laden": "aan het laden",
+    # v5.93.0: gelijk met APPARAAT_STATUS in www/ems-cockpit.js
+    "test_aan": "kijkt of er iets aan hangt",
+    "wacht_op_apparaat": "niets aangesloten",
+    "voltooid": "opgeladen",
+    "overruled": "handmatig (overrule)",
 }
 
 # --- Ondergrens voor de zelfconsumptie (v1.16.8) ---------------------

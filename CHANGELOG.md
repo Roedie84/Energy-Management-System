@@ -32967,3 +32967,34 @@ boven de ondergrens nog in zit), gerekend met het vermogen van dit moment.
 Niet getoond in rust (onder 50 W) of als het langer dan een etmaal zou duren.
 
 Tests: in `test_v591_planvolging.py` (1).
+
+## v5.93.0 — cockpit tijdens het laadblok, apparaatstanden en airco
+
+Gemeld 12-10 11:32 met een schermafdruk van "Verkopen en reserve": tijdens
+het goedkope blok (11:30-16:15) stonden "Tot het blok", "Na het blok" en
+"Vrij te verkopen" op een streepje, en de tekortkans sprong van 0% naar 99%
+terwijl er 3,72 kWh beschikbaar was tegen 1,30 nodig.
+
+- **Tekortkans tijdens het laadblok.** Monte Carlo rekende vanaf nu met de
+  huidige accu-inhoud, zonder het bijladen in het blok. Loopt het blok, dan
+  begint de simulatie nu aan het einde van het blok, met de geplande stand
+  daar (kwartierplan) als beginvoorraad; zonder plan of capaciteit blijft het
+  als voorheen. Tijdens een blok wordt de kans niet als 22:00-ijkpunt
+  vastgelegd. De horizonuitleg noemt het blokeinde en de geplande kWh.
+- **Verkopen en reserve.** Tijdens het blok staat er "nu / laadblok loopt tot
+  16:15" in plaats van streepjes. "Vrij te verkopen" valt terug op
+  `vrij_te_verkopen_kwh` van de verkooptoets (dat veld werd niet gelezen).
+- **Apparaatstanden.** "Test aan" was de ruwe stand: bij de start van het
+  blok zet het EMS de schakelaar één ronde aan om te zien of er iets aan
+  hangt. Nu leesbaar: "kijkt of er iets aan hangt", "niets aangesloten",
+  "laadt", "opgeladen", "vandaag al geladen", "handmatig (overrule)". Elke
+  stand heeft een eigen kleur (gevraagd 11:50): groen laadt/draait, amber
+  wacht op het blok, cyaan test, blauw klaar, violet handmatig, grijs niets
+  aangesloten of uit.
+- **Airco op Huis en apparaten** (gevraagd 11:39). Nieuwe regel: wordt de
+  airco tot het volgende goedkope blok verwacht (uur en kans, of "airco
+  draait"/"niet verwacht"), en hoeveel kWh de reserve daarvoor meerekent.
+  Dezelfde getallen als de reserve; nieuw attribuut `verwachting` op
+  `sensor.…_airco_besluit`.
+
+Tests: `test_v5930_cockpit_blok_airco.py` (14).

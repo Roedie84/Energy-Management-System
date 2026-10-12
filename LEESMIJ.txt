@@ -1,3 +1,15 @@
+EMS v5.93.0 - cockpit tijdens het laadblok, apparaatstanden en airco
+
+Installeren: via HACS bijwerken en Home Assistant herstarten; daarna de
+Energiecockpit één keer verversen.
+
+- Verkopen en reserve: tijdens het laadblok "laadblok loopt tot ..." in plaats
+  van streepjes, "Vrij te verkopen" weer gevuld, en de tekortkans rekent vanaf
+  het einde van het blok met de geplande accustand (geen 99% meer).
+- Huis en apparaten: leesbare standen ("kijkt of er iets aan hangt",
+  "niets aangesloten", "laadt"), elk met een eigen kleur, en een regel Airco: verwacht of niet tot het
+  volgende blok, en hoeveel kWh de reserve daarvoor meerekent.
+
 EMS v5.92.0 - resterende laad- en ontlaadtijd
 
 Installeren: via HACS bijwerken en Home Assistant herstarten; daarna de

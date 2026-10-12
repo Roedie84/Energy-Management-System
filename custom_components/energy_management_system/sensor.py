@@ -5146,6 +5146,8 @@ class AircoBesluitSensor(_CoordinatorDiagnosticSensor):
         uit = dict(self._coordinator.last_airco_besluit or {})
         # v5.65: wat er van jullie dagritme geleerd is.
         uit["dagritme"] = self._coordinator.get_airco_ritme()
+        # v5.93.0: verwacht tot het volgende blok, zoals de reserve rekent
+        uit["verwachting"] = self._coordinator.get_airco_verwachting()
         return uit
 
 

@@ -604,6 +604,8 @@ async def async_get_config_entry_diagnostics(
         "airco_setpunten": list(getattr(coordinator, "airco_setpunten", None) or []),
         # v5.65: het geleerde dagritme van de airco.
         "airco_ritme": _veilig("get_airco_ritme", coordinator.get_airco_ritme),
+        # v5.93.0: verwacht tot het volgende blok, zoals de reserve rekent.
+        "airco_verwachting": _veilig("get_airco_verwachting", coordinator.get_airco_verwachting),
         # v5.25: het spaarplan - welke kwartieren de accu dekt als hij het
         # goedkope blok niet haalt.
         "spaarplan": dict(getattr(coordinator, "last_spaarplan", None) or {}),
