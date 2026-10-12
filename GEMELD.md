@@ -20,3 +20,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 12-10 13:51 | ongebruikt package tablet_nieuws
 12-10 13:51 | solaredge cloud-integratie verwijderen
 12-10 13:51 | ha-herstarts 40 per dag oorzaak
+12-10 15:51 | dashboard tablet oud + plotly-resource/hacs opruimen
