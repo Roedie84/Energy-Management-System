@@ -2855,7 +2855,10 @@ views:
       subtitle: Verwachte prijs, zon, modus en SoC per kwartier
     - type: markdown
       title: Wat de aansturing van plan is
-      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_kwartierplanning'', ''kwartierplanning'') or [] %}{% if p | length == 0 %}Nog geen planning beschikbaar - hiervoor zijn prijsgegevens en een accustand nodig.{% else %}| Tijd | ct | Zon | Modus | SoC | Totaal |
+      content: '{% set w = state_attr(''sensor.woonkamer_energy_management_system_kwartierplanning'', ''laadplan_gewijzigd'') or {} %}Laadplanning gewijzigd: {{ w.get(''om_tekst'', ''-'') }}, {{ w.get(''blokken'') }}
+
+
+        {% set p = state_attr(''sensor.woonkamer_energy_management_system_kwartierplanning'', ''kwartierplanning'') or [] %}{% if p | length == 0 %}Nog geen planning beschikbaar - hiervoor zijn prijsgegevens en een accustand nodig.{% else %}| Tijd | ct | Zon | Modus | SoC | Totaal |
 
         |---|---|---|---|---|---|
 

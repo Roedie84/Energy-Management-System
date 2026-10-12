@@ -4686,6 +4686,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("helderheid_ijking", self._coordinator.get_helderheid_ijking),
             ("zon_uitstelplan", lambda: self._coordinator.last_solar_defer_plan),
             ("kwartierplanning", self._coordinator.get_quarter_plan_compact),
+            ("laadplan_gewijzigd", self._coordinator.get_laadplan_gewijzigd),
             ("verkooptoets", lambda: self._coordinator.last_sell_check),
             ("reservemarge", self._coordinator.get_reserve_margin_overview),
             ("zelfconsumptie", self._coordinator.get_self_consumption_overview),
@@ -5067,7 +5068,7 @@ class DashboardPaginaSensor(_CoordinatorDiagnosticSensor):
 # v5.62: (suffix, naam, icoon, attributen, lijst die de toestand telt).
 # De toestand is het aantal regels van het eerste attribuut.
 DASHBOARD_PAGINA_SENSOREN = (
-    ("kwartierplanning_tabel", "Kwartierplanning", "mdi:table-clock", ("kwartierplanning",), None),
+    ("kwartierplanning_tabel", "Kwartierplanning", "mdi:table-clock", ("kwartierplanning", "laadplan_gewijzigd"), None),
     ("smart_charging_proef", "Smart charging proef", "mdi:flask-outline", ("smart_charging_proef",), "rijen"),
     ("logboek", "Logboek", "mdi:notebook-outline", ("logboek",), "regels"),
     ("proefstand", "Proefstand", "mdi:test-tube", ("proefstand",), "kandidaten"),

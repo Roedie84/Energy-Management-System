@@ -550,6 +550,10 @@ async def async_get_config_entry_diagnostics(
         "kwartierplan_compact": _veilig(
             "get_quarter_plan_compact", coordinator.get_quarter_plan_compact
         ),
+        # v5.88: wanneer de laadplanning het laatst veranderde.
+        "laadplan_gewijzigd": _veilig(
+            "get_laadplan_gewijzigd", coordinator.get_laadplan_gewijzigd
+        ),
         "weerbron_overzicht": _veilig(
             "get_weather_source_overview", coordinator.get_weather_source_overview
         ),

@@ -1365,7 +1365,8 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="g-y2">${y2Lab}</div>` +
       `<div class="g-x">${xLab.join("")}</div>` +
       `</div>` +
-      `<div class="meternoot">Staaf: prijs per kwartier (ct/kWh) in de kleur van de geplande stand. Witte lijn: verwachte accustand. Geel: verwachte zon.${drempel != null ? ` Stippellijn: drempel voor duur (${ct(drempel)} ct).` : ""}</div>`;
+      `<div class="meternoot">Staaf: prijs per kwartier (ct/kWh) in de kleur van de geplande stand. Witte lijn: verwachte accustand. Geel: verwachte zon.${drempel != null ? ` Stippellijn: drempel voor duur (${ct(drempel)} ct).` : ""}</div>` +
+      this._laadplanRegel();
 
     // Tabel met de blokken
     const blokken = this._blokken();
@@ -1394,6 +1395,20 @@ class EmsCockpitCard extends HTMLElement {
         `</tbody></table></div>`
       : "";
     return kop + `<div class="pb">${grafiek}${tabel}</div>`;
+  }
+
+  /* v5.88: wanneer de laadplanning (laden uit het net) het laatst veranderde. */
+  _laadplanRegel() {
+    const w = attr(this._s("plan"), "laadplan_gewijzigd") || {};
+    const d = alsDatum(w.om);
+    if (!d) return "";
+    const wanneer = `${dagLabel(d)}${klok(w.om)}`;
+    return (
+      `<div class="sub laadplan">Laadplanning gewijzigd: <b>${esc(wanneer)}</b> (${esc(geleden(w.om) || "")})` +
+      ` \u00b7 nu: ${esc(w.blokken || "")}` +
+      (w.was ? ` \u00b7 was: ${esc(w.was)}` : "") +
+      `</div>`
+    );
   }
 
   _accuTekst(begin, eind) {

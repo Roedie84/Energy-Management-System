@@ -1505,7 +1505,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -23389,7 +23389,69 @@ class EnergyManagementSystemCoordinator:
         plan = self._bouw_kwartierplan(now)
         if ronde is not None:
             self._kwartierplan_cache = (sleutel, plan)
+            self._volg_laadplan(plan, moment)
         return plan
+
+    def _volg_laadplan(self, plan: list[dict], moment: datetime) -> None:
+        """Onthoud wanneer de laadplanning het laatst veranderde (v5.88).
+
+        Gevraagd: "op het dashboard laatste wijziging timestamp voor planning
+        accu laden". Het plan wordt elke ronde opnieuw opgebouwd; dat is geen
+        wijziging. Een wijziging is: een ander stel laadkwartieren (laden uit
+        het net) vanaf het huidige kwartier. Kwartieren die voorbij zijn,
+        tellen niet - anders zou elk verstreken laadkwartier een "wijziging"
+        zijn.
+        """
+        huidig = moment.replace(
+            minute=moment.minute // 15 * 15, second=0, microsecond=0
+        )
+        nieuw = []
+        for regel in plan or []:
+            start = dt_util.parse_datetime(regel.get("start") or "")
+            if start is None or start < huidig:
+                continue
+            if str(regel.get("modus") or "").startswith("manual (laden)"):
+                nieuw.append(start)
+        vorig = self.laadplan_gewijzigd if isinstance(self.laadplan_gewijzigd, dict) else {}
+        oud = []
+        for tekst in vorig.get("kwartieren") or []:
+            t = dt_util.parse_datetime(tekst)
+            if t is not None and t >= huidig:
+                oud.append(t)
+        if vorig and sorted(oud) == sorted(nieuw):
+            return
+        self.laadplan_gewijzigd = {
+            "om": moment.isoformat(),
+            "om_tekst": f"{dt_util.as_local(moment):%d-%m %H:%M}",
+            "kwartieren": [t.isoformat() for t in sorted(nieuw)],
+            "blokken": self._laadblokken_tekst(sorted(nieuw), moment),
+            "was": vorig.get("blokken"),
+        }
+        self.schedule_persisted_state_save()
+
+    @staticmethod
+    def _laadblokken_tekst(kwartieren: list[datetime], moment: datetime) -> str:
+        """Aaneengesloten laadkwartieren als "morgen 02:30-04:45" (v5.88)."""
+        if not kwartieren:
+            return "geen laden uit het net gepland"
+        blokken = []
+        begin = vorig = kwartieren[0]
+        for t in kwartieren[1:] + [None]:
+            if t is not None and t - vorig == timedelta(minutes=15):
+                vorig = t
+                continue
+            eind = vorig + timedelta(minutes=15)
+            lokaal = dt_util.as_local(begin)
+            dag = lokaal.date() - dt_util.as_local(moment).date()
+            label = "" if dag.days == 0 else ("morgen " if dag.days == 1 else f"{lokaal:%d-%m} ")
+            blokken.append(f"{label}{lokaal:%H:%M}-{dt_util.as_local(eind):%H:%M}")
+            if t is not None:
+                begin = vorig = t
+        return ", ".join(blokken)
+
+    def get_laadplan_gewijzigd(self) -> dict:
+        """Voor het dashboard: wanneer de laadplanning veranderde (v5.88)."""
+        return dict(self.laadplan_gewijzigd or {})
 
     def _bouw_kwartierplan(self, now: datetime | None = None) -> list[dict]:
 

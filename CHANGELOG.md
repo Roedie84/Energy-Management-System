@@ -32858,3 +32858,19 @@ nabeschouwing per dag zonder kwartierlijsten) en de spaarplanbehoefte met
 bron. Zo zijn deze getallen te lezen zonder de diagnostiek te downloaden.
 
 Tests: `test_v587.py` (10).
+
+## v5.88.0 — Energiecockpit: wanneer veranderde de laadplanning het laatst
+
+Gevraagd 12-10 06:29: "Energiecockpit, ik wil op het dashboard laatste
+wijziging timestamp voor planning accu laden". Het plan wordt elke ronde
+(elke minuut) opnieuw opgebouwd; dat is geen wijziging. Nu onthoudt het EMS
+wanneer het stel laadkwartieren (laden uit het net) vanaf het huidige
+kwartier écht veranderde, met de blokken van nu en van daarvoor
+(`laadplan_gewijzigd`: `om`, `kwartieren`, `blokken`, `was`). Verstreken
+laadkwartieren tellen niet als wijziging. Bewaard over een herstart.
+
+In de Energiecockpit staat onder de planningsgrafiek: "Laadplanning gewijzigd:
+06:12 (5 min geleden) · nu: morgen 02:30-04:15 · was: …". Ook als attribuut op
+`sensor.…_kwartierplanning` en in het YAML-dashboard (pagina Kwartierplanning), en in de diagnostiek-export.
+
+Tests: `test_v588_laadplan_gewijzigd.py` (7).
