@@ -372,3 +372,14 @@ laatste ronde: 12-10 15:40, gemeten t/m 12-10 15:45
 - MC 0 % (19:46). Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde, niets acuut). L-EMS-022/023 in de dagafsluiting van 13-10.
 
 laatste ronde: 12-10 19:40, gemeten t/m 12-10 19:46
+
+## 12-10 23:40 · tussenronde
+- 6 HA-herstarts (21:10, 21:52, 22:38, 22:40, 22:41, 23:17; o.a. Gold Scalper 2.3-2.4.1); actief **v5.93.3** (19:08, andere sessie), 0 EMS-fouten.
+- 19:45-23:40: import 0,05 kWh, export 0,33 kWh; accu dekt het huis (53 → 52 % om 23:41).
+- **Harde regel: 0× onder de reserve.** Verkoop 20:45 ~0,28 kWh bij 40 ct (`mag_verkopen`, marge +0,046, kleinste +0,016); 21:00 ~8 Wh met marge −0,03 bij `mag_verkopen` false = regeloverschot binnen de SoC-stap (L-EMS-022-patroon, nu 14 van 14 zonder echte verkoop). Daarna geen verkoop: beschikbaar 3,63 < reserve 7,78 (boven capaciteit).
+- Nacht 12→13: MC 0 %, nodig tot blok (13-10 12:00) 2,50 bij 3,63 beschikbaar → marge 1,13 kWh; kalibratie 22:00 kans 0 % (Brier 0, n=3). Morgen Solcast 4,0 kWh, `nodig_na_blok` 5,18 → laadblok moet bijladen.
+- **H-EMS-10** (springende reserve): 1 `reserve_sprong` om 23:18:20, 11 s na de eerste ronde na de herstart; behoefte 10,16 → 7,77 (lange horizon 6,95 → 5,18), reserve zelf gelijk (7,78, afgekapt). Herstartartefact, geen avondsprong (avond 19:46-23:18: 0). Meetbaarheid: eerste ronde na start markeren of overslaan → meenemen in L-EMS-023-bouw (zelf bouwen: meetfout).
+- Planvolging dag 42 kwartieren 47,6 % (19:46-23:40: 12 van 16 volgens plan); `afwijking_accu` 9 tegen `oorzaken.accu` 4 → L-EMS-023 blijft.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve; 1 avond zonder sprong). Geen release (tussenronde, niets acuut). L-EMS-022/023 in de dagafsluiting van 13-10.
+
+laatste ronde: 12-10 23:40, gemeten t/m 12-10 23:41
