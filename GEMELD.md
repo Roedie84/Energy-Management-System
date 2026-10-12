@@ -22,3 +22,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 12-10 13:51 | ha-herstarts 40 per dag oorzaak
 12-10 15:51 | dashboard tablet oud + plotly-resource/hacs opruimen
 12-10 16:51 | buienradar-sensoren unknown (integratie herladen)
+12-10 20:51 | luchtreiniger turbo bij koken (automation)
