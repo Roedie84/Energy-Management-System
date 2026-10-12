@@ -162,3 +162,9 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: een laadblok van het net alleen als (verkoop- of vermeden inkoopprijs − inkoopprijs / 0,84) > (waarde van de zon die morgen door het nachtladen niet meer in de accu past − exportprijs op dat moment), per kWh; verdrongen kWh = min(nachtlading, verwacht zonoverschot vóór het vol-moment − vrije ruimte na de ochtendverkoop).
 - Verwacht effect: geen nachtladen op dagen met een volle accu uit zon vóór de middag; op dagen met weinig zon ongewijzigd.
 - Narekenen eerst: per nacht van de laatste 14 dagen geladen kWh, prijs, verwacht en werkelijk vol-moment, export na vol-moment → netto opbrengst met/zonder nachtladen.
+
+## L-EMS-022 · verkoopkwartier alleen als er echt teruggeleverd werd (meetfout) + netarbitrage in de nabeschouwing
+- Status: **gepland** (zelf bouwen: meetfout/classificatie, raakt de sturing niet) — bouwen in de dagafsluiting van 13-10.
+- Onderbouwing (12-10 07:40): `marge_bij_export_min_kwh` neemt de marge van elke ronde met net ≤ −100 W. Eén regelpiek of een herstart (12-10 06:15, accu kort offline) is genoeg. 11-10/12-10: 8 kwartieren met negatieve marge (tot −1,51 kWh) bij 6-18 Wh teruglevering per kwartier (P1-teller) = 0 echte verkoop; de 2 echte verkoopkwartieren (230 en 114 Wh) stonden goed (+0,47 / +0,035). Een lezer van `verkoopkwartieren` ziet nu 8 valse "onder de reserve verkocht".
+- Bouw: per kwartier `export_kwh` (P1-tellerverschil of geïntegreerd net_w) in het dagverloop; de marge telt pas als het kwartier ≥ 25 Wh (= 100 W gemiddeld) terugleverde, of als ≥ 2 opeenvolgende rondes ≤ −100 W. `verkoopkwartieren` toont `export_kwh`. Daarnaast `netarbitrage_eur` (bestaat al in de nabeschouwing) in `nabeschouwing_7d`, zodat "gemist" op netlaaddagen te duiden is (11-10: −0,26).
+- Meten na bouw: 0 kwartieren met negatieve marge bij < 25 Wh export; echte verkoopkwartieren ongewijzigd.

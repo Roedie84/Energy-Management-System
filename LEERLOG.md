@@ -327,3 +327,15 @@ laatste ronde: 11-10 23:40, gemeten t/m 11-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog, nu ook heldere dag), H-EMS-10 (springende reserve; meetbaar na installatie). Open voor Ruud: L-EMS-019.
 
 laatste ronde: 12-10 03:40, gemeten t/m 12-10 03:55
+
+## 12-10 07:40 · tussenronde
+- 2 HA-herstarts (06:14-06:15, 06:47-06:49); actief **v5.88.0** (andere sessie 06:46; bevat v5.87). 06:15:48 accu kort "offline" (Zendure status 0) direct na de herstart, daarna normaal. Geen EMS-fouten.
+- Beslissingen 03:45-07:42: alleen `default_smart` (2× ~30 s `unknown` bij herstart). Import 0,073 kWh, export 0,106 kWh (regelruis, 5-14 Wh/kwartier). Geen netladen in de nacht (leermodus tot 05:00).
+- **Nacht 11→12 zonder tekort:** 07:30 beschikbaar 2,42 kWh, nodig tot blok (11:30) 0,36 → marge ~2,0 (MC 22:00 0 %, uitkomst nee → Brier 0, n=4).
+- **Harde regel 11-10 nu direct getoetst (v5.87-attribuut `verkoopkwartieren`):** echte verkoopkwartieren 19:45 (230 Wh export) en 20:00 (114 Wh) hadden kleinste marge +0,47 en +0,035 kWh → **0× onder de reserve** (bevestigt de afleiding van 03:40).
+- **Meetfout gevonden:** 8 kwartieren tonen `marge_bij_export_min_kwh` < 0 (11-10 09:00, 09:30, 10:45, 11:00, 11:15, 18:00, 22:30; 12-10 06:15 −1,51) terwijl er per kwartier maar 6-18 Wh werd teruggeleverd (P1-teller). Eén ronde met ≥ 100 W export (regelpiek, herstart) telt al als "verkoop". 8 van 8 negatieve meldingen vals, 2 van 2 echte verkopen goed → **L-EMS-022** (zelf bouwen: export-kWh per kwartier, alleen ≥ 25 Wh telt; dagafsluiting).
+- `nabeschouwing_7d` nu leesbaar: gemist t.o.v. achteraf-optimum 05..11-10 € 0,78 / 0,67 / 0,89 / 0,39 / 0,29 / 0,09 / −0,26 (7 d € 2,85 van € 7,18 haalbaar). Dalend. 11-10 negatief: het optimum rekent zonder netladen (`sta_netladen_toe=False`, bewust), terwijl 11-10 7,49 kWh van het net laadde → op netlaaddagen geen bovengrens; `netarbitrage_eur` staat niet in het attribuut → meenemen in L-EMS-022.
+- H-EMS-10: `reserve_sprongen` 0 sinds installatie (06:49-07:42, ochtend, geen avond) → eerste echte toets bij de avond van 12-10.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde; meetfout niet acuut, sturing raakt hij niet; vandaag al v5.87 + v5.88).
+
+laatste ronde: 12-10 07:40, gemeten t/m 12-10 07:42
