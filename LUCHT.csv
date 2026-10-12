@@ -187,3 +187,30 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-12 16:20,filtergebruik_pct,0,1,
 2026-10-12 16:20,ha_herstarts,7,1,12:37/13:05/13:28/14:44/15:01/15:43/16:11
 2026-10-12 16:20,automation_traces_fout,0,5,laatste 16:23
+2026-10-12 20:20,pm25_gem,15.3,48,16:20-20:20 5-min statistiek; incl. kookpiek
+2026-10-12 20:20,pm25_mediaan,3.12,48,
+2026-10-12 20:20,pm25_p95,68.0,48,
+2026-10-12 20:20,pm25_max,134.7,48,17:11 tijdens koken
+2026-10-12 20:20,pm25_uren_gt15,0.83,48,17:00-17:50
+2026-10-12 20:20,pm25_uren_gt25,0.67,48,
+2026-10-12 20:20,stand_auto_min,214,1,16:20-20:20
+2026-10-12 20:20,stand_mid_min,25,1,18:30-18:45 en 18:50-19:02
+2026-10-12 20:20,stand_unavailable_min,1,1,HA-herstart 18:34
+2026-10-12 20:20,pm25_gem_auto,16.59,43,5-min blokken; bevat kookpiek
+2026-10-12 20:20,pm25_gem_mid,4.21,5,staart van kookpiek
+2026-10-12 20:20,piek_hoogte,134.7,1,start ~16:57; kookplaat run 17:02:55-17:14:43 (status daarvoor unavailable); ramen dicht; stand auto; aanwezig
+2026-10-12 20:20,piek_halvering_auto_min,12.2,8,fit 17:15-17:29 na kookplaat uit; achtergrond 2.3 eraf
+2026-10-12 20:20,piek_halvering_auto_totaal_min,15.3,27,fit 17:15-18:07
+2026-10-12 20:20,piek_min_tot_lt10,53,1,kookplaat uit 17:14:43 -> < 10 om ~18:07
+2026-10-12 20:20,apparaat_pm25_max,150,1,UltimateSensor 134.7: volgt bij hoge waarden
+2026-10-12 20:20,pm25_dag_gem_tot_nu,3.60,1,dagstatistiek 12-10
+2026-10-12 20:20,pm25_7d_gem,2.74,7,daggemiddelden 06-10 t/m 12-10 (12-10 deels)
+2026-10-12 20:20,co2_gem,1129,48,5-min gem; stijgt 625 -> 1534 (max 19:55)
+2026-10-12 20:20,co2_uren_gt1200,1.08,48,ramen dicht
+2026-10-12 20:20,schimmel_indicator_max,79,48,17:25 na koken; nu 75
+2026-10-12 20:20,stand_auto_zonder_aanwezigheid_n,1,1,18:45-18:50 na HA-herstart 18:34
+2026-10-12 20:20,mid_na_vertrek_min,15,1,occupancy uit 18:15:34 -> mid 18:30:34
+2026-10-12 20:20,lokaal_mislukt,0,9645,rondes sinds 11-10 11:48; uitval 0; 38 verbindingen; sturen 49/49
+2026-10-12 20:20,filtergebruik_pct,0,1,
+2026-10-12 20:20,ha_herstarts,1,1,18:34
+2026-10-12 20:20,automation_traces_fout,0,5,laatste 20:20

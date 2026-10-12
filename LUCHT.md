@@ -68,4 +68,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ gem 486, max 636; schimmelindicator 63 → 57: in orde.
 - Hypotheses: H1 (n=3), H2 (n=1), H3 (n=2): geen nieuwe pieken, geen toets.
 
-laatste ronde: 12-10 16:25, gemeten t/m 16:20
+## 12-10 20:25 (ronde 9)
+- PM2.5 16:20-20:20: gem 15,3, mediaan 3,1, P95 68, max 135 (n=48); 0,8 u > 15, 0,7 u > 25. Dag t/m nu 3,6; 7d 2,7 (nulmeting okt 2025 9,1).
+- KOOKPIEK: start ~16:57, kookplaat run 17:03-17:15 (status daarvoor unavailable), ramen dicht, stand auto, aanwezig. Max 135 om 17:11. Halveringstijd na kookplaat uit ~12 min (fit 17:15-17:29), over de hele daling 15 min; < 10 pas om ~18:07 (53 min na uit). 08-10 (stand onbekend) halveerde ~5 min: deze keer 2-3x trager.
+- Stand: auto 214 min (gem 16,6, incl. piek), mid 25 min (gem 4,2, staart): geen standvergelijking mogelijk.
+- Werking: mid precies 15 min na vertrek (18:30). Na HA-herstart 18:34 weer 5 min auto zonder aanwezigheid (bekende oorzaak). 5/5 traces zonder fout. 1 HA-herstart. Lokaal 9645/9645, uitval 0, sturen 49/49, filter 0%. Kookplaatstatus weer beschikbaar sinds 17:03. Apparaat-PM2.5 volgde de piek (max 150): bruikbaar bij hoge waarden.
+- CO₂ gem 1.129, 1,1 u > 1.200, max 1.534 (19:55, stijgend), ramen dicht; schimmelindicator 79 na koken, nu 75. Ventileren.
+- Hypotheses: H1 koken met raam open → nauwelijks piek, met ramen dicht wel (n=4: 10-10 open max 3,4; 12-10 dicht 135) - gesteund. H2 aangepast: auto halveert kookpiek in ~12 min (n=2: 5 en 12 min, spreiding groot); turbo nog niet getest. H3 niet-kookbronnen dalen trager (n=2, geen toets).
+
+laatste ronde: 12-10 20:25, gemeten t/m 20:20
