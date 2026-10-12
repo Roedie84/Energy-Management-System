@@ -360,3 +360,15 @@ laatste ronde: 12-10 11:40, gemeten t/m 12-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde, niets acuut; vandaag al v5.87-v5.93.2). L-EMS-022/023 in de dagafsluiting.
 
 laatste ronde: 12-10 15:40, gemeten t/m 12-10 15:45
+
+## 12-10 19:40 · tussenronde
+- 2 HA-herstarts (16:12, 18:35; andere integraties); actief **v5.93.2**, 0 EMS-fouten. Solcast-run nog van 07:52 (429).
+- **PV dag 12-10: 11,75 kWh tegen Solcast 12,69 → −7,4 %** (15:45 nog −1,4 %; middag 1,53 tegen 2,33 verwacht). Weer te hoog, nu bij een heldere dag → H-EMS-2 houdt (verouderde run; dagafsluiting rekent de day-ahead tracker).
+- 15:45-19:46: import 0,68 kWh, export 1,47 kWh. **Avondverkoop** 18:45-19:46 ~1,18 kWh bij 46-48 ct (18:45 526 Wh, 19:00 329, 19:15 27, 19:30 ~300), stop 19:45 op `expensive_quarter_soc_protected`.
+- **Harde regel: 0× onder de reserve.** Kleinste marge in de echte verkoopkwartieren +0,33 / +0,006 / +0,028 kWh; 19:15 −0,02 bij 27 Wh (binnen de SoC-stap van `beschikbaar`, ~0,09 kWh per %). Live gevolgd 19:41-19:46: marge 0,17 → 0,09 → 0,03, verkoop stopte vóór 0.
+- L-EMS-022: 4 nieuwe negatieve vlaggen 16:15-17:00 (−0,09..−0,87) bij 56/15/24/15 Wh export: accu ontlaadt dan ~0,9-1,4 kW **voor het huis** (stand niet "verkopen"), export = regeloverschot bij starten/stoppen. 13 van 13 negatieve vlaggen zonder verkoop; 16:15 (56 Wh) en 19:15 (27 Wh) halen de geplande 25-Wh-grens wél → bouw aangevuld: alleen kwartieren met stand verkopen/`mag_verkopen` tellen als verkoop, regeloverschot apart.
+- H-EMS-10 (springende reserve), eerste avond na v5.87: `reserve_sprongen` 0; verkoopreserve daalde gelijkmatig 5,71 → 5,06 met `nodig_tot_blok` (4,39 → 4,05). Morgen weinig zon (Solcast 4,0 kWh, `nodig_na_blok` 5,19). Niet gezien (n=1 avond).
+- Planvolging: 26 kwartieren, 30,8 % volgens plan; `afwijking_accu` 8 tegen `oorzaken.accu` 3 (17:45 "afwijking accu" met oorzaak zon) → L-EMS-023 blijft. Verkoopkwartieren tellen als afwijking (plan 0,4 kW, gemeten 2,4 kW): plan kent de verkoopbeslissing niet.
+- MC 0 % (19:46). Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde, niets acuut). L-EMS-022/023 in de dagafsluiting van 13-10.
+
+laatste ronde: 12-10 19:40, gemeten t/m 12-10 19:46

@@ -169,6 +169,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: per kwartier `export_kwh` (P1-tellerverschil of geïntegreerd net_w) in het dagverloop; de marge telt pas als het kwartier ≥ 25 Wh (= 100 W gemiddeld) terugleverde, of als ≥ 2 opeenvolgende rondes ≤ −100 W. `verkoopkwartieren` toont `export_kwh`. Daarnaast `netarbitrage_eur` (bestaat al in de nabeschouwing) in `nabeschouwing_7d`, zodat "gemist" op netlaaddagen te duiden is (11-10: −0,26).
 - Meten na bouw: 0 kwartieren met negatieve marge bij < 25 Wh export; echte verkoopkwartieren ongewijzigd.
 - 12-10 11:40: 9e valse vlag: 12-10 10:45 marge_bij_export_min −1,01 bij 14 Wh export (P1) → 9 van 9 negatieve vlaggen vals.
+- 12-10 19:40: +4 vlaggen 16:15-17:00 (−0,09..−0,87) bij 56/15/24/15 Wh export terwijl de accu ~1 kW **voor het huis** ontlaadde (regeloverschot bij starten/stoppen). 16:15 (56 Wh) zou de 25-Wh-grens halen → **aanvulling bouw:** een kwartier telt alleen als verkoopkwartier als de stand verkopen was (`mag_verkopen` / modus `manual (verkopen)`) én ≥ 25 Wh export; overige export apart als `regeloverschot_kwh`. Echte verkoop 12-10 avond (18:45-19:30) ongewijzigd goed (+0,33 / +0,006 / −0,02 binnen SoC-stap / +0,028).
 
 ## L-EMS-023 · planvolging: oorzaak en status spreken elkaar tegen (classificatie)
 - Status: **gepland** (zelf bouwen: rapportage/classificatie, stuurt niets) — bouwen in de dagafsluiting van 13-10, samen met L-EMS-022.
@@ -176,3 +177,4 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: oorzaak volgt de status — "afwijking accu" → oorzaak accu; "verklaard" → grootste van zon/verbruik. Test met beide randgevallen.
 - Meten na bouw: 0 kwartieren met oorzaak accu én status verklaard (of omgekeerd) in `laatste_kwartieren`/dagsamenvatting.
 - 12-10 15:40: v5.93.2 (andere sessie) loste dit niet op (alleen oorzaak "sturing" bij een andere stand erbij). Dagtelling 12-10: 10 kwartieren, `oorzaken` accu 1 tegen `afwijking_accu` 2 → opnieuw 1 tegenstrijdig kwartier (omgekeerde geval).
+- 12-10 19:40: dag 26 kwartieren, `afwijking_accu` 8 tegen `oorzaken.accu` 3 (o.a. 17:45 "afwijking accu" met oorzaak zon) → tegenstrijdigheid groeit mee met de dag.
