@@ -27,3 +27,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 12-10 23:51 | gold scalper opzet per positie als attribuut (L-GS-019)
 13-10 00:51 | gold scalper herkansing na afwijzing zonder force open (netting IG)
 13-10 00:51 | gold scalper netting-trades buiten t-toets en oordeel
+13-10 02:50 | gold scalper ig-sessie vernieuwen voor verlopen (403 elk uur)
