@@ -1,3 +1,12 @@
+EMS v5.95.0 - geen bijtoppen van 99 naar 100% in het goedkope blok
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- In het goedkope blok begint het EMS geen nieuwe netlading meer als de accu
+  al op 97% of hoger staat; hij blijft dan op slim. Een lading die al loopt
+  laadt gewoon door tot vol. Geldt voor de sturing en het kwartierplan
+  (gemeld 13-10: 02:15-02:45 "laden van net" tussen kwartieren "slim").
+
 EMS v5.94.0 - echte verkoop gescheiden van regeloverschot, planvolging klopt
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -288,6 +288,11 @@ EXPORT_MEETDREMPEL_W = 100
 # v5.94 (L-EMS-022): een kwartier telt pas als verkoop vanaf 25 Wh uit de
 # accu (= 100 W gemiddeld); minder is regeloverschot.
 EXPORT_VERKOOP_MIN_KWH = 0.025
+# v5.95: hysterese bij laden in het goedkope blok. Staat de accu (bruikbaar
+# deel) op of boven deze fractie en laadde hij niet al, dan niet opnieuw
+# uit het net laden - een kwartier bijtoppen van 99 naar 100% levert
+# niets op (gemeld 13-10: 02:15-02:45 "laden van net" midden in "slim").
+LAADBLOK_HERLAAD_DREMPEL = 0.97
 
 # Hoeveel dagen er minstens nodig zijn voordat de zonpersistentie een
 # richting noemt. Bij acht dagen was r=0,69 een aanwijzing en geen

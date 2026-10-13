@@ -212,6 +212,7 @@ from .const import (
     DAGVERLOOP_DAGEN,
     EXPORT_MEETDREMPEL_W,
     EXPORT_VERKOOP_MIN_KWH,
+    LAADBLOK_HERLAAD_DREMPEL,
     NABESCHOUWING_MIN_KWARTIEREN,
     NACHTLAST_MIN_NACHTEN,
     NACHTLAST_MIN_STIJGING_FRACTIE,
@@ -21088,6 +21089,17 @@ class EnergyManagementSystemCoordinator:
         if prijs_nu is None or ruimte is None or slijtage_ct is None:
             uit["reden"] = "prijs, laadruimte of slijtage onbekend"
             return uit
+        # v5.95: hysterese - zie `_laadblok_hysterese`.
+        if self._laadblok_hysterese(
+            self.beschikbare_energie_kwh() or 0.0,
+            (self.beschikbare_energie_kwh() or 0.0) + ruimte,
+            self._laadt_uit_het_net(),
+        ):
+            uit["reden"] = (
+                f"accu al {LAADBLOK_HERLAAD_DREMPEL:.0%} of voller; niet opnieuw bijladen"
+            )
+            uit["hysterese"] = True
+            return uit
         horizon_eind = now + timedelta(hours=24)
         later = sorted(
             (
@@ -21131,6 +21143,28 @@ class EnergyManagementSystemCoordinator:
         )
         uit["voorzichtige_zon"] = salderen
         return self._laad_op_goedkoopste(now, uit)
+
+    def _laadt_uit_het_net(self) -> bool:
+        """Laadde de vorige ronde uit het net? (v5.95)"""
+        return getattr(self, "last_reason", None) in (
+            "grid_charging_profitable",
+            "grid_charging_low_solar",
+        )
+
+    @staticmethod
+    def _laadblok_hysterese(beschikbaar: float, bruikbaar: float, laadt_al: bool) -> bool:
+        """Niet opnieuw laden in het blok als de accu al (bijna) vol is (v5.95).
+
+        Gemeld 13-10: het plan zette 02:15-02:45 op "laden van net" tussen
+        kwartieren "slim" - de accu zakte door het nachtverbruik naar 99% en
+        werd weer bijgetopt. Dat levert niets op en geeft een onrustig plan.
+        Een lading die al loopt mag gewoon doorladen tot vol; alleen een
+        NIEUWE start vanaf ``LAADBLOK_HERLAAD_DREMPEL`` en hoger valt af.
+        Dezelfde toets voor de beslissing en het kwartierplan.
+        """
+        if laadt_al or bruikbaar <= 0:
+            return False
+        return beschikbaar >= LAADBLOK_HERLAAD_DREMPEL * bruikbaar - 1e-9
 
     def _lopend_blok(self, now: datetime, nieuw_start, nieuw_eind, entries=None) -> tuple:
         """Het lopende blok houden tot het eindigt (v5.28.5).
@@ -23401,6 +23435,9 @@ class EnergyManagementSystemCoordinator:
             "rendement": rendement,
             "slijtage_ct": (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh"),
             "salderen": self._is_salderen_active(now),
+            # v5.95: laadde het vorige kwartier uit het net? Begint bij de
+            # sturing; de plan-lus werkt het per kwartier bij.
+            "laadde_vorig": self._laadt_uit_het_net(),
             # v5.93.2: het lopende/volgende goedkope blok, zodat het plan in
             # dat blok met dezelfde "latere" kwartieren rekent als de
             # beslissing (vanaf het blokeinde, niet vanaf het kwartiereinde).
@@ -23486,6 +23523,9 @@ class EnergyManagementSystemCoordinator:
         # v5.26.1: ook bij weinig zon door de rekenregel - net als de
         # beslissing (`_laad_uit_het_net_als_nodig`).
         if netregels.get("slijtage_ct") is None or per_kwartier <= 0:
+            return 0.0
+        # v5.95: niet opnieuw beginnen vanaf 97% - zie `_laadblok_hysterese`.
+        if self._laadblok_hysterese(soc, bruikbaar, bool(netregels.get("laadde_vorig"))):
             return 0.0
         # v5.93.2: binnen het bekende goedkope blok tellen, net als in
         # `laadbesluit_uit_het_net`, alleen de kwartieren NA het blok als
@@ -23951,6 +23991,8 @@ class EnergyManagementSystemCoordinator:
             # `net_kwh` is negatief bij teruglevering en positief bij
             # import. De opbrengst volgt daaruit: teruglevering levert
             # geld op, import kost geld.
+            # v5.95: voor de hysterese van het volgende kwartier.
+            netregels["laadde_vorig"] = modus == "manual (laden)"
             opbrengst = -net * prijs
             loper += opbrengst
 

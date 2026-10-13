@@ -32873,7 +32873,7 @@ In de Energiecockpit staat onder de planningsgrafiek: "Laadplanning gewijzigd:
 06:12 (5 min geleden) · nu: morgen 02:30-04:15 · was: …". Ook als attribuut op
 `sensor.…_kwartierplanning` en in het YAML-dashboard (pagina Kwartierplanning), en in de diagnostiek-export.
 
-Tests: `test_v588_laadplan_gewijzigd.py` (7).
+Tests: `test_v588_laadplan_gewijzigd.py` (8).
 
 ## v5.89.0 — nabeschouwing per dagdeel (L-EMS-019)
 
@@ -33107,3 +33107,21 @@ sturing verandert niet.
 
 Tests: `test_v594_verkoop_en_planvolging.py` (5).
 
+
+## v5.95.0 — hysterese bij laden in het goedkope blok
+
+Gemeld 13-10 met de planning: 02:15-02:45 stond op "laden van net" tussen
+kwartieren "slim". De accu zakte 's nachts door het verbruik naar 99% en het
+plan topte hem weer bij naar 100%. Dat levert niets op en geeft een onrustig
+plan.
+
+- **Hysterese (`LAADBLOK_HERLAAD_DREMPEL = 0.97`).** In het blok start geen
+  nieuwe netlading zolang het bruikbare deel van de accu op 97% of hoger
+  staat. Laadde de vorige ronde (sturing) of het vorige kwartier (plan) al
+  uit het net, dan laadt hij gewoon door tot vol.
+- Eén toets, `_laadblok_hysterese`, voor `laadbesluit_uit_het_net` en het
+  kwartierplan. Het laadbesluit meldt `hysterese: true` met de reden "accu al
+  97% of voller; niet opnieuw bijladen".
+- De dipregel buiten het blok is ongewijzigd.
+
+Tests: `test_v595_laadblok_hysterese.py` (8).
