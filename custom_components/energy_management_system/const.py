@@ -285,6 +285,9 @@ DAGVERLOOP_DAGEN = 40
 # v5.81 (L-EMS-018): vanaf dit terugleververmogen telt een ronde als export
 # in `marge_bij_export_min_kwh` (de regelverschuiving van ~20 W niet).
 EXPORT_MEETDREMPEL_W = 100
+# v5.94 (L-EMS-022): een kwartier telt pas als verkoop vanaf 25 Wh uit de
+# accu (= 100 W gemiddeld); minder is regeloverschot.
+EXPORT_VERKOOP_MIN_KWH = 0.025
 
 # Hoeveel dagen er minstens nodig zijn voordat de zonpersistentie een
 # richting noemt. Bij acht dagen was r=0,69 een aanwijzing en geen

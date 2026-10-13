@@ -1,3 +1,18 @@
+EMS v5.94.0 - echte verkoop gescheiden van regeloverschot, planvolging klopt
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Per kwartier staat nu hoeveel er werkelijk uit de accu naar het net ging.
+  Alleen als dat minstens 25 Wh was en het EMS in een verkoopstand stond,
+  telt het als verkoop. Korte teruglevering bij starten/stoppen van de accu
+  staat apart als regeloverschot (13 van de 13 valse "onder de reserve
+  verkocht"-meldingen van 11/12-10 verdwijnen zo).
+- De verkooptoets wordt vastgelegd op het moment van de eerste export in het
+  kwartier (en hoeveel rondes er zonder vrijgave verkocht werd), zodat te
+  zien is of een verkoop zonder vrijgave echt gebeurde.
+- Planvolging: de oorzaak volgt de status ("afwijking accu" heeft altijd
+  oorzaak accu, "verklaard" altijd zon of verbruik).
+
 EMS v5.93.3 - secundaire verkooplaag zichtbaar in het kwartierplan
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

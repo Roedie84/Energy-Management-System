@@ -33078,3 +33078,32 @@ kwartierplan toonde smart met ~0,5 kW voor het huis en de planvolging meldde
 
 Tests: `test_v5933_plan_secundaire_laag.py` (7), `test_v5272.py`,
 `test_v528_meetlaag.py`, `test_v570_verkoopreserve.py` (bronregels aangepast).
+
+## v5.94.0 — echte verkoop gescheiden van regeloverschot, vrijgave op het exportmoment, planvolging
+
+Gevraagd 13-10 (Ruud: "4, 5 en 6 oplossen"). Alleen meten en rapportage; de
+sturing verandert niet.
+
+- **Verkoopkwartieren (L-EMS-022).** `marge_bij_export_min_kwh` nam elke ronde
+  met >= 100 W teruglevering mee; één regelpiek of een herstart was genoeg.
+  11/12-10: 13 van de 13 negatieve vlaggen waren vals (6-56 Wh, de accu
+  ontlaadde voor het huis). Nieuw per kwartier in het dagverloop:
+  `export_kwh` (net_w geïntegreerd over de rondes), `export_uit_accu_kwh`
+  (ontladen voor zover de zon het niet dekt), `verkoopstand_bij_export`,
+  `verkocht` (>= 25 Wh uit de accu in een verkoopstand: expensive_quarter,
+  _peak, _no_own_load of handmatig verkopen/ontladen) en `regeloverschot_kwh`.
+  `verkoopkwartieren` op Diagnose sturing toont alleen echte verkoop (oude
+  regels zonder het veld zoals voorheen); `regeloverschot_kwh` per dag staat
+  ernaast. `netarbitrage_eur` staat nu ook in `nabeschouwing_7d`.
+- **Vrijgave op het exportmoment.** `mag_verkopen` in het dagverloop is die
+  van de laatste ronde van het kwartier. Nieuw: `eerste_export_om`,
+  `mag_verkopen_bij_export`, `marge_bij_eerste_export_kwh` en
+  `export_zonder_vrijgave_rondes` (rondes met export uit de accu terwijl de
+  toets nee zei), ook in `verkoopkwartieren`.
+- **Planvolging (L-EMS-023).** De oorzaak volgt de status: "afwijking accu"
+  heeft oorzaak accu, "verklaard" het grootste van zon en verbruik. Eerder
+  was de oorzaak het grootste van zon/verbruik/rest los van de status (12-10:
+  8 keer afwijking accu tegen 3 keer oorzaak accu).
+
+Tests: `test_v594_verkoop_en_planvolging.py` (5).
+

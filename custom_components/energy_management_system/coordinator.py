@@ -211,6 +211,7 @@ from .const import (
     DAGTELLER_INSTELLINGEN,
     DAGVERLOOP_DAGEN,
     EXPORT_MEETDREMPEL_W,
+    EXPORT_VERKOOP_MIN_KWH,
     NABESCHOUWING_MIN_KWARTIEREN,
     NACHTLAST_MIN_NACHTEN,
     NACHTLAST_MIN_STIJGING_FRACTIE,
@@ -22811,14 +22812,26 @@ class EnergyManagementSystemCoordinator:
             "marge_kwh", "marge_bij_export_min_kwh", "nodig_tot_blok_kwh",
             "nodig_na_blok_kwh", "spaarplan_nodig_tot_blok_kwh", "prijs_ct",
             "mag_verkopen",
+            # v5.94: echte verkoop en de vrijgave op het exportmoment.
+            "export_kwh", "export_uit_accu_kwh", "eerste_export_om",
+            "mag_verkopen_bij_export", "marge_bij_eerste_export_kwh",
+            "export_zonder_vrijgave_rondes",
         )
         verkoop: list = []
+        regeloverschot: dict = {}
         for dag in sorted(self.dagverloop or {})[-2:]:
             for regel in self.dagverloop.get(dag) or []:
-                if isinstance(regel, dict) and regel.get("marge_bij_export_min_kwh") is not None:
-                    verkoop.append(
-                        {"dag": dag, **{k: regel.get(k) for k in velden}}
-                    )
+                if not isinstance(regel, dict):
+                    continue
+                if "verkocht" in regel:
+                    # v5.94 (L-EMS-022): alleen echte verkoop; regeloverschot apart.
+                    if not regel.get("verkocht"):
+                        if regel.get("regeloverschot_kwh"):
+                            regeloverschot[dag] = regeloverschot.get(dag, 0.0) + float(regel["regeloverschot_kwh"])
+                        continue
+                elif regel.get("marge_bij_export_min_kwh") is None:
+                    continue
+                verkoop.append({"dag": dag, **{k: regel.get(k) for k in velden}})
         plan = self.last_spaarplan or {}
         # De nabeschouwing per dag (laatste 7), zonder de kwartierlijsten:
         # zo is de realisatie te volgen zonder de diagnostiek te downloaden.
@@ -22827,7 +22840,7 @@ class EnergyManagementSystemCoordinator:
             "had_kunnen_opleveren_eur", "gemist_eur", "gemist_door_reserve_eur",
             "gemist_door_voorspelling_eur", "te_veel_vastgehouden_kwh",
             "te_veel_ontladen_kwh", "kwartieren", "handmatige_kwartieren",
-            "per_dagdeel",
+            "per_dagdeel", "netarbitrage_eur",
         )
         nabeschouwing = [
             {k: n.get(k) for k in na_velden if k in n}
@@ -22840,6 +22853,8 @@ class EnergyManagementSystemCoordinator:
             "reserve_sprongen": list(self.reserve_sprongen)[-24:],
             "reserve_sprongen_aantal": len(self.reserve_sprongen),
             "verkoopkwartieren": verkoop[-48:],
+            # v5.94: teruglevering uit de accu die geen verkoop was (kWh per dag).
+            "regeloverschot_kwh": {d: round(v, 3) for d, v in regeloverschot.items()},
             "spaarplan_behoefte_bron": plan.get("behoefte_bron"),
             "spaarplan_eigen_tot_blok_kwh": plan.get("spaarplan_eigen_tot_blok_kwh"),
             "spaarplan_nodig_tot_blok_kwh": plan.get("nodig_tot_blok_kwh"),
@@ -24975,6 +24990,12 @@ class EnergyManagementSystemCoordinator:
         reeks = self.dagverloop.setdefault(dag, [])
         vorige = reeks[-1] if reeks and reeks[-1].get("tijd") == regel["tijd"] else None
         regel["marge_bij_export_min_kwh"] = self._kleinste_marge_bij_export(regel, vorige)
+        # v5.94 (L-EMS-022 + vrijgave op het exportmoment): echte verkoop
+        # scheiden van regeloverschot. Alleen meten; stuurt niets.
+        try:
+            regel.update(self._dagverloop_exportvelden(regel, vorige, now))
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Exportvelden dagverloop niet bepaald", exc_info=True)
         # v5.72: reserve en laadstand ALTIJD in het dagverloop, zodat een
         # tekortnacht achteraf te duiden is - zie `_vul_reserve_en_laadstand_aan`.
         self._vul_reserve_en_laadstand_aan(regel, reeks)
@@ -25022,6 +25043,80 @@ class EnergyManagementSystemCoordinator:
                 else None
             ),
         }
+
+    #: v5.94: redenen waarin het EMS zelf uit de accu verkoopt.
+    _VERKOOPREDENEN = ("expensive_quarter", "expensive_quarter_peak", "expensive_quarter_no_own_load")
+
+    def _is_verkoopreden(self, reden) -> bool:
+        reden = str(reden or "")
+        if reden in self._VERKOOPREDENEN:
+            return True
+        return reden.startswith("handmatig_") and ("verko" in reden or "ontla" in reden)
+
+    def _dagverloop_exportvelden(self, regel: dict, vorige: dict | None, now: datetime) -> dict:
+        """Teruglevering per kwartier, met de verkoopvrijgave op het moment
+        van export (v5.94, L-EMS-022 en controle 11-10).
+
+        - `export_kwh`: teruglevering in het kwartier (net_w geïntegreerd
+          over de rondes); `export_uit_accu_kwh`: het deel dat uit de accu
+          kwam (ontladen voor zover de zon het niet dekt).
+        - `verkocht`: alleen True als er >= 25 Wh uit de accu terugging
+          terwijl het EMS in een verkoopstand stond. Anders is de export
+          regeloverschot (bij starten/stoppen, een herstart): dat staat in
+          `regeloverschot_kwh` en telt niet als verkoop. 11/12-10 waren 13
+          van de 13 "onder de reserve verkocht"-vlaggen zo vals (6-56 Wh).
+        - `eerste_export_om`, `mag_verkopen_bij_export` en
+          `marge_bij_eerste_export_kwh`: de verkooptoets op het moment van
+          de eerste exportronde; `mag_verkopen` zelf is die van de laatste
+          ronde van het kwartier. `export_zonder_vrijgave_rondes`: rondes
+          met export uit de accu terwijl de toets nee zei.
+        """
+        vorige = vorige or {}
+        interval = float(getattr(self, "update_interval_seconds", 0) or 60)
+        laatst = self.__dict__.get("_dagverloop_vorige_ronde")
+        self.__dict__["_dagverloop_vorige_ronde"] = now
+        dt = interval
+        if isinstance(laatst, datetime):
+            verschil = (now - laatst).total_seconds()
+            if 0 < verschil <= 3 * interval:
+                dt = verschil
+
+        def _w(v):
+            return float(v) if isinstance(v, (int, float)) else None
+
+        net_w, pv_w, accu_w = _w(regel.get("net_w")), _w(regel.get("pv_w")), _w(regel.get("accu_w"))
+        export_w = max(0.0, -net_w) if net_w is not None else 0.0
+        if accu_w is not None:
+            accu_export_w = min(max(0.0, accu_w), max(0.0, export_w - max(0.0, pv_w or 0.0)))
+        else:
+            accu_export_w = 0.0
+        export_kwh = float(vorige.get("export_kwh") or 0.0) + export_w * dt / 3_600_000
+        accu_kwh = float(vorige.get("export_uit_accu_kwh") or 0.0) + accu_export_w * dt / 3_600_000
+        verkoopstand = bool(vorige.get("verkoopstand_bij_export"))
+        uit = {
+            "eerste_export_om": vorige.get("eerste_export_om"),
+            "mag_verkopen_bij_export": vorige.get("mag_verkopen_bij_export"),
+            "marge_bij_eerste_export_kwh": vorige.get("marge_bij_eerste_export_kwh"),
+            "export_zonder_vrijgave_rondes": int(vorige.get("export_zonder_vrijgave_rondes") or 0),
+        }
+        if export_w >= EXPORT_MEETDREMPEL_W:
+            if uit["eerste_export_om"] is None:
+                uit["eerste_export_om"] = now.strftime("%H:%M:%S")
+                uit["mag_verkopen_bij_export"] = regel.get("mag_verkopen")
+                uit["marge_bij_eerste_export_kwh"] = regel.get("marge_kwh")
+            if accu_export_w >= EXPORT_MEETDREMPEL_W:
+                verkoopstand = verkoopstand or self._is_verkoopreden(regel.get("reden"))
+                if regel.get("mag_verkopen") is False:
+                    uit["export_zonder_vrijgave_rondes"] += 1
+        verkocht = verkoopstand and accu_kwh >= EXPORT_VERKOOP_MIN_KWH
+        uit.update({
+            "export_kwh": round(export_kwh, 4),
+            "export_uit_accu_kwh": round(accu_kwh, 4),
+            "verkoopstand_bij_export": verkoopstand,
+            "verkocht": verkocht,
+            "regeloverschot_kwh": 0.0 if verkocht else round(accu_kwh, 4),
+        })
+        return uit
 
     @staticmethod
     def _kleinste_marge_bij_export(regel: dict, vorige: dict | None) -> float | None:

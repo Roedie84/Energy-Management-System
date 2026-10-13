@@ -95,8 +95,16 @@ def beoordeel(
     elif andere_stand:
         oorzaak, status = "sturing", "afwijking sturing"
     else:
-        oorzaak = max(bijdragen, key=lambda k: abs(bijdragen[k]))
-        status = "afwijking accu" if abs(rest) >= DREMPEL_W else "verklaard"
+        # v5.94 (L-EMS-023): oorzaak volgt de status. Was de oorzaak het
+        # grootste van zon/verbruik/rest los van de status, dan gaf dat
+        # "verklaard" met oorzaak accu, of "afwijking accu" met oorzaak zon
+        # (12-10: 8 keer afwijking accu tegen 3 keer oorzaak accu).
+        if abs(rest) >= DREMPEL_W:
+            oorzaak, status = "accu", "afwijking accu"
+        else:
+            verklarend = {k: v for k, v in bijdragen.items() if k != "accu"}
+            oorzaak = max(verklarend, key=lambda k: abs(verklarend[k])) if verklarend else "accu"
+            status = "verklaard"
     return {
         "beschikbaar": True,
         "gepland_accu_w": gepland["accu_w"],
