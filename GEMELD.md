@@ -29,3 +29,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 13-10 00:51 | gold scalper netting-trades buiten t-toets en oordeel
 13-10 02:50 | gold scalper ig-sessie vernieuwen voor verlopen (403 elk uur)
 13-10 03:51 | gold scalper vloercheck valse noodstop op één meting/risicobasis
+13-10 06:51 | gold scalper runs na herstart samentellen per configuratie
