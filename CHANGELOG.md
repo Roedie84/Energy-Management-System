@@ -33163,3 +33163,13 @@ Tests: `test_v5961_nilm_accumodules.py` (4).
 
 Tests: `test_v5962_cockpit_vrij_te_verkopen.py` (2); `test_v5930_cockpit_blok_airco.py` aangepast.
 
+## v5.97.0 — airco-opwarmtempo volgt de buitentemperatuur
+
+- **Gevraagd (14-10):** "Houdt de airco-sturing/voorspelling ook rekening met de buitentemperatuur de komende uren?" De woonkamerprojectie deed dat al (KNMI-uurverwachting met geleerde bias, per uur het verschil buiten-binnen, wind en zon), maar het opwarmtempo van de airco (`_airco_opwarmtempo`) was de mediaan over álle verwarmen-cellen: op een koude ochtend te snel, op een zachte te traag.
+- **Wijziging:** `_airco_opwarmtempo(buiten_c, binnen_c)` neemt eerst de mediaan uit de cellen van hetzelfde verschilvakje (`_climate_verschil_bucket`, alle rolluikstanden, `|verwarmen`), vanaf `CLIMATE_RATE_MIN_SAMPLES` metingen; anders het algemene tempo.
+  - Ochtend (`airco_ritme.besluit`) en de nachtplanning (`nacht_extra_kwh`): `_airco_ochtend_tempo` - buiten- en woonkamertemperatuur volgens de projectie op het geleerde warm-moment (vandaag, of morgen als dat al voorbij is).
+  - Thuiskomst: `_airco_tempo_nu` - buiten volgens het eerste projectie-uur, binnen gemeten.
+  - Nieuw: `_buiten_verwacht_op(moment)`.
+
+Tests: `test_v597_airco_tempo_buiten.py` (6).
+

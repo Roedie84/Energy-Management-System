@@ -1,3 +1,14 @@
+EMS v5.97.0 - airco-opwarmtempo volgt de buitentemperatuur
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Hoe snel de airco de woonkamer opwarmt, was één gemiddelde. Nu rekent het
+  EMS met het tempo dat het geleerd heeft bij hetzelfde verschil tussen
+  buiten en binnen: 's ochtends met de verwachte buitentemperatuur op het
+  warm-moment, bij thuiskomst met die van nu. Op een koude ochtend start de
+  airco daardoor eerder, op een zachte later. Te weinig metingen bij dat
+  verschil: het gemiddelde, zoals eerst.
+
 EMS v5.96.2 - tegel "Vrij te verkopen" gelijk aan de uitleg
 
 Installeren: via HACS bijwerken en Home Assistant herstarten (en de app/browser verversen).

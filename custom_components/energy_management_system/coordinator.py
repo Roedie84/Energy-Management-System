@@ -46874,12 +46874,33 @@ class EnergyManagementSystemCoordinator:
         self.airco_ritme = airco_ritme.geldig(self.airco_ritme)
         return self.airco_ritme
 
-    def _airco_opwarmtempo(self) -> float | None:
+    def _airco_opwarmtempo(
+        self, buiten_c: float | None = None, binnen_c: float | None = None
+    ) -> float | None:
         """Hoe snel de airco de woonkamer opwarmt (°C per uur): de mediaan
-        van alle geleerde klimaatmetingen met de airco op verwarmen (v5.65)."""
+        van alle geleerde klimaatmetingen met de airco op verwarmen (v5.65).
+
+        v5.97.0 (Ruud 14-10: "houdt de airco-voorspelling rekening met de
+        buitentemperatuur de komende uren?"): met een buiten- en
+        binnentemperatuur erbij eerst het tempo uit het vakje van dat
+        verschil - op een koude ochtend warmt de airco langzamer op dan
+        gemiddeld. Te weinig metingen in dat vakje: het algemene tempo."""
+        cellen = self.climate_rate_history or {}
+        if buiten_c is not None and binnen_c is not None:
+            vak = self._climate_verschil_bucket(buiten_c, binnen_c)
+            eigen = [
+                w
+                for sleutel, reeks in cellen.items()
+                if str(sleutel).startswith(f"{vak}|") and str(sleutel).endswith("|verwarmen")
+                for w in reeks
+            ]
+            if len(eigen) >= CLIMATE_RATE_MIN_SAMPLES:
+                tempo = statistics.median(eigen)
+                if tempo > 0:
+                    return tempo
         waarden = [
             w
-            for sleutel, reeks in (self.climate_rate_history or {}).items()
+            for sleutel, reeks in cellen.items()
             if str(sleutel).endswith("|verwarmen")
             for w in reeks
         ]
@@ -46887,6 +46908,50 @@ class EnergyManagementSystemCoordinator:
             return None
         tempo = statistics.median(waarden)
         return tempo if tempo > 0 else None
+
+    def _buiten_verwacht_op(self, moment: datetime) -> float | None:
+        """De voorspelde buitentemperatuur in het uur van `moment` (v5.97.0),
+        uit dezelfde projectie als `_woonkamer_verwacht_op`."""
+        uur = moment.strftime("%Y-%m-%dT%H")
+        for regel in self.climate_forecast_trajectory or []:
+            if str(regel.get("tijd") or "")[:13] == uur:
+                return regel.get("buitentemp_voorspeld_c")
+        return None
+
+    def _airco_ochtend_tempo(self, now: datetime) -> float | None:
+        """Het opwarmtempo voor de eerstvolgende ochtend (v5.97.0): bij de
+        verwachte buitentemperatuur op het geleerde warm-moment en de
+        verwachte woonkamertemperatuur van dat moment."""
+        try:
+            # Alleen lezen: `_airco_ritme()` zou het opgeslagen ritme
+            # vervangen terwijl de ronde het nog bijwerkt.
+            ritme = airco_ritme.geldig(self.airco_ritme)
+            lokaal = dt_util.as_local(now)
+            for dagen in (0, 1):
+                datum = lokaal + timedelta(days=dagen)
+                leer = airco_ritme.geleerd(ritme, airco_ritme.dagsoort(datum))
+                warm_om = leer.get("warm_om")
+                if warm_om is None:
+                    continue
+                moment = datum.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
+                    minutes=int(warm_om)
+                )
+                if moment + timedelta(minutes=airco_ritme.NA_WARM_OM_MIN) < lokaal:
+                    continue
+                return self._airco_opwarmtempo(
+                    self._buiten_verwacht_op(moment),
+                    self._woonkamer_verwacht_op(moment),
+                )
+        except Exception:  # noqa: BLE001 - een tempo mag de sturing niet breken
+            pass
+        return self._airco_opwarmtempo()
+
+    def _airco_tempo_nu(self) -> float | None:
+        """Het opwarmtempo van dit moment (v5.97.0): buiten volgens het
+        eerste uur van de projectie, binnen gemeten."""
+        traject = self.climate_forecast_trajectory or []
+        buiten = traject[0].get("buitentemp_voorspeld_c") if traject else None
+        return self._airco_opwarmtempo(buiten, self.living_room_current_temp_c)
 
     def _woonkamer_verwacht_om(self, minuut: int) -> float | None:
         """De voorspelde woonkamertemperatuur op een minuut van vandaag (v5.65)."""
@@ -46965,7 +47030,7 @@ class EnergyManagementSystemCoordinator:
         if not self.airco_automaat_aan or tot <= now:
             return {"extra_kwh": 0.0, "verwacht_kwh": 0.0, "al_in_profiel_kwh": 0.0}
         return airco_ritme.nacht_extra_kwh(
-            self._airco_ritme(), now, tot, self._woonkamer_verwacht_op, self._airco_opwarmtempo()
+            self._airco_ritme(), now, tot, self._woonkamer_verwacht_op, self._airco_ochtend_tempo(now)
         )
 
     def _airco_gebruik_extra_kwh(self, now: datetime, tot: datetime) -> dict:
@@ -47016,7 +47081,7 @@ class EnergyManagementSystemCoordinator:
             nu=now,
             woonkamer_c=self.living_room_current_temp_c,
             verwacht_bij_warm_om=self._woonkamer_verwacht_om,
-            tempo_c_per_uur=self._airco_opwarmtempo(),
+            tempo_c_per_uur=self._airco_ochtend_tempo(now),
             aanwezigheid=self.presence_state,
             advies=(self.get_verwarmingsadvies() or {}).get("advies"),
             airco_stand=stand,
@@ -47109,7 +47174,7 @@ class EnergyManagementSystemCoordinator:
             aanwezigheid=self.presence_state,
             woonkamer_c=self.living_room_current_temp_c,
             doel_c=uit.get("doel_c"),
-            tempo_c_per_uur=self._airco_opwarmtempo(),
+            tempo_c_per_uur=self._airco_tempo_nu(),
             advies=(self.get_verwarmingsadvies() or {}).get("advies"),
             airco_stand=stand,
             door_ems=self.airco_door_ems,
