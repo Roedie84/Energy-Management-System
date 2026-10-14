@@ -1,3 +1,11 @@
+EMS v5.96.2 - tegel "Vrij te verkopen" gelijk aan de uitleg
+
+Installeren: via HACS bijwerken en Home Assistant herstarten (en de app/browser verversen).
+
+- De tegel toonde alleen het deel na het blok dat het blok terugladt (0,90),
+  de uitleg eronder het totaal (2,80). De tegel toont nu het totaal, met
+  "waarvan 0,90 kWh terugladen 31,8 ct" eronder.
+
 EMS v5.96.1 - accumodules nooit als NILM-kandidaat
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

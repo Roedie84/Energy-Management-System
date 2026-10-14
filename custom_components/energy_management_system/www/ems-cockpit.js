@@ -1556,8 +1556,12 @@ class EmsCockpitCard extends HTMLElement {
     const nodig = num(toets.nodig_voor_woning_kwh);
     const tot = num(toets.nodig_tot_blok_kwh);
     const na = num(toets.nodig_na_blok_kwh);
-    // v5.93.0: tijdens het laadblok staat alleen vrij_te_verkopen_kwh
-    const vrij = num(toets.verkoop_na_blok_vrij_kwh) ?? num(toets.vrij_te_verkopen_kwh);
+    // v5.96.2: de tegel toont het TOTAAL vrij te verkopen (zoals de
+    // uitleg eronder); het deel na het blok dat het blok terugladt staat
+    // er als "waarvan" onder. Eerder stond hier alleen dat deel (0,90 tegen
+    // 2,80 in de tekst). Mag er niet verkocht worden: 0.
+    const vrij = num(toets.vrij_te_verkopen_kwh) ?? (toets.mag_verkopen === false ? 0 : null);
+    const naBlokVrij = toets.verkoop_na_blok_toegepast ? num(toets.verkoop_na_blok_vrij_kwh) : null;
     const blokLoopt = this._blokLoopt();
     const terug = num(toets.terugladen_in_blok_eur);
 
@@ -1576,7 +1580,7 @@ class EmsCockpitCard extends HTMLElement {
           mini("Na het blok", STREEP, "volgend blok nog niet bepaald")
         : mini("Tot het blok", tot == null ? STREEP : `${fmt(tot, 2)}<small>kWh</small>`, "altijd beschermd") +
           mini("Na het blok", na == null ? STREEP : `${fmt(na, 2)}<small>kWh</small>`, "laadt het blok bij")) +
-      mini("Vrij te verkopen", vrij == null ? STREEP : `${fmt(vrij, 2)}<small>kWh</small>`, terug != null ? `terugladen ${ct(terug)} ct` : toets.verkoop_na_blok_reden ? esc(toets.verkoop_na_blok_reden) : "", vrij ? "var(--oranje)" : "") +
+      mini("Vrij te verkopen", vrij == null ? STREEP : `${fmt(vrij, 2)}<small>kWh</small>`, naBlokVrij && terug != null ? `waarvan ${fmt(naBlokVrij, 2)} kWh terugladen ${ct(terug)} ct` : toets.verkoop_na_blok_reden ? esc(toets.verkoop_na_blok_reden) : "", vrij ? "var(--oranje)" : "") +
       `</div>`;
 
     const onderdelen = Array.isArray(marge.onderdelen) ? marge.onderdelen : [];

@@ -17,7 +17,7 @@
   "klimaat_zon.py": "0bb96b0caec895ec",
   "kwartierenergie.py": "f1394966051ad8d5",
   "luchtreiniger_lokaal.py": "26752fea69813a33",
-  "manifest.json": "04c559043fc41932",
+  "manifest.json": "c99c9303c7adba05",
   "meetlaag.py": "624d6d7ddac60d50",
   "meetlog.py": "59b3129b541a19ac",
   "nabeschouwing.py": "37f659720466b8b5",
@@ -39,7 +39,7 @@
   "translations/nl.json": "1b7542afc5a3c5d9",
   "tuya_lokaal.py": "e1c2c8b25c5f7ce8",
   "vooruitplan.py": "cbdec7f812bd9029",
-  "www/ems-cockpit.js": "61d6ce4702397396",
+  "www/ems-cockpit.js": "946910ba27e0c12b",
   "zendure_lokaal.py": "9e738ca68a4b14ca",
   "zendure_status.py": "6cd688d4695f6dff"
 }

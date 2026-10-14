@@ -137,7 +137,8 @@ def test_airco_sensor_geeft_de_verwachting_mee():
 
 
 def test_vrij_te_verkopen_valt_terug_op_het_veld_van_de_verkooptoets():
-    assert "num(toets.verkoop_na_blok_vrij_kwh) ?? num(toets.vrij_te_verkopen_kwh)" in JS
+    # v5.96.2: het totaal uit de verkooptoets, niet alleen het deel na het blok.
+    assert "const vrij = num(toets.vrij_te_verkopen_kwh)" in JS
 
 
 def test_tijdens_het_blok_een_tekst_in_plaats_van_streepjes():

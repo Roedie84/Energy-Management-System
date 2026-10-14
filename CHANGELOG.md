@@ -33156,3 +33156,10 @@ Tests: `test_v596_zon_realisatie_dipmarge.py` (8).
 
 Tests: `test_v5961_nilm_accumodules.py` (4).
 
+## v5.96.2 — tegel "Vrij te verkopen" gelijk aan de uitleg
+
+- **Gevonden (14-10, Energiecockpit):** tegel "Vrij te verkopen 0,90 kWh" en de uitleg eronder "2.80 kWh vrij te verkopen". De tegel nam `verkoop_na_blok_vrij_kwh` (het deel dat pas na het blok nodig is en door het blok wordt teruggeladen) vóór `vrij_te_verkopen_kwh` (het totaal, waar dat deel al in zit).
+- **Wijziging (alleen weergave, `www/ems-cockpit.js`):** de tegel toont het totaal; mag er niet verkocht worden, dan 0. Het deel na het blok staat eronder als "waarvan … kWh terugladen … ct". De beslissing zelf is ongewijzigd.
+
+Tests: `test_v5962_cockpit_vrij_te_verkopen.py` (2); `test_v5930_cockpit_blok_airco.py` aangepast.
+
