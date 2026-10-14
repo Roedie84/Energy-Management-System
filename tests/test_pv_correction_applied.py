@@ -59,7 +59,8 @@ def test_todays_remaining_hours_are_rescaled():
     bron = (PAKKET / "coordinator.py").read_text()
 
     assert "remaining_correction_ratio" in bron
-    assert "segment_kwh *= remaining_correction_ratio" in bron
+    # v5.96: samen met de realisatie (de voorzichtigste van de twee).
+    assert "remaining_correction_ratio if remaining_correction_ratio is not None else 1.0" in bron
 
 
 # --- de status is zichtbaar ------------------------------------------

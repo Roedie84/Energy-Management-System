@@ -293,6 +293,16 @@ EXPORT_VERKOOP_MIN_KWH = 0.025
 # uit het net laden - een kwartier bijtoppen van 99 naar 100% levert
 # niets op (gemeld 13-10: 02:15-02:45 "laden van net" midden in "slim").
 LAADBLOK_HERLAAD_DREMPEL = 0.97
+# v5.96 (gemeld 14-10 06:03: "accu nog maar 18% met zo meteen hele dure
+# kwartieren"): de zon van vandaag wordt naar beneden bijgesteld als hij
+# achterloopt op de verwachting tot nu. Pas vanaf zoveel verwachte kWh tot nu
+# (anders zegt de verhouding niets), en nooit omhoog.
+ZON_REALISATIE_MIN_KWH = 0.5
+# v5.96: bijladen in een prijsdip rekent met deze marge op het tekort tot het
+# blok - dezelfde +25 % als de reserve. Zonder marge leek 0,69 kWh om 06:00
+# genoeg tot 11:30 en bleef de nachtdip (26-28 ct) voor een ochtendpiek van
+# 47-58 ct liggen.
+DIP_MARGE = 1.25
 
 # Hoeveel dagen er minstens nodig zijn voordat de zonpersistentie een
 # richting noemt. Bij acht dagen was r=0,69 een aanwijzing en geen

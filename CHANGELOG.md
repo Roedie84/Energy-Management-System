@@ -33125,3 +33125,25 @@ plan.
 - De dipregel buiten het blok is ongewijzigd.
 
 Tests: `test_v595_laadblok_hysterese.py` (8).
+
+## v5.96.0 — zon volgt de werkelijkheid; bijladen in een dip met marge
+
+Gemeld 14-10 06:03: "Wat gaat er mis? Accu nog maar 18% met zo meteen hele
+dure kwartieren."
+
+- **Zon van vandaag tegen de werkelijkheid (`_zon_realisatie`).** Op 13-10
+  stond het EMS 12:00-13:16 op "sparen in blok": de zon zou de accu om 15:03
+  vullen. Het regende (2,95 kWh, piek 440 W); laden van het net begon pas om
+  13:30 en bij het blokeinde stond de accu op 78 %. Nu: opgewekt vandaag tot
+  nu / verwacht tot nu (vanaf `ZON_REALISATIE_MIN_KWH` = 0,5 kWh verwacht),
+  begrensd op 1. De rest van vandaag schaalt met de voorzichtigste van deze
+  verhouding en de Solcast-teller "rest van vandaag". Raakt alles wat de
+  zonschatting gebruikt: vol-moment, zonoverschot, reserve, plan.
+- **Dip met marge (`DIP_MARGE` = 1,25).** `_dipbesluit` en het plan
+  (`_plan_dip_laadt`) rekenen het tekort tot het blok met +25 %, zoals de
+  reserve. 14-10 00:15-02:00 kostte stroom 26-28 ct; de ochtendpiek
+  07:45-09:15 47-58 ct; het spaarplan zag 0,72 kWh nodig tegen 0,75
+  beschikbaar en laadde niet. Het spaarplan zelf (sparen en verkoop) blijft
+  zonder marge (v5.87, L-EMS-017).
+
+Tests: `test_v596_zon_realisatie_dipmarge.py` (8).

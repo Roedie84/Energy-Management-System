@@ -1,3 +1,15 @@
+EMS v5.96.0 - zon volgt de werkelijkheid, bijladen in een dip met marge
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Loopt de zon vandaag achter op de verwachting, dan rekent het EMS de rest
+  van de dag met evenveel minder zon (nooit meer). Op 13-10 wachtte het in
+  het goedkope blok op een zon die niet kwam en laadde het pas om 13:30;
+  de accu kwam tot 78 %.
+- Bijladen in een prijsdip (buiten het blok) rekent met dezelfde marge als
+  de reserve (+25 %). Vannacht bleef de dip van 26-28 ct liggen terwijl de
+  ochtendpiek 47-58 ct was: 0,69 kWh leek net genoeg tot 11:30.
+
 EMS v5.95.0 - geen bijtoppen van 99 naar 100% in het goedkope blok
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

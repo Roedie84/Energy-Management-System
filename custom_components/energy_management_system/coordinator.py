@@ -213,6 +213,8 @@ from .const import (
     EXPORT_MEETDREMPEL_W,
     EXPORT_VERKOOP_MIN_KWH,
     LAADBLOK_HERLAAD_DREMPEL,
+    ZON_REALISATIE_MIN_KWH,
+    DIP_MARGE,
     NABESCHOUWING_MIN_KWARTIEREN,
     NACHTLAST_MIN_NACHTEN,
     NACHTLAST_MIN_STIJGING_FRACTIE,
@@ -20412,9 +20414,43 @@ class EnergyManagementSystemCoordinator:
             "bias": self.zonbias_percent(),
             "nu": nu,
             "rest": self._get_pv_remaining_correction_ratio(nu, pv_entries),
+            # v5.96: zon van vandaag tot nu tegen de verwachting.
+            "realisatie": self._zon_realisatie(nu, pv_entries),
         }
         self._pv_vast_cache = (sleutel, vast)
         return vast
+
+    def _zon_realisatie(self, nu: datetime, pv_entries: list) -> float | None:
+        """Opgewekt vandaag tot nu gedeeld door de verwachting tot nu (v5.96).
+
+        Gemeld 14-10: op 13-10 rekende het EMS in het blok op een volle accu
+        door de zon om 15:03 en laadde het pas om 13:30 van het net; de zon
+        leverde 2,95 kWh (piek 440 W) en de accu kwam tot 78 %. De rest van
+        vandaag schaalt met deze verhouding mee - alleen naar beneden.
+        None: te weinig verwacht tot nu, of geen meting.
+        """
+        gemeten = getattr(self, "pv_production_today_kwh", None)
+        # Alleen met een echt gelezen opwekmeter; anders is 0 kWh "onbekend".
+        if gemeten is None or getattr(self, "_pv_energy_meter_last", None) is None:
+            return None
+        middernacht = nu.replace(hour=0, minute=0, second=0, microsecond=0)
+        verwacht = 0.0
+        for begin, eind, kwh in pv_entries or []:
+            if eind <= middernacht or begin >= nu:
+                continue
+            duur = (eind - begin).total_seconds()
+            if duur <= 0:
+                continue
+            deel = (min(eind, nu) - max(begin, middernacht)).total_seconds() / duur
+            verwacht += float(kwh) * max(0.0, deel)
+        return self._realisatie_factor(verwacht, float(gemeten))
+
+    @staticmethod
+    def _realisatie_factor(verwacht: float, gemeten: float) -> float | None:
+        """v5.96: gemeten/verwacht, begrensd op [0, 1]; None onder de drempel."""
+        if verwacht < ZON_REALISATIE_MIN_KWH:
+            return None
+        return max(0.0, min(1.0, gemeten / verwacht))
 
     def _pv_rakende_halfuren(self, pv_entries: list, start: datetime, end: datetime) -> list:
         """Alleen de zonintervallen die [start, end) raken (v5.27.2).
@@ -20518,12 +20554,18 @@ class EnergyManagementSystemCoordinator:
             # De live teller gaat over wat er van vandaag NOG komt. Een
             # uur van vandaag dat al voorbij is, zit niet in die teller
             # en hoort de verhouding dus niet te krijgen.
+            realisatie = vast.get("realisatie")
             if (
                 entry_start.date() == today
                 and entry_end > nu
-                and remaining_correction_ratio is not None
+                and (remaining_correction_ratio is not None or realisatie is not None)
             ):
-                segment_kwh *= remaining_correction_ratio
+                # v5.96: de voorzichtigste van de Solcast-teller en wat er
+                # vandaag tot nu werkelijk opgewekt is.
+                segment_kwh *= min(
+                    remaining_correction_ratio if remaining_correction_ratio is not None else 1.0,
+                    realisatie if realisatie is not None else 1.0,
+                )
             else:
                 hourly_ratio = self.learned_pv_hourly_ratio(self._utc_uur(entry_start))
                 if hourly_ratio is not None:
@@ -20976,7 +21018,8 @@ class EnergyManagementSystemCoordinator:
         plaats daarvan - dat verschuift zonder rendementsverlies.
         """
         uit: dict = {"laden": False, "soort": "dip"}
-        plan = self.spaarplan(now, self._get_forecast_entries() or [], blok)
+        # v5.96: met marge - zie DIP_MARGE.
+        plan = self.spaarplan(now, self._get_forecast_entries() or [], blok, marge=DIP_MARGE)
         if not plan.get("actief"):
             uit["reden"] = "niet in het goedkope blok, en de accu haalt het blok"
             return uit
@@ -23479,8 +23522,10 @@ class EnergyManagementSystemCoordinator:
         slijtage = netregels.get("slijtage_ct")
         if volgend is None or slijtage is None:
             return 0.0
+        # v5.96: met dezelfde marge als `_dipbesluit` (DIP_MARGE).
         toekomst = [
-            (b, p, d) for b, p, d in netregels.get("kwartieren", []) if start <= b < volgend
+            (b, p, d * DIP_MARGE if d > 0 else d)
+            for b, p, d in netregels.get("kwartieren", []) if start <= b < volgend
         ]
         nodig = sum(d for _b, _p, d in toekomst)
         if not toekomst or soc >= nodig:
@@ -45337,7 +45382,7 @@ class EnergyManagementSystemCoordinator:
         return sparen
 
     def spaarplan(
-        self, now: datetime, entries, blok: datetime | None
+        self, now: datetime, entries, blok: datetime | None, marge: float = 1.0
     ) -> dict:
         """Waar gaat de lading heen als hij niet tot het blok reikt? (v5.25)
 
@@ -45382,6 +45427,13 @@ class EnergyManagementSystemCoordinator:
         # behoefte als de verkooptoets - één bron.
         kwartieren, bron = self._spaarkwartieren_op_verkooptoets(kwartieren, blok)
         uit.update(bron)
+        # v5.96: het bijladen in een dip rekent met marge (DIP_MARGE).
+        if marge != 1.0:
+            kwartieren = [
+                (b, e, p, t * marge) if b < blok and t > 0 else (b, e, p, t)
+                for b, e, p, t in kwartieren
+            ]
+            uit["marge"] = marge
         nodig = sum(k[3] for k in kwartieren)
         uit.update(
             {

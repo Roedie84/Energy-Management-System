@@ -16,7 +16,7 @@ BLOK = datetime(2026, 11, 20, 13, 0, tzinfo=TZ)
 
 
 def _stel_in(c, *, prijs_nu, duurste_ongedekt, beschikbaar=1.0, nodig=3.0, actief=True):
-    c.spaarplan = lambda now, entries, blok: {
+    c.spaarplan = lambda now, entries, blok, marge=1.0: {
         "actief": actief, "beschikbaar_kwh": beschikbaar, "nodig_kwh": nodig,
         "duurste_ongedekt_eur": duurste_ongedekt, "blok": BLOK.isoformat(),
         # v5.25.1: ook WANNEER - laden alleen op de goedkoopste momenten
@@ -166,7 +166,7 @@ def _avond(c, prijs_nu, nu=AVOND):
     """Gemeld: "hij begint nu direct op een veel te duur moment te laden".
     Avond 31 ct, nacht 24 ct, ochtendpiek 52 ct niet gedekt."""
     _stel_in(c, prijs_nu=prijs_nu, duurste_ongedekt=0.52)
-    c.spaarplan = lambda now, entries, blok: {
+    c.spaarplan = lambda now, entries, blok, marge=1.0: {
         "actief": True, "beschikbaar_kwh": 1.0, "nodig_kwh": 2.0,
         "duurste_ongedekt_eur": 0.52, "duurste_ongedekt_om": PIEK.isoformat(),
         "blok": BLOK.isoformat(),
