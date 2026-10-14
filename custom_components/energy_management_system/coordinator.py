@@ -14173,6 +14173,16 @@ class EnergyManagementSystemCoordinator:
         de reserve niet op gaan rekenen.
         """
         reeks = self.capacity_trend_history or []
+        # v5.97.1: alleen regels van de HUIDIGE opstelling. Op 14-10 kwam er
+        # een vierde module bij (8,64 -> 11,52 kWh nominaal); de kalibraties
+        # van de oude drie (~8,1 kWh) bleven gelden en de reserve rekende
+        # met 8,1 kWh voor een accu van 11,5. Zichtbaar in de zelfcontrole:
+        # "101,2 % tegen 86 %".
+        nominaal_nu = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        if nominaal_nu:
+            reeks = self._capaciteitsregels_van_opstelling(reeks, nominaal_nu)
         # v3.99.3: kalibratieregels winnen. De dagelijkse regels zijn de
         # nominale sensor (v3.92.5) en zeggen niets; één echte meting
         # tussen negenentwintig nominale verdwijnt in de mediaan.
@@ -14226,6 +14236,41 @@ class EnergyManagementSystemCoordinator:
         # Boven nominaal meten kan niet; dan is er iets anders aan de
         # hand en blijft nominaal staan.
         return min(gemeten, nominaal)
+
+    @staticmethod
+    def _capaciteitsregels_van_opstelling(reeks: list, nominaal_nu: float) -> list:
+        """De regels uit de capaciteitsreeks die bij de huidige opstelling
+        horen (v5.97.1).
+
+        Een andere opstelling (een module erbij of eraf) is een sprong van
+        minstens een halve module in de nominale capaciteit die de dagregels
+        vastleggen. Alles tot en met de laatste dagregel van een andere
+        opstelling valt af. Een kalibratie met een eigen `nominaal_kwh`
+        (sinds v5.97.1) telt als die bij de huidige opstelling hoort.
+        Kleine verschillen (een gemeten 7,9 tegen nominaal 8,64) zijn geen
+        andere opstelling en blijven gewoon meetellen."""
+        sprong = BATTERY_MODULE_CAPACITY_KWH / 2
+        grens = None
+        for r in reeks:
+            if not isinstance(r, dict) or r.get("bron") == "kalibratie":
+                continue
+            waarde = r.get("capaciteit_kwh")
+            if waarde and abs(float(waarde) - nominaal_nu) >= sprong:
+                datum = r.get("datum")
+                if datum and (grens is None or datum > grens):
+                    grens = datum
+        uit = []
+        for r in reeks:
+            if not isinstance(r, dict):
+                continue
+            eigen = r.get("nominaal_kwh")
+            if eigen:
+                if abs(float(eigen) - nominaal_nu) < CAPACITY_MEASURE_MIN_VERSCHIL_KWH:
+                    uit.append(r)
+                continue
+            if grens is None or (r.get("datum") or "") > grens:
+                uit.append(r)
+        return uit
 
     def get_capacity_overview(self) -> dict:
         """Wat de accu nominaal en feitelijk levert (v3.5.0)."""
@@ -17444,11 +17489,17 @@ class EnergyManagementSystemCoordinator:
             if beschikbaar_entity
             else None
         )
-        capaciteit = self.bruikbare_capaciteit_kwh()
+        # v5.97.1: de beschikbare energie van de omvormer is (stand - bodem)
+        # x de NOMINALE capaciteit (14-10: (84 - 10) % x 11,52 = 8,5248, op de
+        # vierde decimaal). Dus terugrekenen met de nominale capaciteit en
+        # x 100, niet x (100 - bodem): dat laatste week bij een volle accu
+        # al 7 punten af en verborg zich achter de marge.
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        ) or self.bruikbare_capaciteit_kwh()
         if stand is not None and beschikbaar is not None and capaciteit:
             bodem = self.effective_min_soc_percent()
-            schaal = max(1.0, 100.0 - bodem)
-            afgeleid = bodem + (beschikbaar / capaciteit) * schaal
+            afgeleid = bodem + (beschikbaar / capaciteit) * 100.0
             _voeg_toe(
                 "Accustand tegen beschikbare energie",
                 round(afgeleid, 1),
@@ -33399,6 +33450,10 @@ class EnergyManagementSystemCoordinator:
                 "capaciteit_kwh": round(gemeten * laadrendement, 2),
                 "doorzet_kwh": None,
                 "bron": "kalibratie",
+                # v5.97.1: bij welke opstelling deze meting hoort.
+                "nominaal_kwh": self._read_sensor_float(
+                    self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+                ),
                 "kalibratie_sleutel": sleutel,
                 "begin_soc": meting.get("begin_soc"),
                 "eind_soc": meting.get("eind_soc"),

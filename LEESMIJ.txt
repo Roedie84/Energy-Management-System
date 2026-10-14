@@ -1,3 +1,15 @@
+EMS v5.97.1 - accucapaciteit na de vierde module
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Na de nieuwe module rekende het EMS nog met de gemeten capaciteit van de
+  oude drie (~8,1 kWh) in plaats van 11,52 kWh: reserve, planning en
+  verkoop zagen een te kleine accu. De zelfcontrole ving het ("101,2 % tegen
+  86 %"). Metingen van een andere opstelling tellen nu niet meer mee; tot er
+  een nieuwe kalibratie is geldt de nominale 11,52 kWh.
+- De kruiscontrole accustand/beschikbare energie rekent nu precies zoals de
+  omvormer: bodem + beschikbaar / nominaal x 100.
+
 EMS v5.97.0 - airco-opwarmtempo volgt de buitentemperatuur
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

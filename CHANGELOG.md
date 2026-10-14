@@ -33173,3 +33173,12 @@ Tests: `test_v5962_cockpit_vrij_te_verkopen.py` (2); `test_v5930_cockpit_blok_ai
 
 Tests: `test_v597_airco_tempo_buiten.py` (6).
 
+## v5.97.1 — accucapaciteit na de vierde module
+
+- **Gevonden (14-10 15:47 en 19:01, zelfcontrole):** "Accustand tegen beschikbare energie: de integratie rekent met 101,2 % terwijl ... 86,0 %". Na het toevoegen van de vierde AB3000 (nominaal 8,64 -> 11,52 kWh) gaf `gemeten_capaciteit_kwh()` nog de kalibraties van de oude drie modules (~8,07 kWh). `bruikbare_capaciteit_kwh()` - en daarmee reserve, plan, verkooptoets en uitbreidingsadvies - rekende met 8,07 kWh voor een accu van 11,52.
+- **Wijziging:** `_capaciteitsregels_van_opstelling`: een sprong van minstens een halve module (1,44 kWh) in de nominale dagregels markeert een andere opstelling; alles tot en met de laatste dagregel van die andere opstelling valt af. Nieuwe kalibraties krijgen `nominaal_kwh` en tellen alleen bij die opstelling. Kleine verschillen (een gemeten 7,9 tegen 8,64) blijven meetellen. Tot er een nieuwe kalibratie is: nominaal 11,52 kWh.
+- **Kruiscontrole:** de omvormer meldt beschikbaar = (stand - bodem) x nominaal (14-10: (84 - 10) % x 11,52 = 8,5248). Terugrekenen nu met de nominale capaciteit en x 100 in plaats van met de bruikbare capaciteit en x (100 - bodem); dat laatste week bij een volle accu al ~7 punten af en verborg zich achter de marge van 15.
+- Geen nieuwe apparaten nodig.
+
+Tests: `test_v5971_capaciteit_opstelling.py` (4).
+
