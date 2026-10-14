@@ -33147,3 +33147,12 @@ dure kwartieren."
   zonder marge (v5.87, L-EMS-017).
 
 Tests: `test_v596_zon_realisatie_dipmarge.py` (8).
+
+## v5.96.1 — accumodules nooit als NILM-kandidaat
+
+- **Gevonden:** 14-10 is een vierde AB3000 toegevoegd (01029, nu "Accu module 1"; de zwakke 00996 is "Accu module 4"). De NILM-ontdekking stelde hem voor als apparaat: "AB3000 01029 Power 457W". `NILM_PATTERN_EXCLUDED_KEYWORDS` kende "zendure"/"solarflow" maar niet de modules zelf.
+- **Wijziging:** sleutelwoorden "ab3000" en "accu module" toegevoegd; bestaande kandidaten met die naam worden bij de volgende ronde opgeruimd (`_prune_nilm_pattern_excluded_entries`).
+- Moduleconfiguratie (geen code): de vijf modulelijsten staan nu op 01029, 00917, 02093, 00996. De modulegezondheid volgt het apparaat: module 1 begint schoon, de uitgezette melding blijft bij 00996 (module 4).
+
+Tests: `test_v5961_nilm_accumodules.py` (4).
+

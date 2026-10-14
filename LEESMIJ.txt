@@ -1,3 +1,11 @@
+EMS v5.96.1 - accumodules nooit als NILM-kandidaat
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De nieuw toegevoegde accumodule (AB3000 01029) verscheen als
+  apparaatkandidaat ("AB3000 01029 Power 457W"). Accumodules (AB3000,
+  "Accu module ...") worden nu altijd uitgesloten.
+
 EMS v5.96.0 - zon volgt de werkelijkheid, bijladen in een dip met marge
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

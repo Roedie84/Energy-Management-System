@@ -1294,6 +1294,10 @@ NILM_PATTERN_EXCLUDED_KEYWORDS = (
     "solar production",
     "p1 meter",
     "(omgekeerd)",
+    # v5.96.1: de accumodules zelf (14-10: een nieuw toegevoegde AB3000
+    # verscheen als NILM-kandidaat "AB3000 01029 Power 457W").
+    "ab3000",
+    "accu module",
 )
 
 # NILM-duplicaatdetectie (v0.63.91, gevraagd na een diagnostiek-review
