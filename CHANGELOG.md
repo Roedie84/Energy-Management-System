@@ -33227,3 +33227,10 @@ Tests: geen nieuwe; volledige suite gedraaid.
 - `_koeling_rust_tekst`: "om HH:MM uitgezet; weer aan vanaf HH:MM (… rust tegen pendelen …)".
 
 Tests: `test_v5992_koeling_rust.py` (3); `test_battery_cooling_control.py` tekst bijgewerkt.
+
+## v5.99.3 — accukoeling: "Blijft koelen" met reden
+
+- **Gemeld (15-10 12:17):** "Nu staat er blijft koelen maar waarom dan?"
+- `_blijft_koelen_tekst`: huidige accu-, buiten- en vermogenswaarden plus de uitschakelvoorwaarden van de geldende tak (boven 42 °C altijd aan; onder 32 °C de goedkope-koelingsgrenzen; daartussen < 2 °C verschil én < 300 W).
+
+Tests: `test_v5992_koeling_rust.py` (+2); `test_battery_cooling_control.py` tekst bijgewerkt.

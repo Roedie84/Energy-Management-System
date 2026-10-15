@@ -32979,6 +32979,40 @@ class EnergyManagementSystemCoordinator:
             >= BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C
         )
 
+    def _blijft_koelen_tekst(self, accu_c: float, buiten_c: float, vermogen_w: float) -> str:
+        """Waarom de ventilator aan blijft en wanneer hij uitgaat (v5.99.3).
+
+        Was alleen "Blijft koelen." (gemeld 15-10: "maar waarom dan?").
+        Volgt dezelfde regels als `_battery_cooling_should_turn_off`.
+        """
+        def c(x: float) -> str:
+            return f"{x:.1f}".replace(".", ",").replace(",0", "")
+
+        delta = accu_c - buiten_c
+        nu = (
+            f"Blijft koelen: accu {c(accu_c)} °C, {c(delta)} °C boven buiten "
+            f"({c(buiten_c)} °C), {abs(vermogen_w or 0):.0f} W door de accu."
+        )
+        if accu_c >= BATTERY_COOLING_KEEP_RUNNING_ABOVE_C:
+            return f"{nu} Boven {c(BATTERY_COOLING_KEEP_RUNNING_ABOVE_C)} °C blijft hij altijd aan."
+        if accu_c < BATTERY_COOLING_STOP_BELOW_C:
+            try:
+                drempel = float(self.config.get(
+                    CONF_BATTERY_COOLING_OPPORTUNITY_C, BATTERY_COOLING_OPPORTUNITY_MIN_C))
+            except (TypeError, ValueError):
+                drempel = BATTERY_COOLING_OPPORTUNITY_MIN_C
+            stop_bij = drempel - BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C
+            return (
+                f"{nu} Uit zodra de accu op {c(stop_bij)} °C of lager is, minder dan "
+                f"{c(BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C)} °C boven buiten komt, "
+                f"of onder {c(drempel)} °C bijna stil staat (< "
+                f"{BATTERY_COOLING_OPPORTUNITY_IDLE_W:.0f} W)."
+            )
+        return (
+            f"{nu} Uit zodra hij minder dan {c(BATTERY_COOLING_OFF_DELTA_C)} °C boven "
+            f"buiten is én er minder dan {BATTERY_COOLING_OFF_POWER_W:.0f} W door gaat."
+        )
+
     def _koeling_rust_tekst(self, grens: float | None, belast: bool) -> str:
         """Wanneer uitgezet en vanaf wanneer weer aan (v5.99.2).
 
@@ -33211,7 +33245,7 @@ class EnergyManagementSystemCoordinator:
                 f"{vermogen_w:.0f}W belasting"
             )
         else:
-            resultaat["reden"] = "Blijft koelen."
+            resultaat["reden"] = self._blijft_koelen_tekst(accu_c, buiten_c, vermogen_w)
         return resultaat
 
     async def _async_apply_battery_cooling(self) -> None:

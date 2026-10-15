@@ -127,7 +127,7 @@ def test_keeps_cooling_when_only_the_load_dropped(make_coordinator, hass):
     besluit = coordinator.evaluate_battery_cooling()
 
     assert besluit["actie"] is None
-    assert besluit["reden"] == "Blijft koelen."
+    assert besluit["reden"].startswith("Blijft koelen: accu 42 °C")
 
 
 def test_keeps_cooling_when_still_too_hot(make_coordinator, hass):

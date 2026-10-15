@@ -39,3 +39,19 @@ def test_volgas_laden_binnen_een_half_uur_wacht_nog(make_coordinator, hass):
     b = c.evaluate_battery_cooling()
     assert b["actie"] is None
     assert "30 min rust" in b["reden"]
+
+
+def test_blijft_koelen_zegt_waarom(make_coordinator, hass):
+    """Gemeld 15-10 12:17: "Nu staat er blijft koelen maar waarom dan?"."""
+    c = make_coordinator(_config())
+    _situatie(hass, accu=29.0, buiten=15.1, vermogen=1333, ventilator="on")
+    b = c.evaluate_battery_cooling()
+    assert b["actie"] is None
+    assert b["reden"].startswith("Blijft koelen: accu 29 °C, 13,9 °C boven buiten (15,1 °C), 1333 W")
+    assert "Uit zodra de accu op" in b["reden"]
+
+
+def test_blijft_koelen_boven_32(make_coordinator, hass):
+    c = make_coordinator(_config())
+    _situatie(hass, accu=36.0, buiten=20.0, vermogen=800, ventilator="on")
+    assert "minder dan 300 W" in c.evaluate_battery_cooling()["reden"]
