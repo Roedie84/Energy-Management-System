@@ -1,3 +1,11 @@
+EMS v5.98.1 - reservesprong na een herstart telt niet
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Een sprong in de reserve in de eerste 10 minuten na een herstart is
+  opstarten, geen gedrag van de reserve. Die wordt nu gemarkeerd en telt niet
+  mee in het aantal reservesprongen (open punt van de leerronde 13-10).
+
 EMS v5.98.0 - airco-verwachting leert alleen van het aanzetten
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

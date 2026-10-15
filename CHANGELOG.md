@@ -33197,3 +33197,9 @@ Tests: `test_stalled_series.py` (+1).
 - Uitleg op het dashboard bijgewerkt.
 
 Tests: `test_v598_airco_aanzetten.py` (4).
+
+## v5.98.1 — reservesprong na een herstart (L-EMS-020-aanvulling)
+
+- **Open punt (leerronde 13-10, analysedashboard):** "reservesprong direct na een herstart markeren en niet tellen". Een sprong binnen `RESERVE_SPRONG_HERSTART_S` (600 s) na de start van de coordinator krijgt `na_herstart: true`; `reserve_sprongen_aantal` telt die niet, `reserve_sprongen_na_herstart` wel. Stuurt niets.
+
+Tests: `test_v5981_reservesprong_herstart.py` (1).

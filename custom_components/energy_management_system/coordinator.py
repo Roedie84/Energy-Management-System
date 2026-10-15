@@ -63,6 +63,7 @@ from homeassistant.helpers.storage import Store
 from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging
 from .const import (
     RESERVE_SPRONG_DREMPEL_KWH,
+    RESERVE_SPRONG_HERSTART_S,
     RESERVE_SPRONGEN_MAX,
     DIAGNOSE_REGEL_MAX_TEKENS,
     DASHBOARD_ONBEKEND_IS_NORMAAL,
@@ -22895,6 +22896,18 @@ class EnergyManagementSystemCoordinator:
                 "ronde_oud": oud.get("ronde"),
                 "ronde_nieuw": nieuw.get("ronde"),
             }
+            # v5.98.1 (L-EMS-020-aanvulling): een sprong in de eerste
+            # minuten na een herstart is opstarten (sensoren en geleerde
+            # waarden komen binnen), geen gedrag van de reserve. Markeren en
+            # niet meetellen in het aantal.
+            gestart = self._started_at
+            if gestart is not None:
+                try:
+                    na_start = (now - gestart).total_seconds()
+                except TypeError:
+                    na_start = None
+                if na_start is not None and 0 <= na_start < RESERVE_SPRONG_HERSTART_S:
+                    regel["na_herstart"] = True
             for k in self._RESERVE_SPRONG_VELDEN:
                 regel[k] = [oud.get(k), nieuw.get(k)]
             # Het onderdeel met de grootste verandering (kWh-velden; de
@@ -22979,7 +22992,14 @@ class EnergyManagementSystemCoordinator:
             "nabeschouwing_7d": nabeschouwing,
             # De laatste 24 (de diagnostiek heeft er 48): attribuut klein houden.
             "reserve_sprongen": list(self.reserve_sprongen)[-24:],
-            "reserve_sprongen_aantal": len(self.reserve_sprongen),
+            "reserve_sprongen_aantal": sum(
+                1 for r in self.reserve_sprongen
+                if not (isinstance(r, dict) and r.get("na_herstart"))
+            ),
+            "reserve_sprongen_na_herstart": sum(
+                1 for r in self.reserve_sprongen
+                if isinstance(r, dict) and r.get("na_herstart")
+            ),
             "verkoopkwartieren": verkoop[-48:],
             # v5.94: teruglevering uit de accu die geen verkoop was (kWh per dag).
             "regeloverschot_kwh": {d: round(v, 3) for d, v in regeloverschot.items()},
