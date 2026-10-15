@@ -606,6 +606,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .planvolg .cel .s { font-size: 11px; color: var(--tekst2); }
 .planvolg .cel .w { font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .planvolg .dag { grid-column: 1 / -1; font-size: 11.5px; color: var(--tekst3); }
+.planvolg .rk { grid-column: 1 / -1; margin-bottom: -4px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--tekst2); }
 
 /* ---- planning ---- */
 .pl-legenda { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--tekst2); }
@@ -1377,14 +1378,38 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="planvolg">` +
       chip(label, kl) +
       `<div class="zinpv">${esc(nu.tekst || "")}</div>` +
+      `<div class="rk">Accu</div>` +
       `<div class="rij3">` +
       `<div class="cel"><div class="l">Gepland</div><div class="w">${rw(nu.gepland_accu_w)}</div></div>` +
       `<div class="cel"><div class="l">Gemeten</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
       `<div class="cel"><div class="l">Verschil</div><div class="w">${verschil == null ? STREEP : watt(Math.abs(verschil))}</div>` +
       `<div class="s">${nu.verschil_tekst ? esc(nu.verschil_tekst) : verschil == null || Math.abs(verschil) < 50 ? "geen" : verschil < 0 ? "meer laden" : "meer ontladen"}</div></div>` +
       `</div>` +
+      this._planvolgingZon(nu) +
       (dag ? `<div class="dag">Vandaag ${fmt(dag.volgens_plan_procent)}% van ${dag.kwartieren} kwartieren volgens plan` +
-        `${dag.afwijking_accu ? `${PUNT}${dag.afwijking_accu}\u00d7 wijkt de accu zelf af` : ""}</div>` : "") +
+        `${dag.afwijking_accu ? `${PUNT}${dag.afwijking_accu}\u00d7 wijkt de accu zelf af` : ""}` +
+        `${num(dag.zon_verschil_kwh) != null ? `${PUNT}zon ${fmtTeken(dag.zon_verschil_kwh, 1)} kWh t.o.v. voorspeld` : ""}</div>` : "") +
+      `</div>`
+    );
+  }
+
+  /* Gepland (voorspelling in het plan) tegen gemeten zonvermogen (v5.99) */
+  _planvolgingZon(nu) {
+    if (num(nu.gepland_zon_w) == null && num(nu.gemeten_zon_w) == null) return "";
+    const zw = (w) => {
+      const n = num(w);
+      if (n == null) return `<div class="w">${STREEP}</div>`;
+      return `<div class="w">${watt(Math.max(0, n))}</div><div class="s">${n >= 50 ? "opwek" : "geen opwek"}</div>`;
+    };
+    const d = num(nu.zon_verschil_w);
+    const tekst = nu.zon_verschil_tekst || (d == null ? "onbekend" : Math.abs(d) < 50 ? "geen" : d > 0 ? "meer zon" : "minder zon");
+    return (
+      `<div class="rk">Zon</div>` +
+      `<div class="rij3">` +
+      `<div class="cel"><div class="l">Gepland</div>${zw(nu.gepland_zon_w)}</div>` +
+      `<div class="cel"><div class="l">Gemeten</div>${zw(nu.gemeten_zon_w)}</div>` +
+      `<div class="cel"><div class="l">Verschil</div><div class="w">${d == null ? STREEP : watt(Math.abs(d))}</div>` +
+      `<div class="s">${esc(tekst)}</div></div>` +
       `</div>`
     );
   }

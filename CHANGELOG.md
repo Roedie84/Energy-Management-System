@@ -33203,3 +33203,12 @@ Tests: `test_v598_airco_aanzetten.py` (4).
 - **Open punt (leerronde 13-10, analysedashboard):** "reservesprong direct na een herstart markeren en niet tellen". Een sprong binnen `RESERVE_SPRONG_HERSTART_S` (600 s) na de start van de coordinator krijgt `na_herstart: true`; `reserve_sprongen_aantal` telt die niet, `reserve_sprongen_na_herstart` wel. Stuurt niets.
 
 Tests: `test_v5981_reservesprong_herstart.py` (1).
+
+## v5.99.0 — planvolging: zon gepland tegen gemeten
+
+- **Gevraagd (15-10):** "Accu gepland/gemeten ook zichtbaar maken voor PV."
+- `planvolging.beoordeel` geeft nu ook `gepland_zon_w` (zon in de planregel van het kwartier, `zon_kwh * 4000`), `gemeten_zon_w` (`_live_pv_w`) en `zon_verschil_tekst`; `sluit_kwartier` draagt `gepland_zon_w`, `gemeten_zon_w` en `zon_verschil_w`; `dagsamenvatting` geeft `zon_kwartieren` en `zon_verschil_kwh`.
+- `planvolging_vandaag` bewaart ook `zon_verschil_w` (geen huisverbruik), zodat de dagregel een herstart overleeft.
+- Cockpit: blok "Zon" met Gepland / Gemeten / Verschil onder het accublok, en "zon ±x kWh t.o.v. voorspeld" in de dagregel. Stuurt niets.
+
+Tests: `test_v599_planvolging_zon.py` (6), `test_v5931_planvolging_herstart.py` bijgewerkt.

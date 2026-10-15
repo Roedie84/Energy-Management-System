@@ -112,6 +112,10 @@ def beoordeel(
         "verschil_w": round(verschil),
         "verschil_tekst": verschil_tekst(gepland["accu_w"], accu_w),
         "zon_verschil_w": None if zon_d is None else round(zon_d),
+        # v5.99: zon gepland (voorspelling in het plan) tegen gemeten
+        "gepland_zon_w": gepland["zon_w"],
+        "gemeten_zon_w": None if zon_w is None else round(zon_w),
+        "zon_verschil_tekst": zon_verschil_tekst(zon_d),
         "verbruik_verschil_w": None if huis_d is None else round(huis_d),
         "onverklaard_w": round(rest),
         "oorzaak": oorzaak,
@@ -146,6 +150,15 @@ def verschil_tekst(gepland_w: float, gemeten_w: float) -> str:
     if gepland_w >= 50 and gemeten_w >= 50:
         return "meer ontladen" if verschil > 0 else "minder ontladen"
     return "meer ontladen" if verschil > 0 else "meer laden"
+
+
+def zon_verschil_tekst(zon_d: float | None) -> str:
+    """Het zonverschil in woorden (v5.99): "meer zon" of "minder zon"."""
+    if zon_d is None:
+        return "onbekend"
+    if abs(zon_d) < 50:
+        return "geen"
+    return "meer zon" if zon_d > 0 else "minder zon"
 
 
 def tekst(gepland_w: float, gemeten_w: float, oorzaak: str, zon_d, huis_d, rest,
@@ -201,7 +214,8 @@ def sluit_kwartier(gepland: dict, monsters: list[dict]) -> dict | None:
         "kwartier": gepland.get("kwartier"),
         "van": gepland.get("van"),
         "monsters": len(monsters),
-        **{k: oordeel[k] for k in ("gepland_accu_w", "gemeten_accu_w", "verschil_w", "onverklaard_w", "oorzaak", "status")},
+        **{k: oordeel[k] for k in ("gepland_accu_w", "gemeten_accu_w", "verschil_w", "onverklaard_w", "oorzaak", "status",
+                                   "gepland_zon_w", "gemeten_zon_w", "zon_verschil_w")},
     }
 
 
@@ -214,6 +228,8 @@ def dagsamenvatting(dag: str, kwartieren: list[dict]) -> dict | None:
         oorzaken[k["oorzaak"]] = oorzaken.get(k["oorzaak"], 0) + 1
     volgens = oorzaken.get("geen", 0)
     afwijking_accu = sum(1 for k in kwartieren if k["status"] == "afwijking accu")
+    # v5.99: zon tegen de voorspelling, alleen kwartieren met een zonmeting
+    zon = [k["zon_verschil_w"] for k in kwartieren if k.get("zon_verschil_w") is not None]
     return {
         "dag": dag,
         "kwartieren": len(kwartieren),
@@ -222,4 +238,6 @@ def dagsamenvatting(dag: str, kwartieren: list[dict]) -> dict | None:
         "mediaan_verschil_w": round(statistics.median(abs(k["verschil_w"]) for k in kwartieren)),
         "energie_verschil_kwh": round(sum(k["verschil_w"] for k in kwartieren) / 4000, 2),
         "oorzaken": oorzaken,
+        "zon_kwartieren": len(zon),
+        "zon_verschil_kwh": round(sum(zon) / 4000, 2) if zon else None,
     }

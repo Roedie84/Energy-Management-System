@@ -23795,7 +23795,7 @@ class EnergyManagementSystemCoordinator:
                 self._planvolging_kwartieren.append({**oordeel, "dag": vorig["begin"][:10]})
             self._planvolging_dagwissel(kwartier.date().isoformat())
             self.planvolging_vandaag = [
-                {k: r.get(k) for k in ("dag", "van", "status", "oorzaak", "verschil_w")}
+                {k: r.get(k) for k in ("dag", "van", "status", "oorzaak", "verschil_w", "zon_verschil_w")}
                 for r in self._planvolging_kwartieren
             ]
             self._planvolging = {"begin": kwartier.isoformat(), "gepland": self._planvolging_gepland(now, kwartier), "monsters": []}

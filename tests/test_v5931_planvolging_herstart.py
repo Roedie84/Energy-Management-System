@@ -31,8 +31,8 @@ def test_kwartieren_van_vandaag_overleven_een_herstart(make_coordinator, hass):
     assert len(c._planvolging_kwartieren) == 2
     bewaard = c.planvolging_vandaag
     assert len(bewaard) == 2
-    # stand, oorzaak en accuverschil; geen huisverbruik of zon
-    assert all(set(k) == {"dag", "van", "status", "oorzaak", "verschil_w"} for k in bewaard)
+    # stand, oorzaak, accuverschil en (v5.99) zonverschil; geen huisverbruik
+    assert all(set(k) == {"dag", "van", "status", "oorzaak", "verschil_w", "zon_verschil_w"} for k in bewaard)
 
     na = _coordinator(make_coordinator)
     na.planvolging_vandaag = bewaard

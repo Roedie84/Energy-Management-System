@@ -1,3 +1,13 @@
+EMS v5.99.0 - planvolging ook voor de zon
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- In de cockpit, onder Energiestroom, staat naast de accu nu ook de zon:
+  gepland (de zonvoorspelling in het plan voor dit kwartier), gemeten en
+  het verschil ("meer zon" of "minder zon").
+- De regel "Vandaag ..." toont ook hoeveel kWh zon er meer of minder was
+  dan voorspeld.
+
 EMS v5.98.1 - reservesprong na een herstart telt niet
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
