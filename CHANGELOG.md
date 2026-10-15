@@ -33219,3 +33219,11 @@ Tests: `test_v599_planvolging_zon.py` (6), `test_v5931_planvolging_herstart.py` 
 - Cockpit: vakjes krijgen klasse `k` met `--k`: accu laden `--groen`, ontladen `--amber` (rust ongekleurd); zon `--amber`, verschil "minder zon" `--tekst2`. Gekleurde bovenrand, lichte tint en gekleurde waarde.
 
 Tests: geen nieuwe; volledige suite gedraaid.
+
+## v5.99.2 — accukoeling: rusttijd bij belasting, melding met tijden
+
+- **Gemeld (15-10 12:05):** "maar de ventilator is net uitgezet; wachten om pendelen te voorkomen" terwijl hij om 11:10 uit ging (55 min eerder). En: "ik ga zo volgas laden, dan gaat hij toch wel eerder aan?" - nee: onder 35 °C liep alles via de goedkope tak met 120 min rust; pas vanaf 35 °C (bescherming) direct.
+- **Nu:** bij `|vermogen| >= BATTERY_COOLING_ON_POWER_W` (500 W) geldt de gewone rusttijd (`BATTERY_COOLING_MIN_REST_MINUTES`, 30 min) en niet de dagportie. Het pendelen van v3.33.0 was bij 200-430 W.
+- `_koeling_rust_tekst`: "om HH:MM uitgezet; weer aan vanaf HH:MM (… rust tegen pendelen …)".
+
+Tests: `test_v5992_koeling_rust.py` (3); `test_battery_cooling_control.py` tekst bijgewerkt.

@@ -686,7 +686,7 @@ def test_it_waits_before_starting_again(make_coordinator, hass):
     besluit = coordinator.evaluate_battery_cooling()
 
     assert besluit["actie"] is None
-    assert "net uitgezet" in besluit["reden"]
+    assert "uitgezet; weer aan vanaf" in besluit["reden"]
 
 
 # --- v3.6.0: koelen als het bijna niets kost -------------------------

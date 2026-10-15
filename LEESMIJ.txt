@@ -1,3 +1,13 @@
+EMS v5.99.2 - accukoeling: tijden in de melding, korter wachten bij laden
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- "De ventilator is net uitgezet" wordt nu "om 11:10 uitgezet; weer aan
+  vanaf 13:10 (2 uur rust tegen pendelen ...)".
+- Laadt of ontlaadt de accu met meer dan 500 W, dan geldt bij de goedkope
+  koeling de gewone rusttijd van 30 minuten in plaats van 2 uur, en telt
+  de dagportie niet. Vanaf 35 °C gaat hij zoals eerder direct aan.
+
 EMS v5.99.1 - kleuren in gepland/gemeten
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

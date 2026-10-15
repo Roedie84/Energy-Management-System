@@ -32979,6 +32979,33 @@ class EnergyManagementSystemCoordinator:
             >= BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C
         )
 
+    def _koeling_rust_tekst(self, grens: float | None, belast: bool) -> str:
+        """Wanneer uitgezet en vanaf wanneer weer aan (v5.99.2).
+
+        Was "net uitgezet; wachten om pendelen te voorkomen" - ook na 55
+        minuten (gemeld 15-10). Nu met de tijden en de rusttijd erbij.
+        """
+        moment = self.battery_cooling_last_change
+        if isinstance(moment, str):
+            moment = dt_util.parse_datetime(moment)
+        minuten = grens if grens is not None else BATTERY_COOLING_MIN_REST_MINUTES
+        rust = f"{minuten / 60:.0f} uur" if minuten >= 60 else f"{minuten:.0f} min"
+        if moment is None:
+            return f"net uitgezet; {rust} rust om pendelen te voorkomen."
+        uit = dt_util.as_local(moment)
+        weer = dt_util.as_local(moment + timedelta(minutes=minuten))
+        tekst = (
+            f"om {uit:%H:%M} uitgezet; weer aan vanaf {weer:%H:%M} "
+            f"({rust} rust tegen pendelen"
+        )
+        if grens is not None and not belast:
+            tekst += (
+                f", korter bij laden/ontladen boven "
+                f"{BATTERY_COOLING_ON_POWER_W:.0f} W, direct vanaf "
+                f"{BATTERY_COOLING_PROTECT_ALWAYS_C:.0f} °C"
+            )
+        return tekst + ")."
+
     def _cooling_switch_too_recent(
         self,
         now: datetime,
@@ -33107,7 +33134,14 @@ class EnergyManagementSystemCoordinator:
                 # stilstandgrens, dus gold de gewone rusttijd van een
                 # half uur en kon het pendelen elk uur terugkomen.
                 grens = None
-                if self._is_goedkope_koelreden(accu_c, buiten_c):
+                # v5.99.2: bij echte belasting (laden of ontladen boven
+                # BATTERY_COOLING_ON_POWER_W) is er een echte reden om te
+                # koelen: dan de gewone rusttijd en geen dagportie. Gemeld
+                # 15-10: "ik ga zo volgas laden, dan gaat hij toch eerder
+                # aan?" - onder de 35 graden bleef het 2 uur wachten. Het
+                # pendelen van v3.33.0 was bij 200-430 W, onder deze grens.
+                belast = abs(vermogen_w or 0.0) >= BATTERY_COOLING_ON_POWER_W
+                if self._is_goedkope_koelreden(accu_c, buiten_c) and not belast:
                     grens = BATTERY_COOLING_OPPORTUNITY_REST_MINUTES
                     if self._goedkope_koeling_op_slot(nu):
                         # v3.44.1: `resultaat` teruggeven, net als elke
@@ -33138,8 +33172,8 @@ class EnergyManagementSystemCoordinator:
                     nu, aanzetten=True, grens_minuten=grens, accu_c=accu_c
                 ):
                     resultaat["reden"] = (
-                        f"{reden} - maar de ventilator is net uitgezet; "
-                        "wachten om pendelen te voorkomen."
+                        f"{reden} - maar de ventilator is "
+                        f"{self._koeling_rust_tekst(grens, belast)}"
                     )
                     return resultaat
                 resultaat["actie"] = "aan"
