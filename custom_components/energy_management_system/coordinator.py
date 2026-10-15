@@ -41114,7 +41114,19 @@ class EnergyManagementSystemCoordinator:
             temp_c, LIVING_ROOM_TEMP_BUCKET_SIZE_C
         )
 
-        airco_active_now = self.last_heavy_load_source == "airco"
+        # v5.98.0, gemeld: "EMS moet voor inschakelen airco alleen kijken
+        # wanneer deze wordt aangezet." Klopt. Hier telde het vermogen
+        # (`last_heavy_load_source`): stond de airco op 21 °C en sloeg de
+        # compressor even af, dan startte er een waarneming, en sloeg hij
+        # weer aan, dan telde dat als "aangezet" - de thermostaat, niet
+        # jullie. Op 14-10 stond hij 18:38-22:00 onafgebroken op "heat",
+        # met tientallen keren aan/af. Nu telt de stand van de climate-
+        # entiteit (uit -> aan); zonder entiteit blijft het vermogen gelden.
+        ingeschakeld = self._airco_ingeschakeld()
+        airco_active_now = (
+            ingeschakeld if ingeschakeld is not None
+            else self.last_heavy_load_source == "airco"
+        )
 
         # v5.63.1: open waarnemingen van vóór een herstart terugzetten.
         self._herstel_airco_waarnemingen(now)
@@ -41140,7 +41152,7 @@ class EnergyManagementSystemCoordinator:
             # het EMS van zichzelf en schuift de aanzettemperatuur op.
             if self.airco_door_ems:
                 self._temp_prediction_pending = []
-            richting = self.climate_airco_state
+            richting = self._airco_richting_stand() or self.climate_airco_state
             for pending in self._temp_prediction_pending:
                 pending["airco_seen_active"] = True
                 if richting in ("verwarmen", "koelen"):
@@ -41428,6 +41440,25 @@ class EnergyManagementSystemCoordinator:
         if not standen:
             return None
         return rolluiklabel(sum(standen) / len(standen))
+
+    def _airco_ingeschakeld(self) -> bool | None:
+        """Staat de airco AAN (ingeschakeld), los van of de compressor nu
+        draait? None = geen of onbeschikbare climate-entiteit (v5.98.0)."""
+        airco_entity = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
+        if not airco_entity:
+            return None
+        state = self.hass.states.get(airco_entity)
+        if state is None or state.state in ("unavailable", "unknown", None, ""):
+            return None
+        return state.state != "off"
+
+    def _airco_richting_stand(self) -> str | None:
+        """Richting uit de gekozen stand (heat/cool), v5.98.0."""
+        airco_entity = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
+        state = self.hass.states.get(airco_entity) if airco_entity else None
+        if state is None:
+            return None
+        return {"heat": "verwarmen", "cool": "koelen"}.get(state.state)
 
     def _get_current_airco_state_label(self) -> str:
         """Uit/verwarmen/koelen op basis van `hvac_action` (v0.63.56) -

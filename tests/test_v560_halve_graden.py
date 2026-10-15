@@ -24,7 +24,7 @@ CONFIG = {
 
 def test_bakgrootte_is_een_halve_graad():
     assert LIVING_ROOM_TEMP_BUCKET_SIZE_C == 0.5
-    assert AIRCO_LEER_VERSIE == 3
+    assert AIRCO_LEER_VERSIE >= 3
 
 
 @pytest.mark.parametrize(
@@ -162,8 +162,8 @@ def test_migratie_wist_de_bakjes_van_een_graad(make_coordinator):
     assert c.living_room_temp_bucket_humidity == {}
     assert c.living_room_temp_bucket_direction == {}
     assert c.airco_bakje_laatste_start == {}
-    assert c.airco_leer_versie == 3
-    assert c._geladen_opslag["airco_leer_versie"] == 3
+    assert c.airco_leer_versie == AIRCO_LEER_VERSIE
+    assert c._geladen_opslag["airco_leer_versie"] == AIRCO_LEER_VERSIE
     assert "living_room_temp_bucket_history" not in c._geladen_opslag
     # de gekozen setpunten blijven
     assert c.airco_setpunten == [21.0] * 5

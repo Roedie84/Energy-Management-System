@@ -1,3 +1,15 @@
+EMS v5.98.0 - airco-verwachting leert alleen van het aanzetten
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De airco-verwachting telde het aan- en afslaan van de compressor als
+  "aangezet". Stond de airco op 21 graden, dan sloeg hij vaak af en weer
+  aan, en dat leek op jullie keuze (21 °C: 64,7 %). Nu telt alleen het
+  aanzetten zelf: de stand van de airco van uit naar aan.
+- De geleerde kansen per temperatuur beginnen opnieuw (de oude waren
+  vertekend). Tot een bakje weer genoeg waarnemingen heeft, meldt de
+  airco-automaat "leert nog".
+
 EMS v5.97.2 - geen melding meer over een vast airco-setpunt
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

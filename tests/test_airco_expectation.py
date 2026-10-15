@@ -120,7 +120,7 @@ def test_the_card_explains_the_mechanism():
     # v5.60: per halve graad
     assert "bakje van 0,5 °C" in kaart["content"]
     assert "19,3 t/m 19,7 → 19,5" in kaart["content"]
-    assert "een uur de tijd" in kaart["content"]
+    assert "binnen dat uur aangezet" in kaart["content"]  # v5.98.0
 
 
 def test_zero_percent_is_a_real_answer(make_coordinator, hass):

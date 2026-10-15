@@ -33188,3 +33188,12 @@ Tests: `test_v5971_capaciteit_opstelling.py` (4).
 - **Wijziging:** `STALLED_SERIES_CONSTANT_IS_NORMAL` + `"setpunt"`; de reeks staat nog in het rapport met "constante waarde te verwachten", maar geeft geen melding meer.
 
 Tests: `test_stalled_series.py` (+1).
+
+## v5.98.0 — airco-verwachting: alleen het aanzetten telt
+
+- **Gemeld (15-10):** "EMS moet voor inschakelen airco alleen kijken wanneer deze wordt aangezet." Klopt. `_update_living_room_airco_prediction` gebruikte het vermogen (`last_heavy_load_source == "airco"`): stond de airco op "heat" en sloeg de compressor af, dan startte er een waarneming; sloeg hij weer aan, dan telde dat als "aangezet". Op 14-10 stond `climate.woonkamer` 18:38-22:00 onafgebroken op "heat" met tientallen compressorwisselingen; bakje 21,0 kwam zo op 64,7 %.
+- **Nu:** `_airco_ingeschakeld()` - de stand van de climate-entiteit (alles behalve "off" = aan). Een waarneming start alleen als hij uit staat; "ja" als hij binnen het uur wordt aangezet. Richting uit de stand (`heat` -> verwarmen, `cool` -> koelen), anders uit `hvac_action`. Zonder (beschikbare) climate-entiteit blijft het vermogen gelden. Aanzetten door het EMS telt nog steeds niet.
+- **Leren opnieuw:** `AIRCO_LEER_VERSIE` 3 -> 4 wist kansen, richting en luchtvochtigheid per bakje (vertekend); de gekozen setpunten blijven. Tot een bakje weer `AIRCO_PREDICTION_MIN_SAMPLES` waarnemingen heeft, meldt de airco-automaat "leert nog".
+- Uitleg op het dashboard bijgewerkt.
+
+Tests: `test_v598_airco_aanzetten.py` (4).

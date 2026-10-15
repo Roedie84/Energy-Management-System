@@ -1734,7 +1734,7 @@ views:
         rows: auto
     - type: markdown
       title: Hoe de airco-verwachting werkt
-      content: 'Per bakje van 0,5 °C (half naar boven: 18,8 t/m 19,2 → 19,0; 19,3 t/m 19,7 → 19,5) start hooguit één waarneming per uur, met een uur de tijd. Gaat de airco in dat uur aan, dan telt die als **ja**.
+      content: 'Per bakje van 0,5 °C (half naar boven: 18,8 t/m 19,2 → 19,0; 19,3 t/m 19,7 → 19,5) start hooguit één waarneming per uur als de airco uit staat. Wordt hij binnen dat uur aangezet: **ja**.
 
 
         Zo leert de integratie bij welke temperatuur je ingrijpt. Per bakje tellen de laatste 20 waarnemingen (20 uren), zodat het meebeweegt met het seizoen.

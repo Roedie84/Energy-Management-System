@@ -1537,7 +1537,10 @@ AIRCO_PREDICTION_HISTORY_LENGTH = 20
 # v5.60: versie 3 - de bakjes van één graad (sleutels "19.0" voor
 # 18,5-19,4 °C) passen niet op die van een halve graad en worden ook
 # eenmalig gewist.
-AIRCO_LEER_VERSIE = 3
+# v5.98.0: 4 - leren op het AANZETTEN van de airco (stand van de
+# climate-entiteit), niet op het compressorvermogen. De oude bakjes telden
+# het aan- en afslaan van de thermostaat als "aangezet" (21 °C: 64,7 %).
+AIRCO_LEER_VERSIE = 4
 
 # Klimaat-tabblad: geleerde woonkamertemperatuur-projectie (v0.63.56,
 # requested). Bewust vereenvoudigd t.o.v. een volledig model (buitentemp
