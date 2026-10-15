@@ -5562,6 +5562,10 @@ STALLED_SERIES_CONSTANT_IS_NORMAL = (
     # daar wordt "_w" pas toegevoegd.
     "idle_power_history",
     "charge_duration_history",
+    # v5.97.2: ingestelde airco-setpunten. Een setpunt is een keuze van de
+    # bewoner, geen meting: 12x 21,0 betekent "staat op 21 graden", niet
+    # "meting gestopt" (melding 15-10).
+    "setpunt",
 )
 
 # --- Ondergrens voor drift-detectie (v1.12.3) ------------------------

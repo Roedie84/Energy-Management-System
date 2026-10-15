@@ -33182,3 +33182,9 @@ Tests: `test_v597_airco_tempo_buiten.py` (6).
 
 Tests: `test_v5971_capaciteit_opstelling.py` (4).
 
+## v5.97.2 — vast airco-setpunt is geen gestopte meting
+
+- **Melding (15-10, zelfcontrole):** "airco_setpunten staat al 12 metingen op 21.0. Deze grootheid hoort te fluctueren." Ruud: "Heb 21 graden ingesteld." Klopt: een setpunt is een instelling van de bewoner, geen meting.
+- **Wijziging:** `STALLED_SERIES_CONSTANT_IS_NORMAL` + `"setpunt"`; de reeks staat nog in het rapport met "constante waarde te verwachten", maar geeft geen melding meer.
+
+Tests: `test_stalled_series.py` (+1).

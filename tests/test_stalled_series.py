@@ -117,7 +117,8 @@ def test_the_exception_list_is_explicit():
     meeglipt."""
     assert len(STALLED_SERIES_CONSTANT_IS_NORMAL) <= 5
     for fragment in STALLED_SERIES_CONSTANT_IS_NORMAL:
-        assert "history" in fragment or "duration" in fragment
+        # v5.97.2: een setpunt is een instelling, geen meting.
+        assert "history" in fragment or "duration" in fragment or fragment == "setpunt"
 
 
 def test_it_is_in_the_diagnostics_export():
@@ -224,3 +225,11 @@ def test_the_distinction_is_in_the_name():
         assert fragment.startswith("_")
         assert "history" not in fragment
         assert "records" not in fragment
+
+
+def test_airco_setpunten_constant_is_normaal():
+    """v5.97.2: een vast ingesteld setpunt (21,0) is geen gestopte meting."""
+    from custom_components.energy_management_system.const import (
+        STALLED_SERIES_CONSTANT_IS_NORMAL,
+    )
+    assert any(f in "airco_setpunten" for f in STALLED_SERIES_CONSTANT_IS_NORMAL)

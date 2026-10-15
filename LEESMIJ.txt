@@ -1,3 +1,12 @@
+EMS v5.97.2 - geen melding meer over een vast airco-setpunt
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De zelfcontrole meldde "airco_setpunten staat al 12 metingen op 21.0 ...
+  hoort te fluctueren". Een setpunt is een instelling, geen meting: blijft
+  het op 21 graden staan, dan is dat jouw keuze. Setpunten tellen nu als
+  reeks waarvan een vaste waarde normaal is.
+
 EMS v5.97.1 - accucapaciteit na de vierde module
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
