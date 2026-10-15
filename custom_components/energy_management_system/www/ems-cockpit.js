@@ -606,6 +606,9 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .planvolg .cel .s { font-size: 11px; color: var(--tekst2); }
 .planvolg .cel .w { font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .planvolg .dag { grid-column: 1 / -1; font-size: 11.5px; color: var(--tekst3); }
+/* v5.99.1: kleuren zoals in het schema (zon amber, accu laden groen, ontladen amber) */
+.planvolg .cel.k { border-top: 2px solid var(--k); background: color-mix(in srgb, var(--k) 7%, rgba(0,0,0,.18)); }
+.planvolg .cel.k > .w, .planvolg .cel.k .w { color: var(--k); }
 .planvolg .rk { grid-column: 1 / -1; margin-bottom: -4px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--tekst2); }
 
 /* ---- planning ---- */
@@ -1374,15 +1377,21 @@ class EmsCockpitCard extends HTMLElement {
     };
     const verschil = num(nu.verschil_w);
     const dag = pv.vandaag;
+    // v5.99.1: kleur zoals de accu in het schema: laden groen, ontladen amber
+    const accuK = (w) => {
+      const n = num(w);
+      if (n == null || Math.abs(n) < 50) return "cel";
+      return `cel k" style="--k:${n < 0 ? "var(--groen)" : "var(--amber)"}`;
+    };
     return (
       `<div class="planvolg">` +
       chip(label, kl) +
       `<div class="zinpv">${esc(nu.tekst || "")}</div>` +
       `<div class="rk">Accu</div>` +
       `<div class="rij3">` +
-      `<div class="cel"><div class="l">Gepland</div><div class="w">${rw(nu.gepland_accu_w)}</div></div>` +
-      `<div class="cel"><div class="l">Gemeten</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
-      `<div class="cel"><div class="l">Verschil</div><div class="w">${verschil == null ? STREEP : watt(Math.abs(verschil))}</div>` +
+      `<div class="${accuK(nu.gepland_accu_w)}"><div class="l">Gepland</div><div class="w">${rw(nu.gepland_accu_w)}</div></div>` +
+      `<div class="${accuK(nu.gemeten_accu_w)}"><div class="l">Gemeten</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
+      `<div class="${accuK(verschil)}"><div class="l">Verschil</div><div class="w">${verschil == null ? STREEP : watt(Math.abs(verschil))}</div>` +
       `<div class="s">${nu.verschil_tekst ? esc(nu.verschil_tekst) : verschil == null || Math.abs(verschil) < 50 ? "geen" : verschil < 0 ? "meer laden" : "meer ontladen"}</div></div>` +
       `</div>` +
       this._planvolgingZon(nu) +
@@ -1402,13 +1411,19 @@ class EmsCockpitCard extends HTMLElement {
       return `<div class="w">${watt(Math.max(0, n))}</div><div class="s">${n >= 50 ? "opwek" : "geen opwek"}</div>`;
     };
     const d = num(nu.zon_verschil_w);
+    // v5.99.1: zon amber zoals in het schema; minder zon gedempt
+    const zonK = (w, gedempt = false) => {
+      const n = num(w);
+      if (n == null || Math.abs(n) < 50) return "cel";
+      return `cel k" style="--k:${gedempt ? "var(--tekst2)" : "var(--amber)"}`;
+    };
     const tekst = nu.zon_verschil_tekst || (d == null ? "onbekend" : Math.abs(d) < 50 ? "geen" : d > 0 ? "meer zon" : "minder zon");
     return (
       `<div class="rk">Zon</div>` +
       `<div class="rij3">` +
-      `<div class="cel"><div class="l">Gepland</div>${zw(nu.gepland_zon_w)}</div>` +
-      `<div class="cel"><div class="l">Gemeten</div>${zw(nu.gemeten_zon_w)}</div>` +
-      `<div class="cel"><div class="l">Verschil</div><div class="w">${d == null ? STREEP : watt(Math.abs(d))}</div>` +
+      `<div class="${zonK(nu.gepland_zon_w)}"><div class="l">Gepland</div>${zw(nu.gepland_zon_w)}</div>` +
+      `<div class="${zonK(nu.gemeten_zon_w)}"><div class="l">Gemeten</div>${zw(nu.gemeten_zon_w)}</div>` +
+      `<div class="${zonK(d, d != null && d < 0)}"><div class="l">Verschil</div><div class="w">${d == null ? STREEP : watt(Math.abs(d))}</div>` +
       `<div class="s">${esc(tekst)}</div></div>` +
       `</div>`
     );

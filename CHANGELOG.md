@@ -33212,3 +33212,10 @@ Tests: `test_v5981_reservesprong_herstart.py` (1).
 - Cockpit: blok "Zon" met Gepland / Gemeten / Verschil onder het accublok, en "zon ±x kWh t.o.v. voorspeld" in de dagregel. Stuurt niets.
 
 Tests: `test_v599_planvolging_zon.py` (6), `test_v5931_planvolging_herstart.py` bijgewerkt.
+
+## v5.99.1 — planvolging in de kleuren van het schema
+
+- **Gevraagd (15-10):** "Graag ook bij gepland/gemeten kleuren toepassen als ook in het schema erboven."
+- Cockpit: vakjes krijgen klasse `k` met `--k`: accu laden `--groen`, ontladen `--amber` (rust ongekleurd); zon `--amber`, verschil "minder zon" `--tekst2`. Gekleurde bovenrand, lichte tint en gekleurde waarde.
+
+Tests: geen nieuwe; volledige suite gedraaid.

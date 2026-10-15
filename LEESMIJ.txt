@@ -1,3 +1,11 @@
+EMS v5.99.1 - kleuren in gepland/gemeten
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De vakjes Gepland/Gemeten/Verschil onder Energiestroom krijgen de kleuren
+  van het schema erboven: zon amber, accu laden groen, accu ontladen amber.
+  Minder zon dan voorspeld is grijs.
+
 EMS v5.99.0 - planvolging ook voor de zon
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
