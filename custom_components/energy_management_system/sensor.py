@@ -1681,12 +1681,16 @@ class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
 
                 elapsed_min = (dt_util.now() - started_at).total_seconds() / 60
                 progress_percent = round(min(100, 100 * elapsed_min / learned), 0)
+        klaar = getattr(self._coordinator, "cyclus_klaar_sinds", {}) or {}
         return {
             "geleerde_cyclusduur_minuten": (
                 round(learned, 1) if learned is not None else None
             ),
             "geschatte_voortgang_procent": progress_percent,
             "cyclusduur_geschiedenis": history,
+            # v5.99.7: wanneer de laatste cyclus klaar was (blijft over een
+            # herstart; last_changed niet).
+            "klaar_sinds": klaar.get(self._state_attr) if self.native_value == "klaar" else None,
         }
 
     @_store_wint
@@ -1716,6 +1720,11 @@ class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
                 pass
         if last_state.state in ("rustend", "actief", "klaar"):
             setattr(self._coordinator, self._state_attr, last_state.state)
+        sinds = last_state.attributes.get("klaar_sinds")
+        if last_state.state == "klaar" and isinstance(sinds, str):
+            klaar = getattr(self._coordinator, "cyclus_klaar_sinds", None)
+            if isinstance(klaar, dict):
+                klaar.setdefault(self._state_attr, sinds)
 
 
 class DishwasherCycleStateSensor(_ApplianceCycleStateSensor):

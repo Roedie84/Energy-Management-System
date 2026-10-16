@@ -523,6 +523,7 @@ def test_a_current_store_keeps_the_balance_history(make_coordinator, hass):
 # precies één van drie bakken vallen. Wie er een nieuwe bijzet en niets
 # kiest, krijgt hier een rode test in plaats van stille dataverlies.
 VLUCHTIG_MET_REDEN = {
+    "cyclus_klaar_sinds": "v5.99.7: wordt via het attribuut klaar_sinds van de cyclus-statussensor teruggezet (RestoreEntity), net als de toestand zelf",
     "_planvolging_kwartieren": "v5.91: de kwartieroordelen van vandaag, met huisverbruik per kwartier; bewust vluchtig (privacykeuze van v5.28) - alleen de dagsamenvatting wordt bewaard",
     "prijsreeks_bevindingen": "dubbele of ontbrekende kwartieren in de prijsreeks; elke keer opnieuw bepaald bij het inlezen",
     "_afwegingen_deze_ronde": "de afwegingen die nu worden verzameld; elke ronde opnieuw",

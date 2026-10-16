@@ -33253,3 +33253,10 @@ Tests: `test_v5995_airco_ingang.py` (3).
 
 - **Gemeld (16-10 10:10, schermafdruk):** de staven na 17:00 liepen in elkaar over tot één vlak. Oorzaak: `.staven` gebruikte een vaste `gap: 1px`; bij een browserzoom/schaal onder 100% wordt dat minder dan een schermpixel en valt het bij een deel van de staven weg. Nagebootst met deviceScaleFactor 0,9.
 - Nu: geen gap; elke staaf `clip-path: inset(0 12% -8px 12% round 3px 3px 0 0)` - de tussenruimte is een deel van de staafbreedte; de -8px laat de rode tekortstreep onder de staaf zichtbaar.
+
+## v5.99.7 — cyclus-status: attribuut klaar_sinds
+
+- **Gemeld (16-10 11:31, tablet):** "Vaatwasser klaar · leeghalen · sinds 11:15" terwijl de vaatwasser op 15-10 om 15:48 klaar was en daarna is uitgeruimd (deur 16:46). Het dashboard rekende met `last_changed` van de cyclus-status, en dat verspringt bij elke herstart (16-10: 06:55, 08:12, 09:52, 10:16, 10:57, 11:15).
+- `cyclus_klaar_sinds` per toestandsveld, gezet bij de overgang naar klaar; attribuut `klaar_sinds` op de vaatwasser- en wasmachine-cyclus-status; teruggezet uit de vorige sensortoestand.
+
+Tests: `test_v5997_klaar_sinds.py` (2); `test_state_persistence.py` (veld als vluchtig benoemd).
