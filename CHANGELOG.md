@@ -33234,3 +33234,10 @@ Tests: `test_v5992_koeling_rust.py` (3); `test_battery_cooling_control.py` tekst
 - `_blijft_koelen_tekst`: huidige accu-, buiten- en vermogenswaarden plus de uitschakelvoorwaarden van de geldende tak (boven 42 °C altijd aan; onder 32 °C de goedkope-koelingsgrenzen; daartussen < 2 °C verschil én < 300 W).
 
 Tests: `test_v5992_koeling_rust.py` (+2); `test_battery_cooling_control.py` tekst bijgewerkt.
+
+## v5.99.4 — dagoverzicht met accucorrectie; airco-leren negeert wegvallen
+
+- **Controle 16-10:** het dagoverzicht van 15-10 meldde "Kosten 0.62 € tegenover 0.05 € zonder accu - dat scheelt -0.57 €"; de nabeschouwing gaf dezelfde dag +1,25 € opbrengst. Het overzicht gebruikte het rauwe cijfer. Nu `_dagoverzicht_tekst()` met `get_savings_correction()` (voorraadverschil x terugleverwaarde), zoals de besparingssensor sinds v5.40.
+- **Daikin valt weg:** `climate.slaapkamer` was 15/16-10 zeven keer 2 minuten `unavailable` ("Server disconnected"). `_update_living_room_airco_prediction` viel dan terug op het vermogen; met de airco op heat en de compressor stil startte er een waarneming die na het herstel als "aangezet" telde. Nu wordt de ronde overgeslagen als de ingestelde climate-entiteit onbeschikbaar is.
+
+Tests: `test_v5994_dagoverzicht.py` (2), `test_v598_airco_aanzetten.py` (+1).

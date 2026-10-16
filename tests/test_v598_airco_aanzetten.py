@@ -67,3 +67,15 @@ def test_uit_blijft_uit(make_coordinator, hass):
 
 def test_leren_opnieuw():
     assert AIRCO_LEER_VERSIE == 4
+
+
+def test_wegvallen_telt_niet_als_aanzetten(make_coordinator, hass):
+    """v5.99.4: de Daikin valt 2 min weg terwijl hij op heat staat."""
+    c = _verse(make_coordinator)
+    for m in range(0, 30):
+        _ronde(c, hass, NU + timedelta(minutes=m), 21.0, stand="heat")
+    for m in range(30, 32):
+        _ronde(c, hass, NU + timedelta(minutes=m), 21.0, stand="unavailable")
+    for m in range(32, 120):
+        _ronde(c, hass, NU + timedelta(minutes=m), 21.0, stand="heat")
+    assert c.living_room_temp_bucket_history.get("21.0", []) == []

@@ -1,3 +1,14 @@
+EMS v5.99.4 - dagoverzicht telt de accu mee, airco-leren negeert wegvallen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het dagoverzicht van 22:00 meldde "dat scheelt -0.57 €" terwijl de accu
+  vol stond voor de ochtend. Nu met de waarde van wat er extra in de accu
+  zit erbij, net als de besparingssensor.
+- Valt de airco even weg (de Daikin-units doen dat geregeld 2 minuten), dan
+  slaat de airco-verwachting die ronden over. Eerder kon zo'n onderbreking
+  als "aangezet" tellen.
+
 EMS v5.99.3 - accukoeling zegt waarom hij blijft koelen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

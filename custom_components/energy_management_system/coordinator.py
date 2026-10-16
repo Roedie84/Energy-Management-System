@@ -5106,19 +5106,7 @@ class EnergyManagementSystemCoordinator:
 
         # --- samenvattingen ---
         if now.hour >= 22:
-            bespaard = (
-                self.counterfactual_cost_today_eur - self.actual_cost_today_eur
-            )
-            stuur(
-                "daily_summary",
-                "📊 Dagoverzicht",
-                f"Vandaag: {self.pv_production_today_kwh:.1f} kWh opgewekt, "
-                f"{self.gross_consumption_today_kwh:.1f} kWh verbruikt, "
-                f"{self.grid_import_today_kwh:.1f} kWh van het net. "
-                f"Kosten {self.actual_cost_today_eur:.2f} € tegenover "
-                f"{self.counterfactual_cost_today_eur:.2f} € zonder accu - "
-                f"dat scheelt {bespaard:.2f} €.",
-            )
+            stuur("daily_summary", "📊 Dagoverzicht", self._dagoverzicht_tekst())
 
         if now.day == 1 and now.hour >= 9:
             maand_bespaard = (
@@ -6488,6 +6476,33 @@ class EnergyManagementSystemCoordinator:
     def _som(self, dagen: list[dict], sleutel: str) -> float | None:
         waarden = [d[sleutel] for d in dagen if d.get(sleutel) is not None]
         return round(sum(waarden), 2) if waarden else None
+
+    def _dagoverzicht_tekst(self) -> str:
+        """Tekst van het dagoverzicht (v5.99.4: gecorrigeerd voor de accu).
+
+        Gemeld 15-10: "dat scheelt -0.57 €" terwijl de accu voor de ochtend
+        was geladen (nabeschouwing: de accu leverde 1,25 € op). Nu net als
+        de besparingssensor met de waarde van wat er extra in de accu zit.
+        """
+        bespaard = self.counterfactual_cost_today_eur - self.actual_cost_today_eur
+        corr = self.get_savings_correction() or {}
+        if corr.get("correctie_beschikbaar"):
+            voorraad = corr.get("voorraadwaarde_eur") or 0.0
+            kwh = corr.get("voorraadverschil_kwh") or 0.0
+            zin = (
+                f"dat scheelt {bespaard + voorraad:.2f} € "
+                f"(afgerekend {bespaard:.2f} €, plus {kwh:+.1f} kWh in de "
+                f"accu ter waarde van {voorraad:+.2f} €)."
+            )
+        else:
+            zin = f"dat scheelt {bespaard:.2f} €."
+        return (
+            f"Vandaag: {self.pv_production_today_kwh:.1f} kWh opgewekt, "
+            f"{self.gross_consumption_today_kwh:.1f} kWh verbruikt, "
+            f"{self.grid_import_today_kwh:.1f} kWh van het net. "
+            f"Kosten {self.actual_cost_today_eur:.2f} € tegenover "
+            f"{self.counterfactual_cost_today_eur:.2f} € zonder accu - {zin}"
+        )
 
     def get_savings_correction(self) -> dict:
         """De besparing van vandaag, gecorrigeerd voor wat er nog in de
@@ -41211,6 +41226,13 @@ class EnergyManagementSystemCoordinator:
         # met tientallen keren aan/af. Nu telt de stand van de climate-
         # entiteit (uit -> aan); zonder entiteit blijft het vermogen gelden.
         ingeschakeld = self._airco_ingeschakeld()
+        # v5.99.4: is de climate-entiteit ingesteld maar even onbeschikbaar
+        # (de Daikin-units vallen geregeld 2 minuten weg), dan deze ronde
+        # overslaan. Anders viel de stand terug op het vermogen: een airco
+        # die op "heat" stond met de compressor even af telde als uit, er
+        # startte een waarneming, en na het herstel telde hij als aangezet.
+        if ingeschakeld is None and self.config.get(CONF_AIRCO_CLIMATE_ENTITY):
+            return
         airco_active_now = (
             ingeschakeld if ingeschakeld is not None
             else self.last_heavy_load_source == "airco"
