@@ -33248,3 +33248,8 @@ Tests: `test_v5994_dagoverzicht.py` (2), `test_v598_airco_aanzetten.py` (+1).
 - `get_input_health` slaat de hvac_action-controle over als de climate-entiteit `unavailable`/`unknown` is; een beschikbare entiteit zonder hvac_action blijft een gebrek.
 
 Tests: `test_v5995_airco_ingang.py` (3).
+
+## v5.99.6 — cockpit: staven in de planningsgrafiek gescheiden bij elke zoom
+
+- **Gemeld (16-10 10:10, schermafdruk):** de staven na 17:00 liepen in elkaar over tot één vlak. Oorzaak: `.staven` gebruikte een vaste `gap: 1px`; bij een browserzoom/schaal onder 100% wordt dat minder dan een schermpixel en valt het bij een deel van de staven weg. Nagebootst met deviceScaleFactor 0,9.
+- Nu: geen gap; elke staaf `clip-path: inset(0 12% -8px 12% round 3px 3px 0 0)` - de tussenruimte is een deel van de staafbreedte; de -8px laat de rode tekortstreep onder de staaf zichtbaar.

@@ -622,8 +622,12 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .g-y2 span { left: 7px; transform: translateY(-50%); }
 .g-plot { position: relative; border-left: 1px solid rgba(255,255,255,.08); border-bottom: 1px solid rgba(255,255,255,.12); }
 .g-raster { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,.05); }
-.staven { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 1px; padding: 0 1px; }
-.staaf { flex: 1 1 0; min-width: 0; border-radius: 2px 2px 0 0; opacity: .88; position: relative; }
+/* v5.99.6: de tussenruimte schaalt mee met de staaf (clip-path in procenten
+   van de staaf zelf) in plaats van een vaste gap van 1px. Bij een
+   browserzoom onder 100% viel die 1px weg en liepen de staven in elkaar
+   over (gemeld 16-10). */
+.staven { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 0 1px; }
+.staaf { flex: 1 1 0; min-width: 0; opacity: .88; position: relative; clip-path: inset(0 12% -8px 12% round 3px 3px 0 0); }
 .staaf.verkopen { box-shadow: 0 0 10px rgba(251, 146, 60, .6); }
 .staaf.laden { box-shadow: 0 0 10px rgba(52, 211, 153, .5); }
 .staaf.tekort::after { content: ""; position: absolute; left: 0; right: 0; bottom: -6px; height: 3px; background: var(--rood); border-radius: 2px; }
