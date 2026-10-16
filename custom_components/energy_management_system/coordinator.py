@@ -9235,6 +9235,13 @@ class EnergyManagementSystemCoordinator:
             ),
         ):
             entity_id = self.config.get(entity_key)
+            # v5.99.5: een airco die even onbeschikbaar is (de Daikin-units
+            # vallen geregeld 2 minuten weg) heeft geen attributen - dat is
+            # wegvallen, geen ontbrekende hvac_action. Gemeld 16-10 09:47 als
+            # Repairs-melding "Airco: hvac_action".
+            staat = self.hass.states.get(entity_id) if entity_id else None
+            if staat is not None and staat.state in ("unavailable", "unknown"):
+                continue
             if entity_id:
                 controles.append(
                     (

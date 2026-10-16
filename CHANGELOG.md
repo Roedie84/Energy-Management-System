@@ -33241,3 +33241,10 @@ Tests: `test_v5992_koeling_rust.py` (+2); `test_battery_cooling_control.py` teks
 - **Daikin valt weg:** `climate.slaapkamer` was 15/16-10 zeven keer 2 minuten `unavailable` ("Server disconnected"). `_update_living_room_airco_prediction` viel dan terug op het vermogen; met de airco op heat en de compressor stil startte er een waarneming die na het herstel als "aangezet" telde. Nu wordt de ronde overgeslagen als de ingestelde climate-entiteit onbeschikbaar is.
 
 Tests: `test_v5994_dagoverzicht.py` (2), `test_v598_airco_aanzetten.py` (+1).
+
+## v5.99.5 — invoercontrole: onbeschikbare airco is geen ontbrekende hvac_action
+
+- **Gemeld (16-10 09:47, Repairs):** "1 ingang(en) leveren niet wat ze horen te leveren ... Airco: hvac_action". `climate.woonkamer` was om 09:44-09:46 weggevallen ("Server disconnected") en had dan geen attributen.
+- `get_input_health` slaat de hvac_action-controle over als de climate-entiteit `unavailable`/`unknown` is; een beschikbare entiteit zonder hvac_action blijft een gebrek.
+
+Tests: `test_v5995_airco_ingang.py` (3).

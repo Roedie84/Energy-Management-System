@@ -1,3 +1,11 @@
+EMS v5.99.5 - geen reparatiemelding meer als de airco even wegvalt
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- "1 ingang(en) leveren niet wat ze horen te leveren - Airco: hvac_action"
+  verscheen als de Daikin even onbeschikbaar was. Een onbeschikbare airco
+  telt nu niet meer als ontbrekend attribuut.
+
 EMS v5.99.4 - dagoverzicht telt de accu mee, airco-leren negeert wegvallen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
