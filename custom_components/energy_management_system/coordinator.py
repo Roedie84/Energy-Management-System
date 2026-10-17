@@ -1510,7 +1510,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag, self.cyclus_klaar_sinds = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, [], [], {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag, self.cyclus_klaar_sinds, self.netmeterdag = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, [], [], {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -29825,10 +29825,68 @@ class EnergyManagementSystemCoordinator:
             self.battery_discharge_today_kwh += (
                 abs(accu_w) / 1000
             ) * elapsed_hours
-        self.gross_consumption_today_kwh += (gross_power_w / 1000) * elapsed_hours
-        self.grid_import_today_kwh += (
-            max(0.0, p1_power_w) / 1000
-        ) * elapsed_hours
+        # v5.99.9: in één toewijzing (functiegrootte); daarna de meters.
+        self.gross_consumption_today_kwh, self.grid_import_today_kwh = (
+            self.gross_consumption_today_kwh + (gross_power_w / 1000) * elapsed_hours,
+            self.grid_import_today_kwh + (max(0.0, p1_power_w) / 1000) * elapsed_hours,
+        )
+        self._ijk_netmeters(now)
+
+    def _ijk_netmeters(self, now: datetime) -> None:
+        """Afname en teruglevering van vandaag uit de P1-meterstanden (v5.99.9).
+
+        Gevonden bij de controle van 17-10: afname en teruglevering werden
+        geïntegreerd uit het P1-vermogen. Dat mist wat er tijdens een
+        herstart en tussen twee rondes gebeurt: op 11-10 (veel herstarts)
+        0,72 kWh afname te weinig (7,94 tegen 8,66 op de meter), over de
+        week 11-16 okt 0,9 kWh afname en 0,5 kWh teruglevering. De opwek
+        kwam al uit de meterstand (v1.9.1) en klopte op de Wh.
+
+        Nu net als de opwek: het dagbegin van beide meters bewaard (ook over
+        een herstart), en vandaag = meterstand - dagbegin. Het verschil met
+        de integratie gaat ook in het bruto verbruik (dat is zon + net +
+        accu), en de splitsing zon/accu van de teruglevering schaalt mee.
+        Zonder meter blijft de integratie staan.
+        """
+        dag = now.date().isoformat()
+        stand = dict(self.netmeterdag) if isinstance(self.netmeterdag, dict) else {}
+        nieuwe_dag = stand.get("dag") != dag
+        delta = {}
+        for sleutel, conf, veld in (
+            ("import", CONF_GRID_IMPORT_ENERGY_SENSOR, "grid_import_today_kwh"),
+            ("export", CONF_GRID_EXPORT_ENERGY_SENSOR, "pv_export_today_kwh"),
+        ):
+            entiteit = self.config.get(conf)
+            meter = self._read_sensor_float(entiteit) if entiteit else None
+            if meter is None:
+                continue
+            m = stand.get(sleutel) or {}
+            laatst, begin = m.get("laatst"), m.get("begin")
+            zelfde = m.get("entity") == entiteit
+            if nieuwe_dag and laatst is not None and zelfde:
+                begin = laatst  # middernacht: de laatste stand van gisteren
+            elif begin is None or not zelfde or (
+                laatst is not None and meter < laatst - PV_ENERGY_METER_RESET_TOLERANCE_KWH
+            ):
+                begin = meter - getattr(self, veld)  # (opnieuw) ijken zonder sprong
+            stand[sleutel] = {"begin": begin, "laatst": meter, "entity": entiteit}
+            waarde = round(max(0.0, meter - begin), 3)
+            delta[sleutel] = waarde - getattr(self, veld)
+            setattr(self, veld, waarde)
+        stand["dag"] = dag
+        self.netmeterdag = stand
+        d_exp = delta.get("export", 0.0)
+        if d_exp:
+            oud = self.pv_export_today_kwh - d_exp
+            if oud > 0:
+                factor = self.pv_export_today_kwh / oud
+                self.solar_export_today_kwh *= factor
+                self.battery_export_today_kwh *= factor
+            else:
+                self.solar_export_today_kwh += d_exp
+        self.gross_consumption_today_kwh = max(
+            0.0, self.gross_consumption_today_kwh + delta.get("import", 0.0) - d_exp
+        )
 
     def _onthoud_energiedagstand(self, dag) -> None:
         """Houdt de dagstand van de lopende dag bij (v1.98.0).
@@ -30801,7 +30859,10 @@ class EnergyManagementSystemCoordinator:
             if incl is not None and excl is not None:
                 belastingdeel = (incl - excl) / vandaag["import_kwh"]
         entries = [
-            (start, prijs) for start, _eind, prijs in (self._get_forecast_entries() or [])
+            # v5.99.9: de reeks staat in eenheden van 1e-7 euro; per uur
+            # stond er 3.755.765 in plaats van 0,3756 (controle 17-10).
+            (start, prijs / PRICE_SCALE_FACTOR)
+            for start, _eind, prijs in (self._get_forecast_entries() or [])
             if start.date() == nu.date()
         ]
         return {
@@ -30947,9 +31008,14 @@ class EnergyManagementSystemCoordinator:
             # Zonder gemiddelde is een maand niet met een week te
             # vergelijken - je kijkt dan naar het aantal dagen in plaats
             # van naar het verbruik.
+            # v5.99.9: delen door de dagen MET een waarde. Over het jaar
+            # stond inkoop € 19,96 over 23 dagen gedeeld door 289 (€ 0,07
+            # per dag in plaats van € 0,87) - controle 17-10.
             uitkomst["gemiddeld_per_dag"] = {
                 sleutel: (
-                    round(uitkomst[sleutel] / len(dagen), 2)
+                    round(uitkomst[sleutel] / (
+                        (uitkomst.get("dagen_met_waarde") or {}).get(sleutel) or len(dagen)
+                    ), 2)
                     if uitkomst[sleutel] is not None
                     else None
                 )

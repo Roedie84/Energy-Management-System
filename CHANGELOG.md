@@ -33267,3 +33267,11 @@ Tests: `test_v5997_klaar_sinds.py` (2); `test_state_persistence.py` (veld als vl
 - Nu: `__init__.py` zet `_wacht_op_eerste_ronde`; tot de eerste ronde (`_begin_ronde_cache`) geven het komende schema (0, lege lijst) en de GACS-attributen niets zwaars terug. De eerste ronde schrijft ze opnieuw.
 
 Tests: `test_v5998_opstart_sensoren.py` (4).
+
+## v5.99.9 — kosten- en kWh-controle (17-10)
+
+- **Afname en teruglevering uit de meterstanden.** Werden geïntegreerd uit het P1-vermogen; dat mist herstarts en de tijd tussen rondes. Vergeleken met de P1-meter over 11-16 okt: afname 29,81 tegen 30,71 kWh, teruglevering 14,80 tegen 15,31 kWh; op 11-10 (veel herstarts) 7,94 tegen 8,66 kWh afname. Nu `_ijk_netmeters`: dagbegin per meter bewaard (`netmeterdag`, ook over een herstart), vandaag = meterstand - dagbegin. Het verschil gaat ook in het bruto verbruik; de splitsing zon/accu van de teruglevering schaalt mee. Zonder meter blijft de integratie. Opwek kwam al uit de meterstand en klopte op de Wh.
+- **Prijs per uur vandaag** (`monthly_summary` → `prijsoverzicht.per_uur_vandaag`): stond in eenheden van 1e-7 euro (3.755.765 in plaats van 0,3756).
+- **Gemiddeld per dag** (perioden): deelde door alle dagen in de periode in plaats van de dagen met een waarde. Jaar: inkoop € 19,96 over 23 dagen gaf € 0,07 per dag.
+
+Tests: `test_v5999_netmeters.py` (5).

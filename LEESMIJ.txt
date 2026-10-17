@@ -1,3 +1,14 @@
+EMS v5.99.9 - afname en teruglevering uit de P1-meterstanden
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Afname en teruglevering per dag komen nu uit de meterstanden van de
+  P1-meter (net als de opwek), niet meer uit het opgetelde vermogen. Een
+  herstart kost zo geen kWh meer (11-10: 0,7 kWh afname te weinig).
+- Gemiddelde prijs per uur van vandaag stond in de verkeerde eenheid.
+- Gemiddeld per dag over jaar/contractjaar deelt nu door de dagen met
+  een waarde.
+
 EMS v5.99.8 - sneller opstarten
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

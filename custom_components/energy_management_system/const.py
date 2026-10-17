@@ -3480,6 +3480,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_pv_energy_meter_day_start": {"type": "plain"},
     "_pv_energy_meter_last": {"type": "plain"},
     "_pv_energy_meter_entity": {"type": "plain"},
+    # v5.99.9: dagbegin van de P1-meters (afname/teruglevering vandaag).
+    "netmeterdag": {"type": "plain"},
     "battery_module_health": {"type": "plain"},
     "energy_balance_error_history": {"type": "plain"},
     "energy_balance_method_version": {"type": "plain"},
