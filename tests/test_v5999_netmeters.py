@@ -21,6 +21,7 @@ def _z(imp, exp, **kw):
         gross_consumption_today_kwh=5.0, **kw)
     z._read_sensor_float = lambda e: meters.get(e)
     z._meters = meters
+    z._noteer_accu_tellers = lambda dag: None
     return z
 
 

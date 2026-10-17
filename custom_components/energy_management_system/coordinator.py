@@ -841,6 +841,7 @@ from .const import (
     PROEFSTAND_LEDGER_DAYS,
     PROEFSTAND_SLIJTAGE_UITSCHIETER_FACTOR,
     PRICE_SCALE_FACTOR,
+    RUSTVERBRUIK_DAGEN,
     SOC_TAPER_BAND_PERCENT,
     CONF_UPDATE_INTERVAL_SECONDS,
     UPDATE_INTERVAL_MAX_SECONDS,
@@ -1510,7 +1511,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag, self.cyclus_klaar_sinds, self.netmeterdag = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, [], [], {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag, self.cyclus_klaar_sinds, self.netmeterdag, self.accu_tellerstanden = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, [], [], {}, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -29875,6 +29876,7 @@ class EnergyManagementSystemCoordinator:
             setattr(self, veld, waarde)
         stand["dag"] = dag
         self.netmeterdag = stand
+        self._noteer_accu_tellers(dag)
         d_exp = delta.get("export", 0.0)
         if d_exp:
             oud = self.pv_export_today_kwh - d_exp
@@ -29887,6 +29889,72 @@ class EnergyManagementSystemCoordinator:
         self.gross_consumption_today_kwh = max(
             0.0, self.gross_consumption_today_kwh + delta.get("import", 0.0) - d_exp
         )
+
+    def _laadteller_entiteit(self) -> str | None:
+        """De levenslange laadteller naast de ontlaadteller (v5.99.10).
+
+        Niet apart in te stellen: Zendure geeft beide als paar
+        (``..._aggr_discharge`` / ``..._aggr_charge``)."""
+        ontlaad = self.config.get(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR) or ""
+        if "discharge" not in ontlaad:
+            return None
+        laad = ontlaad.replace("discharge", "charge")
+        return laad if self.hass.states.get(laad) is not None else None
+
+    def _noteer_accu_tellers(self, dag: str) -> None:
+        """Eén stand per dag van de laad- en ontlaadteller (v5.99.10)."""
+        if dag in (self.accu_tellerstanden or {}):
+            return
+        laad = self._read_sensor_float(self._laadteller_entiteit())
+        ontlaad = self._levenslang_geleverd_kwh()
+        inhoud = self.beschikbare_energie_kwh()
+        if laad is None or ontlaad is None or inhoud is None:
+            return
+        standen = dict(self.accu_tellerstanden or {})
+        standen[dag] = [round(laad, 3), round(ontlaad, 3), round(inhoud, 3)]
+        self.accu_tellerstanden = dict(sorted(standen.items())[-RUSTVERBRUIK_DAGEN - 1:])
+
+    def get_rustverbruik(self) -> dict:
+        """Wat de omvormer gebruikt buiten het laden en ontladen (v5.99.10).
+
+        Controle 17-10: over de hele levensduur kwam er 1922 kWh uit de accu
+        tegen 2377 kWh erin (80,9%), terwijl het geleerde rendement per laad-
+        of ontlaadslag 85,2% is. Het verschil is wat de omvormer zelf
+        gebruikt als hij stilstaat of bijhoudt: het rustverbruik. Uit de
+        dagstanden: verlies = (erin - eruit - toename inhoud), min het
+        rondreisverlies over wat erin ging.
+
+        Dit is geen marginale kost - het loopt ook als de accu niets doet -
+        dus het telt niet mee in laad- en verkoopbesluiten. De besparing
+        t.o.v. zonder sturing bevat het al: die haalt al het accuvermogen
+        (ook dit) uit de netmeting.
+        """
+        standen = sorted((self.accu_tellerstanden or {}).items())
+        eta = (self.learned_battery_efficiency_percent or 90.0) / 100
+        if len(standen) < 3:
+            return {"beschikbaar": False, "dagen": max(0, len(standen) - 1)}
+        (_d0, (l0, o0, i0)), (_d1, (l1, o1, i1)) = standen[0], standen[-1]
+        dagen = len(standen) - 1
+        erin, eruit = l1 - l0, o1 - o0
+        verlies = erin - eruit - (i1 - i0)
+        rust = max(0.0, verlies - erin * (1 - eta))
+        per_dag = rust / dagen
+        prijs = self.huidige_prijs_eur_per_kwh() or 0.0
+        return {
+            "beschikbaar": True,
+            "dagen": dagen,
+            "kwh_per_dag": round(per_dag, 3),
+            "gemiddeld_w": round(per_dag * 1000 / 24, 1),
+            "eur_per_maand_bij_huidige_prijs": round(per_dag * 30 * prijs, 2),
+            "rondreisverlies_kwh": round(erin * (1 - eta), 2),
+            "totaal_verlies_kwh": round(verlies, 2),
+            "rendement_gebruikt_procent": round(eta * 100, 1),
+            "toelichting": (
+                "Eigen verbruik van de omvormer buiten laden en ontladen. "
+                "Geen marginale kost, dus niet in de laad-/verkoopbesluiten; "
+                "de besparing t.o.v. zonder sturing bevat het al."
+            ),
+        }
 
     def _onthoud_energiedagstand(self, dag) -> None:
         """Houdt de dagstand van de lopende dag bij (v1.98.0).

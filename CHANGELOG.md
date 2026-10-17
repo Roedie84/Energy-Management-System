@@ -33275,3 +33275,12 @@ Tests: `test_v5998_opstart_sensoren.py` (4).
 - **Gemiddeld per dag** (perioden): deelde door alle dagen in de periode in plaats van de dagen met een waarde. Jaar: inkoop € 19,96 over 23 dagen gaf € 0,07 per dag.
 
 Tests: `test_v5999_netmeters.py` (5).
+
+## v5.99.10 — één besparingscijfer; rustverbruik van de omvormer
+
+- **Gevraagd 17-10:** één besparingscijfer als hoofdgetal, en het eigen verbruik van de omvormer meenemen.
+- **Hoofdgetal:** de besparing t.o.v. zonder accu-sturing (de hele rekening tegen een huis zonder sturing). Nieuwe sensor `Besparing totaal t.o.v. zonder accu-sturing` (state_class total, alle tijd), zodat de helpers "EMS Accubesparing - vandaag/deze maand" daarop kunnen tellen in plaats van op de kostprijsmethode (die blijft als tweede blik, diagnostisch). Attribuut `hoofdgetal: true` op de dagsensor.
+- **Rustverbruik:** levenslang ging er 2377 kWh in de accu en kwam er 1922 kWh uit (80,9%), terwijl het geleerde rendement per slag 85,2% is. Het verschil is het eigen verbruik van de omvormer. `get_rustverbruik()`: één stand per dag van laad- en ontlaadteller en accu-inhoud (`accu_tellerstanden`, 30 dagen, bewaard), verlies = erin - eruit - toename inhoud, min het rondreisverlies; als kWh/dag, gemiddeld W en €/maand. Geen marginale kost, dus niet in laad-/verkoopbesluiten; de besparing t.o.v. zonder sturing bevat het al (al het accuvermogen gaat uit de netmeting). De laadteller wordt naast de ingestelde ontlaadteller gevonden (`..._aggr_discharge` → `..._aggr_charge`).
+- Dashboard: kaart met het totaal en het rustverbruik.
+
+Tests: `test_v59910_rustverbruik.py` (5).

@@ -119,6 +119,7 @@ async def async_setup_entry(
         WaterUsageSensor(coordinator, entry.entry_id),
         PeakPowerSensor(coordinator, entry.entry_id),
         CounterfactualSavingsSensor(coordinator, entry.entry_id),
+        CounterfactualSavingsTotalSensor(coordinator, entry.entry_id),
         SelfSufficiencySensor(coordinator, entry.entry_id),
         SelfConsumptionSensor(coordinator, entry.entry_id),
         BatteryHealthSensor(coordinator, entry.entry_id),
@@ -2907,6 +2908,43 @@ class SelfSufficiencySensor(SensorEntity):
         }
 
 
+class CounterfactualSavingsTotalSensor(SensorEntity):
+    """Besparing t.o.v. zonder accu-sturing, oplopend totaal (v5.99.10).
+
+    Gevraagd 17-10: "één besparingscijfer als hoofdgetal". Er waren er twee:
+    deze (de hele rekening tegen een huis zonder sturing) en de
+    kostprijsmethode (`battery_savings_cost_basis_model`). De helpers
+    "EMS Accubesparing - vandaag/deze maand" telden de kostprijsmethode,
+    omdat alleen die een oplopend totaal had. Deze sensor geeft het
+    hoofdgetal ook als oplopend totaal, zodat een meter-helper erop kan.
+    De tellers achter dit getal (alle tijd) worden al bewaard over een
+    herstart; daarom geen RestoreEntity.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Besparing totaal t.o.v. zonder accu-sturing"
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    _attr_icon = "mdi:cash-plus"
+    _attr_native_unit_of_measurement = "€"
+    _attr_state_class = "total"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_counterfactual_savings_total"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float:
+        c = self._coordinator
+        return round(
+            (c.counterfactual_cost_all_time_eur or 0.0) - (c.actual_cost_all_time_eur or 0.0), 4
+        )
+
+
 class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
     """Tegenfeitelijke besparingsvergelijking (v0.63.101, gevraagd:
     "als je dit systeem niet had, had je deze maand €X betaald; nu
@@ -2984,6 +3022,9 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
             "besparing_all_time_eur": round(
                 c.counterfactual_cost_all_time_eur - c.actual_cost_all_time_eur, 2
             ),
+            # v5.99.10: het hoofdgetal; de kostprijsmethode is een tweede blik.
+            "hoofdgetal": True,
+            "rustverbruik_omvormer": c.get_rustverbruik(),
             "note": (
                 "Tegenfeitelijk scenario: zelfde PV-opbrengst als nu, maar "
                 "geen accu-sturing (accu-vermogen bij de netmeter-aflezing "

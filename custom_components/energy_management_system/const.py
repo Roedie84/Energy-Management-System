@@ -2142,6 +2142,9 @@ UNPROTECTED_AFTERMATH_MARGIN_PERCENT = 15.0
 # (e.g. 3728480 / 10_000_000 = 0.372848 €/kWh).
 PRICE_SCALE_FACTOR = 10_000_000
 
+#: v5.99.10: over hoeveel dagen het rustverbruik van de omvormer gemeten wordt.
+RUSTVERBRUIK_DAGEN = 30
+
 UPDATE_INTERVAL_MINUTES = 5
 
 # --- Instelbaar interval (v2.2.0) ------------------------------------
@@ -3482,6 +3485,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_pv_energy_meter_entity": {"type": "plain"},
     # v5.99.9: dagbegin van de P1-meters (afname/teruglevering vandaag).
     "netmeterdag": {"type": "plain"},
+    # v5.99.10: dagstanden laad-/ontlaadteller voor het rustverbruik.
+    "accu_tellerstanden": {"type": "plain"},
     "battery_module_health": {"type": "plain"},
     "energy_balance_error_history": {"type": "plain"},
     "energy_balance_method_version": {"type": "plain"},
