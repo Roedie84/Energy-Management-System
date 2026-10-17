@@ -166,6 +166,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     config = {**entry.data, **entry.options}
 
     coordinator = EnergyManagementSystemCoordinator(hass, config)
+    coordinator._wacht_op_eerste_ronde = True  # v5.99.8: zware sensoren wachten
     solar_tracker = SolarForecastAccuracyTracker(hass, config)
     coordinator.solar_tracker = solar_tracker
 

@@ -464,6 +464,18 @@ def _to_date(value: str | None) -> date | None:
     return date.fromisoformat(value)
 
 
+def _voor_eerste_ronde(coordinator) -> bool:
+    """v5.99.8: nog geen ronde gedraaid (net opgestart).
+
+    Bij het opstarten schreven de zware sensoren hun toestand vóór de eerste
+    ronde: zonder rondecache werd het kwartierplan dan bij elke aanroep
+    opnieuw opgebouwd ("Updating state for ... upcoming_schedule took 0.616
+    seconds", gacs_zelfbeoordeling 0.406 s, 16-10). Vóór de eerste ronde is
+    er nog niets zinnigs te tonen; de eerste ronde schrijft ze opnieuw. De vlag
+    zet alleen de opstart in __init__.py; buiten HA (toetsen) staat hij uit."""
+    return bool(getattr(coordinator, "_wacht_op_eerste_ronde", False))
+
+
 class _CoordinatorDiagnosticSensor(SensorEntity):
     """Base class for the read-only debug/diagnostic sensors."""
 
@@ -4210,6 +4222,8 @@ class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
         """Number of upcoming intervals in the timeline (state is a count;
         use the 'transitions' attribute for the actual table)."""
         # v5.26: uit het kwartierplan - een plan op het scherm.
+        if _voor_eerste_ronde(self._coordinator):
+            return 0
         return len(self._coordinator.get_plan_blokken())
 
     @property
@@ -4224,7 +4238,8 @@ class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
         return {
             # v5.26: het kwartierplan, niet meer de oude tijdlijn - die liep
             # uit de pas met wat het EMS werkelijk deed.
-            "transitions": self._coordinator.get_plan_blokken(),
+            "transitions": [] if _voor_eerste_ronde(self._coordinator)
+            else self._coordinator.get_plan_blokken(),
         }
 
 
@@ -4624,6 +4639,8 @@ class GacsAssessmentSensor(SensorEntity):
         een trage keer bewaart met of het regressiewoud op dat moment
         trainde, en dat in de diagnoseregel zet.
         """
+        if _voor_eerste_ronde(self._coordinator):
+            return {}
         start = time.perf_counter()
         attributen: dict = {}
         try:

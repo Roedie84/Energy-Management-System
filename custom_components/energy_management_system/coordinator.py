@@ -20252,6 +20252,7 @@ class EnergyManagementSystemCoordinator:
         """Wist de rondecache (v3.99.20). Aan het begin van elke ronde."""
         self._forecast_cache = None
         self._forecast_cache_ronde = now
+        self._wacht_op_eerste_ronde = False  # v5.99.8, zie sensor._voor_eerste_ronde
 
     def _get_pv_forecast_entries(self) -> list[tuple[datetime, datetime, float]]:
         """Per ronde één keer gelezen (v3.99.20): 1.425 aanroepen in

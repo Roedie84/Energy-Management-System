@@ -33260,3 +33260,10 @@ Tests: `test_v5995_airco_ingang.py` (3).
 - `cyclus_klaar_sinds` per toestandsveld, gezet bij de overgang naar klaar; attribuut `klaar_sinds` op de vaatwasser- en wasmachine-cyclus-status; teruggezet uit de vorige sensortoestand.
 
 Tests: `test_v5997_klaar_sinds.py` (2); `test_state_persistence.py` (veld als vluchtig benoemd).
+
+## v5.99.8 — sneller opstarten: zware sensoren wachten op de eerste ronde
+
+- **Gevonden bij de HA-controle (17-10):** HA meldde bij het opstarten van 16-10 "Updating state for sensor.energy_management_system_upcoming_schedule took 0.616 seconds" en voor de GACS-zelfbeoordeling 0.406 s. Vóór de eerste ronde is er geen rondecache, dus het kwartierplan werd bij elke aanroep opnieuw opgebouwd (de schema-sensor vroeg het twee keer per bijwerking).
+- Nu: `__init__.py` zet `_wacht_op_eerste_ronde`; tot de eerste ronde (`_begin_ronde_cache`) geven het komende schema (0, lege lijst) en de GACS-attributen niets zwaars terug. De eerste ronde schrijft ze opnieuw.
+
+Tests: `test_v5998_opstart_sensoren.py` (4).
