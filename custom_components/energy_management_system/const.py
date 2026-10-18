@@ -486,7 +486,7 @@ APPARAAT_INSTELLINGEN = (
 PV_FOUT_EENZIJDIG_AANDEEL = 0.7
 
 MODUS_KORTE_NAAM = {
-    "smart_discharging": "ontladen",
+    "smart_discharging": "huis dekken, zon niet opslaan",
     "smart_charging": "laden uit het net",
     "smart": "slim",
     "manual": "handmatig",

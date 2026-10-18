@@ -33291,3 +33291,10 @@ Tests: `test_v59910_rustverbruik.py` (5).
 - `_rustige_lange_reserve`: binnen hetzelfde kwartier blijft de oude waarde staan zolang het verschil kleiner is dan `LANGE_RESERVE_HYSTERESE_KWH` (0,5); een groter verschil of een nieuw kwartier neemt de nieuwe waarde meteen over.
 
 Tests: `test_v59911_rustige_reserve.py` (3).
+
+## v5.99.12 — smart_discharging heet "huis dekken, zon niet opslaan"
+
+- **Gemeld 18-10:** "de Zendure zelf staat op slim ontladen, dat is alleen het huis ondersteunen en niet het kleine beetje PV opslaan". Klopt: die stand laadt niet uit zon. De korte naam (`MODUS_KORTE_NAAM`, "ontladen") en de planvolging ("ontladen naar het huis") zeiden dat niet.
+- Namen: "huis dekken, zon niet opslaan" en "huis dekken (zon niet opslaan)". De uitleg bij `discharging_window` noemt nu dat er geen zon wordt opgeslagen en dat het EMS boven `SOLAR_CAPTURE_HYSTERESIS_W` (150 W) overschot naar slim gaat (`arbitrage_solar_capture`).
+
+Tests: `test_v59912_huis_dekken_label.py` (2).

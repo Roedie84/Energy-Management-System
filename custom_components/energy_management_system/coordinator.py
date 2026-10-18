@@ -44691,15 +44691,15 @@ class EnergyManagementSystemCoordinator:
                     f"beschikbaar - genoeg om de resterende tijd tot het "
                     f"goedkoopste blok te overbruggen (geschat nodig: "
                     f"{needed_txt} kWh). Daarom wordt laden uitgesteld: de "
-                    f"accu dekt het huishoudverbruik zelf (0 op de meter), "
-                    f"zonder actief te verkopen (smart_discharging)."
+                    f"accu dekt alleen het huishoudverbruik (0 op de meter) en "
+                    f"slaat geen zon op (smart_discharging); boven {SOLAR_CAPTURE_HYSTERESIS_W:.0f} W overschot naar slim."
                     + self._tot_en_na_blok_zin()
                 )
             else:
                 parts.append(
                     "Het is nog vóór het goedkoopste blok, dus laden wordt "
-                    "uitgesteld: de accu dekt het huishoudverbruik zelf (0 "
-                    "op de meter), zonder actief te verkopen "
+                    "uitgesteld: de accu dekt alleen het huishoudverbruik (0 "
+                    "op de meter), verkoopt niet en slaat geen zon op "
                     "(smart_discharging)."
                 )
 

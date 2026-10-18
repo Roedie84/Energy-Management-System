@@ -1,3 +1,11 @@
+EMS v5.99.12 - "huis dekken, zon niet opslaan"
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De stand smart_discharging heet nu wat hij doet: de accu dekt alleen het
+  huis en slaat geen zon op. Komt het zonoverschot boven 150 W, dan schakelt
+  het EMS naar slim om het op te vangen; dat staat nu ook in de uitleg.
+
 EMS v5.99.11 - accureserve zonder minuutruis
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

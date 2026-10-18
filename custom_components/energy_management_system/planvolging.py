@@ -190,7 +190,7 @@ def _stand_tekst(stand: str | None) -> str:
     if "smart_charging" in t:
         return "sparen (alleen zon laden)"
     if "smart_discharging" in t:
-        return "ontladen naar het huis"
+        return "huis dekken (zon niet opslaan)"
     if t.startswith("smart"):
         return "slim"
     return t or "onbekend"
