@@ -842,6 +842,7 @@ from .const import (
     PROEFSTAND_SLIJTAGE_UITSCHIETER_FACTOR,
     PRICE_SCALE_FACTOR,
     RUSTVERBRUIK_DAGEN,
+    LANGE_RESERVE_HYSTERESE_KWH,
     SOC_TAPER_BAND_PERCENT,
     CONF_UPDATE_INTERVAL_SECONDS,
     UPDATE_INTERVAL_MAX_SECONDS,
@@ -13160,7 +13161,10 @@ class EnergyManagementSystemCoordinator:
         vermeden = max(na_blok)
 
         # v3.99.18: het verschil is nu ook wat de reserve erbij neemt.
-        self._lange_reserve_extra_kwh = round(max(0.0, lang - kort), 3)
+        # v5.99.11: met hysterese (zie `_rustige_lange_reserve`).
+        self._lange_reserve_extra_kwh = self._rustige_lange_reserve(
+            round(max(0.0, lang - kort), 3), now
+        )
         self.lange_reserve_history.append(
             {
                 "moment": now.isoformat(),
@@ -27524,6 +27528,29 @@ class EnergyManagementSystemCoordinator:
     def lange_horizon_actief(self, waarde: bool) -> None:
         self.config = dict(self.config or {})
         self.config[CONF_LANGE_HORIZON] = bool(waarde)
+
+    def _rustige_lange_reserve(self, nieuw: float, now: datetime) -> float:
+        """De lange-horizonreserve zonder minuutruis (v5.99.11).
+
+        Controle 18-10: 47 "reservesprongen" op één dag, steeds de lange
+        horizon die per minuut 0,15-0,7 kWh op en neer ging - de schatting
+        van het diepste tekort rekent met het verbruik van dat moment. De
+        reserve zat toch op het plafond, maar het logboek en elke vergelijking
+        werden er onrustig van. Nu: binnen hetzelfde kwartier blijft de oude
+        waarde staan zolang het verschil kleiner is dan
+        LANGE_RESERVE_HYSTERESE_KWH; een groter verschil of een nieuw kwartier
+        neemt de nieuwe waarde meteen over.
+        """
+        kwartier = now.replace(minute=now.minute // 15 * 15, second=0, microsecond=0).isoformat()
+        oud = getattr(self, "_lange_reserve_extra_kwh", None)
+        if (
+            oud is not None
+            and getattr(self, "_lange_reserve_kwartier", None) == kwartier
+            and abs(nieuw - oud) < LANGE_RESERVE_HYSTERESE_KWH
+        ):
+            return oud
+        self._lange_reserve_kwartier = kwartier
+        return nieuw
 
     def _lange_horizon_dagrecord(self) -> dict:
         """Wat de lange horizon vandaag deed en wat de ochtend bracht

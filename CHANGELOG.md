@@ -33284,3 +33284,10 @@ Tests: `test_v5999_netmeters.py` (5).
 - Dashboard: kaart met het totaal en het rustverbruik.
 
 Tests: `test_v59910_rustverbruik.py` (5).
+
+## v5.99.11 — lange-horizonreserve met hysterese
+
+- **Controle 18-10:** 47 reservesprongen op 17-10, telkens de lange horizon die per minuut 0,15-0,7 kWh op en neer ging (het diepste tekort rekent met het verbruik van dat moment). De reserve zat op het plafond, dus de sturing veranderde niet, maar het logboek en de vergelijkingen werden onrustig.
+- `_rustige_lange_reserve`: binnen hetzelfde kwartier blijft de oude waarde staan zolang het verschil kleiner is dan `LANGE_RESERVE_HYSTERESE_KWH` (0,5); een groter verschil of een nieuw kwartier neemt de nieuwe waarde meteen over.
+
+Tests: `test_v59911_rustige_reserve.py` (3).

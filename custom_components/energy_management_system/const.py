@@ -2145,6 +2145,10 @@ PRICE_SCALE_FACTOR = 10_000_000
 #: v5.99.10: over hoeveel dagen het rustverbruik van de omvormer gemeten wordt.
 RUSTVERBRUIK_DAGEN = 30
 
+#: v5.99.11: binnen een kwartier verandert de lange-horizonreserve pas bij
+#: een verschil van minstens zoveel kWh (minuutruis eruit).
+LANGE_RESERVE_HYSTERESE_KWH = 0.5
+
 UPDATE_INTERVAL_MINUTES = 5
 
 # --- Instelbaar interval (v2.2.0) ------------------------------------

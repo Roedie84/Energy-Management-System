@@ -1,3 +1,10 @@
+EMS v5.99.11 - accureserve zonder minuutruis
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De reserve voor de lange horizon springt niet meer elke minuut een paar
+  tienden kWh op en neer; binnen een kwartier pas bij 0,5 kWh verschil.
+
 EMS v5.99.10 - één besparingscijfer en rustverbruik omvormer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
