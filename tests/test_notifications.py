@@ -197,6 +197,10 @@ def test_only_the_pre_existing_kinds_default_to_on():
         "opdracht_niet_aangekomen",
         # v5.29: en dat de accu helemaal geen opdrachten aanneemt.
         "accu_niet_aanstuurbaar",
+        # v5.100: gevraagd - "aangeven wanneer een keuze achteraf niet de
+        # beste keuze was". Hooguit eens per dag, alleen bij een regelkeuze
+        # die met een goede verwachting toch 25 cent of meer kostte.
+        "keuze_achteraf",
         # v3.67.0: een onvolledige installatie hoort te melden - dat is
         # het hele punt van de bestandscontrole.
         "installatie_onvolledig",

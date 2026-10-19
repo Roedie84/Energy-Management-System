@@ -1085,6 +1085,11 @@ async def async_get_config_entry_diagnostics(
                     dt_util.now().date().isoformat()
                 )
             ),
+            # v5.100: zelfanalyse, prijsverwachting en de generale repetitie 2027.
+            "zelfanalyse": _veilig("get_zelfanalyse", coordinator.get_zelfanalyse),
+            "keuzeoordelen": _veilig("keuzeoordelen", lambda: coordinator.keuzeoordelen),
+            "prijsverwachting": _veilig("get_prijsverwachting", coordinator.get_prijsverwachting),
+            "repetitie_2027": _veilig("get_repetitie_2027", coordinator.get_repetitie_2027),
             # v3.99.18: wat de lange horizon werkelijk opleverde.
             "lange_horizon_effect": _veilig(
                 "get_lange_horizon_effect", coordinator.get_lange_horizon_effect

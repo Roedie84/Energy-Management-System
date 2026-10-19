@@ -328,6 +328,9 @@ METING_VERWACHTE_STILTE_DAGEN = {
     "safe_sell_shadow": 60,
     # v5.3: drie momenten per dag, dus stil na twee dagen is verdacht.
     "voorspellingsverloop": 2,
+    # v5.100: elke nacht een oordeel; elke drie uur een verwachting.
+    "keuzeoordelen": 2,
+    "prijsverwachting": 1,
 }
 
 METING_WAT_VULT_HEM = {
@@ -339,6 +342,8 @@ METING_WAT_VULT_HEM = {
     "eigen_ingrepen": "een handmatige stand aan- of uitzetten",
     "safe_sell_shadow": "verkoop in het terugvalpad, dus 's avonds",
     "voorspellingsverloop": "de rondes van 08:00, 11:00 en 14:00",
+    "keuzeoordelen": "de dagwissel: het keuzeoordeel van gisteren",
+    "prijsverwachting": "elke drie uur, met het weer van Open-Meteo",
 }
 
 # Hoe lang na het opstarten er niets wordt gemeld: een verse installatie
@@ -3122,6 +3127,7 @@ LOG_PRIORITEITEN = {
     # Info - het hoort erbij.
     "mode_change": LOG_PRIO_INFO,
     "plan_uitstel": LOG_PRIO_INFO,
+    "keuze_achteraf": LOG_PRIO_INFO,
     "plan_tekort_hersteld": LOG_PRIO_INFO,
     "battery_cooling": LOG_PRIO_INFO,
     "appliance_ready": LOG_PRIO_INFO,
@@ -3491,6 +3497,12 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "netmeterdag": {"type": "plain"},
     # v5.99.10: dagstanden laad-/ontlaadteller voor het rustverbruik.
     "accu_tellerstanden": {"type": "plain"},
+    # v5.100: prijsgeschiedenis en verwachtingsarchief, keuzeoordeel en
+    # de generale repetitie 2027.
+    "prijsgeschiedenis": {"type": "plain"},
+    "prijsverwachting_archief": {"type": "plain"},
+    "keuzeoordelen": {"type": "plain"},
+    "repetitie_2027": {"type": "plain"},
     "battery_module_health": {"type": "plain"},
     "energy_balance_error_history": {"type": "plain"},
     "energy_balance_method_version": {"type": "plain"},
@@ -4104,6 +4116,12 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
         "Niets. De integratie laadt zo nodig zelf bij in het goedkope blok. "
         "Komt dit dagelijks, kijk dan op de kaart Planning welk kwartier het is.",
     ),
+    "keuze_achteraf": (
+        "Bij de nachtelijke zelfanalyse bleek een keuze van gisteren achteraf duur: met "
+        "een goede verwachting van zon en verbruik koos een regel anders dan het beste was.",
+        "Niets nodig. Kijk bij de kaart Zelfanalyse welke regel het meest kost; blijft "
+        "dezelfde regel terugkomen, dan is dat het verbeterpunt voor de sturing.",
+    ),
     "plan_uitstel": (
         "Er komt vandaag genoeg zon om de accu later op de dag te vullen, en "
         "tot dan levert het overschot meer op tegen de huidige prijs.",
@@ -4357,6 +4375,14 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "woning aan het net komt te hangen.",
         True,
         360,
+    ),
+    (
+        "keuze_achteraf",
+        "Keuze achteraf niet de beste",
+        "Eens per dag, als de zelfanalyse een keuze van gisteren vindt die met een goede "
+        "verwachting toch duur uitviel (vanaf 25 cent).",
+        True,
+        720,
     ),
     (
         "plan_uitstel",
@@ -4714,7 +4740,7 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
 # drukke dag vulde de lijst en duwde de melding waar je naar zocht er
 # alweer uit.
 # v5.25: 41 soorten x 5 - zie test_the_history_is_long_enough_for_a_busy_day.
-NOTIFICATION_HISTORY_LENGTH = 210
+NOTIFICATION_HISTORY_LENGTH = 220
 
 # --- Eén betrouwbaarheidsschaal (v1.3.0) -----------------------------
 # Gevraagd: "ik wil dit eigenlijk voor vele data welke wordt gecreeerd,
@@ -6672,6 +6698,7 @@ ACHTERHOEKS_TITELS = {
     "plan_tekort": "Den accu kump tekort",
     "accu_sparen": "Den accu wödt bewaard veur de dure uren",
     "plan_uitstel": "Zunne opvangen wödt uut-esteld",
+    "keuze_achteraf": "Achteraf was dat nie de beste keuze",
     "meet_stuurt_niet": "Wat met en nog neet stuurt",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
     "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
@@ -7452,3 +7479,7 @@ AIRCO_RAAM_UITSTEL_S = 300
 # slag onder dit rendement is geen verlies maar een meetfout (de
 # vermogenssensor en de voorraad lopen niet gelijk); dan de begrenzing.
 ACCU_AC_MIN_RENDEMENT = 0.75
+
+# v5.100: de prijsverwachting hooguit eens per drie uur (Open-Meteo en de
+# training kosten een paar seconden in een executor).
+PRIJSVERWACHTING_MINUTEN = 180

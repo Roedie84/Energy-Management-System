@@ -1,3 +1,28 @@
+EMS v5.100.0 - zelfanalyse, prijsverwachting en generale repetitie 2027
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+Alle drie meten alleen; ze sturen niets.
+
+- Zelfanalyse: elke nacht wordt elke keuze van de vorige dag vergeleken met
+  de beste keuze die achteraf mogelijk was, vanuit de laadstand die er toen
+  werkelijk was. Per keuze: wat het kostte, wat beter was, en waarom -
+  "voorspelling" (zon of verbruik zat ernaast) of "regel" (de verwachting
+  klopte, de regel koos anders). Over dertig dagen: welke regels het meest
+  kosten. Melding "Keuze achteraf niet de beste" bij een regelkeuze vanaf
+  25 cent. Na de herstart worden de laatste veertien dagen meteen
+  beoordeeld.
+- Prijsverwachting: verwachte uurprijzen voor de dagen waarvan de prijzen
+  nog niet bekend zijn, uit wind, zon, uur en weekdag (Open-Meteo) en het
+  prijsniveau van de afgelopen week. Elke dag getoetst tegen de echte
+  prijzen en tegen "zoals gisteren".
+- Generale repetitie 2027: de regels van na de saldering draaien nu al in
+  de schaduw mee; elke dag wordt doorgerekend wat ze onder het tarief van
+  2027 hadden opgeleverd, tegenover de huidige sturing en het beste
+  achteraf.
+- Drie nieuwe sensoren (Zelfanalyse, Prijsverwachting, Generale repetitie
+  2027) met kaarten op het dashboard.
+
 EMS v5.99.12 - "huis dekken, zon niet opslaan"
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

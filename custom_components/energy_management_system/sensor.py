@@ -120,6 +120,9 @@ async def async_setup_entry(
         PeakPowerSensor(coordinator, entry.entry_id),
         CounterfactualSavingsSensor(coordinator, entry.entry_id),
         CounterfactualSavingsTotalSensor(coordinator, entry.entry_id),
+        PrijsverwachtingSensor(coordinator, entry.entry_id),
+        ZelfanalyseSensor(coordinator, entry.entry_id),
+        Repetitie2027Sensor(coordinator, entry.entry_id),
         SelfSufficiencySensor(coordinator, entry.entry_id),
         SelfConsumptionSensor(coordinator, entry.entry_id),
         BatteryHealthSensor(coordinator, entry.entry_id),
@@ -2943,6 +2946,86 @@ class CounterfactualSavingsTotalSensor(SensorEntity):
         return round(
             (c.counterfactual_cost_all_time_eur or 0.0) - (c.actual_cost_all_time_eur or 0.0), 4
         )
+
+
+class _V5100Sensor(SensorEntity):
+    """Gemeenschappelijk voor de drie zelfanalyse-sensoren van v5.100."""
+
+    _attr_has_entity_name = True
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    _sleutel = ""
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_{self._sleutel}"
+        self._attr_device_info = {"identifiers": {(DOMAIN, entry_id)}, "name": DEFAULT_NAME}
+
+
+class PrijsverwachtingSensor(_V5100Sensor):
+    """Verwachte stroomprijs voor de dagen zonder gepubliceerde prijzen (v5.100).
+
+    Staat: de verwachte gemiddelde prijs (ct/kWh) van de verste dag met een
+    verwachting - meestal overmorgen. Alleen meten; stuurt niets.
+    """
+
+    _attr_name = "Prijsverwachting"
+    _attr_icon = "mdi:chart-timeline-variant-shimmer"
+    _attr_native_unit_of_measurement = "ct/kWh"
+    _sleutel = "prijsverwachting"
+
+    @property
+    def native_value(self):
+        dagen = (self._coordinator.get_prijsverwachting() or {}).get("dagen") or {}
+        if not dagen:
+            return None
+        laatste = dagen[sorted(dagen)[-1]]
+        gem = laatste.get("gemiddeld_eur")
+        return round(gem * 100, 1) if gem is not None else None
+
+    @property
+    def extra_state_attributes(self):
+        return self._coordinator.get_prijsverwachting()
+
+
+class ZelfanalyseSensor(_V5100Sensor):
+    """Welke keuzes waren achteraf niet de beste, en welke regel kost het meest (v5.100).
+
+    Staat: wat er de afgelopen dertig dagen gemist is bij keuzes waarvan de
+    verwachting klopte - het deel dat aan de regels ligt.
+    """
+
+    _attr_name = "Zelfanalyse"
+    _attr_icon = "mdi:magnify-scan"
+    _attr_native_unit_of_measurement = "€"
+    _sleutel = "zelfanalyse"
+
+    @property
+    def native_value(self):
+        return (self._coordinator.get_zelfanalyse().get("dertig_dagen") or {}).get("door_regel_eur")
+
+    @property
+    def extra_state_attributes(self):
+        return self._coordinator.get_zelfanalyse()
+
+
+class Repetitie2027Sensor(_V5100Sensor):
+    """Generale repetitie voor 2027: de regels van na de saldering in de schaduw (v5.100).
+
+    Staat: wat de accu met de regels van 2027 gemiddeld per dag zou opleveren.
+    """
+
+    _attr_name = "Generale repetitie 2027"
+    _attr_icon = "mdi:calendar-sync"
+    _attr_native_unit_of_measurement = "€"
+    _sleutel = "repetitie_2027"
+
+    @property
+    def native_value(self):
+        return (self._coordinator.get_repetitie_2027().get("samenvatting") or {}).get("per_dag_2027_eur")
+
+    @property
+    def extra_state_attributes(self):
+        return self._coordinator.get_repetitie_2027()
 
 
 class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
