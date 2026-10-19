@@ -1,3 +1,13 @@
+EMS v5.105.1 - het lopende kwartier in de planning klopt weer
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De planning rekende voor het kwartier dat al liep nog een heel
+  kwartier laden of ontladen bovenop de stand van nu. Om 14:09 op 57%
+  beloofde hij daardoor 62% om 14:15, waar 59% klopt. Nu telt alleen
+  het stuk dat nog over is. De rest van de planning schuift daardoor
+  ook iets op, en de planvolging rekent het vermogen over dezelfde tijd.
+
 EMS v5.105.0 - cockpit compacter, met bovenin wie er thuis is
 
 Installeren: via HACS bijwerken en Home Assistant herstarten (en de

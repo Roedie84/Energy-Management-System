@@ -33392,3 +33392,10 @@ Tests: `test_v51042_cockpit_kolommen.py` (3).
 - Zon van de middelste naar de rechterkolom (onder geld): met echte gegevens was de middelste kolom ruim 500 px langer dan de rechter.
 
 Tests: `test_v51050_cockpit_compact_aanwezig.py` (4); `test_v51042_cockpit_kolommen.py` bijgewerkt.
+
+## v5.105.1 — het lopende kwartier telt alleen voor de rest
+
+- **Gemeld 19-10 14:09 (screenshot):** "Verwachting iets te optimistisch? het is nu 14:09" - accu 57%, laden 2,4 kW, en de kwartierplanning gaf 14:00-14:15 "57 → 62%". `_bouw_kwartierplan` begint bij de gemeten stand van NU, maar rekende voor het lopende kwartier met een heel kwartier (`duur` uit `einde - start`): 0,6 kWh laden in 6 minuten. Klopt: 0,24 kWh, ongeveer 59%.
+- Nu rekent het lopende kwartier vanaf `max(start, now)`: duur, laad- en ontlaadhoeveelheid, zon en verbruik. De laadregel krijgt voor de LATERE kwartieren wel de maat van een heel kwartier (die bepaalt welk later kwartier de volgende kWh dekt). Elke planregel draagt `uren`; `planvolging.gepland_uit_plan` deelt door die tijd in plaats van vast x4, zodat het geplande vermogen gelijk blijft als de planvolging midden in een kwartier begint (na een herstart).
+
+Tests: `test_v51051_lopend_kwartier.py` (5; de eerste faalt op v5.105.0).

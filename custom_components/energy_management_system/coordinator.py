@@ -24032,10 +24032,15 @@ class EnergyManagementSystemCoordinator:
             # zijn)."
             if len(plan) >= QUARTER_PLAN_MAX_ROWS:
                 break
-            duur = (einde - start).total_seconds() / 3600
+            # v5.105.1: van het lopende kwartier telt alleen wat er nog van
+            # over is. Gemeld 19-10 om 14:09 (screenshot): "Verwachting iets
+            # te optimistisch?" - de accu stond op 57% en het plan beloofde
+            # 62% om 14:15. De stand is de gemeten stand van NU, maar het
+            # plan rekende er nog een heel kwartier laden bovenop.
+            duur = (einde - (vanaf := max(start, now))).total_seconds() / 3600
             if duur <= 0:
                 continue
-            zon = self._estimate_pv_kwh_for_period(start, einde)
+            zon = self._estimate_pv_kwh_for_period(vanaf, einde)
             # v3.45.1: terugval als het uurprofiel (nog) niet elk uur
             # dekt.
             #
@@ -24062,7 +24067,7 @@ class EnergyManagementSystemCoordinator:
             # Het geleerde nachtverbruik is de beste schatting die er
             # zonder profiel is; is ook die er niet, dan de gemeten
             # live-belasting.
-            verbruik = self._verbruik_met_terugval(start, einde)
+            verbruik = self._verbruik_met_terugval(vanaf, einde)
             in_blok = prijs <= _blok_drempel_voor(start)
 
             duur_kwh = ontlaad_w / 1000 * duur
@@ -24112,7 +24117,10 @@ class EnergyManagementSystemCoordinator:
             elif (
                 geladen := (
                     self._plan_laadt(
-                        netregels, einde, prijs, soc, bruikbaar, laad_kwh, duur_kwh
+                        netregels, einde, prijs, soc, bruikbaar, laad_kwh,
+                        # v5.105.1: de maat van de LATERE kwartieren blijft
+                        # een heel kwartier, ook als dit kwartier al loopt.
+                        ontlaad_w / 1000 * (einde - start).total_seconds() / 3600,
                     )
                     if in_blok
                     else self._plan_dip_laadt(
@@ -24198,6 +24206,9 @@ class EnergyManagementSystemCoordinator:
                     "verbruik_kwh": round(verbruik, 3),
                     "modus": modus,
                     "soc_kwh": round(soc, 2),
+                    # v5.105.1: hoeveel uur dit kwartier nog telt (het
+                    # lopende kwartier minder dan 0,25), voor de planvolging.
+                    "uren": round(duur, 4),
                     # v1.24.3, gemeld: "Dit kon toch niet, zoals
                     # aangegeven minimale soc = 10%. SoC laagste /
                     # hoogste 0% / 86%."

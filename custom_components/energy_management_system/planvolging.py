@@ -49,13 +49,17 @@ def gepland_uit_plan(rij: dict, start_kwh: float) -> dict:
     het plan de accu in (of uit) laat gaan.
     """
     delta = (rij.get("soc_kwh") or 0.0) - start_kwh
+    # v5.105.1: het lopende kwartier telt in het plan alleen voor de rest
+    # (`uren`); het vermogen is energie gedeeld door DIE tijd.
+    uren = rij.get("uren") or 0.25
+    per_uur = 1000 / uren if uren > 0 else 4000
     return {
         "kwartier": rij.get("start"),
         "van": rij.get("van"),
         "modus": rij.get("modus"),
-        "accu_w": round(-delta * 4000),
-        "zon_w": round((rij.get("zon_kwh") or 0.0) * 4000),
-        "huis_w": round((rij.get("verbruik_kwh") or 0.0) * 4000),
+        "accu_w": round(-delta * per_uur),
+        "zon_w": round((rij.get("zon_kwh") or 0.0) * per_uur),
+        "huis_w": round((rij.get("verbruik_kwh") or 0.0) * per_uur),
     }
 
 
