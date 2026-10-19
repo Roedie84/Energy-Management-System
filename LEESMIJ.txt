@@ -1,3 +1,11 @@
+EMS v5.101.1 - prijsverwachting na een storing sneller opnieuw
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Open-Meteo gaf op 19-10 een tijdelijke storing (503). De verwachting
+  wachtte daarna drie uur; nu na een kwartier opnieuw, en de kaart zegt
+  wat er aan de hand is en wanneer de volgende poging is.
+
 EMS v5.101.0 - de airco leert jullie middag- en avondpatroon
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

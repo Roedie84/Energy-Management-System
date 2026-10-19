@@ -113,3 +113,9 @@ def test_niveau_van_eerder_als_de_laatste_week_dun_is():
            or P._lokaal(s).date() == laatste}
     dag = laatste - timedelta(days=1)
     assert P.verwacht_dag(coefs, weer, dun, dag) is not None
+
+
+def test_kaart_bij_een_storing():
+    k = P.kaart({}, None, None, fout="ClientResponseError: 503, url='https://api.open-meteo.com/v1/forecast'",
+                opnieuw_om="2026-10-19T09:20:00+02:00")
+    assert k["kaart_secundair"] == "weer (Open-Meteo) niet bereikbaar - nieuwe poging om 09:20"

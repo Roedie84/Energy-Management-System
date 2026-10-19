@@ -33330,3 +33330,9 @@ Tests: `test_v5100_prijsverwachting.py` (+1).
 
 Tests: `test_v5101_airco_dagritme.py` (7).
 
+## v5.101.1 — prijsverwachting: sneller opnieuw na een storing
+
+- 19-10 na de herstart: `ClientResponseError: 503` van Open-Meteo; de volgende poging stond pas drie uur later en de kaart zei "nog geen verwachting". Nu na `PRIJSVERWACHTING_OPNIEUW_MINUTEN` (15) opnieuw, en `kaart_secundair` zegt "weer (Open-Meteo) niet bereikbaar - nieuwe poging om HH:MM".
+
+Tests: `test_v5100_prijsverwachting.py` (+1).
+

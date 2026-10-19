@@ -7483,3 +7483,5 @@ ACCU_AC_MIN_RENDEMENT = 0.75
 # v5.100: de prijsverwachting hooguit eens per drie uur (Open-Meteo en de
 # training kosten een paar seconden in een executor).
 PRIJSVERWACHTING_MINUTEN = 180
+# v5.101.1: na een mislukte poging (Open-Meteo onbereikbaar) eerder opnieuw.
+PRIJSVERWACHTING_OPNIEUW_MINUTEN = 15

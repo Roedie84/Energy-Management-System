@@ -242,6 +242,7 @@ from .const import (
     REDENEN_ZONDER_STAND,
     REDEN_KORTE_NAAM,
     PRIJSVERWACHTING_MINUTEN,
+    PRIJSVERWACHTING_OPNIEUW_MINUTEN,
     REASON_TO_MODE,
     ACHTERHOEKS_TITELS,
     ACHTERHOEKS_TITELS_PER_ACTIE,
@@ -48311,8 +48312,12 @@ class EnergyManagementSystemCoordinator:
             self.schedule_persisted_state_save()
             self._notify_listeners()
         except Exception as fout:  # noqa: BLE001 - meten mag de sturing nooit raken
+            # v5.101.1: een storing bij Open-Meteo (503 op 19-10) niet drie uur
+            # laten duren - over een kwartier opnieuw
+            opnieuw = now + timedelta(minutes=PRIJSVERWACHTING_OPNIEUW_MINUTEN)
+            self._prijsverwachting_om = opnieuw - timedelta(minutes=PRIJSVERWACHTING_MINUTEN)
             self.prijsverwachting = {**(self.prijsverwachting or {}), "fout": f"{type(fout).__name__}: {fout}",
-                                     "fout_om": now.isoformat()}
+                                     "fout_om": now.isoformat(), "opnieuw_om": opnieuw.isoformat()}
             _LOGGER.debug("Prijsverwachting mislukt", exc_info=True)
         finally:
             self._prijsverwachting_bezig = False
@@ -48324,7 +48329,8 @@ class EnergyManagementSystemCoordinator:
         dagen = pv.get("dagen") or {}
         live = (pv.get("live") or {}).get("d2") or {}
         return {
-            **P.kaart({d: v.get("model") for d, v in dagen.items() if v.get("model")}, pv.get("backtest"), pv.get("live")),
+            **P.kaart({d: v.get("model") for d, v in dagen.items() if v.get("model")}, pv.get("backtest"), pv.get("live"),
+                      fout=pv.get("fout"), opnieuw_om=pv.get("opnieuw_om")),
             "beschikbaar": bool(pv.get("beschikbaar")),
             "dagen": {
                 datum: {**{k: v for k, v in (d.get("model") or {}).items() if k != "uren"},

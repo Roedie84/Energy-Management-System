@@ -455,10 +455,16 @@ def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date)
     }
 
 
-def kaart(dagen: dict, backtest: dict | None, live: dict | None) -> dict:
+def kaart(dagen: dict, backtest: dict | None, live: dict | None,
+          fout: str | None = None, opnieuw_om: str | None = None) -> dict:
     """De teksten voor de dashboardkaart: de verste dag met een verwachting."""
     if not dagen:
-        return {"kaart_primair": "Prijsverwachting", "kaart_secundair": "nog geen verwachting"}
+        tekst = "nog geen verwachting"
+        if fout:
+            tekst = "weer (Open-Meteo) niet bereikbaar" if "open-meteo" in fout.lower() else f"mislukt: {fout[:80]}"
+            if opnieuw_om:
+                tekst += f" - nieuwe poging om {str(opnieuw_om)[11:16]}"
+        return {"kaart_primair": "Prijsverwachting", "kaart_secundair": tekst}
     datum = sorted(dagen)[-1]
     d = dagen[datum]
     primair = f"{d['gemiddeld_eur'] * 100:.1f} ct verwacht".replace(".", ",")
