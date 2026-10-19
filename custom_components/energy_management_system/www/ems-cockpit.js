@@ -1793,6 +1793,26 @@ class EmsCockpitCard extends HTMLElement {
       const liter = num(attr(water, "vandaag_liter"));
       const gem = num(attr(water, "gemiddeld_liter_per_dag"));
       uit.push(regel("druppel", "Water", gem != null ? `gemiddeld ${fmt(gem)} L per dag` : "", `${liter == null ? STREEP : fmt(liter) + " L"}`, "var(--blauw)"));
+      // v5.104.1: wanneer de waterontharder het laatst regenereerde
+      // (gevraagd 19-10: "Energycockpit bij apparaten graag").
+      const reg = alsDatum(attr(water, "waterontharder_laatste_regeneratie"));
+      if (reg) {
+        const momenten = attr(water, "recente_gebruiksmomenten") || [];
+        const sessie = momenten.find((m) => alsDatum(m && m.gestart)?.getTime() === reg.getTime()) || {};
+        const gisteren = new Date();
+        gisteren.setDate(gisteren.getDate() - 1);
+        const dag = reg.toDateString() === new Date().toDateString()
+          ? "vandaag"
+          : reg.toDateString() === gisteren.toDateString()
+            ? "gisteren"
+            : reg.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "numeric" });
+        const l = num(sessie.liter);
+        const duur = num(sessie.duur_minuten);
+        const sub = `${dag} ${klok(reg)}` +
+          (l != null ? `${PUNT}${fmt(l)} L` : "") +
+          (duur != null ? ` in ${fmt(duur)} min` : "");
+        uit.push(regel("druppel", "Waterontharder", `laatst geregenereerd: ${esc(sub)}`, esc(geleden(reg) || ""), "var(--blauw)"));
+      }
     }
     const huis = getal(this._s("huis"));
     return (

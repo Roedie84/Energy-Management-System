@@ -1,3 +1,12 @@
+EMS v5.104.1 - waterontharder in de cockpit
+
+Installeren: via HACS bijwerken en Home Assistant herstarten (en de
+pagina een keer verversen).
+
+- De Energiecockpit toont bij "Huis en apparaten" onder Water een regel
+  Waterontharder: wanneer hij het laatst regenereerde, met liters en
+  duur, en hoe lang geleden.
+
 EMS v5.104.0 - netladen in de echt goedkoopste kwartieren
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

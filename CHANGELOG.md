@@ -33369,3 +33369,10 @@ Tests: `test_v5102_dagarchief.py` (+2).
 - Nu: `_laadregel` geeft `lonend_kwh` - de kwartieren vanaf het k-de duurste waarvan de waarde (prijs x rendement - slijtage) boven de prijs van nu ligt - en `_laad_op_goedkoopste` zoekt de goedkoopste kwartieren voor `min(gat, lonend)`. Zelfde stap voor de beslissing en het plan. Er wordt niet meer geladen, alleen goedkoper. De zonvol-route (v5.86) en de dipregel blijven gelijk.
 
 Tests: `test_v5104_lonend_goedkoopst.py` (4), met de prijzen van 19-10.
+
+## v5.104.1 — waterontharder in de cockpit
+
+- **Gevraagd 19-10:** "Waar kan ik in HA (dashboard) nog zien of de waterontharder heeft geregenereerd?" en "Energycockpit bij apparaten graag". `waterontharder_laatste_regeneratie` stond alleen op de Water-subpagina van het YAML-dashboard, dat sinds vandaag niet meer in de zijbalk staat.
+- `ems-cockpit.js`, paneel Huis en apparaten: onder Water een regel Waterontharder met dag en tijd van de laatste regeneratie, liters en duur uit dezelfde sessie in `recente_gebruiksmomenten` (als die er nog in staat), en hoe lang geleden. Geen regeneratie bekend: geen regel.
+
+Tests: `test_v51041_cockpit_ontharder.py` (3).
