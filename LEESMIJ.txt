@@ -1,3 +1,15 @@
+EMS v5.100.1 - zelfanalyse ook in de energiecockpit
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De energiecockpit toont in het paneel Geld nu ook de zelfanalyse, de
+  prijsverwachting en de generale repetitie 2027, met de keuzes van
+  gisteren die achteraf niet de beste waren.
+- Prijsverwachting: wacht na een herstart tot de meetlog terug is (daar
+  staan de prijzen van de laatste weken), en gebruikt zo nodig het
+  prijsniveau van iets eerder. Na de herstart van 19-10 kwam er daardoor
+  geen verwachting.
+
 EMS v5.100.0 - zelfanalyse, prijsverwachting en generale repetitie 2027
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

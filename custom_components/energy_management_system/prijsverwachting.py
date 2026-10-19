@@ -199,7 +199,9 @@ def verwacht_dag(coefs: list[float], weer: dict, prijzen: dict, dag: date) -> di
     vlak ervoor (overmorgen), dan het laatste niveau dat te bepalen is.
     """
     niveau = None
-    for terug in range(0, 4):
+    # v5.100.1: na een herstart kan de laatste week nog dun zijn; het
+    # niveau van iets eerder is beter dan geen verwachting
+    for terug in range(0, 22):
         niveau = niveau_voor(prijzen, dag - timedelta(days=terug))
         if niveau is not None:
             break
@@ -445,7 +447,11 @@ def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date)
             "zon_ct_per_100_wm2": round(coefs[3] * 100, 2),
             "weekend_ct": round(coefs[5] * 100, 2),
         },
-        "reden": None if dagen else "geen weer voor de komende dagen",
+        "reden": None if dagen else (
+            "geen prijsniveau: minder dan drie dagen prijzen in de weken ervoor"
+            if all(niveau_voor(prijzen, vandaag + timedelta(days=d) - timedelta(days=t)) is None
+                   for d in range(1, 4) for t in range(0, 22))
+            else "geen weer voor de komende dagen"),
     }
 
 

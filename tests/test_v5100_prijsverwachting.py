@@ -101,3 +101,15 @@ def test_kaart():
     assert "duurst 19:00 (45 ct)" in k["kaart_secundair"] and "terugtoets 38.7%" in k["kaart_secundair"]
     k = P.kaart(d, {"winst_procent": 38.7}, {"d2": {"dagen": 15, "winst_procent": 30.0}})
     assert "live 30.0% beter" in k["kaart_secundair"]
+
+
+def test_niveau_van_eerder_als_de_laatste_week_dun_is():
+    prijzen, weer = _synthetisch(dagen=40)
+    rijen, doelen = P.dataset(prijzen, weer)
+    coefs = P.fit(rijen, doelen)
+    laatste = max(P._lokaal(s).date() for s in prijzen)
+    # alleen de laatste dag bekend in de week voor de verwachte dag, daarvoor een gat van 10 dagen
+    dun = {s: p for s, p in prijzen.items() if P._lokaal(s).date() < laatste - timedelta(days=10)
+           or P._lokaal(s).date() == laatste}
+    dag = laatste - timedelta(days=1)
+    assert P.verwacht_dag(coefs, weer, dun, dag) is not None

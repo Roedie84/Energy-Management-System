@@ -33314,3 +33314,10 @@ Gevraagd 19-10: "Kunnen we nog zaken verbeteren aan het EMS, denk compleet out o
 
 Tests: `test_v5100_keuzeoordeel.py` (9), `test_v5100_prijsverwachting.py` (8), `test_v5100_regime2027.py` (9), `test_v5100_koppeling.py` (8).
 
+## v5.100.1 — zelfanalyse in de energiecockpit, prijsverwachting na herstart
+
+- **Energiecockpit:** gevraagd 19-10 "waar op het energiecockpit dashboard zie ik nu de nieuwe zaken?" - de kaarten stonden alleen in het YAML-dashboard (subview Kosten). Het paneel Geld van `ems-cockpit.js` heeft nu een blok met de drie sensoren (teksten uit `kaart_primair`/`kaart_secundair`) en de drie duurste keuzes van gisteren.
+- **Prijsverwachting na herstart:** de eerste ronde liep vóór de meetlog was teruggeladen; zonder de prijzen van 08-10 t/m 18-10 (de tariefsensoren staan sinds 08-10 buiten de recorder) was er geen prijsniveau en dus geen verwachting ("geen weer" was de verkeerde reden). Nu wacht `_plan_prijsverwachting` op `_laden_klaar`, zoekt `verwacht_dag` het niveau tot drie weken terug, en zegt de reden wat er ontbrak. De terugtoets na de herstart: 18 dagen, 3,35 ct afwijking tegen 6,46 ct voor zoals-gisteren (48% beter).
+
+Tests: `test_v5100_prijsverwachting.py` (+1).
+

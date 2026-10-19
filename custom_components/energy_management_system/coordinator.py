@@ -48115,6 +48115,9 @@ class EnergyManagementSystemCoordinator:
         """Hooguit eens per PRIJSVERWACHTING_MINUTEN, in de achtergrond."""
         if self._prijsverwachting_bezig or self.hass is None:
             return
+        laag = getattr(self, "_meetlaag", None)
+        if laag is not None and not getattr(laag, "_laden_klaar", True):
+            return   # v5.100.1: eerst de meetlog terug - daar staan de prijzen van de laatste weken
         if (self._prijsverwachting_om is not None
                 and (now - self._prijsverwachting_om).total_seconds() < PRIJSVERWACHTING_MINUTEN * 60):
             return

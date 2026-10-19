@@ -89,6 +89,10 @@ const EIGEN = {
   schema: "upcoming_schedule",
   maand: "monthly_summary",
   uitleg: "explanation",
+  // v5.100: zelfanalyse, prijsverwachting en de generale repetitie 2027
+  zelfanalyse: "zelfanalyse",
+  prijsverwachting: "prijsverwachting",
+  repetitie: "repetitie_2027",
   // knoppen
   nuLaden: "nu_laden",
   handLaden: "handmatig_laden",
@@ -508,6 +512,12 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .rijen { display: grid; gap: 5px; font-size: 12.5px; color: var(--tekst2); min-width: 0; }
 .rijen span { display: flex; justify-content: space-between; gap: 10px; }
 .rijen b { color: var(--tekst); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.za-blok { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--lijn, rgba(127,127,127,.25)); display: grid; gap: 8px; min-width: 0; }
+.za-k { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--tekst2); }
+.za-k b { color: var(--tekst); white-space: nowrap; }
+.za-s { font-size: 11.5px; color: var(--tekst2); overflow-wrap: anywhere; }
+.za-l { margin: 2px 0 0 16px; padding: 0; font-size: 11.5px; color: var(--tekst2); }
+.za-l i { opacity: .75; }
 .redenen { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12.5px; color: var(--tekst2); }
 .redenen li { display: flex; gap: 8px; }
 .redenen li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent, var(--tekst3)); margin-top: 7px; flex: none; }
@@ -798,7 +808,7 @@ const AFHANKELIJK = {
   huis: ["fietsen", "stofzuiger", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis"],
   bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "meldingenAan", "achterhoeks"],
-  geld: ["besparing", "maand", "perioden", "zelfvoorziening"],
+  geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "prijsverwachting", "repetitie"],
   voet: ["meetlog", "gezondheid", "status"],
 };
 
@@ -1815,7 +1825,37 @@ class EmsCockpitCard extends HTMLElement {
       mini("Vandaag", euro(vandaag.kosten_eur), `${fmt(vandaag.import_kwh, 1)} kWh van het net`) +
       mini("Week", euro(week.kosten_eur), `${fmt(week.opwek_kwh, 0)} kWh zon`) +
       mini("Maand", euro(maand.kosten_eur), `${fmt(maand.opwek_kwh, 0)} kWh zon`) +
-      `</div></div>`
+      `</div>` +
+      this._zelfanalyse() +
+      `</div>`
+    );
+  }
+
+  /* v5.100: zelfanalyse, prijsverwachting en repetitie 2027 - de teksten
+     komen kant-en-klaar uit de integratie (kaart_primair/kaart_secundair). */
+  _zelfanalyse() {
+    const blokken = [
+      ["zelfanalyse", "Zelfanalyse"],
+      ["prijsverwachting", "Prijsverwachting"],
+      ["repetitie", "Generale repetitie 2027"],
+    ];
+    const regels = blokken.map(([k, naam]) => {
+      const s = this._s(k);
+      if (!s) return "";
+      return (
+        `<div class="za"><div class="za-k">${esc(naam)}<b>${esc(attr(s, "kaart_primair") || "")}</b></div>` +
+        `<div class="za-s">${esc(attr(s, "kaart_secundair") || "")}</div></div>`
+      );
+    }).join("");
+    if (!regels) return "";
+    const gisteren = attr(this._s("zelfanalyse"), "gisteren") || {};
+    const keuzes = (gisteren.niet_de_beste || []).slice(0, 3).map(
+      (k) => `<li>${esc(k.tekst || "")} <i>${esc(k.oorzaak || "")}</i></li>`
+    ).join("");
+    return (
+      `<div class="za-blok">${regels}` +
+      (keuzes ? `<div class="za-s" style="margin-top:6px">Achteraf niet de beste (${esc(gisteren.datum || "")}):</div><ul class="za-l">${keuzes}</ul>` : "") +
+      `</div>`
     );
   }
 
