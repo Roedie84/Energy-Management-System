@@ -22,7 +22,7 @@ import statistics
 import time
 from datetime import datetime, timedelta
 
-from . import kwartierenergie, meetlog, schaduw, tarief
+from . import accuteller, kwartierenergie, meetlog, schaduw, tarief
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -573,6 +573,10 @@ class Meetlaag:
             eenheid = (getattr(toestand, "attributes", None) or {}).get("unit_of_measurement") if toestand else None
             standen[naam] = kwartierenergie.stand(toestand.state if toestand else None, gemeld, grens, eenheid)
         vorige, vorige_grens = self._vorige_standen, self._vorige_grens
+        # v5.103: de eigen accuteller uit de lokale lezing ernaast.
+        lokaal = getattr(self.c, "zendure_lokaal", None)
+        eigen = lokaal.eigen_standen() if lokaal is not None else None
+        vorige_eigen, self._vorige_eigen = getattr(self, "_vorige_eigen", None), eigen
         over_herstart = False
         if vorige is None:
             vorige, vorige_grens = self._standen_van_voor_herstart(grens, tellers)
@@ -593,6 +597,7 @@ class Meetlaag:
             vorige_grens, vorige, standen, prijs,
             accu_in_geschat_kwh=geschat if not tellers.get("battery_in") else None,
         )
+        record = self._met_eigen_accuteller(lokaal, record, (vorige_grens, vorige, standen, prijs), vorige_eigen, eigen)
         if over_herstart:
             # v5.57: de accutellers van zendure_ha zijn in HA opgeteld
             # vermogen - tijdens de herstart telden ze niet mee. De
@@ -612,7 +617,43 @@ class Meetlaag:
         self.laatste_kwartier = record
         opslag = kwartierenergie.compact(record)
         opslag["bron"] = {"teller": "t", "teller (naamgenoot van de ontlaadteller)": "n"}.get(record["bron_accu_in"], "g")
+        if record.get("accu_bron"):
+            opslag["ab"] = record["accu_bron"]   # v5.103: accu uit de eigen teller
         self.log.voeg_toe("kwartier", vorige_grens, opslag)
+
+    @staticmethod
+    def _met_eigen_accuteller(lokaal, record: dict, kwartier: tuple, vorige_eigen, eigen) -> dict:
+        """v5.103: de eigen accuteller naast de Zendure-tellers.
+
+        Zijn de Zendure-tellers er, dan alleen vergelijken. Ontbreekt er een,
+        en is een eigen koppeling over minstens een dag betrouwbaar gebleken,
+        dan vult de eigen teller het kwartier in (kwaliteit
+        `partially_estimated`, `accu_bron` zegt welke koppeling). Mag de
+        meetlaag nooit raken.
+        """
+        try:
+            d = accuteller.deltas(vorige_eigen, eigen)
+            if lokaal is None or d is None:
+                return record
+            kw = record["kwaliteit_per_teller"]
+            accu = ("battery_in", "battery_out")
+            if all(record.get(f"{t}_kwh") is not None and kw.get(t) in ("measured", "partially_estimated") for t in accu):
+                lokaal.vergelijk_teller({t: record[f"{t}_kwh"] for t in accu}, d)
+                return record
+            koppeling = lokaal.betrouwbare_koppeling()
+            if not koppeling or koppeling not in d:
+                return record
+            grens, begin, eind, prijs = kwartier
+            begin, eind = dict(begin), dict(eind)
+            for t in accu:
+                begin[t] = {"waarde": vorige_eigen[koppeling][t], "vers": False, "leeftijd_s": None}
+                eind[t] = {"waarde": eigen[koppeling][t], "vers": False, "leeftijd_s": None}
+            nieuw = kwartierenergie.kwartier(grens, begin, eind, prijs)
+            nieuw["accu_bron"] = koppeling
+            lokaal.noteer_ingevuld()
+            return nieuw
+        except Exception:  # noqa: BLE001
+            return record
 
     def _bewaar_standen(self, grens: datetime, standen: dict, tellers: dict) -> None:
         """De tellerstanden van deze kwartiergrens bewaren (v5.57).

@@ -1,3 +1,17 @@
+EMS v5.103.0 - eigen accuteller uit de lokale verbinding
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De kWh die de accu laadt en ontlaadt kwamen alleen uit de tellers van de
+  Zendure-integratie. Viel die uit, dan ontbraken de accukwartieren in de
+  meetlog, de zelfanalyse en het dagarchief.
+- Nu telt het EMS zelf mee, uit de lokale lezing van de accu (elke 2 s).
+  Eerst alleen vergelijken: pas als de eigen teller over minstens een dag
+  binnen 5% van de Zendure-teller blijft, vult hij kwartieren in waarin de
+  Zendure-teller ontbreekt.
+- De vergelijking staat in de diagnostiek bij het Zendure-meelezen
+  (eigen_accuteller).
+
 EMS v5.102.0 - dagarchief: elke dag blijvend bewaard
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

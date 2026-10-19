@@ -53,6 +53,8 @@ import unicodedata
 from datetime import timedelta
 from typing import Any, Callable
 
+from . import accuteller
+
 _LOGGER = logging.getLogger(__name__)
 
 ZENDURE_DOMEIN = "zendure_ha"
@@ -886,6 +888,11 @@ def lege_tellingen() -> dict:
         # v5.56: de vergelijking van snelle vermogensvelden telt alleen
         # stabiele waarden; zie `herstel`.
         "stabiel_vergelijk": True,
+        # v5.103: de eigen laad-/ontlaadteller en de vergelijking met de
+        # tellers van de Zendure-integratie (accuteller.py).
+        "eigen_teller": accuteller.leeg(),
+        "teller_vergelijking": accuteller.lege_vergelijking(),
+        "teller_ingevuld": 0,
     }
 
 
@@ -1381,6 +1388,8 @@ class ZendureLokaalMeelezer:
         self.laatste = lokaal
         self.laatste_t = time.monotonic()
         nu = time.time()
+        # v5.103: de eigen kWh-teller, los van de Zendure-integratie.
+        accuteller.integreer(self.tellingen.setdefault("eigen_teller", accuteller.leeg()), lokaal["apparaat"], nu)
         r = self.tellingen.setdefault("reactie", lege_reactie())
         verwerk_ronde(self.tellingen, zonder_lopende_wijzigingen(
             vergelijk(lokaal, self._zoek_toestand, self._stabiliteit, nu), r, nu), nu, latentie)
@@ -1397,6 +1406,25 @@ class ZendureLokaalMeelezer:
         lokaal_netto = netto_ac(lokaal["apparaat"])
         bron_waarneming(ref, "lokaal", nu, lokaal_netto)
         steekproef(ref, nu, {"lokaal": lokaal_netto, "zendure": self._zendure_netto()})
+
+    # eigen accuteller (v5.103) ----------------------------------------------
+
+    def eigen_standen(self) -> dict | None:
+        """De eigen laad-/ontlaadstanden (kWh) per koppeling, of None als ze niet vers zijn."""
+        try:
+            return accuteller.standen(self.tellingen.get("eigen_teller"), time.time())
+        except Exception:  # noqa: BLE001 - mag het EMS nooit raken
+            return None
+
+    def vergelijk_teller(self, zendure: dict, eigen: dict) -> None:
+        accuteller.vergelijk_kwartier(
+            self.tellingen.setdefault("teller_vergelijking", accuteller.lege_vergelijking()), zendure, eigen)
+
+    def betrouwbare_koppeling(self) -> str | None:
+        return accuteller.beste_koppeling(self.tellingen.get("teller_vergelijking") or {})
+
+    def noteer_ingevuld(self) -> None:
+        self.tellingen["teller_ingevuld"] = int(self.tellingen.get("teller_ingevuld") or 0) + 1
 
     # terugval (v5.82) -------------------------------------------------------
 
@@ -1449,5 +1477,8 @@ class ZendureLokaalMeelezer:
             else "via Home Assistant"
         )
         uit["terugval"] = terugval_samenvatting(self.terugval, time.time())
+        uit["eigen_accuteller"] = accuteller.samenvatting(
+            self.tellingen.get("eigen_teller"), self.tellingen.get("teller_vergelijking"),
+            int(self.tellingen.get("teller_ingevuld") or 0))
         uit["tekst"] = tekst(self.status(), uit)
         return uit

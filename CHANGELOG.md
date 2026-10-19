@@ -33346,3 +33346,12 @@ Tests: `test_v5100_prijsverwachting.py` (+1).
 
 Tests: `test_v5102_dagarchief.py` (13).
 
+## v5.103.0 — eigen accuteller uit de lokale lezing
+
+- **Gevraagd 19-10:** "We hadden ook een lokale verbinding met de accu in het EMS gebouwd" - de lokale lezing (v5.50, terugval v5.82) gaf vermogens, maar de kWh in de meetlog kwamen alleen uit `aggr_charge`/`aggr_discharge` van zendure_ha. Valt die integratie uit, dan zijn de accukwartieren `invalid` en haalt een dag de zelfanalyse en het dagarchief (80 kwartieren) niet.
+- `accuteller.py` (zuiver): elke lokale lezing wordt opgeteld (trapezium) in twee koppelingen naast elkaar - `pack` (outputPackPower/packInputPower, DC) en `ac` (gridInputPower/outputHomePower) - omdat niet vastligt welke zendure_ha telt. Gaten langer dan 30 s worden niet opgevuld. Opslag in de tellingen van het meelezen (`eigen_teller`, `teller_vergelijking`, `teller_ingevuld`), die een herstart overleven.
+- Meetlaag: elke kwartiergrens ook de eigen standen (hooguit 30 s oud). Zijn de Zendure-tellers er, dan alleen vergelijken per koppeling. Ontbreekt er een en is een koppeling over ≥ 96 kwartieren binnen 5% gebleken (`beste_koppeling`), dan rekent het kwartier met de eigen standen (kwaliteit `partially_estimated`, `accu_bron` / `ab` in de meetlog). Fouten blijven binnen `_met_eigen_accuteller`.
+- Diagnostiek: `zendure_lokaal.eigen_accuteller` (oordeel, afwijking per koppeling, stand, gaten, ingevulde kwartieren). Het meelezen schrijft nog steeds nooit naar de accu.
+
+Tests: `test_v5103_accuteller.py` (10).
+
