@@ -33321,3 +33321,12 @@ Tests: `test_v5100_keuzeoordeel.py` (9), `test_v5100_prijsverwachting.py` (8), `
 
 Tests: `test_v5100_prijsverwachting.py` (+1).
 
+## v5.101.0 — airco: verwarmen overdag en 's avonds geleerd
+
+- **Gevraagd 19-10:** "Hoe zit het met de airco voorspelling? Ziet hij mijn patroon? Wanneer aan etc." - daarna "bouwen". Analyse van `climate.woonkamer` 09-10 t/m 18-10: op 8 van de 10 dagen met de hand op verwarmen tussen 12:19 en 19:39 (werkdag 12:19 / 14:26 / 18:38 / 19:39, weekend 13:50 / 16:30 / 18:23 / 18:37), 21 °C, uit om 22:00; nooit 's ochtends. Het dagritme (v5.65) leerde alleen de ochtend (04-11) en de bedtijd: "0 keer aan". De temperatuurregel vond niets: aanzetten bij 18-20,5 °C met 5-20% kans per halve graad - jullie gaan op tijd en aanwezigheid, niet op temperatuur.
+- `airco_ritme`: `dag_aan` en `dagen_thuis` per werkdag/weekend (venster 11:00-21:30), `geleerd_dag` (mediaan aan-om, temperatuur, kans), `besluit_dag` (op tijd voorverwarmen met de bestaande voorlooptijd uit de voorspelde temperatuur en het geleerde opwarmtempo; alleen bij "thuis", verwarmingsadvies airco, kans ≥ 50%, één keer per dag), `noteer_ems_dag_aan` (uitzetten door jullie = niet gewenst), `zaai_dag_uit_historie` (eenmalig 14 dagen uit de recorder, hooguit drie pogingen per start), `patroon_tekst`.
+- Coordinator: `besluit_dag` na het ochtend-/bedtijdbesluit; de bestaande lagen (kort weg, thuiskomst, prijsbuffer, raam open, vaste uittijd 22:00) blijven erna komen. Alleen met de knop Airco automaat aan.
+- Energiecockpit, paneel Huis: regel "Airco-patroon".
+
+Tests: `test_v5101_airco_dagritme.py` (7).
+

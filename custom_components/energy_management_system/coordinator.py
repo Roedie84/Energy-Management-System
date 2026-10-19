@@ -43581,6 +43581,7 @@ class EnergyManagementSystemCoordinator:
                 try:
                     self._plan_prijsverwachting(dt_util.now())
                     self._plan_zelfanalyse_achterstand(dt_util.now())
+                    self._plan_airco_zaaien()
                 except Exception:  # noqa: BLE001
                     _LOGGER.debug("Zelfanalyse of prijsverwachting niet gepland", exc_info=True)
         except Exception as err:  # noqa: BLE001 - must never crash silently
@@ -47467,6 +47468,8 @@ class EnergyManagementSystemCoordinator:
         ritme = self._airco_ritme()
         if self.presence_state not in (None, "weg"):
             airco_ritme.noteer_ochtend_thuis(ritme, now)
+        if self.presence_state == "thuis":
+            airco_ritme.noteer_dag_thuis(ritme, now)
         self._noteer_airco_verbruik(now, ritme)
         vraag = airco_ritme.besluit(
             ritme,
@@ -47479,6 +47482,18 @@ class EnergyManagementSystemCoordinator:
             airco_stand=stand,
             bedtijd_vast=airco_ritme.minuten_uit_klok(self.instelling(CONF_AIRCO_UIT_OM, DEFAULT_AIRCO_UIT_OM)),
         )
+        if vraag is None:
+            # v5.101: overdag en 's avonds - zie `airco_ritme.besluit_dag`
+            vraag = airco_ritme.besluit_dag(
+                ritme,
+                nu=now,
+                woonkamer_c=self.living_room_current_temp_c,
+                verwacht_om=self._woonkamer_verwacht_om,
+                tempo_c_per_uur=self._airco_ochtend_tempo(now),
+                aanwezigheid=self.presence_state,
+                advies=(self.get_verwarmingsadvies() or {}).get("advies"),
+                airco_stand=stand,
+            )
         if vraag is None:
             return uit
         if vraag.get("markeer_uit") and (
@@ -47498,7 +47513,10 @@ class EnergyManagementSystemCoordinator:
         elif uit["actie"] == "niets" and self._airco_handmatig_bij is None:
             nieuw.update(actie="verwarmen", tekst=vraag["tekst"], doel_c=vraag["doel_c"])
             if self.airco_automaat_aan:
-                airco_ritme.noteer_ems_aan(ritme, now)
+                if vraag.get("dag"):
+                    airco_ritme.noteer_ems_dag_aan(ritme, now)
+                else:
+                    airco_ritme.noteer_ems_aan(ritme, now)
         return nieuw
 
     def _nadering(self) -> tuple[str | None, float | None]:
@@ -47839,6 +47857,52 @@ class EnergyManagementSystemCoordinator:
             coro.close()
             _LOGGER.debug("Achtergrondtaak %s niet gestart", naam, exc_info=True)
             return False
+
+    _airco_zaai_bezig: bool = False
+
+    def _plan_airco_zaaien(self) -> None:
+        """v5.101: eenmalig het dagritme overdag vullen uit de geschiedenis van
+        de airco, zodat het EMS jullie patroon meteen kent."""
+        if self._airco_zaai_bezig or self._airco_ritme().get("dag_gezaaid"):
+            return
+        # hooguit drie pogingen per keer dat HA draait (recorder nog niet klaar)
+        self._airco_zaai_pogingen = getattr(self, "_airco_zaai_pogingen", 0) + 1
+        if self._airco_zaai_pogingen > 3:
+            return
+        if not self.config.get(CONF_AIRCO_CLIMATE_ENTITY):
+            return
+        self._airco_zaai_bezig = True
+        if not self._start_achtergrondtaak(self._async_zaai_airco(), f"{DOMAIN} airco-dagritme"):
+            self._airco_zaai_bezig = False
+
+    async def _async_zaai_airco(self) -> None:
+        entiteit = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
+        try:
+            from homeassistant.components.recorder import get_instance, history
+
+            begin = dt_util.utcnow() - timedelta(days=14)
+            toestanden = await get_instance(self.hass).async_add_executor_job(
+                history.state_changes_during_period, self.hass, begin, None, entiteit
+            )
+            lijst = (toestanden or {}).get(entiteit) or []
+            overgangen = [
+                (dt_util.as_local(t.last_changed), t.state, (t.attributes or {}).get("temperature"))
+                for t in lijst
+            ]
+            gisteren = dt_util.now().date() - timedelta(days=1)
+            eerste = overgangen[0][0].date() if overgangen else gisteren
+            dagen = [eerste + timedelta(days=i) for i in range((gisteren - eerste).days + 1)]
+            ritme = self._airco_ritme()
+            aantal = airco_ritme.zaai_dag_uit_historie(
+                ritme, [o for o in overgangen if o[0].date() <= gisteren], dagen
+            )
+            self.internal_failures.pop("airco_zaaien", None)
+            _LOGGER.info("Airco-dagritme: %s dagen uit de geschiedenis geleerd", aantal)
+            self.schedule_persisted_state_save()
+        except Exception as fout:  # noqa: BLE001 - leren mag de sturing nooit raken
+            self.internal_failures["airco_zaaien"] = f"{type(fout).__name__}: {fout}"
+        finally:
+            self._airco_zaai_bezig = False
 
     def _meet_stuurt_niet_v5100(self) -> list[dict]:
         pv = self.get_prijsverwachting()

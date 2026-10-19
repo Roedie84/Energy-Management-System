@@ -60,6 +60,10 @@ def leeg() -> dict:
         "vermogens": [],
         "uurverbruik": {},
         "afwezig": [],
+        # v5.101: verwarmen overdag en 's avonds (11:00-21:30)
+        "dag_aan": {"werkdag": {}, "weekend": {}},
+        "dagen_thuis": {"werkdag": [], "weekend": []},
+        "dag_gezaaid": False,
     }
 
 
@@ -94,7 +98,15 @@ def geldig(ritme) -> dict:
         basis["afwezig"] = [float(v) for v in afwezig if isinstance(v, (int, float))][-HISTORIE:]
     ems = ritme.get("ems")
     if isinstance(ems, dict):
-        basis["ems"].update({k: ems.get(k) for k in ("aan", "uit")})
+        basis["ems"].update({k: ems.get(k) for k in ("aan", "uit", "dag_aan")})
+    for soort in ("werkdag", "weekend"):
+        waarde = (ritme.get("dag_aan") or {}).get(soort)
+        if isinstance(waarde, dict):
+            basis["dag_aan"][soort] = dict(waarde)
+        waarde = (ritme.get("dagen_thuis") or {}).get(soort)
+        if isinstance(waarde, list):
+            basis["dagen_thuis"][soort] = [str(d) for d in waarde]
+    basis["dag_gezaaid"] = bool(ritme.get("dag_gezaaid"))
     return basis
 
 
@@ -140,6 +152,10 @@ def noteer_bediening(ritme: dict, moment: datetime, stand: str | None, doel) -> 
     """Iemand bediende de airco zelf (niet het EMS)."""
     soort = dagsoort(moment)
     datum = moment.date().isoformat()
+    if is_dag(moment) and stand in ("heat", "off"):
+        noteer_dag_bediening(ritme, moment, stand, doel)
+        if stand == "heat":
+            return
     if is_ochtend(moment):
         aan = ritme["aan"][soort]
         if stand == "heat":
@@ -333,13 +349,21 @@ def overzicht(ritme: dict) -> dict:
             "warm_om_klok": klok(leer["warm_om"]),
             "bedtijd_klok": klok(leer["bedtijd"]),
         }
+        dag = geleerd_dag(ritme, soort)
+        uit[soort].update({
+            "dag_aan_om": dag["aan_om"], "dag_aan_om_klok": klok(dag["aan_om"]),
+            "dag_tussen": f"{klok(dag['vroegst'])}-{klok(dag['laatst'])}" if dag["vroegst"] is not None else "—",
+            "dag_doel_c": dag["doel_c"], "dag_kans": dag["kans"], "dag_keer_aan": dag["keer_aan"],
+            "dagen_thuis": dag["dagen"],
+        })
+    uit["patroon_tekst"] = patroon_tekst(uit)
     uit["verwarmvermogen_kw"] = verwarmvermogen_kw(ritme)
     uit["vermogensmetingen"] = len(ritme.get("vermogens") or [])
     uit["toelichting"] = (
         f"Geleerd uit jullie eigen bediening, vanaf {MIN_KEER} keer. 's Ochtends "
-        "(04-11 uur) zet het EMS de airco zo vroeg aan dat het op het geleerde "
-        "moment warm is; 's avonds (19-03 uur) gaat hij uit op de geleerde "
-        "bedtijd. Alleen met de knop Airco automaat aan."
+        "(04-11 uur) en overdag/'s avonds (11:00-21:30) zet het EMS de airco zo "
+        "vroeg aan dat het op het geleerde moment warm is, als er iemand thuis is; "
+        "'s avonds gaat hij uit op de bedtijd. Alleen met de knop Airco automaat aan."
     )
     return uit
 
@@ -697,3 +721,181 @@ def kort_weg(ritme: dict, weg_minuten: float | None, km: float | None) -> dict |
         ),
         "reden": f"kort weg, uit na {uitstel} min",
     }
+
+
+# --- v5.101: verwarmen overdag en 's avonds ---------------------------------
+#
+# Gevraagd 19-10: "Hoe zit het met de airco voorspelling? Ziet hij mijn
+# patroon? Wanneer aan etc." - en daarna "bouwen". Het dagritme leerde
+# alleen de ochtend (04-11) en de bedtijd. Jullie zetten de airco juist
+# 's middags of 's avonds aan: op 8 van de 10 dagen tussen 12:19 en 19:39,
+# nooit 's ochtends, en niet bij een vaste temperatuur (18-20,5 °C, 5-20%
+# kans per halve graad) - dus op tijd en aanwezigheid. Dat leert dit deel,
+# per werkdag en weekend:
+#
+# - aan om: de mediaan van het eerste moment dat jullie hem tussen 11:00 en
+#   21:30 op verwarmen zetten;
+# - temperatuur: waarop jullie hem dan zetten;
+# - hoe vaak: op hoeveel van de dagen met iemand thuis dat gebeurt.
+#
+# Met de knop Airco automaat aan zet het EMS hem zo vroeg aan dat het op
+# "aan om" warm is, als er iemand thuis is (niet weg, niet slapend).
+# Zetten jullie hem dezelfde dag binnen het venster weer uit, dan telt die
+# dag als niet gewenst. Een open raam en de vaste uittijd van 22:00 gaan
+# altijd voor.
+
+DAG_VAN = 11 * 60
+DAG_TOT = 21 * 60 + 30
+NA_AAN_DAG_MIN = 120
+
+
+def is_dag(moment: datetime) -> bool:
+    return DAG_VAN <= minuut(moment) < DAG_TOT
+
+
+def noteer_dag_thuis(ritme: dict, moment: datetime) -> None:
+    """Vandaag was er overdag iemand thuis - de noemer van "hoe vaak"."""
+    if not is_dag(moment):
+        return
+    lijst = ritme["dagen_thuis"][dagsoort(moment)]
+    datum = moment.date().isoformat()
+    if datum not in lijst:
+        lijst.append(datum)
+        del lijst[:-HISTORIE]
+
+
+def noteer_dag_bediening(ritme: dict, moment: datetime, stand: str | None, doel) -> None:
+    soort = dagsoort(moment)
+    datum = moment.date().isoformat()
+    aan = ritme["dag_aan"][soort]
+    if stand == "heat":
+        bestaand = aan.get(datum)
+        if bestaand is None:
+            aan[datum] = {"minuut": minuut(moment), "doel": _getal(doel)}
+        elif bestaand.get("ems"):
+            # jullie namen het over van het EMS: jullie temperatuur telt
+            bestaand["doel"] = _getal(doel)
+        ritme["dag_aan"][soort] = _bijsnijden(aan)
+        noteer_dag_thuis(ritme, moment)
+    elif stand == "off" and (aan.get(datum) or {}).get("ems"):
+        # het EMS zette hem aan, jullie zetten hem uit: niet gewenst
+        aan.pop(datum, None)
+
+
+def noteer_ems_dag_aan(ritme: dict, moment: datetime) -> None:
+    ritme["dag_aan"][dagsoort(moment)][moment.date().isoformat()] = {
+        "minuut": None, "doel": None, "ems": True,
+    }
+    ritme["ems"]["dag_aan"] = moment.date().isoformat()
+
+
+def geleerd_dag(ritme: dict, soort: str) -> dict:
+    aan = ritme["dag_aan"][soort]
+    momenten = sorted(v["minuut"] for v in aan.values() if v.get("minuut") is not None)
+    doelen = [v["doel"] for v in aan.values() if v.get("doel") is not None]
+    dagen = ritme["dagen_thuis"][soort]
+    gewenst = sum(1 for d in dagen if d in aan)
+    return {
+        "aan_om": round(statistics.median(momenten)) if len(momenten) >= MIN_KEER else None,
+        "vroegst": momenten[0] if momenten else None,
+        "laatst": momenten[-1] if momenten else None,
+        "doel_c": round(statistics.median(doelen), 1) if len(doelen) >= MIN_KEER else None,
+        "kans": round(gewenst / len(dagen), 2) if dagen else None,
+        "keer_aan": len(momenten),
+        "dagen": len(dagen),
+    }
+
+
+def besluit_dag(
+    ritme: dict,
+    *,
+    nu: datetime,
+    woonkamer_c: float | None,
+    verwacht_om,
+    tempo_c_per_uur,
+    aanwezigheid: str | None,
+    advies: str | None,
+    airco_stand: str | None,
+) -> dict | None:
+    """Overdag/'s avonds: op tijd warm voor het geleerde moment (v5.101)."""
+    if not is_dag(nu) or aanwezigheid in (None, "weg", "slaapt"):
+        return None
+    soort = dagsoort(nu)
+    leer = geleerd_dag(ritme, soort)
+    if leer["aan_om"] is None or leer["doel_c"] is None or (leer["kans"] or 0) < KANS_MINIMAAL:
+        return None
+    datum = nu.date().isoformat()
+    if datum in ritme["dag_aan"][soort] or airco_stand == "heat":
+        return None
+    if advies != "airco" or woonkamer_c is None:
+        return None
+    doel = leer["doel_c"]
+    verwacht = verwacht_om(leer["aan_om"]) if verwacht_om else None
+    if verwacht is None:
+        verwacht = woonkamer_c
+    if verwacht >= doel - MARGE_C and woonkamer_c >= doel - MARGE_C:
+        return None
+    voorloop = voorloop_uren(verwacht, doel, tempo_c_per_uur)
+    start = leer["aan_om"] - round(voorloop * 60)
+    m = minuut(nu)
+    if not (start <= m < min(leer["aan_om"] + NA_AAN_DAG_MIN, DAG_TOT)):
+        return None
+    return {
+        "actie": "verwarmen",
+        "doel_c": doel,
+        "dag": True,
+        "tekst": (
+            f"Verwarmen tot {doel:.1f} °C: jullie zetten hem op een {soort} rond "
+            f"{klok(leer['aan_om'])} aan (verwacht dan {verwacht:.1f} °C, "
+            f"{round(voorloop * 60)} min opwarmen)."
+        ),
+        "reden": (
+            f"{soort}: meestal aan rond {klok(leer['aan_om'])} op {doel:.1f} °C "
+            f"({leer['keer_aan']} keer, {round((leer['kans'] or 0) * 100)}% van de dagen thuis)"
+        ),
+    }
+
+
+def zaai_dag_uit_historie(ritme: dict, overgangen: list, dagen: list) -> int:
+    """Eenmalig: de laatste dagen uit de geschiedenis van de airco (v5.101).
+
+    `overgangen`: [(lokaal moment, stand, doeltemperatuur)] op tijdvolgorde;
+    `dagen`: de datums die de geschiedenis beslaat. Telt alleen het eerste
+    "aan op verwarmen" per dag in het venster, en alleen dagen die nog niet
+    bekend zijn. Geeft het aantal geleerde dagen terug.
+    """
+    geleerd_aantal = 0
+    vorige = None
+    for moment, stand, doel in overgangen:
+        if stand == "heat" and vorige != "heat" and is_dag(moment):
+            soort = dagsoort(moment)
+            datum = moment.date().isoformat()
+            if datum not in ritme["dag_aan"][soort]:
+                ritme["dag_aan"][soort][datum] = {"minuut": minuut(moment), "doel": _getal(doel)}
+                geleerd_aantal += 1
+        if stand in ("heat", "off"):
+            vorige = stand
+    for dag in dagen:
+        lijst = ritme["dagen_thuis"][dagsoort(dag)]
+        if dag.isoformat() not in lijst:
+            lijst.append(dag.isoformat())
+    for soort in ("werkdag", "weekend"):
+        ritme["dag_aan"][soort] = _bijsnijden(ritme["dag_aan"][soort])
+        ritme["dagen_thuis"][soort] = sorted(ritme["dagen_thuis"][soort])[-HISTORIE:]
+    ritme["dag_gezaaid"] = True
+    return geleerd_aantal
+
+
+def patroon_tekst(overzicht_: dict) -> str:
+    """Eén regel voor het dashboard: wanneer jullie de airco aanzetten."""
+    delen = []
+    for soort in ("werkdag", "weekend"):
+        o = overzicht_.get(soort) or {}
+        if o.get("dag_aan_om") is not None:
+            kans = round((o.get("dag_kans") or 0) * 100)
+            delen.append(f"{soort} rond {o['dag_aan_om_klok']} ({o['dag_tussen']}, {kans}% van de dagen)")
+        elif o.get("dag_keer_aan"):
+            delen.append(f"{soort}: {o['dag_keer_aan']} van {MIN_KEER} keer gezien")
+        if o.get("warm_om") is not None:
+            delen.append(f"{soort}ochtend warm om {o['warm_om_klok']}")
+    return ("Aan op verwarmen: " + "; ".join(delen)) if delen else "Nog geen patroon: minder dan drie keer gezien."

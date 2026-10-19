@@ -1776,6 +1776,11 @@ class EmsCockpitCard extends HTMLElement {
             vw.verwacht ? "var(--oranje)" : "")
         );
       }
+      // v5.101: het geleerde patroon - wanneer jullie de airco aanzetten
+      const ritme = attr(besluit, "dagritme") || {};
+      if (ritme.patroon_tekst) {
+        uit.push(regel("airco", "Airco-patroon", esc(ritme.patroon_tekst), "", ""));
+      }
       uit.push(
         regel("airco", "Klimaat", sub,
           `${binnen != null ? fmt(binnen, 1) + GRAAD : STREEP}${buiten != null ? ` <span class="leeg">/ ${fmt(buiten, 1)}${GRAAD}</span>` : ""}`,
