@@ -1514,7 +1514,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag, self.cyclus_klaar_sinds, self.netmeterdag, self.accu_tellerstanden, self.prijsgeschiedenis, self.prijsverwachting_archief, self.keuzeoordelen, self.repetitie_2027, self.prijsverwachting = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, [], [], {}, {}, {}, {}, {}, [], [], {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag, self.cyclus_klaar_sinds, self.netmeterdag, self.accu_tellerstanden, self.prijsgeschiedenis, self.prijsverwachting_archief, self.keuzeoordelen, self.repetitie_2027, self.prijsverwachting, self.dagarchief = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, [], [], {}, {}, {}, {}, {}, [], [], {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -43583,6 +43583,7 @@ class EnergyManagementSystemCoordinator:
                     self._plan_prijsverwachting(dt_util.now())
                     self._plan_zelfanalyse_achterstand(dt_util.now())
                     self._plan_airco_zaaien()
+                    self._plan_dagarchief(dt_util.now())
                 except Exception:  # noqa: BLE001
                     _LOGGER.debug("Zelfanalyse of prijsverwachting niet gepland", exc_info=True)
         except Exception as err:  # noqa: BLE001 - must never crash silently
@@ -47994,6 +47995,11 @@ class EnergyManagementSystemCoordinator:
             self.keuzeoordelen.sort(key=lambda d: d.get("datum") or "")
             self.repetitie_2027.sort(key=lambda d: d.get("datum") or "")
             self.noteer_meting_gevuld("keuzeoordelen")
+            if invoer.get("te_becijferen"):
+                try:
+                    self._archiveer_zelfanalyse(datum, invoer, oordeel, repetitie)
+                except Exception:  # noqa: BLE001 - het archief is bijzaak
+                    _LOGGER.debug("Zelfanalyse niet in het dagarchief", exc_info=True)
             if melden:
                 self._meld_keuzes_achteraf(oordeel)
             self.schedule_persisted_state_save()
@@ -48281,6 +48287,10 @@ class EnergyManagementSystemCoordinator:
                     antwoord.raise_for_status()
                     ruw = await antwoord.json()
             weer = P.weer_uit_open_meteo(ruw)
+            if isinstance(self.dagarchief, dict) and self.dagarchief.get("dagen"):
+                from . import dagarchief as D
+
+                D.vul_weer(self.dagarchief, weer)   # v5.102: temperatuur en graaddagen
             vandaag = dt_util.as_local(now).date()
             prijzen = dict(self.prijsgeschiedenis)
             doe_backtest = self._prijs_backtest_dag != vandaag.isoformat()
@@ -48352,6 +48362,171 @@ class EnergyManagementSystemCoordinator:
                 "wind, zon, temperatuur, uur en weekdag (Open-Meteo) en het prijsniveau van de "
                 "afgelopen week. Alleen meten: het stuurt niets. 'Rijp' als de verwachting van "
                 "twee dagen vooruit over minstens veertien dagen 15% beter is dan 'zoals gisteren'."
+            ),
+        }
+
+    # --- dagarchief (v5.102) ----------------------------------------------
+    #
+    # Gevraagd: "is het voor het EMS niet beter om data altijd op te slaan?"
+    # Niet de ruwe recorder, wel één compacte regel per dag die blijft. Zie
+    # dagarchief.py. Alleen meten; stuurt niets.
+
+    _dagarchief_bezig: bool = False
+    _dagarchief_dag: str | None = None
+    _dagarchief_zaai_pogingen: int = 0
+
+    def _plan_dagarchief(self, now: datetime) -> None:
+        """Eens per dag (en na het opstarten): de afgesloten dagen uit de meetlog
+        in het archief, en eenmalig de oudere dagen uit de statistiek."""
+        if self._dagarchief_bezig or self.hass is None or not getattr(self, "_state_store_loaded", False):
+            return   # eerst de bewaarde toestand terug, anders begint het archief leeg
+        laag = getattr(self, "_meetlaag", None)
+        if laag is not None and not getattr(laag, "_laden_klaar", True):
+            return   # eerst de meetlog terug
+        vandaag = dt_util.as_local(now).date().isoformat()
+        if self._dagarchief_dag == vandaag:
+            return
+        self._dagarchief_dag = vandaag
+        self._dagarchief_bezig = True
+        if not self._start_achtergrondtaak(self._async_dagarchief(vandaag), f"{DOMAIN} dagarchief"):
+            self._dagarchief_bezig = False
+
+    def _dagarchief_kwartierdagen(self, vandaag: str) -> dict[str, list]:
+        """De afgesloten dagen in de meetlog die nog niet uit de meetlog in het archief staan."""
+        laag = getattr(self, "_meetlaag", None)
+        if laag is None:
+            return {}
+        dagen = (self.dagarchief or {}).get("dagen") or {}
+        uit = {}
+        for soort, dag in list(getattr(laag.log, "_dagen", {})):
+            if soort != "kwartier" or dag >= vandaag or (dagen.get(dag) or {}).get("b_") == "m":
+                continue
+            uit[dag] = list(laag.log.regels_alleen_lezen("kwartier", date.fromisoformat(dag)))
+        return uit
+
+    async def _async_dagarchief(self, vandaag: str) -> None:
+        from . import dagarchief as D
+
+        try:
+            if not isinstance(self.dagarchief, dict) or "dagen" not in self.dagarchief:
+                self.dagarchief = D.leeg()
+            voor = copy.deepcopy(self.dagarchief)
+            ruw = self._dagarchief_kwartierdagen(vandaag)
+            if ruw:
+                nieuw = await self.hass.async_add_executor_job(_reken_dagarchief, D, ruw)
+                for datum, regel in nieuw.items():
+                    D.zet(self.dagarchief, datum, regel)
+            for r in self.reserve_daily_records or []:
+                datum = r.get("date")
+                if datum and datum in self.dagarchief["dagen"]:
+                    D.vul_aan(self.dagarchief, datum, tn=r.get("tekortnacht_kwh"),
+                              ov=r.get("excess"), so=r.get("laagste_soc_ochtend"))
+            if not self.dagarchief.get("gezaaid") and self._dagarchief_zaai_pogingen < 3:
+                self._dagarchief_zaai_pogingen += 1
+                self.dagarchief["gezaaid"] = await self._zaai_dagarchief(vandaag)
+            self.internal_failures.pop("dagarchief", None)
+            if self.dagarchief["dagen"]:
+                self.noteer_meting_gevuld("dagarchief")
+            if self.dagarchief["dagen"] != voor.get("dagen"):
+                self.schedule_persisted_state_save()
+                self._notify_listeners()
+        except Exception as fout:  # noqa: BLE001 - meten mag de sturing nooit raken
+            self.internal_failures["dagarchief"] = f"{type(fout).__name__}: {fout}"
+            self._dagarchief_dag = None   # de volgende ronde opnieuw
+            _LOGGER.debug("Dagarchief niet bijgewerkt", exc_info=True)
+        finally:
+            self._dagarchief_bezig = False
+
+    async def _zaai_dagarchief(self, vandaag: str) -> bool:
+        """Eenmalig: de dagen van vóór de meetlog uit de langetermijnstatistiek
+        (uurwaarden van de energietellers en de prijssensor, tot drie jaar terug)."""
+        from . import dagarchief as D
+
+        tellers = {
+            "grid_import": self.config.get(CONF_GRID_IMPORT_ENERGY_SENSOR),
+            "grid_export": self.config.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
+            "pv": self.config.get(CONF_PV_ENERGY_SENSOR),
+            "battery_out": self.config.get(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR),
+            "battery_in": self.config.get(CONF_BATTERY_CHARGE_ENERGY_SENSOR),
+        }
+        if not tellers["grid_import"] or not tellers["pv"]:
+            return True   # zonder netafname- en zonteller valt er niets te zaaien
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import statistics_during_period
+
+            eind = dt_util.start_of_local_day(date.fromisoformat(vandaag)).astimezone(timezone.utc)
+            begin = eind - timedelta(days=3 * 365)
+            ids = {e for e in tellers.values() if e}
+            recorder = get_instance(self.hass)
+            energie = await recorder.async_add_executor_job(
+                statistics_during_period, self.hass, begin, eind, ids, "hour", {"energy": "kWh"}, {"change"}
+            )
+            prijzen: dict = {}
+            prijssensor = self.config.get(CONF_PRICE_SENSOR)
+            if prijssensor:
+                ruw = await recorder.async_add_executor_job(
+                    statistics_during_period, self.hass, begin, eind, {prijssensor}, "hour", None, {"mean"}
+                )
+                prijzen = {_stat_moment(r): r.get("mean") for r in (ruw or {}).get(prijssensor) or []
+                           if r.get("mean") is not None}
+            uren = {
+                naam: {_stat_moment(r): r.get("change") for r in (energie or {}).get(e) or []
+                       if r.get("change") is not None}
+                for naam, e in tellers.items() if e
+            }
+            dagen = await self.hass.async_add_executor_job(D.dagen_uit_statistiek, uren, prijzen)
+            for datum, regel in dagen.items():
+                if datum < vandaag:
+                    D.zet(self.dagarchief, datum, regel)
+            self.dagarchief["gezaaid_dagen"] = len(dagen)
+            return True
+        except Exception as fout:  # noqa: BLE001
+            self.dagarchief["zaai_fout"] = f"{type(fout).__name__}: {fout}"
+            return False
+
+    def _archiveer_zelfanalyse(self, datum: str, invoer: dict, oordeel: dict, repetitie: dict) -> None:
+        """Verwachting, gemist bedrag en de repetitie 2027 bij de dag in het archief."""
+        from . import dagarchief as D
+
+        if not isinstance(self.dagarchief, dict) or "dagen" not in self.dagarchief:
+            self.dagarchief = D.leeg()
+        verwachting = invoer.get("verwachting") or {}
+        begin = verwachting.get(min(verwachting)) if verwachting else None
+        regel_eur = sum(k.get("spijt_eur") or 0 for k in oordeel.get("niet_de_beste") or []
+                        if k.get("oorzaak") == "regel" and not k.get("handmatig"))
+        D.vul_aan(
+            self.dagarchief, datum,
+            pv=round(begin["zon_kwh"], 2) if begin else None,
+            vv=round(begin["verbruik_kwh"], 2) if begin else None,
+            gm=oordeel.get("gemist_eur") if oordeel.get("te_becijferen") else None,
+            gr=round(regel_eur, 2) if oordeel.get("te_becijferen") else None,
+            r27=repetitie.get("accu_levert_op_2027_eur") if repetitie.get("te_becijferen") else None,
+        )
+
+    def get_dagarchief(self) -> dict:
+        from . import dagarchief as D
+
+        archief = self.dagarchief if isinstance(self.dagarchief, dict) else D.leeg()
+        dagen = archief.get("dagen") or {}
+        verg = D.vergelijking(archief, dt_util.now().date())
+        gemeten = sorted(d for d, r in dagen.items() if r.get("v") is not None)
+        return {
+            **D.kaart(archief, verg),
+            "dagen_bewaard": len(gemeten),
+            "sinds": gemeten[0] if gemeten else None,
+            "uit_meetlog": sum(1 for r in dagen.values() if r.get("b_") == "m"),
+            "uit_statistiek": sum(1 for r in dagen.values() if r.get("b_") == "s"),
+            "vergelijking": verg,
+            "per_maand": D.per_maand(archief),
+            "laatste_dagen": {d: D.uitgeschreven(dagen[d]) for d in gemeten[-7:]},
+            "zaai_fout": archief.get("zaai_fout"),
+            "toelichting": (
+                "Per dag één compacte regel die altijd bewaard blijft: verbruik, zon, net, accu, "
+                "prijs, kosten, wat de accu opleverde, de verwachting van die ochtend, wat achteraf "
+                "gemist werd, de nacht en het weer. Uit de meetlog (kwartiertellers) of, voor de "
+                "dagen daarvoor, uit de langetermijnstatistiek van Home Assistant. Zo kan het EMS "
+                "seizoenen vergelijken, ook als de recorder de ruwe data al heeft opgeruimd."
             ),
         }
 
@@ -49404,6 +49579,34 @@ def _reken_zelfanalyse(invoer: dict, keuzeoordeel, regime2027) -> tuple[dict, di
     )
     repetitie["datum"] = datum
     return oordeel, repetitie
+
+
+def _reken_dagarchief(D, ruw: dict) -> dict:
+    """De dagen uit de meetlog samenvatten, buiten de event loop (v5.102)."""
+    from . import kwartierenergie
+
+    uit = {}
+    for datum, regels in ruw.items():
+        kwartieren = []
+        for kort in regels:
+            try:
+                kwartieren.append(kwartierenergie.uitpakken(kort))
+            except Exception:  # noqa: BLE001
+                continue
+        regel = D.dag_uit_kwartieren(kwartieren)
+        if regel is not None:
+            uit[datum] = regel
+    return uit
+
+
+def _stat_moment(rij: dict) -> datetime:
+    """Het begin van een statistiekrij: een tijdstempel (HA 2023+) of een datetime."""
+    start = rij.get("start")
+    if isinstance(start, (int, float)):
+        return datetime.fromtimestamp(start, tz=timezone.utc)
+    if isinstance(start, str):
+        return datetime.fromisoformat(start).astimezone(timezone.utc)
+    return start.astimezone(timezone.utc)
 
 
 def _reken_prijsverwachting(P, prijzen: dict, weer: dict, vandaag, bekend_tot, backtest: bool) -> dict:

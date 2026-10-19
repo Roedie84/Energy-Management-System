@@ -93,6 +93,7 @@ const EIGEN = {
   zelfanalyse: "zelfanalyse",
   prijsverwachting: "prijsverwachting",
   repetitie: "repetitie_2027",
+  dagarchief: "dagarchief",
   // knoppen
   nuLaden: "nu_laden",
   handLaden: "handmatig_laden",
@@ -808,7 +809,7 @@ const AFHANKELIJK = {
   huis: ["fietsen", "stofzuiger", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis"],
   bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "meldingenAan", "achterhoeks"],
-  geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "prijsverwachting", "repetitie"],
+  geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "prijsverwachting", "repetitie", "dagarchief"],
   voet: ["meetlog", "gezondheid", "status"],
 };
 
@@ -1843,6 +1844,7 @@ class EmsCockpitCard extends HTMLElement {
       ["zelfanalyse", "Zelfanalyse"],
       ["prijsverwachting", "Prijsverwachting"],
       ["repetitie", "Generale repetitie 2027"],
+      ["dagarchief", "Dagarchief"],
     ];
     const regels = blokken.map(([k, naam]) => {
       const s = this._s(k);

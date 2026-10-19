@@ -1,3 +1,19 @@
+EMS v5.102.0 - dagarchief: elke dag blijvend bewaard
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De recorder bewaart de ruwe data 30 dagen; dat blijft zo. Daarnaast
+  bewaart het EMS nu per dag één compacte regel, voor altijd: verbruik,
+  zon, net, accu, nachtverbruik, prijs, kosten, wat de accu opleverde, de
+  verwachting van die ochtend, wat achteraf gemist werd, de nacht en de
+  temperatuur. Tien jaar is minder dan 1 MB.
+- Na de herstart vult het EMS het archief meteen: de dagen uit de eigen
+  meetlog, en eenmalig de dagen daarvoor (tot drie jaar terug) uit de
+  langetermijnstatistiek van Home Assistant.
+- Nieuwe sensor Dagarchief: de laatste 30 dagen tegen dezelfde dagen
+  vorig jaar (verbruik, zon, graaddagen) en totalen per maand. Staat in
+  de energiecockpit (paneel Geld) en in de subview Kosten.
+
 EMS v5.101.1 - prijsverwachting na een storing sneller opnieuw
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

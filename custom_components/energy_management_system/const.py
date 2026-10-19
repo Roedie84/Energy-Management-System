@@ -331,6 +331,7 @@ METING_VERWACHTE_STILTE_DAGEN = {
     # v5.100: elke nacht een oordeel; elke drie uur een verwachting.
     "keuzeoordelen": 2,
     "prijsverwachting": 1,
+    "dagarchief": 2,
 }
 
 METING_WAT_VULT_HEM = {
@@ -344,6 +345,7 @@ METING_WAT_VULT_HEM = {
     "voorspellingsverloop": "de rondes van 08:00, 11:00 en 14:00",
     "keuzeoordelen": "de dagwissel: het keuzeoordeel van gisteren",
     "prijsverwachting": "elke drie uur, met het weer van Open-Meteo",
+    "dagarchief": "eens per dag: de afgesloten dag uit de meetlog in het archief",
 }
 
 # Hoe lang na het opstarten er niets wordt gemeld: een verse installatie
@@ -3503,6 +3505,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "prijsverwachting_archief": {"type": "plain"},
     "keuzeoordelen": {"type": "plain"},
     "repetitie_2027": {"type": "plain"},
+    # v5.102: het dagarchief - één regel per dag, blijvend.
+    "dagarchief": {"type": "plain"},
     "battery_module_health": {"type": "plain"},
     "energy_balance_error_history": {"type": "plain"},
     "energy_balance_method_version": {"type": "plain"},

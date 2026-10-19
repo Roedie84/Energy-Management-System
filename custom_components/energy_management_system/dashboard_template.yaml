@@ -2214,6 +2214,14 @@ views:
         entity: sensor.woonkamer_energy_management_system_prijsverwachting
         tap_action:
           action: more-info
+      - type: custom:mushroom-template-card
+        primary: '{{ state_attr(''sensor.woonkamer_energy_management_system_dagarchief'', ''kaart_primair'') }}'
+        secondary: '{{ state_attr(''sensor.woonkamer_energy_management_system_dagarchief'', ''kaart_secundair'') }}'
+        icon: mdi:archive-clock-outline
+        icon_color: teal
+        entity: sensor.woonkamer_energy_management_system_dagarchief
+        tap_action:
+          action: more-info
 - title: Besparing
   path: detail-besparing
   subview: true

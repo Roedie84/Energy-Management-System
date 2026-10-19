@@ -1090,6 +1090,8 @@ async def async_get_config_entry_diagnostics(
             "keuzeoordelen": _veilig("keuzeoordelen", lambda: coordinator.keuzeoordelen),
             "prijsverwachting": _veilig("get_prijsverwachting", coordinator.get_prijsverwachting),
             "repetitie_2027": _veilig("get_repetitie_2027", coordinator.get_repetitie_2027),
+            # v5.102: het dagarchief (vergelijking, maanden, laatste dagen).
+            "dagarchief": _veilig("get_dagarchief", coordinator.get_dagarchief),
             # v3.99.18: wat de lange horizon werkelijk opleverde.
             "lange_horizon_effect": _veilig(
                 "get_lange_horizon_effect", coordinator.get_lange_horizon_effect

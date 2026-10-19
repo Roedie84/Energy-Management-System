@@ -33336,3 +33336,13 @@ Tests: `test_v5101_airco_dagritme.py` (7).
 
 Tests: `test_v5100_prijsverwachting.py` (+1).
 
+## v5.102.0 — dagarchief: één regel per dag, blijvend
+
+- **Gevraagd 19-10:** "Nu wordt data 30 dagen opgeslagen maar is het voor het EMS niet beter om data altijd op te slaan?" - niet de ruwe recorder (MariaDB groeit met gigabytes, de back-up zit al op ± 3,8 GB van de ± 4,8 GB), wel een compact dagarchief dat nooit verloopt. Het dagverloop (40 dagen) en de meetlog (400 dagen) verliepen; seizoenen vergelijken kon niet.
+- `dagarchief.py` (zuiver): per dag ± 200 bytes met korte sleutels - verbruik, zon, netafname, teruglevering, accu geladen/ontladen, nacht 22-07, prijs gem/laagste/hoogste, kosten onder salderen, kosten zonder accu, accu-opbrengst; aangevuld met de zon-/verbruiksverwachting van het begin van de dag, gemist en gemist door een regel (zelfanalyse), de repetitie 2027, tekortnacht/overschotdag/laagste laadstand (dagrecord) en de gemiddelde temperatuur met graaddagen (Open-Meteo, al opgehaald voor de prijsverwachting). Vangnet 3660 dagen.
+- Bronnen: de kwartierenergie uit de meetlog (bron `m`), en eenmalig de uurwaarden van de energietellers en de prijssensor uit de langetermijnstatistiek van HA tot drie jaar terug (bron `s`, `statistics_during_period` met omzetting naar kWh; prijzen buiten 0-2 €/kWh tellen niet). Een meetlogdag gaat altijd voor; aanvullingen overleven een nieuwe meting.
+- Coordinator: `_plan_dagarchief` eens per dag, pas na het laden van de toestand en de meetlog, in de achtergrond (`_reken_dagarchief` in een executor); opslaan alleen als het archief veranderde. `get_dagarchief`: kaartteksten, de laatste 30 dagen tegen dezelfde dagen 364 dagen eerder (zelfde weekdag), verschil in procent en graaddagen, totalen per maand (25 maanden), de laatste zeven dagen. Bewaard in `dagarchief` (PERSISTED_FIELDS), stiltebewaking `dagarchief`.
+- Nieuwe sensor Dagarchief (staat: aantal dagen), in de diagnostiek-export, het YAML-dashboard (subview Kosten) en de energiecockpit (paneel Geld).
+
+Tests: `test_v5102_dagarchief.py` (13).
+

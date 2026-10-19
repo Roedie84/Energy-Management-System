@@ -123,6 +123,7 @@ async def async_setup_entry(
         PrijsverwachtingSensor(coordinator, entry.entry_id),
         ZelfanalyseSensor(coordinator, entry.entry_id),
         Repetitie2027Sensor(coordinator, entry.entry_id),
+        DagarchiefSensor(coordinator, entry.entry_id),
         SelfSufficiencySensor(coordinator, entry.entry_id),
         SelfConsumptionSensor(coordinator, entry.entry_id),
         BatteryHealthSensor(coordinator, entry.entry_id),
@@ -3026,6 +3027,27 @@ class Repetitie2027Sensor(_V5100Sensor):
     @property
     def extra_state_attributes(self):
         return self._coordinator.get_repetitie_2027()
+
+
+class DagarchiefSensor(_V5100Sensor):
+    """Dagarchief: per dag één compacte regel die altijd bewaard blijft (v5.102).
+
+    Staat: het aantal dagen in het archief. De attributen vergelijken de
+    laatste dertig dagen met dezelfde dagen een jaar eerder.
+    """
+
+    _attr_name = "Dagarchief"
+    _attr_icon = "mdi:archive-clock-outline"
+    _attr_native_unit_of_measurement = "dagen"
+    _sleutel = "dagarchief"
+
+    @property
+    def native_value(self):
+        return self._coordinator.get_dagarchief().get("dagen_bewaard")
+
+    @property
+    def extra_state_attributes(self):
+        return self._coordinator.get_dagarchief()
 
 
 class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
