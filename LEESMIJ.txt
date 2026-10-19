@@ -1,3 +1,12 @@
+EMS v5.103.1 - dagarchief: verbruik uit de statistiek klopt weer
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Bij het vullen uit de statistiek telde het ontladen van de accu mee,
+  het laden niet. Daardoor was het verbruik van de oudere dagen te hoog
+  (juni 2026: 508 in plaats van 329 kWh) en klopte de vergelijking met
+  vorig jaar niet. Na de herstart vult het EMS die dagen opnieuw.
+
 EMS v5.103.0 - eigen accuteller uit de lokale verbinding
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

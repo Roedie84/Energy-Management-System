@@ -51,6 +51,8 @@ MIN_UREN = 22
 JAAR_DAGEN = 364
 VERGELIJK_DAGEN = 30
 GRAADDAG_BASIS = 18.0
+#: v5.103.1: omhoog als het zaaien uit de statistiek opnieuw moet.
+ZAAI_VERSIE = 2
 
 NAMEN = {
     "v": "verbruik_kwh", "p": "zon_kwh", "i": "netafname_kwh", "e": "teruglevering_kwh",
@@ -127,6 +129,10 @@ def dagen_uit_statistiek(uren: dict[str, dict[datetime, float]], prijzen: dict[d
     per_dag: dict[str, list] = {}
     imp, exp, pv = (uren.get(t) or {} for t in ("grid_import", "grid_export", "pv"))
     uit_, in_ = uren.get("battery_out") or {}, uren.get("battery_in") or {}
+    if bool(uit_) != bool(in_):
+        # v5.103.1: alleen ontladen (of alleen laden) telt het huis scheef;
+        # dan de accu helemaal weglaten (het verschil is dan alleen het verlies)
+        uit_, in_ = {}, {}
     for moment, i in imp.items():
         if moment not in pv:
             continue
@@ -153,7 +159,7 @@ def dagen_uit_statistiek(uren: dict[str, dict[datetime, float]], prijzen: dict[d
 
 
 def leeg() -> dict:
-    return {"dagen": {}, "gezaaid": False}
+    return {"dagen": {}, "gezaaid": False, "zaai_versie": ZAAI_VERSIE}
 
 
 def zet(archief: dict, datum: str, regel: dict) -> None:

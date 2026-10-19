@@ -48410,6 +48410,11 @@ class EnergyManagementSystemCoordinator:
         try:
             if not isinstance(self.dagarchief, dict) or "dagen" not in self.dagarchief:
                 self.dagarchief = D.leeg()
+            if self.dagarchief.get("zaai_versie") != D.ZAAI_VERSIE:
+                # v5.103.1: opnieuw zaaien (de eerste keer telde het laden niet)
+                self.dagarchief["gezaaid"] = False
+                self.dagarchief["zaai_versie"] = D.ZAAI_VERSIE
+                self._dagarchief_zaai_pogingen = 0
             voor = copy.deepcopy(self.dagarchief)
             ruw = self._dagarchief_kwartierdagen(vandaag)
             if ruw:
@@ -48442,7 +48447,12 @@ class EnergyManagementSystemCoordinator:
         (uurwaarden van de energietellers en de prijssensor, tot drie jaar terug)."""
         from . import dagarchief as D
 
-        tellers = {
+        # v5.103.1: dezelfde tellers als de meetlaag - inclusief de laadteller
+        # die de meetlaag afleidt uit de naam van de ontlaadteller. Zonder die
+        # telde het zaaien het ontladen wel en het laden niet (verbruik in juni
+        # 2026 508 in plaats van 329 kWh).
+        laag = getattr(self, "_meetlaag", None)
+        tellers = laag._tellers() if laag is not None else {
             "grid_import": self.config.get(CONF_GRID_IMPORT_ENERGY_SENSOR),
             "grid_export": self.config.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
             "pv": self.config.get(CONF_PV_ENERGY_SENSOR),

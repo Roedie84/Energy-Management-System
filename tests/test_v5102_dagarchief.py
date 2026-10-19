@@ -175,3 +175,31 @@ def test_dagarchief_vult_uit_de_meetlog(make_coordinator, hass):
     assert list(dagen) == ["2026-10-18"]   # vandaag nog niet
     assert dagen["2026-10-18"]["v"] == 14.4 and dagen["2026-10-18"]["ov"] is True and dagen["2026-10-18"]["so"] == 22
     assert c.get_dagarchief()["uit_meetlog"] == 1
+
+
+def test_alleen_een_accuteller_telt_de_accu_niet_mee():
+    """v5.103.1: zonder laadteller telde het ontladen wel mee - verbruik te hoog."""
+    begin = datetime(2026, 6, 14, 22, 0, tzinfo=timezone.utc)
+    uren = {t: {} for t in ("grid_import", "grid_export", "pv", "battery_out")}
+    for h in range(24):
+        m = begin + timedelta(hours=h)
+        uren["grid_import"][m], uren["grid_export"][m], uren["pv"][m], uren["battery_out"][m] = 0.1, 0.4, 0.8, 0.3
+    r = D.dagen_uit_statistiek(uren, {})["2026-06-15"]
+    assert r["v"] == 12.0 and r["o"] == 0 and r["l"] == 0
+
+
+def test_oude_zaaiing_wordt_opnieuw_gedaan(make_coordinator, hass):
+    c = make_coordinator({})
+    c.dagarchief = {"dagen": {"2025-06-15": {"v": 99.0, "b_": "s"}}, "gezaaid": True}
+    gezaaid = []
+
+    async def zaai(vandaag):
+        gezaaid.append(vandaag)
+        return True
+
+    c._zaai_dagarchief = zaai
+    c._dagarchief_kwartierdagen = lambda vandaag: {}
+    asyncio.run(c._async_dagarchief("2026-10-19"))
+    assert gezaaid == ["2026-10-19"] and c.dagarchief["zaai_versie"] == D.ZAAI_VERSIE
+    asyncio.run(c._async_dagarchief("2026-10-20"))
+    assert gezaaid == ["2026-10-19"]

@@ -33355,3 +33355,10 @@ Tests: `test_v5102_dagarchief.py` (13).
 
 Tests: `test_v5103_accuteller.py` (10).
 
+## v5.103.1 — dagarchief: laadteller bij het zaaien
+
+- Controle na de installatie (19-10): 778 dagen gezaaid, maar het verbruik van de statistiekdagen was te hoog (juni 2026 508 kWh; uit de tellers 26,7 - 259,1 + 591,4 + 148,8 - 178,8 = 329 kWh). `_zaai_dagarchief` las alleen de ingestelde tellers; de laadteller (`aggr_charge`) leidt de meetlaag af uit de naam van de ontlaadteller en stond dus niet in de configuratie. Nu dezelfde `_tellers()` als de meetlaag, en `dagen_uit_statistiek` laat de accu helemaal weg als maar één van de twee accutellers er is.
+- `ZAAI_VERSIE` (2): een archief dat met de oude versie gezaaid is, wordt één keer opnieuw gezaaid; meetlogdagen en aanvullingen blijven staan.
+
+Tests: `test_v5102_dagarchief.py` (+2).
+
