@@ -1,3 +1,15 @@
+EMS v5.105.2 - duidelijker wat de bedragen bij Geld tellen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten (en de
+pagina een keer verversen).
+
+- "Besparing maand" heet nu "t.o.v. zonder accu": het vergelijkt met
+  een huis zonder accu, dus ook het huis voeden en zon opslaan telt mee.
+- De drie regels eronder staan onder "Actieve sturing deze maand" en
+  heten Ontladen in dure kwartieren, Laden uit het net en Actieve sturing
+  netto: alleen wat het EMS zelf ingrijpt.
+- Bij Vandaag staat "zonder accu" in plaats van "zonder sturing".
+
 EMS v5.105.1 - het lopende kwartier in de planning klopt weer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

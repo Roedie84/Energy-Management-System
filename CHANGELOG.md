@@ -33399,3 +33399,10 @@ Tests: `test_v51050_cockpit_compact_aanwezig.py` (4); `test_v51042_cockpit_kolom
 - Nu rekent het lopende kwartier vanaf `max(start, now)`: duur, laad- en ontlaadhoeveelheid, zon en verbruik. De laadregel krijgt voor de LATERE kwartieren wel de maat van een heel kwartier (die bepaalt welk later kwartier de volgende kWh dekt). Elke planregel draagt `uren`; `planvolging.gepland_uit_plan` deelt door die tijd in plaats van vast x4, zodat het geplande vermogen gelijk blijft als de planvolging midden in een kwartier begint (na een herstart).
 
 Tests: `test_v51051_lopend_kwartier.py` (5; de eerste faalt op v5.105.0).
+
+## v5.105.2 — Geld: duidelijker wat wel en niet meetelt
+
+- **Gevraagd 19-10:** "Wordt in deze kosten ook meegenomen de besparing omdat de accu het huis voedt....." en daarna "Ja graag duidelijker". De besparing (`besparing_deze_maand_eur`, `besparing_all_time_eur`) is netstroom tegen netstroom + accuvermogen: een huis ZONDER accu, dus alles wat de accu doet telt mee. Het onderschrift zei "t.o.v. zonder sturing". De regels eronder (`current_month_discharge_value_eur`, `current_month_charge_cost_eur`, netto) tellen alleen ontladen met reden `expensive_quarter(_peak)` en laden uit het net; het huis voeden in de stand slim zit er niet in. Daardoor stond "Accu netto" op -5,17 naast een besparing van +6,01.
+- Cockpit: "t.o.v. zonder accu"; de regels onder een kopje "Actieve sturing deze maand - alleen wat het EMS zelf ingrijpt" met de namen Ontladen in dure kwartieren / Laden uit het net / Actieve sturing netto, en een tooltip. Tegel Vandaag: "zonder accu". Alleen teksten; de berekeningen zijn gelijk.
+
+Tests: `test_v51052_cockpit_geldlabels.py` (2).

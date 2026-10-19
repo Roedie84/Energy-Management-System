@@ -1337,7 +1337,7 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="tegel" style="--accent:${kleur}" data-info="besparing">` +
       `<div class="lbl">Vandaag</div>` +
       `<div class="big">${kosten == null ? STREEP : euro(kosten)}</div>` +
-      `<div class="sub">stroomkosten tot nu${zonder != null ? `, zonder sturing ${euro(zonder)}` : ""}</div>` +
+      `<div class="sub">stroomkosten tot nu${zonder != null ? `, zonder accu ${euro(zonder)}` : ""}</div>` +
       `<div class="rijen" style="margin-top:10px">` +
       `<span>Besparing deze maand <b style="color:${maand != null && maand >= 0 ? "var(--groen)" : "var(--oranje)"}">${euroTeken(maand)}</b></span>` +
       `<span>Zon opgewekt <b>${fmt(zon.opgewekt_kwh, 1)} / ${fmt(zon.voorspeld_kwh, 1)} kWh</b></span>` +
@@ -1888,13 +1888,20 @@ class EmsCockpitCard extends HTMLElement {
       paneelKop("euro", "Geld", "", "detail-besparing") +
       `<div class="pb">` +
       `<div class="duo">` +
-      mini("Besparing maand", euroTeken(bmaand), "t.o.v. zonder sturing", bmaand != null && bmaand >= 0 ? "var(--groen)" : "var(--oranje)") +
+      // v5.105.2: de besparing vergelijkt met een huis ZONDER accu (alles
+      // wat de accu doet, ook het huis voeden in de stand slim). Gevraagd
+      // 19-10: "Wordt in deze kosten ook meegenomen de besparing omdat de
+      // accu het huis voedt....." - het onderschrift zei "zonder sturing".
+      mini("Besparing maand", euroTeken(bmaand), "t.o.v. zonder accu", bmaand != null && bmaand >= 0 ? "var(--groen)" : "var(--oranje)") +
       mini("Besparing totaal", euroTeken(ball), "sinds de start", ball != null && ball >= 0 ? "var(--groen)" : "var(--oranje)") +
       `</div>` +
-      `<div class="rijen">` +
-      `<span>Verkocht in dure kwartieren (maand) <b>${euro(verkocht)}</b></span>` +
-      `<span>Laadkosten uit het net (maand) <b>${euro(geladen)}</b></span>` +
-      `<span>Accu netto (maand) <b style="color:${netto != null && netto >= 0 ? "var(--groen)" : "var(--oranje)"}">${euroTeken(netto)}</b></span>` +
+      // v5.105.2: alleen wat het EMS ACTIEF doet; het huis voeden in de
+      // stand slim zit hier niet in (wel in de besparing hierboven).
+      `<div class="za-s">Actieve sturing deze maand - alleen wat het EMS zelf ingrijpt:</div>` +
+      `<div class="rijen" title="Alleen ontladen in dure kwartieren en laden uit het net. Dat de accu het huis voedt in de stand slim, of zon opslaat, staat hier niet in maar wel in de besparing.">` +
+      `<span>Ontladen in dure kwartieren <b>${euro(verkocht)}</b></span>` +
+      `<span>Laden uit het net <b>${euro(geladen)}</b></span>` +
+      `<span>Actieve sturing netto <b style="color:${netto != null && netto >= 0 ? "var(--groen)" : "var(--oranje)"}">${euroTeken(netto)}</b></span>` +
       `</div>` +
       `<div class="trio">` +
       mini("Vandaag", euro(vandaag.kosten_eur), `${fmt(vandaag.import_kwh, 1)} kWh van het net`) +
