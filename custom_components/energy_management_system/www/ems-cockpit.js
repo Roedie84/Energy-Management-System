@@ -535,6 +535,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
   box-shadow: 0 12px 34px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
   padding: 0 0 16px; display: flex; flex-direction: column;
 }
+.kol { display: contents; }
 .p-stroom { grid-area: stroom; }
 .p-planning { grid-area: planning; }
 .p-verkoop { grid-area: verkoop; }
@@ -744,11 +745,12 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
   .raster {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) minmax(0, 1fr);
     grid-template-areas:
-      "stroom planning verkoop"
-      "modules planning geld"
-      "zon huis huis"
+      "k1 k2 k3"
       "bediening bediening bediening";
+    align-items: start;
   }
+  .kol { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .k1 { grid-area: k1; } .k2 { grid-area: k2; } .k3 { grid-area: k3; }
   .gwrap { grid-template-rows: 250px 22px; }
   .knoppen { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .p-huis .lijst { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -972,14 +974,23 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="geenbron" data-p="geenbron" hidden></div>` +
       `<div class="meldingen" data-p="meldingen"></div>` +
       `<section class="hero" data-p="hero" aria-label="Status"></section>` +
+      // v5.104.2: drie kolommen die elk hun eigen hoogte volgen. In een
+      // gewoon raster liep de planning over twee rijen en bleef eronder
+      // een groot gat ("Cockpit is opzich super! alleen de grote lege
+      // ruimte"). Op smallere schermen doen de kolommen niet mee
+      // (display: contents) en geldt het raster zoals het was.
       `<main class="raster">` +
+      `<div class="kol k1">` +
       `<section class="paneel p-stroom" data-p="stroom"></section>` +
-      `<section class="paneel p-planning" data-p="planning"></section>` +
-      `<section class="paneel p-verkoop" data-p="verkoop"></section>` +
       `<section class="paneel p-modules" data-p="modules"></section>` +
-      `<section class="paneel p-zon" data-p="zon"></section>` +
+      `</div><div class="kol k2">` +
+      `<section class="paneel p-planning" data-p="planning"></section>` +
       `<section class="paneel p-huis" data-p="huis"></section>` +
+      `<section class="paneel p-zon" data-p="zon"></section>` +
+      `</div><div class="kol k3">` +
+      `<section class="paneel p-verkoop" data-p="verkoop"></section>` +
       `<section class="paneel p-geld" data-p="geld"></section>` +
+      `</div>` +
       `<section class="paneel p-bediening" data-p="bediening"></section>` +
       `</main>` +
       `<footer class="paneel voet" data-p="voet"></footer>` +

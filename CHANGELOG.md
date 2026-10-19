@@ -33376,3 +33376,10 @@ Tests: `test_v5104_lonend_goedkoopst.py` (4), met de prijzen van 19-10.
 - `ems-cockpit.js`, paneel Huis en apparaten: onder Water een regel Waterontharder met dag en tijd van de laatste regeneratie, liters en duur uit dezelfde sessie in `recente_gebruiksmomenten` (als die er nog in staat), en hoe lang geleden. Geen regeneratie bekend: geen regel.
 
 Tests: `test_v51041_cockpit_ontharder.py` (3).
+
+## v5.104.2 — cockpit in drie kolommen, zonder gat
+
+- **Gemeld 19-10 (screenshot):** "Cockpit is opzich super! alleen de grote lege ruimte." Vanaf 1260 px liep de planning in het raster over twee rijen (`stroom planning verkoop` / `modules planning geld`); die rijen werden zo hoog als stroom + modules en verkoop + geld, en onder de veel kortere planning bleef een groot leeg vlak.
+- Nu drie kolommen (`.kol`) die elk hun eigen hoogte volgen: k1 stroom en modules, k2 planning, huis en zon, k3 verkoop en geld; bediening blijft over de volle breedte. Onder 1260 px staan de kolommen op `display: contents`, dus het raster met de bestaande gebieden geldt ongewijzigd. Nagekeken met een weergave in Chromium bij 1500 en 900 px.
+
+Tests: `test_v51042_cockpit_kolommen.py` (3).

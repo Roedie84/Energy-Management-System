@@ -1,3 +1,13 @@
+EMS v5.104.2 - cockpit zonder lege ruimte
+
+Installeren: via HACS bijwerken en Home Assistant herstarten (en de
+pagina een keer verversen).
+
+- Op een breed scherm staan de panelen nu in drie kolommen die elk hun
+  eigen hoogte volgen: links stroom en accumodules, midden planning,
+  huis en apparaten en zon, rechts verkoop en geld. Het grote gat onder
+  de planning is weg. Op smallere schermen blijft alles zoals het was.
+
 EMS v5.104.1 - waterontharder in de cockpit
 
 Installeren: via HACS bijwerken en Home Assistant herstarten (en de
