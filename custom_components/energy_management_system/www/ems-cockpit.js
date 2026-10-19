@@ -94,6 +94,8 @@ const EIGEN = {
   prijsverwachting: "prijsverwachting",
   repetitie: "repetitie_2027",
   dagarchief: "dagarchief",
+  // v5.105.0: is er iemand thuis (bovenin de cockpit)
+  aanwezig: "aanwezigheid",
   // knoppen
   nuLaden: "nu_laden",
   handLaden: "handmatig_laden",
@@ -316,6 +318,8 @@ const ICOON = {
   accu: '<rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4"/><path d="M7 10v4M10.5 10v4"/>',
   zon: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
   net: '<path d="M8 22 12 2l4 20"/><path d="M6.5 9h11M5 15h14M9.5 2h5"/>',
+  persoon: '<circle cx="12" cy="7.5" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/>',
+  maan: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
   huis: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>',
   euro: '<path d="M17 6.5a6.5 6.5 0 1 0 0 11"/><path d="M4 10h9M4 14h9"/>',
   klok: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
@@ -433,7 +437,7 @@ const STIJL = `
 }
 .bg { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
 .bg svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.wrap { container-type: inline-size; max-width: 1760px; margin: 0 auto; padding: 20px 24px 28px; }
+.wrap { container-type: inline-size; max-width: 1760px; margin: 0 auto; padding: 14px 18px 20px; }
 .ic { width: 18px; height: 18px; flex: none; }
 small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3px; letter-spacing: 0; }
 .leeg { color: var(--tekst3); opacity: .75; }
@@ -441,20 +445,20 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .num, .big, td, .mini .w, .kv b { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 
 /* ---- kop ---- */
-.kop { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 4px 2px 16px; }
+.kop { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 2px 2px 10px; }
 .merk { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .logo {
-  width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; color: #fff;
+  width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; color: #fff;
   background: linear-gradient(135deg, #f59e0b, #10b981 70%, #0ea5e9);
   box-shadow: 0 6px 22px rgba(16, 185, 129, .40), inset 0 1px 0 rgba(255,255,255,.3);
 }
-.logo .ic { width: 26px; height: 26px; fill: #fff; stroke: none; }
-.merknaam { font-size: 19px; font-weight: 800; letter-spacing: .14em; line-height: 1.1; }
+.logo .ic { width: 22px; height: 22px; fill: #fff; stroke: none; }
+.merknaam { font-size: 17px; font-weight: 800; letter-spacing: .14em; line-height: 1.1; }
 .merksub { font-size: 12px; color: var(--tekst2); letter-spacing: .04em; margin-top: 2px; }
 .kop-mid { display: flex; gap: 8px; flex-wrap: wrap; flex: 1 1 0; min-width: 0; }
 .kop-r { display: flex; align-items: center; gap: 18px; margin-left: auto; }
 .klok { text-align: right; line-height: 1.1; }
-.klok .tijd { font-size: 30px; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.klok .tijd { font-size: 26px; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
 .klok .datum { font-size: 12px; color: var(--tekst2); margin-top: 3px; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
@@ -463,18 +467,20 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
   max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
 .chip .ic { width: 14px; height: 14px; }
-.chip.groot { font-size: 13px; padding: 7px 12px; color: var(--tekst); background: var(--paneel2); }
+.chip.groot { font-size: 13px; padding: 6px 11px; color: var(--tekst); background: var(--paneel2); }
 .chip.ok { color: var(--groen); border-color: rgba(52, 211, 153, .35); }
 .chip.let { color: var(--oranje); border-color: rgba(251, 146, 60, .4); }
 .chip.gevaar { color: #fff; background: rgba(251, 77, 101, .22); border-color: rgba(251, 77, 101, .55); }
 .chip.uit { opacity: .55; }
+.chip.aanwezig .ic { width: 14px; height: 14px; }
+.chip.aanwezig .leeg { font-weight: 500; margin-left: 2px; }
 .stip { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: var(--kleur, var(--tekst3)); box-shadow: 0 0 8px var(--kleur, transparent); }
 
 /* ---- meldingen ---- */
-.meldingen { display: grid; gap: 10px; margin-bottom: 14px; }
+.meldingen { display: grid; gap: 8px; margin-bottom: 10px; }
 .meldingen:empty { display: none; }
 .melding {
-  display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-radius: 14px;
+  display: flex; align-items: flex-start; gap: 10px; padding: 9px 14px; border-radius: 14px;
   border: 1px solid var(--rand2); background: var(--paneel);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); font-size: 13.5px; line-height: 1.45;
 }
@@ -486,9 +492,9 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .melding.gevaar .ic { color: var(--rood); }
 
 /* ---- statusrij ---- */
-.hero { display: grid; gap: 14px; grid-template-columns: 1fr; margin-bottom: 14px; }
+.hero { display: grid; gap: 10px; grid-template-columns: 1fr; margin-bottom: 10px; }
 .tegel {
-  position: relative; overflow: hidden; padding: 16px 18px 16px 20px; border-radius: var(--r);
+  position: relative; overflow: hidden; padding: 12px 14px 12px 17px; border-radius: var(--r);
   background: linear-gradient(160deg, rgba(26, 40, 64, .74), rgba(10, 16, 30, .74));
   border: 1px solid var(--rand);
   backdrop-filter: blur(16px) saturate(130%); -webkit-backdrop-filter: blur(16px) saturate(130%);
@@ -498,22 +504,22 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .tegel::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent, transparent) 18%, transparent), transparent 55%); }
 .tegel > * { position: relative; z-index: 1; }
 .lbl { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--tekst2); }
-.big { font-size: 30px; font-weight: 800; line-height: 1.1; letter-spacing: .01em; margin: 6px 0 4px; }
+.big { font-size: 26px; font-weight: 800; line-height: 1.1; letter-spacing: .01em; margin: 4px 0 3px; }
 .big.accent { color: var(--accent); }
 .sub { font-size: 13px; color: var(--tekst2); line-height: 1.45; }
 .sub b { color: var(--tekst); font-weight: 600; }
-.tekst-m { font-size: 17px; font-weight: 700; line-height: 1.3; margin: 8px 0 6px; }
+.tekst-m { font-size: 16px; font-weight: 700; line-height: 1.3; margin: 5px 0 4px; }
 .klem { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.accu-t { display: grid; grid-template-columns: 116px 1fr; gap: 16px; align-items: center; }
-.ring { width: 116px; height: 116px; display: block; }
+.accu-t { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; }
+.ring { width: 96px; height: 96px; display: block; }
 .ring-t { font-size: 30px; font-weight: 800; fill: var(--tekst); font-variant-numeric: tabular-nums; }
 .ring-p { font-size: 14px; fill: var(--tekst2); font-weight: 700; }
 .ring-o { font-size: 10px; fill: var(--tekst2); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .ring-boog { transition: stroke-dasharray .8s ease; }
-.rijen { display: grid; gap: 5px; font-size: 12.5px; color: var(--tekst2); min-width: 0; }
+.rijen { display: grid; gap: 3px; font-size: 12.5px; color: var(--tekst2); min-width: 0; }
 .rijen span { display: flex; justify-content: space-between; gap: 10px; }
 .rijen b { color: var(--tekst); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.za-blok { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--lijn, rgba(127,127,127,.25)); display: grid; gap: 8px; min-width: 0; }
+.za-blok { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--lijn, rgba(127,127,127,.25)); display: grid; gap: 8px; min-width: 0; }
 .za-k { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--tekst2); }
 .za-k b { color: var(--tekst); white-space: nowrap; }
 .za-s { font-size: 11.5px; color: var(--tekst2); overflow-wrap: anywhere; }
@@ -525,7 +531,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 
 /* ---- raster ---- */
 .raster {
-  display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr);
+  display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr);
   grid-template-areas: "stroom" "planning" "verkoop" "modules" "zon" "huis" "bediening" "geld";
 }
 .paneel {
@@ -533,7 +539,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
   background: linear-gradient(180deg, var(--paneel), var(--paneel2)); border: 1px solid var(--rand);
   backdrop-filter: blur(16px) saturate(130%); -webkit-backdrop-filter: blur(16px) saturate(130%);
   box-shadow: 0 12px 34px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
-  padding: 0 0 16px; display: flex; flex-direction: column;
+  padding: 0 0 12px; display: flex; flex-direction: column;
 }
 .kol { display: contents; }
 .p-stroom { grid-area: stroom; }
@@ -544,35 +550,35 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .p-huis { grid-area: huis; }
 .p-bediening { grid-area: bediening; }
 .p-geld { grid-area: geld; }
-.ph { display: flex; align-items: center; gap: 9px; padding: 14px 16px 10px; color: var(--tekst2); min-width: 0; flex-wrap: wrap; }
+.ph { display: flex; align-items: center; gap: 8px; padding: 10px 14px 7px; color: var(--tekst2); min-width: 0; flex-wrap: wrap; }
 .ph h2 { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--tekst); }
 .ph .ic { color: var(--amber); }
 .ph-r { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; min-width: 0; }
-.meer { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; border: 1px solid var(--rand); background: rgba(255,255,255,.04); color: var(--tekst2); cursor: pointer; padding: 0; }
+.meer { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 9px; border: 1px solid var(--rand); background: rgba(255,255,255,.04); color: var(--tekst2); cursor: pointer; padding: 0; }
 .meer:hover { color: var(--tekst); border-color: var(--rand2); }
 .meer .ic { width: 15px; height: 15px; color: currentColor; }
-.pb { padding: 0 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.pb { padding: 0 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .leegmelding { padding: 6px 16px 0; color: var(--tekst3); font-size: 13px; }
-.mini { padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); min-width: 0; }
+.mini { padding: 7px 10px; border-radius: 11px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); min-width: 0; }
 .mini .lbl { font-size: 10px; letter-spacing: .1em; }
-.mini .w { font-size: 20px; font-weight: 750; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini .w { font-size: 18px; font-weight: 750; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mini .s { font-size: 12px; color: var(--tekst2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.kwart { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kwart { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .balk { position: relative; height: 8px; border-radius: 99px; background: rgba(255,255,255,.07); overflow: hidden; }
 .balk b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; box-shadow: 0 0 12px currentColor; transition: width .6s ease; }
 .balk i { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff; border-radius: 2px; opacity: .85; }
-.meterrij { display: grid; gap: 6px; }
+.meterrij { display: grid; gap: 4px; }
 .meterkop { display: flex; justify-content: space-between; align-items: baseline; gap: 2px 10px; flex-wrap: wrap; }
 .meterkop .lbl { font-size: 11px; }
 .meterkop .w { font-size: 16px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .meternoot { font-size: 12px; color: var(--tekst3); line-height: 1.45; }
-.zin { font-size: 13px; color: var(--tekst2); line-height: 1.5; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); }
+.zin { font-size: 13px; color: var(--tekst2); line-height: 1.45; padding: 7px 10px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); }
 .zin b { color: var(--tekst); }
 
 /* ---- energiestroom (v5.91) ---- */
-.stroom { position: relative; width: 100%; max-width: 600px; margin: 0 auto; aspect-ratio: 1.12 / 1; }
+.stroom { position: relative; width: 100%; max-width: 480px; margin: 0 auto; aspect-ratio: 1.12 / 1; }
 .stroom svg.lijnen { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .spoor { fill: none; stroke: rgba(255,255,255,.07); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .loop {
@@ -586,7 +592,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .knoop {
   position: absolute; transform: translate(-50%, -50%); width: 32%; min-height: 25%;
   display: flex; flex-direction: column; justify-content: center; gap: 3px;
-  padding: 10px 12px; border-radius: 16px; text-align: left;
+  padding: 7px 10px; border-radius: 14px; text-align: left;
   background: linear-gradient(160deg, rgba(22, 34, 56, .92), rgba(8, 13, 25, .92));
   border: 1px solid var(--rand2);
   box-shadow: 0 10px 26px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.05), 0 0 26px var(--gloed, transparent);
@@ -596,7 +602,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .knoop .badge { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--k) 16%, transparent); }
 .knoop .badge .ic { width: 16px; height: 16px; color: var(--k); }
 .knoop .n { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--tekst2); }
-.knoop .v { font-size: 22px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.knoop .v { font-size: 20px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .knoop .v small { font-size: 11px; }
 .knoop .s { font-size: 11.5px; color: var(--tekst2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .knoop .s.rest { color: var(--tekst3); font-size: 11px; white-space: normal; }
@@ -608,12 +614,12 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
   box-shadow: 0 0 0 4px rgba(251,191,36,.12), 0 0 18px rgba(251,191,36,.7);
 }
 .planvolg {
-  display: grid; grid-template-columns: auto 1fr; gap: 10px 12px; align-items: center;
-  padding: 11px 13px; border-radius: 13px; background: rgba(255,255,255,.035); border: 1px solid var(--rand);
+  display: grid; grid-template-columns: auto 1fr; gap: 7px 10px; align-items: center;
+  padding: 8px 10px; border-radius: 13px; background: rgba(255,255,255,.035); border: 1px solid var(--rand);
 }
 .planvolg .zinpv { font-size: 13px; color: var(--tekst); line-height: 1.4; min-width: 0; }
 .planvolg .rij3 { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.planvolg .cel { padding: 7px 9px; border-radius: 10px; background: rgba(0,0,0,.18); border: 1px solid var(--rand); min-width: 0; }
+.planvolg .cel { padding: 5px 8px; border-radius: 10px; background: rgba(0,0,0,.18); border: 1px solid var(--rand); min-width: 0; }
 .planvolg .cel .l { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--tekst3); }
 .planvolg .cel .s { font-size: 11px; color: var(--tekst2); }
 .planvolg .cel .w { font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -627,7 +633,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .pl-legenda { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--tekst2); }
 .pl-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 .pl-legenda .lijn-i { height: 3px; border-radius: 2px; vertical-align: 3px; }
-.gwrap { position: relative; display: grid; grid-template-columns: 34px 1fr 34px; grid-template-rows: 210px 22px; }
+.gwrap { position: relative; display: grid; grid-template-columns: 34px 1fr 34px; grid-template-rows: 180px 22px; }
 .g-y, .g-y2 { position: relative; }
 .g-y span, .g-y2 span, .g-x span { position: absolute; font-size: 10.5px; color: var(--tekst3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .g-y span { right: 7px; transform: translateY(-50%); }
@@ -654,8 +660,8 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .g-x span { top: 6px; transform: translateX(-50%); }
 .g-x span.dag { color: var(--violet); font-weight: 800; }
 .tabel { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
-.tabel th { text-align: left; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--tekst3); font-weight: 700; padding: 0 10px 8px; }
-.tabel td { padding: 8px 10px; border-top: 1px solid rgba(255,255,255,.06); white-space: nowrap; }
+.tabel th { text-align: left; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--tekst3); font-weight: 700; padding: 0 8px 5px; }
+.tabel td { padding: 5px 8px; border-top: 1px solid rgba(255,255,255,.06); white-space: nowrap; }
 .tabel td.r, .tabel th.r { text-align: right; }
 .tabel tr.nu td { background: rgba(56, 215, 240, .07); }
 .tabel tr.nu td:first-child { box-shadow: inset 3px 0 0 var(--cyaan); }
@@ -666,7 +672,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .tabelvak { overflow-x: auto; margin: 0 -4px; }
 
 /* ---- modules ---- */
-.module { display: grid; gap: 7px; padding: 11px 12px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); }
+.module { display: grid; gap: 5px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); }
 .module.zwak { border-color: rgba(251, 146, 60, .45); background: rgba(251, 146, 60, .06); }
 .module-kop { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .module-kop b { font-size: 14px; }
@@ -676,19 +682,19 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .vlaggen { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ---- bediening ---- */
-.knoppen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.knoppen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .knop {
   font: inherit; color: var(--tekst); text-align: left; cursor: pointer;
-  display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: 13px; border: 1px solid var(--rand);
+  display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 9px;
+  padding: 7px 10px; border-radius: 12px; border: 1px solid var(--rand);
   background: rgba(255,255,255,.035); transition: background .2s, border-color .2s, transform .1s;
   min-width: 0;
 }
 .knop:hover { border-color: var(--rand2); background: rgba(255,255,255,.06); }
 .knop:active { transform: scale(.985); }
 .knop:focus-visible { outline: 2px solid var(--cyaan); outline-offset: 2px; }
-.knop .kic { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: rgba(255,255,255,.05); color: var(--tekst2); }
-.knop .kic .ic { width: 20px; height: 20px; }
+.knop .kic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: rgba(255,255,255,.05); color: var(--tekst2); }
+.knop .kic .ic { width: 18px; height: 18px; }
 .knop .kt { min-width: 0; }
 .knop .kn { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .knop .ks { font-size: 11.5px; color: var(--tekst3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -703,20 +709,20 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .knopgroep { font-size: 10.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--tekst3); margin: 2px 0 -4px; }
 
 /* ---- huis ---- */
-.lijst { display: grid; gap: 8px; }
-.regel { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 9px 11px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); min-width: 0; }
-.regel .ric { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,255,255,.05); color: var(--rk, var(--tekst2)); }
+.lijst { display: grid; gap: 6px; }
+.regel { display: grid; grid-template-columns: 28px 1fr auto; gap: 9px; align-items: center; padding: 6px 9px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); min-width: 0; }
+.regel .ric { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: rgba(255,255,255,.05); color: var(--rk, var(--tekst2)); }
 .regel .rn { font-size: 13px; font-weight: 700; }
-.regel .rs { font-size: 12px; color: var(--tekst2); line-height: 1.4; }
+.regel .rs { font-size: 12px; color: var(--tekst2); line-height: 1.35; }
 .regel .rw { font-size: 13px; font-weight: 700; color: var(--rk, var(--tekst)); white-space: nowrap; }
 .regel > div { min-width: 0; }
 
 /* ---- voet ---- */
-.voet { margin-top: 14px; }
-.links { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px; }
+.voet { margin-top: 10px; }
+.links { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px; }
 .links button { font: inherit; font-size: 12px; font-weight: 650; color: var(--tekst2); background: rgba(255,255,255,.04); border: 1px solid var(--rand); padding: 6px 11px; border-radius: 999px; cursor: pointer; }
 .links button:hover { color: var(--tekst); border-color: var(--rand2); }
-.voetregel { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--tekst3); padding: 12px 16px 0; }
+.voetregel { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--tekst3); padding: 8px 14px 0; }
 
 /* ---- geen bron ---- */
 .geenbron { padding: 40px 24px; text-align: center; color: var(--tekst2); font-size: 14px; line-height: 1.6; }
@@ -749,9 +755,9 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
       "bediening bediening bediening";
     align-items: start;
   }
-  .kol { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .kol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .k1 { grid-area: k1; } .k2 { grid-area: k2; } .k3 { grid-area: k3; }
-  .gwrap { grid-template-rows: 250px 22px; }
+  .gwrap { grid-template-rows: 210px 22px; }
   .knoppen { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .p-huis .lijst { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -986,10 +992,12 @@ class EmsCockpitCard extends HTMLElement {
       `</div><div class="kol k2">` +
       `<section class="paneel p-planning" data-p="planning"></section>` +
       `<section class="paneel p-huis" data-p="huis"></section>` +
-      `<section class="paneel p-zon" data-p="zon"></section>` +
       `</div><div class="kol k3">` +
       `<section class="paneel p-verkoop" data-p="verkoop"></section>` +
       `<section class="paneel p-geld" data-p="geld"></section>` +
+      // v5.105.0: zon rechts - met echte gegevens was de middelste kolom
+      // ruim 500 px langer dan de rechter.
+      `<section class="paneel p-zon" data-p="zon"></section>` +
       `</div>` +
       `<section class="paneel p-bediening" data-p="bediening"></section>` +
       `</main>` +
@@ -1175,9 +1183,39 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="merk"><div class="logo">${icoon("bout")}</div>` +
       `<div><div class="merknaam">ENERGIECOCKPIT</div>` +
       `<div class="merksub">Energy Management System${this._hass.config && this._hass.config.location_name ? PUNT + esc(this._hass.config.location_name) : ""}</div></div></div>` +
-      `<div class="kop-mid">${status}${modusChip}${prijsChip}</div>` +
+      `<div class="kop-mid">${status}${this._aanwezigChip()}${modusChip}${prijsChip}</div>` +
       `<div class="kop-r"><div class="klok"><div class="tijd">${tijd}</div><div class="datum">${esc(datum)}</div></div></div>`
     );
+  }
+
+  /* v5.105.0: de aanwezigheid zoals het EMS die afleidt - gevraagd 19-10:
+     "tevens de analyse van het EMS of er iemand thuis is of niet (boven aan
+     in dashboard)". Staat, sinds wanneer, en waarop het rust. */
+  _aanwezigChip() {
+    const a = attr(this._s("aanwezig"), "aanwezigheid");
+    if (!a || !a.beschikbaar || !a.nu) return "";
+    const STAAT = {
+      thuis: ["Thuis", "var(--groen)", "persoon", "ok"],
+      weg: ["Niemand thuis", "var(--amber)", "huis", "let"],
+      slaapt: ["Slaapt", "var(--violet)", "maan", ""],
+    };
+    const [label, kleur, ic, klasse] = STAAT[a.nu] || [hoofd(String(a.nu)), "var(--tekst3)", "huis", ""];
+    const tl = Array.isArray(a.tijdlijn) && a.tijdlijn.length ? a.tijdlijn[0] : null;
+    const sinds = tl && tl.staat === a.nu && tl.van ? ` sinds ${tl.van}` : "";
+    const laatst = Array.isArray(a.laatst_gezien) && a.laatst_gezien.length ? a.laatst_gezien[0] : null;
+    const minuten = laatst ? num(laatst.minuten_geleden) : null;
+    const beweging = laatst && minuten != null
+      ? `${PUNT}beweging ${minuten < 1 ? "zojuist" : minuten < 60 ? `${Math.round(minuten)} min geleden` : `${fmt(minuten / 60, 1)} u geleden`}`
+      : "";
+    const titel = [
+      tl && tl.aanleiding ? `Waarom: ${tl.aanleiding}` : "",
+      laatst ? `Laatst gezien: ${laatst.naam}` : "",
+      num(a.afwezig_na_minuten) != null ? `Weg na ${a.afwezig_na_minuten} min zonder beweging` : "",
+      num(a.typisch_thuis_percentage) != null ? `Normaal op dit uur ${a.typisch_thuis_percentage}% thuis` : "",
+    ].filter(Boolean).join(" \n");
+    return `<span class="chip groot aanwezig ${klasse}" title="${esc(titel)}">` +
+      `<span class="stip" style="--kleur:${kleur}"></span>${icoon(ic)}${esc(label + sinds)}` +
+      `<span class="leeg">${esc(beweging)}</span></span>`;
   }
 
   /* ---- meldingen ---- */

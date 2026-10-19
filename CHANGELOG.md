@@ -33383,3 +33383,12 @@ Tests: `test_v51041_cockpit_ontharder.py` (3).
 - Nu drie kolommen (`.kol`) die elk hun eigen hoogte volgen: k1 stroom en modules, k2 planning, huis en zon, k3 verkoop en geld; bediening blijft over de volle breedte. Onder 1260 px staan de kolommen op `display: contents`, dus het raster met de bestaande gebieden geldt ongewijzigd. Nagekeken met een weergave in Chromium bij 1500 en 900 px.
 
 Tests: `test_v51042_cockpit_kolommen.py` (3).
+
+## v5.105.0 — cockpit compacter, aanwezigheid bovenin
+
+- **Gevraagd 19-10:** "Informatie behouden op cockpit dashboard, maar graag wat compacter, tevens de analyse van het EMS of er iemand thuis is of niet (boven aan in dashboard)."
+- Kop: nieuwe chip `_aanwezigChip()` uit de eigen sensor Aanwezigheid (`aanwezigheid.nu`): Thuis / Niemand thuis / Slaapt, "sinds" uit de eerste tijdlijnregel als die dezelfde staat heeft, en hoe lang geleden de laatste beweging was. De tooltip geeft de aanleiding, de laatst geziene sensor, de afwezigheidsgrens en het gebruikelijke thuispercentage. Geen gegevens: geen chip.
+- Compacter, zonder iets weg te laten: kleinere paddings en tussenruimtes (raster en kolommen 14 → 10 px, panelen, tegels, mini's, regels, modules, knoppen, tabel), de accuring 116 → 96 px, de grafiek 210/250 → 180/210 px, het energiestroomschema max. 480 px breed. Met een momentopname van de echte toestanden van 19-10 in Chromium op 1500 px: 2449 → 1870 px hoog.
+- Zon van de middelste naar de rechterkolom (onder geld): met echte gegevens was de middelste kolom ruim 500 px langer dan de rechter.
+
+Tests: `test_v51050_cockpit_compact_aanwezig.py` (4); `test_v51042_cockpit_kolommen.py` bijgewerkt.

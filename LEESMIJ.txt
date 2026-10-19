@@ -1,3 +1,16 @@
+EMS v5.105.0 - cockpit compacter, met bovenin wie er thuis is
+
+Installeren: via HACS bijwerken en Home Assistant herstarten (en de
+pagina een keer verversen).
+
+- Bovenin de cockpit staat nu wat het EMS over de aanwezigheid denkt:
+  Thuis, Niemand thuis of Slaapt, sinds wanneer, en hoe lang geleden er
+  beweging was. Met de muis erop zie je waarop dat rust.
+- Alles is compacter: minder witruimte, kleinere tussenruimtes en een
+  lagere grafiek. Alle informatie blijft staan. Met de gegevens van
+  vandaag is de pagina op een breed scherm een kwart korter.
+- Zon staat nu rechts onder Geld, zodat de drie kolommen even lang zijn.
+
 EMS v5.104.2 - cockpit zonder lege ruimte
 
 Installeren: via HACS bijwerken en Home Assistant herstarten (en de

@@ -20,8 +20,9 @@ def test_drie_kolommen_met_elk_hun_panelen():
     s = _skelet()
     k1, k2, k3 = s.split('class="kol k1"')[1], s.split('class="kol k2"')[1], s.split('class="kol k3"')[1]
     assert k1.index('data-p="stroom"') < k1.index('data-p="modules"') < k1.index('class="kol k2"')
-    assert k2.index('data-p="planning"') < k2.index('data-p="huis"') < k2.index('data-p="zon"') < k2.index('class="kol k3"')
-    assert k3.index('data-p="verkoop"') < k3.index('data-p="geld"') < k3.index('data-p="bediening"')
+    assert k2.index('data-p="planning"') < k2.index('data-p="huis"') < k2.index('class="kol k3"')
+    # v5.105.0: zon naar rechts, onder geld
+    assert k3.index('data-p="verkoop"') < k3.index('data-p="geld"') < k3.index('data-p="zon"') < k3.index('data-p="bediening"')
 
 
 def test_alle_panelen_staan_er_precies_een_keer():
