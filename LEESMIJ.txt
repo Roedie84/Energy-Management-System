@@ -1,3 +1,14 @@
+EMS v5.104.0 - netladen in de echt goedkoopste kwartieren
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het EMS laadde soms in een duurder kwartier terwijl een goedkoper
+  kwartier in hetzelfde blok leeg bleef (19-10: 12:45 tegen 33,7 ct,
+  terwijl 13:30 en 14:00 met 32,4 ct op "Slim" stonden). Het zocht
+  goedkope kwartieren voor de hele lege ruimte in de accu, terwijl maar
+  een deel daarvan loonde. Nu kiest het de goedkoopste kwartieren voor
+  wat er echt loont. Er wordt niet meer geladen, alleen goedkoper.
+
 EMS v5.103.1 - dagarchief: verbruik uit de statistiek klopt weer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

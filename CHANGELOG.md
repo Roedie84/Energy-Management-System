@@ -33362,3 +33362,10 @@ Tests: `test_v5103_accuteller.py` (10).
 
 Tests: `test_v5102_dagarchief.py` (+2).
 
+## v5.104.0 — netladen in de goedkoopste kwartieren voor wat loont
+
+- **Gemeld 19-10 (12:47):** "Dit is toch een rare verdeling, goedkoopste kwartieren worden niet allemaal benut." Laadplanning: laden 12:45-13:30 (33,7 / 33,0 / 32,5 ct) en 13:45-14:00, maar 13:30 en 14:00 (32,4 ct) op smart.
+- Oorzaak: `_laad_op_goedkoopste` (v5.28.5) vroeg zoveel kwartieren als het GAT nodig had (lege ruimte min zonoverschot, ruim 5 kWh), en waren er minder goedkopere kwartieren dan dat, dan laadde ook het dure kwartier nu. Maar de laadregel laat maar een deel van dat gat lonen: de latere kwartieren lopen van duur naar goedkoop, en zodra de stand stijgt is de volgende kWh minder waard dan hij kost. Het plan liep daardoor tegen die grens aan: rond 56% om en om wel en niet laden.
+- Nu: `_laadregel` geeft `lonend_kwh` - de kwartieren vanaf het k-de duurste waarvan de waarde (prijs x rendement - slijtage) boven de prijs van nu ligt - en `_laad_op_goedkoopste` zoekt de goedkoopste kwartieren voor `min(gat, lonend)`. Zelfde stap voor de beslissing en het plan. Er wordt niet meer geladen, alleen goedkoper. De zonvol-route (v5.86) en de dipregel blijven gelijk.
+
+Tests: `test_v5104_lonend_goedkoopst.py` (4), met de prijzen van 19-10.

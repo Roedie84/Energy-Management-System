@@ -21327,8 +21327,14 @@ class EnergyManagementSystemCoordinator:
         """
         if not regel.get("laden"):
             return regel
+        # v5.104.0: niet meer kwartieren zoeken dan er lading LOONT. Het gat
+        # kan groter zijn dan wat lonend is; dan koos dit de goedkoopste
+        # kwartieren voor het hele gat en laadde het ook in duurdere.
+        nodig_kwh = regel.get("gat_kwh") or 0.0
+        if regel.get("lonend_kwh") is not None:
+            nodig_kwh = min(nodig_kwh, regel["lonend_kwh"])
         goedkoopst = self._goedkoopste_laadmomenten(
-            moment, regel["prijs_nu_eur"], regel.get("nodig_vanaf"), regel.get("gat_kwh") or 0.0
+            moment, regel["prijs_nu_eur"], regel.get("nodig_vanaf"), nodig_kwh
         )
         uit = {**regel, "nu_bij_de_goedkoopste": goedkoopst}
         if not goedkoopst:
@@ -21426,8 +21432,18 @@ class EnergyManagementSystemCoordinator:
             return uit
         latere_prijs = later[k - 1][0]
         waarde = latere_prijs * rendement / 100 - slijtage_ct / 100
+        # v5.104.0: hoeveel lading van nu nog loont. `later` loopt van duur
+        # naar goedkoop; vanaf het k-de kwartier telt elk kwartier dat na
+        # rendement en slijtage meer waard is dan de prijs nu. Gemeld 19-10:
+        # het plan laadde om 12:45 tegen 33,7 ct omdat het GAT (ruim 5 kWh)
+        # meer kwartieren vroeg dan er goedkopere waren - terwijl maar een
+        # paar kWh loonde. Die paar kWh horen in de goedkoopste kwartieren.
+        lonend = sum(
+            1 for p, _m in later[k - 1:] if p * rendement / 100 - slijtage_ct / 100 > prijs_nu
+        )
         uit.update(
             {
+                "lonend_kwh": round(lonend * per_kwartier, 2),
                 "latere_prijs_eur": round(latere_prijs, 4),
                 "rendement_procent": round(rendement, 1),
                 "slijtage_ct": round(slijtage_ct, 2),
