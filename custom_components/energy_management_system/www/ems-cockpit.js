@@ -1312,7 +1312,7 @@ class EmsCockpitCard extends HTMLElement {
     const waarom = this._gacs("waarom_nu");
     const verwacht = attr(this._s("uitleg"), "expected_mode") || (bruikbaar(this._s("verwacht")) ? this._s("verwacht").state : "");
     const m = modus(verwacht);
-    const kort = waarom.kort ? hoofd(waarom.kort) : m.label;
+    const kort = waarom.kop ? hoofd(waarom.kop) : waarom.kort ? hoofd(waarom.kort) : m.label;
     const redenen = Array.isArray(waarom.redenen) ? waarom.redenen.slice(0, 3) : [];
     const blok = this._blokken()[1];
     return (

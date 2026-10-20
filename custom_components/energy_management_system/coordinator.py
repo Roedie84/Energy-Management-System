@@ -10330,8 +10330,35 @@ class EnergyManagementSystemCoordinator:
             "vraag": WHY_QUESTIONS.get(reden, "Waarom doet de accu dit nu?"),
             "code": reden,
             "kort": DECISION_REASON_LABELS.get(reden, reden),
+            # v5.112.1: de kop in de cockpit. "standaard slim laden" stond er
+            # terwijl de accu 374 W aan het huis leverde (gemeld 20-10 20:40).
+            "kop": self._waarom_kop(reden),
             "redenen": regels[:WHY_MAX_REASONS],
         }
+
+    def _accu_doet_nu(self) -> tuple[str | None, float | None]:
+        """(stand, watt): wat de accu nu doet volgens de meting."""
+        try:
+            vermogen = self._read_corrected_battery_power()
+        except Exception:  # noqa: BLE001 - uitleg mag nooit breken
+            return None, None
+        if vermogen is None:
+            return None, None
+        if abs(vermogen) < MIN_BATTERY_POWER_IDLE_W:
+            return "STANDBY", vermogen
+        return ("ONTLADEN" if vermogen > 0 else "LADEN"), vermogen
+
+    def _waarom_kop(self, reden: str) -> str:
+        """De titel uit het register; in de slimme stand met wat de accu nu doet."""
+        titel = (REASON_REGISTRY.get(reden) or {}).get("titel") or DECISION_REASON_LABELS.get(reden, reden)
+        if reden != "default_smart":
+            return titel
+        stand, _w = self._accu_doet_nu()
+        return {
+            "ONTLADEN": f"{titel}: accu voedt het huis",
+            "LADEN": f"{titel}: accu laadt op zon",
+            "STANDBY": f"{titel}: accu in rust",
+        }.get(stand, titel)
 
     def _waarom_regels(self, now: datetime, reden: str) -> list[str]:
         """De onderbouwing per beslisreden (v1.60.0)."""
@@ -10542,11 +10569,19 @@ class EnergyManagementSystemCoordinator:
 
         # default_smart en al het overige
         regels = list(gemeenschappelijk)
-        regels.append(
-            "geen bijzondere reden om iets anders te doen: de accu vangt zon "
-            "op en voedt het huis"
-        )
+        regels.append(f"geen bijzondere reden om iets anders te doen: {self._slim_nu_tekst()}")
         return regels
+
+    def _slim_nu_tekst(self) -> str:
+        """v5.112.1: wat de accu NU doet, niet wat hij in deze stand kan."""
+        stand, watt = self._accu_doet_nu()
+        if stand == "ONTLADEN":
+            return f"de accu levert nu {abs(watt):.0f} W aan het huis"
+        if stand == "LADEN":
+            return f"de accu laadt nu {abs(watt):.0f} W met zonne-overschot"
+        if stand == "STANDBY":
+            return "de accu staat stil: geen overschot en het huis vraagt (bijna) niets"
+        return "de accu vangt zon op en voedt het huis"
 
     def _beoordeel_celspreiding(
         self, staat: dict, delta: float, soc: float | None

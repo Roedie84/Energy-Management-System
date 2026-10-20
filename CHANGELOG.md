@@ -33471,3 +33471,10 @@ Tests: `test_v5110_prijs_buren_feest_gas.py` (7).
 - Cockpit `_prijsKwaliteit`: regels morgen/overmorgen (live), terugtoets, bijstelling; staven per dag (afwijking tegen zoals gisteren, terugtoets lichter); tabel laatste 10 dagen.
 
 Tests: `test_v5112_prijs_prestatie.py` (6).
+
+## v5.112.1 — kop "Wat doet het EMS nu" volgt de accu
+
+- **Gemeld 20-10 20:40 (screenshot):** "Accu levert aan woning maar tekst zegt standaard slim laden". De cockpit toonde `get_why_now().kort` = `DECISION_REASON_LABELS["default_smart"]` ("standaard slim laden"); de accu leverde 374 W.
+- `get_why_now` krijgt `kop` (`_waarom_kop`): de titel uit `REASON_REGISTRY`; bij `default_smart` aangevuld met wat de accu nu doet (`_accu_doet_nu`, dezelfde dode band `MIN_BATTERY_POWER_IDLE_W` als `accu_stand`). De laatste reden bij `default_smart` noemt het vermogen van nu in plaats van "vangt zon op en voedt het huis" (ook 's avonds). Cockpit: `kop` boven `kort`.
+
+Tests: `test_v51121_slim_kop.py` (4).

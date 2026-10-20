@@ -1,3 +1,11 @@
+EMS v5.112.1 - "Wat doet het EMS nu" zegt wat de accu doet
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- In de slimme stand stond "Standaard slim laden" terwijl de accu het huis
+  voedde. Nu: "Nul op de meter: accu voedt het huis" (of "laadt op zon",
+  "in rust"), en de regel eronder noemt het vermogen van dat moment.
+
 EMS v5.112.0 - hoe goed is de prijsverwachting, en bijstellen op de eigen fout
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
