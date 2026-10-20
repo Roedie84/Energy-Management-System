@@ -1,3 +1,17 @@
+EMS v5.110.0 - prijsverwachting met buurlanden, feestdagen en gasprijs
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Buurlanden: naast het Nederlandse weer nu ook wind en zon in Duitsland
+  (Duitse Bocht, noord, midden, zuid) en Belgie. Die zetten de prijs hier
+  net zo goed.
+- Feestdagen: Nederlandse en Duitse feestdagen tellen als weekend (minder
+  vraag, lagere prijs).
+- Gasprijs: de gasprijs van de dag (Zonneplan-gastarief) tegen die van de
+  week ervoor. Springt het gas, dan schuift de verwachting meteen mee in
+  plaats van pas na een week.
+- Alleen meten: de verwachting stuurt nog niets.
+
 EMS v5.109.0 - prijzen een week vooruit als staafdiagram
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

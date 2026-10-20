@@ -39,6 +39,10 @@ TZ = ZoneInfo("Europe/Amsterdam")
 
 #: Drie punten voor het landelijke weer: wind op zee, midden, noorden.
 PUNTEN = ((52.6, 4.0), (52.1, 5.2), (53.2, 6.6))
+#: v5.110.0: de buurlanden. Nederland hangt aan dezelfde markt als Duitsland
+#: en België; wind in Noord-Duitsland en zon in Zuid-Duitsland zetten de prijs
+#: hier net zo goed. Duitse Bocht, Noord-, Midden- en Zuid-Duitsland, België.
+BUUR_PUNTEN = ((54.3, 8.0), (53.3, 10.0), (51.0, 10.5), (48.7, 11.0), (50.8, 4.4))
 OPEN_METEO_URL = (
     "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
     "&hourly=wind_speed_100m,shortwave_radiation,temperature_2m"
@@ -63,8 +67,8 @@ RIJP_WINST_PROCENT = 15.0
 
 def open_meteo_url(verleden: int = VERLEDEN_DAGEN, vooruit: int = VOORUIT_DAGEN) -> str:
     return OPEN_METEO_URL.format(
-        lat=",".join(str(p[0]) for p in PUNTEN),
-        lon=",".join(str(p[1]) for p in PUNTEN),
+        lat=",".join(str(p[0]) for p in PUNTEN + BUUR_PUNTEN),
+        lon=",".join(str(p[1]) for p in PUNTEN + BUUR_PUNTEN),
         verleden=verleden, vooruit=vooruit,
     )
 
@@ -81,6 +85,16 @@ def weer_uit_open_meteo(antwoord) -> dict:
     punt zijn. Onbekend blijft onbekend.
     """
     lijst = antwoord if isinstance(antwoord, list) else [antwoord]
+    uit = _weer_gemiddeld(lijst[:len(PUNTEN)])
+    # v5.110.0: de buurlanden apart (wind en zon), bij hetzelfde uur
+    for sleutel, w in _weer_gemiddeld(lijst[len(PUNTEN):]).items():
+        if sleutel in uit:
+            uit[sleutel]["wind_buur"] = w["wind"]
+            uit[sleutel]["zon_buur"] = w["zon"]
+    return uit
+
+
+def _weer_gemiddeld(lijst: list) -> dict:
     som: dict = {}
     for punt in lijst:
         uurlijks = (punt or {}).get("hourly") or {}
@@ -113,14 +127,20 @@ def niveau_voor(prijzen: dict, dag: date) -> float | None:
     return statistics.fmean(waarden) if len(waarden) >= 24 * 3 else None
 
 
-def kenmerken(sleutel: str, weer: dict, niveau: float) -> list[float] | None:
+def kenmerken(sleutel: str, weer: dict, niveau: float, gas_delta: float = 0.0) -> list[float] | None:
     w = weer.get(sleutel)
     if w is None or niveau is None:
         return None
     lok = _lokaal(sleutel)
     wind = w["wind"] / 10.0
+    # v5.110.0: een feestdag (hier of in Duitsland) telt als weekend; zonder
+    # buurlandweer (oud bewaard weer) het Nederlandse; de gassprong in
+    # euro per m3 ten opzichte van de week ervoor
+    vrij = 1.0 if lok.weekday() >= 5 or vrije_dag(lok.date()) else 0.0
     rij = [1.0, wind, wind * wind, w["zon"] / 100.0, w["temp"] / 10.0,
-           1.0 if lok.weekday() >= 5 else 0.0, niveau * 10.0]
+           vrij, niveau * 10.0,
+           w.get("wind_buur", w["wind"]) / 10.0, w.get("zon_buur", w["zon"]) / 100.0,
+           (gas_delta or 0.0) * 10.0]
     rij += [1.0 if lok.hour == u else 0.0 for u in range(1, 24)]
     return rij
 
@@ -169,7 +189,7 @@ def voorspel_rij(coefs: list[float], rij: list[float]) -> float:
     return sum(c * x for c, x in zip(coefs, rij))
 
 
-def dataset(prijzen: dict, weer: dict, tot: date | None = None) -> tuple[list, list]:
+def dataset(prijzen: dict, weer: dict, tot: date | None = None, gas: dict | None = None) -> tuple[list, list]:
     """Rijen en doelen voor alle uren met prijs, weer en niveau (vóór `tot`)."""
     niveaus: dict = {}
     rijen, doelen = [], []
@@ -178,8 +198,8 @@ def dataset(prijzen: dict, weer: dict, tot: date | None = None) -> tuple[list, l
         if tot is not None and dag >= tot:
             continue
         if dag not in niveaus:
-            niveaus[dag] = niveau_voor(prijzen, dag)
-        rij = kenmerken(sleutel, weer, niveaus[dag])
+            niveaus[dag] = (niveau_voor(prijzen, dag), gas_sprong(gas, dag))
+        rij = kenmerken(sleutel, weer, niveaus[dag][0], niveaus[dag][1])
         if rij is not None:
             rijen.append(rij)
             doelen.append(prijzen[sleutel])
@@ -197,7 +217,8 @@ def uren_van_dag(dag: date) -> list[str]:
     return uit
 
 
-def verwacht_dag(coefs: list[float], weer: dict, prijzen: dict, dag: date) -> dict | None:
+def verwacht_dag(coefs: list[float], weer: dict, prijzen: dict, dag: date,
+                 gas: dict | None = None) -> dict | None:
     """Per lokaal uur de verwachte prijs van `dag`, plus een samenvatting.
 
     Het niveau komt uit de bekende prijzen vóór `dag`; ontbreken de dagen
@@ -213,8 +234,9 @@ def verwacht_dag(coefs: list[float], weer: dict, prijzen: dict, dag: date) -> di
     if niveau is None:
         return None
     uren = []
+    sprong = gas_sprong(gas, dag)
     for sleutel in uren_van_dag(dag):
-        rij = kenmerken(sleutel, weer, niveau)
+        rij = kenmerken(sleutel, weer, niveau, sprong)
         if rij is None:
             return None
         uren.append({"uur": _lokaal(sleutel).strftime("%H:%M"), "sleutel": sleutel,
@@ -279,7 +301,8 @@ def naief(prijzen: dict, dag: date) -> dict | None:
     return None
 
 
-def backtest(prijzen: dict, weer: dict, dagen: int = 21, vooruit: int = 2) -> dict:
+def backtest(prijzen: dict, weer: dict, dagen: int = 21, vooruit: int = 2,
+             gas: dict | None = None) -> dict:
     """Voor elk van de laatste `dagen` dagen: trainen op wat er `vooruit`
     dagen eerder bekend was, de dag voorspellen en vergelijken met echt.
 
@@ -293,13 +316,15 @@ def backtest(prijzen: dict, weer: dict, dagen: int = 21, vooruit: int = 2) -> di
     for dag in alle_dagen[-dagen:]:
         bekend_tot = dag - timedelta(days=vooruit - 1)
         bekend = {s: p for s, p in prijzen.items() if _lokaal(s).date() < bekend_tot}
-        rijen, doelen = dataset(bekend, weer)
+        # het gas tot en met de dag waarop voorspeld werd
+        gas_toen = {d: g for d, g in (gas or {}).items() if d < bekend_tot}
+        rijen, doelen = dataset(bekend, weer, gas=gas_toen)
         if len(rijen) < MIN_UREN:
             continue
         coefs = fit(rijen, doelen)
         if coefs is None:
             continue
-        v = verwacht_dag(coefs, weer, bekend, dag)
+        v = verwacht_dag(coefs, weer, bekend, dag, gas_toen)
         n = naief(bekend, dag)
         echt = {s: p for s, p in prijzen.items() if _lokaal(s).date() == dag}
         if not v or not n:
@@ -495,19 +520,117 @@ def kwartierreeks(bekend, verwacht, vanaf: datetime) -> dict | None:
     return {"start": vanaf.isoformat(), "stap_min": 15, "ct": ct, "verwacht_vanaf": eerste_verwacht}
 
 
+# --- feestdagen en gas (v5.110.0) ---------------------------------------
+#
+# Gevraagd 20-10: "Meenemen buurlanden, feestdagen en plotselinge sprongen in
+# de gasprijzen".
+
+def _pasen(jaar: int) -> date:
+    """Paaszondag (gregoriaans, anonieme methode)."""
+    a, b, c = jaar % 19, jaar // 100, jaar % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    maand = (h + l - 7 * m + 114) // 31
+    dag = (h + l - 7 * m + 114) % 31 + 1
+    return date(jaar, maand, dag)
+
+
+@lru_cache(maxsize=64)
+def feestdagen(jaar: int) -> frozenset:
+    """Landelijke vrije dagen in Nederland en Duitsland (dezelfde markt).
+
+    Nederland: Nieuwjaar, tweede paasdag, Koningsdag (26 april als de 27e een
+    zondag is), Bevrijdingsdag in een lustrumjaar, Hemelvaart, tweede
+    pinksterdag, beide kerstdagen. Duitsland daarnaast: Goede Vrijdag,
+    1 mei en 3 oktober.
+    """
+    p = _pasen(jaar)
+    koning = date(jaar, 4, 27)
+    if koning.weekday() == 6:
+        koning = date(jaar, 4, 26)
+    dagen = {
+        date(jaar, 1, 1), p - timedelta(days=2), p + timedelta(days=1), koning,
+        date(jaar, 5, 1), p + timedelta(days=39), p + timedelta(days=50),
+        date(jaar, 10, 3), date(jaar, 12, 25), date(jaar, 12, 26),
+    }
+    if jaar % 5 == 0:
+        dagen.add(date(jaar, 5, 5))
+    return frozenset(dagen)
+
+
+def vrije_dag(dag: date) -> bool:
+    return dag in feestdagen(dag.year)
+
+
+#: De gassprong: de gasprijs van de dag tegen het gemiddelde van zoveel dagen ervoor.
+GAS_DAGEN = 7
+
+
+def gas_sprong(gas: dict | None, dag: date) -> float:
+    """Hoeveel de gasprijs (euro/m3) van `dag` boven of onder die van de
+    week ervoor ligt. Het prijsniveau van de afgelopen week volgt het gas
+    pas na dagen; een sprong zit hier meteen in. Voor een dag in de toekomst
+    geldt de laatst bekende gasprijs. Zonder gegevens: 0.
+    """
+    if not gas:
+        return 0.0
+    bekend = sorted(d for d in gas if d <= dag)
+    if not bekend:
+        return 0.0
+    nu = gas[bekend[-1]]
+    week = [gas[d] for d in bekend if dag - timedelta(days=GAS_DAGEN) <= d < dag]
+    if not week:
+        return 0.0
+    return nu - statistics.fmean(week)
+
+
+def gas_uit_statistiek(rijen: list[dict]) -> dict:
+    """Gasprijs per lokale dag uit de uurstatistiek van de gasprijssensor.
+
+    De gasdag loopt van 06:00 tot 06:00; daarom tellen de uren van 06:00 tot
+    middernacht voor de datum.
+    """
+    per_dag: dict = {}
+    for r in rijen or []:
+        waarde = r.get("mean")
+        start = r.get("start")
+        if not isinstance(waarde, (int, float)) or start is None:
+            continue
+        if isinstance(start, (int, float)):
+            moment = datetime.fromtimestamp(start / 1000 if start > 1e11 else start, timezone.utc)
+        elif isinstance(start, datetime):
+            moment = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+        else:
+            try:
+                moment = datetime.fromisoformat(str(start))
+            except ValueError:
+                continue
+        lok = moment.astimezone(TZ)
+        if lok.hour < 6:
+            continue
+        per_dag.setdefault(lok.date(), []).append(float(waarde))
+    return {d: statistics.fmean(v) for d, v in per_dag.items() if v}
+
+
 def snoei(prijzen: dict, vandaag: date, dagen: int = 130) -> dict:
     grens = uur_sleutel(datetime.combine(vandaag - timedelta(days=dagen), datetime.min.time(), TZ))
     return {s: p for s, p in prijzen.items() if s >= grens}
 
 
-def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date) -> dict:
+def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date,
+                     gas: dict | None = None) -> dict:
     """Train op alles wat bekend is en verwacht de dagen na `bekend_tot`
     (de laatste dag met gepubliceerde prijzen) tot en met zeven dagen vooruit.
 
     Geeft per datum de verwachting en de 'zoals gisteren'-verwachting, en
     hoeveel dagen vooruit die datum lag (voor het archief).
     """
-    rijen, doelen = dataset(prijzen, weer)
+    rijen, doelen = dataset(prijzen, weer, gas=gas)
     if len(rijen) < MIN_UREN:
         return {"beschikbaar": False, "reden": f"{len(rijen)} uren met prijs en weer, minimaal {MIN_UREN}"}
     coefs = fit(rijen, doelen)
@@ -516,7 +639,7 @@ def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date)
     dagen = {}
     dag = bekend_tot + timedelta(days=1)
     while dag <= vandaag + timedelta(days=VERWACHT_DAGEN):
-        v = verwacht_dag(coefs, weer, prijzen, dag)
+        v = verwacht_dag(coefs, weer, prijzen, dag, gas)
         if v:
             dagen[dag.isoformat()] = {"model": v, "naief": naief(prijzen, dag),
                                       "vooruit": (dag - vandaag).days}
@@ -529,7 +652,11 @@ def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date)
             "wind_ct_per_10_kmh_bij_20_kmh": round((coefs[1] + coefs[2] * (2 * 2 + 1)) * 100, 2),
             "zon_ct_per_100_wm2": round(coefs[3] * 100, 2),
             "weekend_ct": round(coefs[5] * 100, 2),
+            "buurlanden_wind_ct_per_10_kmh": round(coefs[7] * 100, 2),
+            "buurlanden_zon_ct_per_100_wm2": round(coefs[8] * 100, 2),
+            "gas_ct_per_10_ct_m3": round(coefs[9] * 100, 2),
         },
+        "gas_dagen": len(gas or {}),
         "reden": None if dagen else (
             "geen prijsniveau: minder dan drie dagen prijzen in de weken ervoor"
             if all(niveau_voor(prijzen, vandaag + timedelta(days=d) - timedelta(days=t)) is None

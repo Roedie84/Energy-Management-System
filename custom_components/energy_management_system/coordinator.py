@@ -48469,6 +48469,32 @@ class EnergyManagementSystemCoordinator:
             paren += [(b + timedelta(minutes=15 * i), p / PRICE_SCALE_FACTOR) for i in range(stappen)]
         return paren
 
+    async def _gasprijzen_per_dag(self, vandaag: date) -> dict:
+        """v5.110.0: de gasprijs per dag uit de statistiek van de gasprijssensor,
+        met de prijs van vandaag uit de sensor zelf. Leeg als er geen sensor is
+        of het ophalen mislukt: dan telt de gassprong als 0."""
+        from . import prijsverwachting as P
+
+        entiteit = self.config.get(CONF_GAS_PRICE_SENSOR)
+        if not entiteit or self.hass is None:
+            return {}
+        gas: dict = {}
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import statistics_during_period
+
+            begin = dt_util.utcnow() - timedelta(days=P.VERLEDEN_DAGEN + 7)
+            uit = await get_instance(self.hass).async_add_executor_job(
+                statistics_during_period, self.hass, begin, None, {entiteit}, "hour", None, {"mean"}
+            )
+            gas = P.gas_uit_statistiek((uit or {}).get(entiteit) or [])
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Gasprijzen uit de statistiek niet gelezen", exc_info=True)
+        nu = self._lees_optionele_sensor(CONF_GAS_PRICE_SENSOR)
+        if isinstance(nu, (int, float)) and nu > 0:
+            gas[vandaag] = float(nu)
+        return gas
+
     async def _zaai_uit_statistiek(self) -> bool:
         """Eenmalig: de uurprijzen uit de HA-statistiek van de prijssensor."""
         from . import prijsverwachting as P
@@ -48526,8 +48552,9 @@ class EnergyManagementSystemCoordinator:
             vandaag = dt_util.as_local(now).date()
             prijzen = dict(self.prijsgeschiedenis)
             doe_backtest = self._prijs_backtest_dag != vandaag.isoformat()
+            gas = await self._gasprijzen_per_dag(vandaag)
             uit = await self.hass.async_add_executor_job(
-                _reken_prijsverwachting, P, prijzen, weer, vandaag, bekend_tot or vandaag, doe_backtest
+                _reken_prijsverwachting, P, prijzen, weer, vandaag, bekend_tot or vandaag, doe_backtest, gas
             )
             for datum, d in (uit.get("dagen") or {}).items():
                 if d.get("vooruit") in (1, 2):
@@ -49867,9 +49894,10 @@ def _stat_moment(rij: dict) -> datetime:
     return start.astimezone(timezone.utc)
 
 
-def _reken_prijsverwachting(P, prijzen: dict, weer: dict, vandaag, bekend_tot, backtest: bool) -> dict:
+def _reken_prijsverwachting(P, prijzen: dict, weer: dict, vandaag, bekend_tot, backtest: bool,
+                            gas: dict | None = None) -> dict:
     """Prijsverwachting (en eens per dag de terugtoets), buiten de event loop."""
-    uit = P.maak_verwachting(prijzen, weer, vandaag, bekend_tot)
+    uit = P.maak_verwachting(prijzen, weer, vandaag, bekend_tot, gas)
     if backtest:
-        uit["backtest"] = P.backtest(prijzen, weer, dagen=21, vooruit=2)
+        uit["backtest"] = P.backtest(prijzen, weer, dagen=21, vooruit=2, gas=gas)
     return uit

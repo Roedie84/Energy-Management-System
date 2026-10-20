@@ -33449,3 +33449,13 @@ Tests: `test_v5108_prijs_per_kwartier.py` (7).
 - Cockpit `_prijsGrafiek`: SVG-staven per kwartier (`viewBox 0 0 n 100`), legenda zoals de planning. Kleur binnen het kwartierplan: `modus(r.modus)` op tijd gekoppeld via de nieuwe `planTijden` (ook gebruikt door `_planning`). Daarbuiten (fill-opacity .45): goedkoop = dagminimum + 20 % van het dagbereik (de dagdrempel van het laadblok) -> laden, >= `expensive_price_threshold` -> verkopen, anders slim. Tooltip per staaf.
 
 Tests: `test_v5108_prijs_per_kwartier.py` bijgewerkt.
+
+## v5.110.0 — prijsverwachting: buurlanden, feestdagen, gassprong
+
+- **Gevraagd 20-10 19:28:** "Meenemen buurlanden, feestdagen en plotselinge sprongen in de gasprijzen" (wattwanneer.nl als betaalde bron afgewezen: "laten we eerst het EMS zelf het werk maar doen").
+- Buurlanden: `BUUR_PUNTEN` (Duitse Bocht, Noord-, Midden-, Zuid-Duitsland, Belgie) in dezelfde Open-Meteo-aanroep; `weer_uit_open_meteo` geeft per uur ook `wind_buur`/`zon_buur`. Kenmerken 7 en 8; zonder buurlandweer de Nederlandse waarden.
+- Feestdagen: `feestdagen(jaar)` (NL: Nieuwjaar, 2e paasdag, Koningsdag (26-4 als 27-4 een zondag is), Bevrijdingsdag in lustrumjaren, Hemelvaart, 2e pinksterdag, kerst; DE daarnaast Goede Vrijdag, 1 mei, 3 oktober). Een feestdag zet het weekendkenmerk op 1 - die coefficient is goed geleerd; een apart kenmerk zou met een paar feestdagen per kwartaal niets leren.
+- Gas: `_gasprijzen_per_dag` leest de uurstatistiek van `gas_price_sensor_entity` (gasdag 06-06, `gas_uit_statistiek`) plus de huidige stand. Kenmerk 9: `gas_sprong` = gasprijs van de dag (toekomst: laatst bekende) min het gemiddelde van de zeven dagen ervoor. Het niveau (7 dagen stroomprijs) volgt het gas pas na dagen; de sprong zit er meteen in. De terugtoets gebruikt alleen het gas tot de dag van voorspellen.
+- `gevoeligheid` krijgt `buurlanden_wind_ct_per_10_kmh`, `buurlanden_zon_ct_per_100_wm2`, `gas_ct_per_10_ct_m3`; `gas_dagen` telt de dagen met gasprijs.
+
+Tests: `test_v5110_prijs_buren_feest_gas.py` (7).
