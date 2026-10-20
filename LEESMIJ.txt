@@ -1,3 +1,17 @@
+EMS v5.106.0 - de hond zet een leeg huis niet meer op "thuis"
+
+Installeren: via HACS bijwerken en Home Assistant herstarten (en de
+pagina een keer verversen).
+
+- Staat het huis op "Niemand thuis", dan telt beweging pas als thuiskomst
+  als er een deur openging (nu of in de tien minuten ervoor), de tv
+  aangaat, er water loopt of een lamp met de hand aangaat - of als er
+  minstens vijf minuten in een kwartier beweging is op twee verschillende
+  plekken. Een korte beweging op één plek (de hond) telt niet.
+- Water van de vaatwasser of wasmachine en een lamp die door een
+  automatisering aangaat, tellen bij een leeg huis ook niet.
+- Bovenin de cockpit staat dan "beweging HH:MM genegeerd (geen deur)".
+
 EMS v5.105.2 - duidelijker wat de bedragen bij Geld tellen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten (en de

@@ -61,6 +61,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
 from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging
+from . import thuiskomst as thuiskomst_mod
 from .const import (
     RESERVE_SPRONG_DREMPEL_KWH,
     RESERVE_SPRONG_HERSTART_S,
@@ -7889,8 +7890,9 @@ class EnergyManagementSystemCoordinator:
             if (staat := self.hass.states.get(entity_id)) is not None
             and str(staat.state).lower() in ("on", "true")
         ]
-        if bewegende_sensoren:
+        if bewegende_sensoren and self._beweging_telt(now, bewegende_sensoren):
             self._registreer_beweging(now, bewegende_sensoren)
+        if bewegende_sensoren:
             self._meld_beweging_bij_vakantie(now, bewegende_sensoren)
 
         # v1.20.0, gemeld: "Als de overloop sensor als laatste beweging
@@ -7929,12 +7931,18 @@ class EnergyManagementSystemCoordinator:
             # 02:39-03:12 op 3 september, 33 minuten.
             elif self._is_nachtelijke_onderbreking(now, vorige):
                 self.presence_state = "slaapt"
-            elif self._stromend_water():
+            elif self._stromend_water() and not (
+                vorige == "weg" and self._water_van_apparaat()
+            ):
                 # v3.29.0: een lopende kraan is het sterkste signaal dat
                 # er is, en het enige dat een simulatie-automatisering
                 # niet kan nabootsen.
+                # v5.106.0: maar niet als de vaatwasser of wasmachine het
+                # water trekt terwijl het huis op "weg" staat.
                 self.presence_state = "thuis"
-            elif self._brandend_licht() is not None:
+            elif self._brandend_licht() is not None and not (
+                vorige == "weg" and not self._licht_met_de_hand()
+            ):
                 # v1.36.0: een brandende lamp binnenshuis telt als
                 # aanwezig, net als de tv. Niet tijdens de vakantiestand.
                 self.presence_state = "thuis"
@@ -8126,6 +8134,9 @@ class EnergyManagementSystemCoordinator:
             licht = self._brandend_licht()
             if licht is not None and laat:
                 return f"licht aan ({licht})"
+            reden = getattr(self._thuiskomst, "laatste_reden", None)
+            if vorige == "weg" and reden:
+                return f"thuiskomst: {reden}{f' ({naam})' if naam else ''}"
             return f"beweging{f' ({naam})' if naam else ''}"
         if self.presence_state == "slaapt":
             return (
@@ -8160,7 +8171,10 @@ class EnergyManagementSystemCoordinator:
         oude_staat = event.data.get("old_state")
         if nieuwe_staat is None:
             return
+        entity_id = event.data.get("entity_id") or nieuwe_staat.entity_id
         if str(nieuwe_staat.state).lower() not in ("on", "true"):
+            # v5.106.0: einde van een beweging, voor de duur bij thuiskomst.
+            self._thuiskomst.uit(entity_id, dt_util.now())
             return
         if oude_staat is not None and str(oude_staat.state).lower() in (
             "on",
@@ -8168,10 +8182,14 @@ class EnergyManagementSystemCoordinator:
         ):
             return
 
-        entity_id = event.data.get("entity_id") or nieuwe_staat.entity_id
         now = dt_util.now()
-        self._registreer_beweging(now, [entity_id])
         self._meld_beweging_bij_vakantie(now, [entity_id])
+        if not self._beweging_telt(now, [entity_id]):
+            # v5.106.0: het huis staat op "weg" en dit is (nog) geen
+            # thuiskomst - waarschijnlijk de hond. Niet als beweging tellen.
+            self._notify_listeners()
+            return
+        self._registreer_beweging(now, [entity_id])
 
         # v1.20.5, gemeld: "Er is gezien de sensoren weldegelijk iemand
         # thuis, echter status onbekend?" - met een tabel waarin de
@@ -8187,6 +8205,64 @@ class EnergyManagementSystemCoordinator:
         # AANWEZIGHEID niet: beweging betekent nu iemand thuis, direct.
         self.presence_state = "thuis"
         self._notify_listeners()
+
+    @property
+    def _thuiskomst(self) -> thuiskomst_mod.ThuiskomstPoort:
+        """v5.106.0: bevestigt een thuiskomst als het huis op "weg" stond
+        (zie thuiskomst.py - de hond telt niet)."""
+        poort = self.__dict__.get("_thuiskomst_poort")
+        if poort is None:
+            poort = self.__dict__["_thuiskomst_poort"] = thuiskomst_mod.ThuiskomstPoort()
+        return poort
+
+    def _beweging_telt(self, now: datetime, sensoren: list[str]) -> bool:
+        """v5.106.0: telt deze beweging als aanwezigheid?
+
+        Altijd, behalve als het huis op "weg" staat: dan alleen bij een
+        bevestigde thuiskomst (deur open, of aanhoudend op meerdere
+        plekken - zie thuiskomst.py). Gemeld 20-10: de hond zette het huis
+        met 22 s radar op "thuis".
+        """
+        poort = self._thuiskomst
+        deur = False
+        for entity_id in sensoren:
+            staat = self.hass.states.get(entity_id)
+            klasse = (staat.attributes.get("device_class") if staat is not None else None)
+            if thuiskomst_mod.is_deur(entity_id, klasse):
+                poort.deur(now)
+                deur = True
+            else:
+                poort.aan(entity_id, self._apparaat_van(entity_id), now)
+        if self.presence_state != "weg":
+            poort.laatste_reden = None
+            return True
+        reden = poort.bevestigd(now)
+        if reden:
+            poort.laatste_reden = reden
+            poort.wis()
+            return True
+        for entity_id in sensoren:
+            poort.noteer_genegeerd(self._entiteitsnaam(entity_id), now)
+        return deur
+
+    def _apparaat_van(self, entity_id: str) -> str | None:
+        """Het apparaat achter een entiteit (de zones van één radar tellen
+        als één plek)."""
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            ent = er.async_get(self.hass).async_get(entity_id)
+            return ent.device_id if ent is not None else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _water_van_apparaat(self) -> bool:
+        """v5.106.0: trekt de vaatwasser of wasmachine nu water/stroom?"""
+        for sleutel in (CONF_DISHWASHER_POWER_SENSOR, CONF_WASHING_MACHINE_POWER_SENSOR):
+            vermogen = self._read_sensor_float(self.config.get(sleutel))
+            if vermogen is not None and vermogen > thuiskomst_mod.APPARAAT_AAN_W:
+                return True
+        return False
 
     def _registreer_beweging(self, now: datetime, sensoren: list[str]) -> None:
         """Legt vast welke sensor wanneer bewoog (v1.20.2)."""
@@ -8661,6 +8737,18 @@ class EnergyManagementSystemCoordinator:
             return False
         return stroom >= PRESENCE_WATER_MIN_LITERS_PER_MINUTE
 
+    def _licht_met_de_hand(self) -> bool:
+        """v5.106.0: brandt er een gekozen lamp die NIET door een
+        automatisering of script aanging? Bij een leeg huis is een lamp
+        die een automatisering aanzette geen bewijs van aanwezigheid."""
+        for entity_id in self.config.get(CONF_PRESENCE_LIGHT_ENTITIES) or []:
+            staat = self.hass.states.get(entity_id)
+            if staat is None or str(staat.state).lower() not in ("on", "true"):
+                continue
+            if not getattr(getattr(staat, "context", None), "parent_id", None):
+                return True
+        return False
+
     def _brandend_licht(self) -> str | None:
         """Welke gekozen lamp brandt er? (v1.36.0)
 
@@ -8857,6 +8945,8 @@ class EnergyManagementSystemCoordinator:
             "water_loopt": self._stromend_water(),
             "tv_staat_aan": self._tv_staat_aan(),
             "afwezig_na_minuten": self._afwezigheidsdrempel_minuten(),
+            # v5.106.0: bewegingen die niet als thuiskomst telden.
+            "thuiskomst": self._thuiskomst.export(),
             "laatst_gezien": [
                 {
                     "naam": self._entiteitsnaam(eid),

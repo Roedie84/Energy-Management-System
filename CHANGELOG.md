@@ -33406,3 +33406,13 @@ Tests: `test_v51051_lopend_kwartier.py` (5; de eerste faalt op v5.105.0).
 - Cockpit: "t.o.v. zonder accu"; de regels onder een kopje "Actieve sturing deze maand - alleen wat het EMS zelf ingrijpt" met de namen Ontladen in dure kwartieren / Laden uit het net / Actieve sturing netto, en een tooltip. Tegel Vandaag: "zonder accu". Alleen teksten; de berekeningen zijn gelijk.
 
 Tests: `test_v51052_cockpit_geldlabels.py` (2).
+
+## v5.106.0 — thuiskomst bevestigen: de hond telt niet
+
+- **Gemeld 20-10 13:58 (screenshot "Thuis sinds 13:54 · beweging 4 min geleden"):** "Waarschijnlijk heeft de hond een rondje door de kamer gelopen, ik weet zeker dat er niemand thuis is, hoe kunnen we dit borgen?" en "zo waterdicht mogelijk". Gemeten: alleen de woonkamerradar (`ultimatesensor_occupancy` 13:53:32-13:53:54, zone 1 13:53:38-13:53:55), geen deur, geen andere sensor, tv uit. `_handle_motion_event` zette bij elke overgang naar "on" het huis direct op "thuis".
+- Nieuw `thuiskomst.py` (`ThuiskomstPoort`): staat het huis op **weg**, dan telt beweging alleen bij (1) een deur (device_class door/garage_door/opening, of "deur"/"door" in de naam) nu of in de tien minuten ervoor, of (2) samen minstens vijf minuten beweging in een kwartier op minstens twee verschillende **apparaten** (de zones van één radar zijn één plek; een hond die lang voor de radar ligt telt dus nooit). Anders: niet in `presence_last_seen`, `last_motion_at` blijft staan (ook na een herstart geen hersteld "thuis"), en de beweging komt in `thuiskomst.genegeerd`. De vakantiemelding blijft op elke beweging.
+- Ook het vangnet van de tick loopt door dezelfde poort. Tijdlijn: "thuiskomst: deur open (...)" of "thuiskomst: aanhoudende beweging (5 min, 2 plekken)".
+- Tv blijft thuis. Water telt bij een leeg huis niet als de vaatwasser of wasmachine draait (vermogen > 5 W); een lamp telt bij een leeg huis alleen als hij niet door een automatisering of script aanging (`context.parent_id`).
+- Cockpit: bij "Niemand thuis" "beweging HH:MM genegeerd (geen deur)" met de reden in de tooltip.
+
+Tests: `test_v5106_thuiskomst.py` (11).

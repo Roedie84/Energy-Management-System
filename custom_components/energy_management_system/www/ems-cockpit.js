@@ -1204,10 +1204,19 @@ class EmsCockpitCard extends HTMLElement {
     const sinds = tl && tl.staat === a.nu && tl.van ? ` sinds ${tl.van}` : "";
     const laatst = Array.isArray(a.laatst_gezien) && a.laatst_gezien.length ? a.laatst_gezien[0] : null;
     const minuten = laatst ? num(laatst.minuten_geleden) : null;
-    const beweging = laatst && minuten != null
+    let beweging = laatst && minuten != null
       ? `${PUNT}beweging ${minuten < 1 ? "zojuist" : minuten < 60 ? `${Math.round(minuten)} min geleden` : `${fmt(minuten / 60, 1)} u geleden`}`
       : "";
+    /* v5.106.0: beweging die bij een leeg huis niet als thuiskomst telde
+       (geen deur, te kort, op een plek - bijvoorbeeld de hond). */
+    const gen = a.thuiskomst && Array.isArray(a.thuiskomst.genegeerd) ? a.thuiskomst.genegeerd[0] : null;
+    const genT = gen && gen.tijd ? new Date(gen.tijd) : null;
+    const genRecent = a.nu === "weg" && genT && !isNaN(genT) && Date.now() - genT.getTime() < 3600000;
+    if (genRecent) {
+      beweging = `${PUNT}beweging ${genT.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })} genegeerd (geen deur)`;
+    }
     const titel = [
+      genRecent ? `Genegeerd: ${gen.naam} - ${gen.reden}. Thuis pas bij een deur, tv, kraan, lamp met de hand of 5 min beweging op 2 plekken.` : "",
       tl && tl.aanleiding ? `Waarom: ${tl.aanleiding}` : "",
       laatst ? `Laatst gezien: ${laatst.naam}` : "",
       num(a.afwezig_na_minuten) != null ? `Weg na ${a.afwezig_na_minuten} min zonder beweging` : "",
