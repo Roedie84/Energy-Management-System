@@ -33423,3 +33423,12 @@ Tests: `test_v5106_thuiskomst.py` (11).
 - Nu `_plan_in_laadblok`: de dagdrempel OF het lopende blok uit `netregels["blok"]` (dezelfde `last_cheap_block_start/end` als de beslissing). Daarbinnen dezelfde `_plan_laadt` met `_laadregel` en `_laad_op_goedkoopste` als de beslissing.
 
 Tests: `test_v51061_plan_lopend_blok.py` (3; de eerste faalt op v5.106.0).
+
+## v5.107.0 — airco-verwachting met aanwezigheid, weekdag en buitentemperatuur
+
+- **Gevraagd 20-10 15:42:** "Neemt de airco voorspelling ook de aanwezigheid etc mee" en "Ja graag alles meenemen". `airco_ritme.gebruik_kwh` (de airco in de reserve, v5.83) rekende per klokuur alleen met de kans uit de laatste 14 dagen; de sturing keek wel naar aanwezigheid, de verwachting niet.
+- `gebruik_kwh` krijgt `thuis_factor(uur)` en `temp_factor(uur)`; de kans wordt kans x thuis x temperatuur (hooguit 1). Niet als de airco al draait (`zeker`). Per uur staan beide factoren in `uren`.
+- `_airco_thuisfactor`: uit `presence_week_profile` de thuis-kans van dit uur op DEZE weekdag gedeeld door die over alle dagen (0-1,5); staat het huis NU op "weg", dan 0 tot het eerste halfuur met >= 50 % thuis op die dag (zonder geleerd patroon hooguit het eerstvolgende uur).
+- `temperatuurfactor`: stook-/koelbehoefte (onder 16 °C / boven 24 °C) van de verwachte buitentemperatuur (`_buiten_verwacht_c` uit de uurverwachting van de klimaatprojectie) gedeeld door die op de geleerde uren, (b+1)/(ref+1), tussen 0,25 en 2. `noteer_uur` legt daarvoor bij elk uur de buitentemperatuur vast (`uurbuiten`, gelijk met `uurverbruik`; eigen buitensensor, anders de verwachting). Zolang er minder dan 3 uren met temperatuur zijn: factor 1.
+
+Tests: `test_v5107_airco_verwachting.py` (10).

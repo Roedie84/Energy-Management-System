@@ -59,6 +59,9 @@ def leeg() -> dict:
         "snelheden": [],
         "vermogens": [],
         "uurverbruik": {},
+        # v5.107.0: de buitentemperatuur bij elk uur in `uurverbruik`
+        # (zelfde volgorde), voor de temperatuurfactor van de verwachting.
+        "uurbuiten": {},
         "afwezig": [],
         # v5.101: verwarmen overdag en 's avonds (11:00-21:30)
         "dag_aan": {"werkdag": {}, "weekend": {}},
@@ -92,6 +95,12 @@ def geldig(ritme) -> dict:
         basis["uurverbruik"] = {
             str(k): [float(v) for v in reeks if isinstance(v, (int, float))][-UURVERBRUIK_DAGEN:]
             for k, reeks in uren.items() if isinstance(reeks, list)
+        }
+    buiten = ritme.get("uurbuiten")
+    if isinstance(buiten, dict):
+        basis["uurbuiten"] = {
+            str(k): [float(v) if isinstance(v, (int, float)) else None for v in reeks][-UURVERBRUIK_DAGEN:]
+            for k, reeks in buiten.items() if isinstance(reeks, list)
         }
     afwezig = ritme.get("afwezig")
     if isinstance(afwezig, list):
@@ -467,11 +476,49 @@ def verwarmvermogen_kw(ritme: dict) -> float | None:
     return statistics.median(reeks) / 1000
 
 
-def noteer_uur(ritme: dict, uur: int, kwh: float) -> None:
-    """Wat de airco in een afgelopen uur gebruikte (ook 0)."""
+def noteer_uur(ritme: dict, uur: int, kwh: float, buiten_c: float | None = None) -> None:
+    """Wat de airco in een afgelopen uur gebruikte (ook 0), en (v5.107.0)
+    hoe warm het buiten was."""
     reeks = ritme["uurverbruik"].setdefault(str(uur), [])
     reeks.append(round(max(kwh, 0.0), 3))
+    # De temperaturen lopen gelijk op met het verbruik; oudere uren zonder
+    # temperatuur (van voor v5.107.0) krijgen None.
+    temps = ritme.setdefault("uurbuiten", {}).setdefault(str(uur), [])
+    eerder = len(reeks) - 1
+    oud = temps[-eerder:] if eerder > 0 else []
+    temps[:] = [None] * (eerder - len(oud)) + oud
+    temps.append(round(float(buiten_c), 1) if buiten_c is not None else None)
     del reeks[:-UURVERBRUIK_DAGEN]
+    del temps[:-UURVERBRUIK_DAGEN]
+
+
+#: v5.107.0: onder deze buitentemperatuur stookt de airco, erboven koelt hij
+#: (vanaf KOELGRENS_C). Daartussen is er geen behoefte.
+STOOKGRENS_C = 16.0
+KOELGRENS_C = 24.0
+#: Zoveel uren met temperatuur zijn nodig voor de temperatuurfactor.
+TEMP_MIN_UREN = 3
+TEMP_FACTOR_MIN = 0.25
+TEMP_FACTOR_MAX = 2.0
+
+
+def behoefte_graden(buiten_c: float) -> float:
+    """Hoeveel graden stook- of koelbehoefte bij deze buitentemperatuur."""
+    return max(STOOKGRENS_C - buiten_c, 0.0) + max(buiten_c - KOELGRENS_C, 0.0)
+
+
+def temperatuurfactor(ritme: dict, uur: int, buiten_c: float | None) -> float:
+    """v5.107.0: koeler (of warmer) dan op de geleerde dagen -> meer kans op
+    airco. De verhouding van de stook-/koelbehoefte van het verwachte uur tot
+    die op de geleerde dagen in hetzelfde klokuur. Zonder gegevens 1."""
+    if buiten_c is None:
+        return 1.0
+    temps = [t for t in ((ritme.get("uurbuiten") or {}).get(str(uur)) or []) if t is not None]
+    if len(temps) < TEMP_MIN_UREN:
+        return 1.0
+    ref = statistics.mean(behoefte_graden(t) for t in temps)
+    factor = (behoefte_graden(buiten_c) + 1.0) / (ref + 1.0)
+    return round(min(max(factor, TEMP_FACTOR_MIN), TEMP_FACTOR_MAX), 3)
 
 
 def _overlap_uren(a_van: datetime, a_tot: datetime, b_van: datetime, b_tot: datetime) -> float:
@@ -553,6 +600,8 @@ def gebruik_kwh(
     zonder_ochtend: bool = False,
     loopt_nu: bool = False,
     loopt_tot: datetime | None = None,
+    thuis_factor=None,
+    temp_factor=None,
 ) -> dict:
     """Wat de airco in dit venster naar verwachting gebruikt, bovenop wat het
     gewone verbruiksprofiel al meeneemt (v5.83, akkoord Ruud 11-10).
@@ -595,6 +644,11 @@ def gebruik_kwh(
             continue
         aan = [v for v in reeks if v >= AAN_UUR_KWH]
         kans = 1.0 if zeker else len(aan) / len(reeks)
+        # v5.107.0: aanwezigheid (nu weg, of deze dag van de week vaker of
+        # minder vaak thuis) en buitentemperatuur. Niet als hij al draait.
+        f_thuis = 1.0 if zeker or thuis_factor is None else float(thuis_factor(uur))
+        f_temp = 1.0 if zeker or temp_factor is None else float(temp_factor(uur))
+        kans = min(kans * f_thuis * f_temp, 1.0)
         typisch = statistics.median(aan) if aan else typisch_alles
         if typisch is None or kans <= 0:
             uur = volgende
@@ -609,6 +663,7 @@ def gebruik_kwh(
             uren.append({
                 "uur": uur.strftime("%H:00"), "kans": round(kans, 2),
                 "kwh": round(bij, 3), "zeker": zeker,
+                "thuis_factor": round(f_thuis, 2), "temp_factor": round(f_temp, 2),
             })
         uur = volgende
     return {

@@ -47544,7 +47544,8 @@ class EnergyManagementSystemCoordinator:
             if vorige is not None and uur - vorige[0] == timedelta(hours=1):
                 staart = (uur - vorige[2]).total_seconds() / 3600
                 laatste = vorige[3] / 1000 * staart if 0 <= staart <= 0.5 else 0.0
-                airco_ritme.noteer_uur(ritme, vorige[0].hour, vorige[1] + laatste)
+                airco_ritme.noteer_uur(ritme, vorige[0].hour, vorige[1] + laatste,
+                                       buiten_c=self._airco_buiten_nu(now))
             self._airco_uur_acc = (uur, 0.0, now, vermogen_w)
             return
         _, kwh, t0, w0 = vorige
@@ -47552,6 +47553,83 @@ class EnergyManagementSystemCoordinator:
         if 0 < uren <= 0.5:
             kwh += w0 / 1000 * uren
         self._airco_uur_acc = (uur, kwh, now, vermogen_w)
+
+    def _airco_buiten_nu(self, now: datetime) -> float | None:
+        """v5.107.0: de buitentemperatuur nu (eigen sensor, anders de
+        verwachting) - voor het uurverbruik van de airco."""
+        try:
+            gemeten = self._get_filtered_backyard_temp_c(now)
+        except Exception:  # noqa: BLE001
+            gemeten = None
+        return gemeten if gemeten is not None else self._buiten_verwacht_c(now)
+
+    def _buiten_verwacht_c(self, moment: datetime) -> float | None:
+        """v5.107.0: de verwachte buitentemperatuur op dit uur, uit de
+        uurverwachting die de klimaatprojectie al ophaalt."""
+        reeks = getattr(self, "_climate_cached_forecast", None) or []
+        beste = None
+        for tijd, temp in reeks:
+            try:
+                afstand = abs((tijd - moment).total_seconds())
+            except TypeError:
+                continue
+            if afstand <= 5400 and (beste is None or afstand < beste[0]):
+                beste = (afstand, temp)
+        return float(beste[1]) if beste is not None and beste[1] is not None else None
+
+    def _airco_tempfactor(self, ritme: dict):
+        """v5.107.0: de temperatuurfactor per uur (zie airco_ritme)."""
+
+        def factor(moment: datetime) -> float:
+            return airco_ritme.temperatuurfactor(ritme, moment.hour, self._buiten_verwacht_c(moment))
+
+        return factor
+
+    def _airco_thuisfactor(self, now: datetime):
+        """v5.107.0: hoe waarschijnlijk is er iemand thuis in dit uur,
+        vergeleken met een gemiddelde dag? (functie per uur)
+
+        - per dag van de week: de geleerde thuis-kans van dit uur op DEZE
+          weekdag gedeeld door die over alle dagen (tussen 0 en 1,5);
+        - staat het huis NU op "weg": tot het eerste halfuur waarop jullie op
+          deze dag meestal (>= 50 %) thuis zijn, telt de airco niet. Zonder
+          geleerd patroon hooguit het eerstvolgende uur, zodat de reserve
+          nooit langer dan dat op een onbekende thuiskomst gokt.
+        """
+        profiel = self.presence_week_profile or {}
+
+        def kans(dag: int, uur: int, half: str) -> float | None:
+            aan, totaal = (profiel.get(f"{dag}-{uur:02d}{half}") or [0, 0])
+            return aan / totaal if totaal >= PRESENCE_MIN_OBSERVATIONS else None
+
+        def uur_kans(dag: int, uur: int) -> float | None:
+            waarden = [k for k in (kans(dag, uur, "00"), kans(dag, uur, "30")) if k is not None]
+            return sum(waarden) / len(waarden) if waarden else None
+
+        terug_om = None
+        if self.presence_state == "weg":
+            terug_om = now + timedelta(hours=1)
+            stap = now.replace(minute=0 if now.minute < 30 else 30, second=0, microsecond=0)
+            for _ in range(48):
+                stap += timedelta(minutes=30)
+                k = kans(stap.weekday(), stap.hour, "30" if stap.minute >= 30 else "00")
+                if k is not None and k >= 0.5:
+                    terug_om = stap
+                    break
+
+        def factor(uur: datetime) -> float:
+            if terug_om is not None and uur + timedelta(hours=1) <= terug_om:
+                return 0.0
+            deze = uur_kans(uur.weekday(), uur.hour)
+            alle = [k for d in range(7) if (k := uur_kans(d, uur.hour)) is not None]
+            if deze is None or not alle:
+                return 1.0
+            gemiddeld = sum(alle) / len(alle)
+            if gemiddeld < 0.05:
+                return 1.0
+            return round(min(max(deze / gemiddeld, 0.0), 1.5), 3)
+
+        return factor
 
     def _airco_ochtend_extra_kwh(self, now: datetime, tot: datetime) -> dict:
         """De ochtendverwarming in de nachtplanning (v5.67) - zie
@@ -47584,10 +47662,13 @@ class EnergyManagementSystemCoordinator:
                     loopt_tot = grens if grens > now else now.replace(
                         minute=0, second=0, microsecond=0
                     ) + timedelta(hours=1)
+            ritme = self._airco_ritme()
             return airco_ritme.gebruik_kwh(
-                self._airco_ritme(), now, tot,
+                ritme, now, tot,
                 zonder_ochtend=bool(self.airco_automaat_aan),
                 loopt_nu=loopt, loopt_tot=loopt_tot,
+                thuis_factor=self._airco_thuisfactor(now),
+                temp_factor=self._airco_tempfactor(ritme),
             )
         except Exception:  # noqa: BLE001 - de reserve mag hier nooit op breken
             return leeg

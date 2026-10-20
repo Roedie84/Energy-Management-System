@@ -1,3 +1,16 @@
+EMS v5.107.0 - de airco-verwachting kijkt naar wie er thuis is en naar het weer
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het airco-verbruik dat de accu vasthoudt, rekent nu met:
+  - wie er thuis is: staat het huis op "Niemand thuis", dan telt de airco
+    pas vanaf het tijdstip waarop jullie op deze dag meestal thuiskomen;
+  - de dag van de week: op dagen dat jullie op dat uur vaker of minder vaak
+    thuis zijn, meer of minder;
+  - de buitentemperatuur: een koude avond telt zwaarder dan een zachte
+    (vanaf nu wordt bij elk uur ook de buitentemperatuur onthouden).
+- Draait de airco al, dan telt hij zoals voorheen tot de vaste uit-tijd.
+
 EMS v5.106.1 - de planning laat het lopende goedkope blok zien
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
