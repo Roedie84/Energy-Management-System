@@ -23761,6 +23761,24 @@ class EnergyManagementSystemCoordinator:
             return 0.0
         return max(0.0, min(laad_kwh, gat))
 
+    @staticmethod
+    def _plan_in_laadblok(prijs: float, start: datetime, netregels: dict, drempel_voor) -> bool:
+        """Hoort dit plankwartier bij het goedkope blok? (v5.106.1)
+
+        Gemeld 20-10 14:36 (screenshot): "Waarom nu op manual? Dit is niet
+        volgens plan toch?" De accu laadde om 14:30 uit het net ("bijladen
+        omdat het loont", 28,6 ct, later 43,3 ct), terwijl het plan voor dat
+        kwartier "slim" zei. De beslissing gebruikt het LOPENDE blok (het
+        goedkoopste dal van wat nog komt: 14:15-14:45); het plan alleen de
+        dagdrempel (laagste prijs van de hele dag + 20 % van het bereik), en
+        de ochtend was veel goedkoper. Nu telt het lopende blok ook voor het
+        plan, zodat het plan zegt wat de beslissing doet.
+        """
+        if prijs <= drempel_voor(start):
+            return True
+        blok_start, blok_eind = netregels.get("blok") or (None, None)
+        return blok_start is not None and blok_eind is not None and blok_start <= start < blok_eind
+
     def _plan_laadt(
         self,
         netregels: dict,
@@ -24158,7 +24176,7 @@ class EnergyManagementSystemCoordinator:
             # zonder profiel is; is ook die er niet, dan de gemeten
             # live-belasting.
             verbruik = self._verbruik_met_terugval(vanaf, einde)
-            in_blok = prijs <= _blok_drempel_voor(start)
+            in_blok = self._plan_in_laadblok(prijs, start, netregels, _blok_drempel_voor)
 
             duur_kwh = ontlaad_w / 1000 * duur
             laad_kwh = laad_w / 1000 * duur if laad_w else float("inf")

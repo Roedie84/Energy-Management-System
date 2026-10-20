@@ -1,3 +1,12 @@
+EMS v5.106.1 - de planning laat het lopende goedkope blok zien
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Laadde de accu in het lopende goedkope blok uit het net omdat het loont
+  (bijvoorbeeld 14:15-14:45 tegen 28,6 ct), dan stond dat kwartier in de
+  planning toch als "Slim". De planning kende alleen de goedkope uren van de
+  hele dag. Nu staat daar ook "Laden", zoals de sturing het doet.
+
 EMS v5.106.0 - de hond zet een leeg huis niet meer op "thuis"
 
 Installeren: via HACS bijwerken en Home Assistant herstarten (en de

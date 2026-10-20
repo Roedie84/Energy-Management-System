@@ -33416,3 +33416,10 @@ Tests: `test_v51052_cockpit_geldlabels.py` (2).
 - Cockpit: bij "Niemand thuis" "beweging HH:MM genegeerd (geen deur)" met de reden in de tooltip.
 
 Tests: `test_v5106_thuiskomst.py` (11).
+
+## v5.106.1 — het plan kent het lopende goedkope blok
+
+- **Gemeld 20-10 14:36 (screenshot):** "Waarom nu op manual? Dit is niet volgens plan toch?" De accu laadde 14:30 uit het net (`grid_charging_profitable`: 28,6 ct, een kWh straks 43,3 x 85 % - 4,2 = 32,6 ct waard, gat 2,1 kWh), het kwartierplan zei "smart". De beslissing (`laadbesluit_uit_het_net`) gebruikt het lopende blok uit `_cheapest_block_range` over de KOMENDE prijzen (14:15-14:45, het goedkoopste dal na de ochtend); `_bouw_kwartierplan` bepaalde `in_blok` alleen met de dagdrempel (laagste prijs van de hele dag + 20 % van het bereik). De ochtenddip van vandaag lag veel lager, dus 14:30 viel buiten het blok en ging naar de dipregel.
+- Nu `_plan_in_laadblok`: de dagdrempel OF het lopende blok uit `netregels["blok"]` (dezelfde `last_cheap_block_start/end` als de beslissing). Daarbinnen dezelfde `_plan_laadt` met `_laadregel` en `_laad_op_goedkoopste` als de beslissing.
+
+Tests: `test_v51061_plan_lopend_blok.py` (3; de eerste faalt op v5.106.0).
