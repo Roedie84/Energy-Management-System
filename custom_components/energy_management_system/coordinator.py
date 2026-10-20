@@ -48493,56 +48493,7 @@ class EnergyManagementSystemCoordinator:
         nu = self._lees_optionele_sensor(CONF_GAS_PRICE_SENSOR)
         if isinstance(nu, (int, float)) and nu > 0:
             gas[vandaag] = float(nu)
-        ttf = await self._ttf_per_dag()
-        gekozen, bron = P.kies_gas(ttf, gas)
-        self._gas_bron = {"bron": bron, "ttf_dagen": len(ttf), "zonneplan_dagen": len(gas)}
-        return gekozen
-
-    _ttf_cache: dict | None = None
-    _ttf_maand_om: datetime | None = None
-    _ttf_laatst_om: datetime | None = None
-    _gas_bron: dict | None = None
-
-    async def _ttf_per_dag(self) -> dict:
-        """v5.111.0: TTF-gasprijs per dag van OilPriceAPI, als de sleutel in
-        secrets.yaml staat (`oilpriceapi_key`). De maand eens per dag, de
-        laatste prijs hooguit eens per uur: ruim onder de 50 per dag."""
-        from . import prijsverwachting as P
-
-        try:
-            from homeassistant.util.yaml import load_yaml
-
-            inhoud = await self.hass.async_add_executor_job(load_yaml, self.hass.config.path("secrets.yaml"))
-            sleutel = (inhoud or {}).get("oilpriceapi_key") if isinstance(inhoud, dict) else None
-        except Exception:  # noqa: BLE001 - geen secrets.yaml: geen TTF
-            sleutel = None
-        if not sleutel:
-            return {}
-        cache = self._ttf_cache if self._ttf_cache is not None else {}
-        nu = dt_util.utcnow()
-        verzoeken = []
-        if self._ttf_maand_om is None or nu - self._ttf_maand_om > timedelta(hours=23):
-            verzoeken.append(("maand", f"{P.OILPRICE_URL}/past_month?by_code={P.TTF_CODE}&interval=1d"))
-        elif self._ttf_laatst_om is None or nu - self._ttf_laatst_om > timedelta(minutes=55):
-            verzoeken.append(("laatst", f"{P.OILPRICE_URL}/latest?by_code={P.TTF_CODE}"))
-        from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-        sessie = async_get_clientsession(self.hass)
-        for soort, url in verzoeken:
-            # het moment telt ook bij een fout: niet elke ronde opnieuw proberen
-            if soort == "maand":
-                self._ttf_maand_om = nu
-            self._ttf_laatst_om = nu
-            try:
-                async with asyncio.timeout(20):
-                    async with sessie.get(url, headers={"Authorization": f"Token {str(sleutel).strip()}"}) as antwoord:
-                        antwoord.raise_for_status()
-                        cache.update(P.ttf_uit_antwoord(await antwoord.json()))
-            except Exception as fout:  # noqa: BLE001 - meten mag de sturing nooit raken
-                _LOGGER.debug("TTF ophalen mislukt (%s): %s", soort, type(fout).__name__)
-        grens = (nu - timedelta(days=P.VERLEDEN_DAGEN + 7)).date()
-        self._ttf_cache = {d: v for d, v in cache.items() if d >= grens}
-        return dict(self._ttf_cache)
+        return gas
 
     async def _zaai_uit_statistiek(self) -> bool:
         """Eenmalig: de uurprijzen uit de HA-statistiek van de prijssensor."""
@@ -48625,7 +48576,6 @@ class EnergyManagementSystemCoordinator:
                 "uren_prijsgeschiedenis": len(prijzen),
                 "uren_weer": len(weer),
                 "prijzen_bekend_tot": bekend_tot.isoformat() if bekend_tot else None,
-                "gas_bron": self._gas_bron,
             }
             self.noteer_meting_gevuld("prijsverwachting")
             self.schedule_persisted_state_save()
@@ -48666,7 +48616,6 @@ class EnergyManagementSystemCoordinator:
             "gevoeligheid": pv.get("gevoeligheid"),
             "gemaakt": pv.get("gemaakt"),
             "prijzen_bekend_tot": pv.get("prijzen_bekend_tot"),
-            "gas_bron": pv.get("gas_bron"),
             "uren_prijsgeschiedenis": pv.get("uren_prijsgeschiedenis"),
             "reden": pv.get("reden"),
             "fout": pv.get("fout"),

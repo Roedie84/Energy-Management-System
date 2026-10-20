@@ -33459,11 +33459,3 @@ Tests: `test_v5108_prijs_per_kwartier.py` bijgewerkt.
 - `gevoeligheid` krijgt `buurlanden_wind_ct_per_10_kmh`, `buurlanden_zon_ct_per_100_wm2`, `gas_ct_per_10_ct_m3`; `gas_dagen` telt de dagen met gasprijs.
 
 Tests: `test_v5110_prijs_buren_feest_gas.py` (7).
-
-## v5.111.0 — TTF-gasprijs van OilPriceAPI
-
-- **Gevraagd 20-10 19:41:** een sleutel voor OilPriceAPI ("Aardgas api"). De sleutel hoort in `secrets.yaml` als `oilpriceapi_key`; het EMS leest hem daar (`_ttf_per_dag`), nooit uit de configuratie, en zet hem nergens in log of attribuut.
-- `past_month?by_code=DUTCH_TTF_EUR&interval=1d` eens per 23 uur, `latest` hooguit eens per 55 minuten (ook bij een fout geteld, dus geen herhaalrondes); `Authorization: Token ...`. `ttf_uit_antwoord`: per lokale dag de laatste prijs, euro/MWh x 9,77/1000 naar euro/m3.
-- `kies_gas`: één bron voor de hele reeks (Zonneplan bevat belasting, TTF niet; door elkaar geeft valse sprongen). TTF vanaf `TTF_MIN_DAGEN` (20) dagen, anders Zonneplan. `gas_bron` (bron, ttf_dagen, zonneplan_dagen) als attribuut.
-
-Tests: `test_v5111_ttf.py` (3).

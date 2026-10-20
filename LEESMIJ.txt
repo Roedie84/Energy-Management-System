@@ -1,16 +1,3 @@
-EMS v5.111.0 - TTF-gasprijs (OilPriceAPI) voor de prijsverwachting
-
-Installeren: via HACS bijwerken, de sleutel in secrets.yaml zetten als
-`oilpriceapi_key: ...` en Home Assistant herstarten.
-
-- Staat de sleutel er, dan haalt het EMS de TTF-beursprijs van gas op
-  (de maand eens per dag, de laatste prijs hooguit eens per uur; het gratis
-  plan staat 50 per dag toe). Met minstens 20 dagen TTF is dat de gasbron
-  voor de verwachting; anders blijft het de Zonneplan-gasprijs.
-- Zonder sleutel verandert er niets.
-- Welke bron gebruikt wordt, staat bij de sensor Prijsverwachting onder
-  `gas_bron`.
-
 EMS v5.110.0 - prijsverwachting met buurlanden, feestdagen en gasprijs
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
