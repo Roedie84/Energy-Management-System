@@ -1,3 +1,17 @@
+EMS v5.108.0 - prijsverwachting per kwartier als grafiek
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- In de cockpit, paneel Geld, staat onder "Prijsverwachting" nu een grafiek
+  per kwartier vanaf nu: eerst de bekende kwartierprijzen (doorgetrokken),
+  daarna de verwachting (gestippeld) tot drie dagen vooruit.
+- De verwachting per kwartier volgt het patroon binnen het uur uit de
+  kwartierprijzen van de afgelopen weken; het uurgemiddelde blijft gelijk.
+- Opgelost: zodra de prijzen van morgen bekend waren, werd morgen toch nog
+  voorspeld ("prijzen bekend tot" bleef leeg). Nu begint de verwachting na
+  de laatste dag met gepubliceerde prijzen.
+- Alleen meten: de verwachting stuurt nog niets.
+
 EMS v5.107.0 - de airco-verwachting kijkt naar wie er thuis is en naar het weer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

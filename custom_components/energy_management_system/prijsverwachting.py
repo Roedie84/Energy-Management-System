@@ -412,6 +412,84 @@ def uurprijzen_uit_kwartieren(kwartieren) -> dict:
     return {s: sum(v) / len(v) for s, v in per_uur.items() if len(v) >= 4}
 
 
+# --- per kwartier (v5.108.0) -------------------------------------------
+#
+# Gevraagd 20-10: "Graag maar wel per kwartier, ik heb immers kwartierprijzen".
+# Het model rekent per uur (wind, zon en vraag bewegen niet per kwartier). Het
+# kwartierpatroon binnen een uur is wel vast: de vier kwartieren van een uur
+# lopen in de ochtend op en in de avond af. Dat patroon komt uit de bekende
+# kwartierprijzen van de afgelopen weken, per lokaal uur en kwartier; het
+# uurgemiddelde van de verwachting blijft daarbij precies gelijk.
+
+#: Zoveel volle uren moet een (uur, kwartier) minstens hebben om mee te tellen.
+KWARTIER_MIN_UREN = 5
+
+
+def kwartiervorm(kwartieren) -> dict:
+    """Gemiddelde afwijking van elk kwartier tot zijn uurgemiddelde.
+
+    Sleutel "HH:k" (lokaal uur, kwartier 0-3), waarde in euro. Alleen volle
+    uren tellen; een vak met te weinig uren telt als 0.
+    """
+    per_uur: dict = {}
+    for begin, prijs in kwartieren:
+        if prijs is None or begin is None:
+            continue
+        lok = begin.astimezone(TZ)
+        per_uur.setdefault(uur_sleutel(begin), {})[lok.minute // 15] = (lok.hour, float(prijs))
+    vakken: dict = {}
+    for kw in per_uur.values():
+        if len(kw) != 4:
+            continue
+        gem = sum(p for _u, p in kw.values()) / 4
+        for k, (uur, p) in kw.items():
+            vakken.setdefault(f"{uur:02d}:{k}", []).append(p - gem)
+    return {s: round(statistics.fmean(v), 5) for s, v in vakken.items() if len(v) >= KWARTIER_MIN_UREN}
+
+
+def kwartieren_van_dag(model: dict | None, vorm: dict | None) -> list[tuple[datetime, float]]:
+    """De uurverwachting van een dag als kwartieren, met het kwartierpatroon."""
+    uit = []
+    for u in (model or {}).get("uren") or []:
+        begin = datetime.strptime(u["sleutel"], "%Y-%m-%dT%H").replace(tzinfo=timezone.utc)
+        uur = begin.astimezone(TZ).hour
+        delta = [float((vorm or {}).get(f"{uur:02d}:{k}", 0.0)) for k in range(4)]
+        midden = sum(delta) / 4
+        uit += [(begin + timedelta(minutes=15 * k), u["prijs_eur"] + delta[k] - midden) for k in range(4)]
+    return uit
+
+
+def kwartierreeks(bekend, verwacht, vanaf: datetime) -> dict | None:
+    """Eén doorlopende reeks per kwartier: eerst bekend, dan verwacht.
+
+    `bekend` en `verwacht` zijn (begin, prijs_eur)-paren. Een kwartier met een
+    bekende prijs wint altijd. Uit: start (ISO), stap in minuten, prijzen in
+    ct (None bij een gat) en de index waar de verwachting begint.
+    """
+    vanaf = vanaf.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    vanaf -= timedelta(minutes=vanaf.minute % 15)
+    punten: dict = {}
+    for begin, prijs in verwacht or []:
+        if prijs is not None:
+            punten[begin.astimezone(timezone.utc)] = (float(prijs), True)
+    for begin, prijs in bekend or []:
+        if prijs is not None:
+            punten[begin.astimezone(timezone.utc)] = (float(prijs), False)
+    punten = {t: v for t, v in punten.items() if t >= vanaf}
+    if not punten:
+        return None
+    eind = max(punten)
+    ct, eerste_verwacht, t, i = [], None, vanaf, 0
+    while t <= eind:
+        p = punten.get(t)
+        ct.append(round(p[0] * 100, 2) if p else None)
+        if p and p[1] and eerste_verwacht is None:
+            eerste_verwacht = i
+        t += timedelta(minutes=15)
+        i += 1
+    return {"start": vanaf.isoformat(), "stap_min": 15, "ct": ct, "verwacht_vanaf": eerste_verwacht}
+
+
 def snoei(prijzen: dict, vandaag: date, dagen: int = 130) -> dict:
     grens = uur_sleutel(datetime.combine(vandaag - timedelta(days=dagen), datetime.min.time(), TZ))
     return {s: p for s, p in prijzen.items() if s >= grens}

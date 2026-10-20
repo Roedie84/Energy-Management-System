@@ -33432,3 +33432,12 @@ Tests: `test_v51061_plan_lopend_blok.py` (3; de eerste faalt op v5.106.0).
 - `temperatuurfactor`: stook-/koelbehoefte (onder 16 °C / boven 24 °C) van de verwachte buitentemperatuur (`_buiten_verwacht_c` uit de uurverwachting van de klimaatprojectie) gedeeld door die op de geleerde uren, (b+1)/(ref+1), tussen 0,25 en 2. `noteer_uur` legt daarvoor bij elk uur de buitentemperatuur vast (`uurbuiten`, gelijk met `uurverbruik`; eigen buitensensor, anders de verwachting). Zolang er minder dan 3 uren met temperatuur zijn: factor 1.
 
 Tests: `test_v5107_airco_verwachting.py` (10).
+
+## v5.108.0 — prijsverwachting per kwartier, "bekend tot" hersteld
+
+- **Gevraagd 20-10 19:05:** "Waar zie ik nu de prijs voorspelling per kWh?" en "Graag maar wel per kwartier ik heb immers kwartierprijzen". De verwachting stond alleen als één regel in Geld en per uur in de attributen.
+- `prijsverwachting.kwartiervorm`: per lokaal uur en kwartier de gemiddelde afwijking tot het uurgemiddelde, uit alle bekende kwartierprijzen (prijsreeks + meetlog; minstens 5 volle uren per vak). `kwartieren_van_dag` zet de uurverwachting om naar kwartieren met dat patroon, genormaliseerd zodat het uurgemiddelde exact gelijk blijft. `kwartierreeks`: één reeks vanaf het huidige kwartier, bekend wint van verwacht, met `verwacht_vanaf`. Attribuut `kwartieren` op de sensor Prijsverwachting (niet in de recorder).
+- Cockpit: `_prijsGrafiek` in het Geld-paneel (bekend cyaan, verwachting violet gestippeld, grenslijn).
+- **Fout:** `_werk_prijsgeschiedenis_bij` telde de volle dagen over `paren`, dat na de meetloglus de laatste meetlogdag was (vandaag, half vol). `prijzen_bekend_tot` bleef `None`, dus `bekend_tot` viel terug op vandaag en morgen werd voorspeld (en als d1 gearchiveerd) terwijl de prijzen al bekend waren. Nu over de prijsreeks zelf (`_prijs_kwartierparen`).
+
+Tests: `test_v5108_prijs_per_kwartier.py` (7).

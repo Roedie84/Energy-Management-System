@@ -48421,14 +48421,9 @@ class EnergyManagementSystemCoordinator:
         """
         from . import prijsverwachting as P
 
-        entries = self._get_forecast_entries() or []
-        # kwartierprijzen (Zonneplan) of uurprijzen: per blok het aantal
-        # kwartieren dat het dekt
-        paren = []
-        for b, e, p in entries:
-            stappen = max(1, min(4, int(round((e - b).total_seconds() / 900)))) if e and b else 1
-            paren += [(b + timedelta(minutes=15 * i), p / PRICE_SCALE_FACTOR) for i in range(stappen)]
-        nieuw = P.uurprijzen_uit_kwartieren(paren)
+        reeks = self._prijs_kwartierparen()
+        nieuw = P.uurprijzen_uit_kwartieren(reeks)
+        alle_kwartieren = list(reeks)
         laag = getattr(self, "_meetlaag", None)
         if laag is not None:
             from . import kwartierenergie
@@ -48445,13 +48440,34 @@ class EnergyManagementSystemCoordinator:
                         continue
                 for sleutel, prijs in P.uurprijzen_uit_kwartieren(paren).items():
                     self.prijsgeschiedenis.setdefault(sleutel, prijs)
+                alle_kwartieren += paren
         self.prijsgeschiedenis.update(nieuw)
         self.prijsgeschiedenis = P.snoei(self.prijsgeschiedenis, now.date())
+        # v5.108.0: het kwartierpatroon binnen het uur, voor de verwachting per kwartier
+        self._prijs_kwartiervorm = P.kwartiervorm(alle_kwartieren)
+        # v5.108.0: tellen over de prijsreeks zelf. Hier stond `paren`, dat na
+        # de lus hierboven de laatste dag uit de meetlog was (vandaag, nog niet
+        # vol): "bekend tot" bleef leeg en morgen werd voorspeld terwijl die
+        # prijzen al gepubliceerd waren.
         per_dag: dict = {}
-        for b, _p in paren:
+        for b, _p in reeks:
             per_dag[dt_util.as_local(b).date()] = per_dag.get(dt_util.as_local(b).date(), 0) + 1
         volledig = [d for d, n in per_dag.items() if n >= 88]
         return max(volledig) if volledig else None
+
+    _prijs_kwartiervorm: dict | None = None
+
+    def _prijs_kwartierparen(self) -> list:
+        """De prijsreeks als (begin, prijs_eur) per kwartier.
+
+        Kwartierprijzen (Zonneplan) of uurprijzen: per blok het aantal
+        kwartieren dat het dekt.
+        """
+        paren = []
+        for b, e, p in self._get_forecast_entries() or []:
+            stappen = max(1, min(4, int(round((e - b).total_seconds() / 900)))) if e and b else 1
+            paren += [(b + timedelta(minutes=15 * i), p / PRICE_SCALE_FACTOR) for i in range(stappen)]
+        return paren
 
     async def _zaai_uit_statistiek(self) -> bool:
         """Eenmalig: de uurprijzen uit de HA-statistiek van de prijssensor."""
@@ -48564,6 +48580,7 @@ class EnergyManagementSystemCoordinator:
                         "uren": [[u["uur"], round(u["prijs_eur"] * 100, 1)] for u in (d.get("model") or {}).get("uren") or []]}
                 for datum, d in dagen.items()
             },
+            "kwartieren": self._prijs_kwartierreeks(dagen),
             "nauwkeurigheid_live": pv.get("live"),
             "backtest_21_dagen": pv.get("backtest"),
             "rijp": bool(live.get("rijp")),
@@ -48580,6 +48597,19 @@ class EnergyManagementSystemCoordinator:
                 "twee dagen vooruit over minstens veertien dagen 15% beter is dan 'zoals gisteren'."
             ),
         }
+
+    def _prijs_kwartierreeks(self, dagen: dict) -> dict | None:
+        """v5.108.0: vanaf nu per kwartier - bekende prijzen, dan de verwachting."""
+        from . import prijsverwachting as P
+
+        try:
+            verwacht = []
+            for _datum, d in sorted((dagen or {}).items()):
+                verwacht += P.kwartieren_van_dag(d.get("model"), self._prijs_kwartiervorm)
+            return P.kwartierreeks(self._prijs_kwartierparen(), verwacht, dt_util.utcnow())
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Kwartierreeks prijsverwachting mislukt", exc_info=True)
+            return None
 
     # --- dagarchief (v5.102) ----------------------------------------------
     #
