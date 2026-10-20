@@ -268,6 +268,24 @@ const modus = (tekst) => {
   return MODI.find((m) => m.test.test(t)) || { label: hoofd(t) || STREEP, kleur: "var(--tekst3)", k: "onbekend" };
 };
 
+/** Tijden van de kwartieren in het plan: van (HH:MM), opgebouwd vanaf vandaag. */
+const planTijden = (rijen) => {
+  const tijden = [];
+  let dagOffset = 0;
+  let vorigeMin = -1;
+  for (const r of rijen) {
+    const [h, mi] = String(r.van || "00:00").split(":").map((x) => parseInt(x, 10) || 0);
+    const min = h * 60 + mi;
+    if (vorigeMin >= 0 && min < vorigeMin) dagOffset += 1;
+    vorigeMin = min;
+    const d = new Date();
+    d.setHours(h, mi, 0, 0);
+    d.setDate(d.getDate() + dagOffset);
+    tijden.push(d);
+  }
+  return tijden;
+};
+
 const APPARAAT_STATUS = {
   wacht_op_goedkoop_blok: "wacht op goedkoop blok",
   laadt: "laadt",
@@ -525,10 +543,10 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .za-s { font-size: 11.5px; color: var(--tekst2); overflow-wrap: anywhere; }
 .za-l { margin: 2px 0 0 16px; padding: 0; font-size: 11.5px; color: var(--tekst2); }
 .za-l i { opacity: .75; }
-.pv-wrap { position: relative; display: grid; grid-template-columns: 34px 1fr; grid-template-rows: 130px 22px; margin-top: 2px; min-width: 0; }
+.pv-wrap { position: relative; display: grid; grid-template-columns: 34px 1fr; grid-template-rows: 150px 22px; margin-top: 2px; min-width: 0; }
 .pv-wrap .g-x { grid-column: 2; }
-.pv-bekend { fill: none; stroke: var(--cyaan); stroke-width: 2; vector-effect: non-scaling-stroke; }
-.pv-verwacht { fill: none; stroke: var(--violet); stroke-width: 2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.pv-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.pv-svg rect:hover { fill-opacity: 1; }
 .pv-grens { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(167, 139, 250, .45); }
 .pv-grens span { position: absolute; top: 2px; left: 5px; font-size: 10px; font-weight: 700; color: var(--violet); white-space: nowrap; }
 .redenen { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12.5px; color: var(--tekst2); }
@@ -1527,19 +1545,7 @@ class EmsCockpitCard extends HTMLElement {
     if (!rijen.length) return kop + `<div class="leegmelding">Nog geen kwartierplanning.</div>`;
 
     // Tijden van de kwartieren: van/dag uit het plan, opgebouwd vanaf vandaag
-    const tijden = [];
-    let dagOffset = 0;
-    let vorigeMin = -1;
-    for (const r of rijen) {
-      const [h, mi] = String(r.van || "00:00").split(":").map((x) => parseInt(x, 10) || 0);
-      const min = h * 60 + mi;
-      if (vorigeMin >= 0 && min < vorigeMin) dagOffset += 1;
-      vorigeMin = min;
-      const d = new Date();
-      d.setHours(h, mi, 0, 0);
-      d.setDate(d.getDate() + dagOffset);
-      tijden.push(d);
-    }
+    const tijden = planTijden(rijen);
 
     const prijzen = rijen.map((r) => num(r.prijs_ct));
     const pMax = Math.max(...prijzen, 1);
@@ -1958,8 +1964,12 @@ class EmsCockpitCard extends HTMLElement {
     );
   }
 
-  /* v5.108.0: prijs per kwartier vanaf nu - bekend (doorgetrokken), dan de
-     verwachting (gestippeld). Gevraagd: "Graag maar wel per kwartier". */
+  /* v5.108.0 / v5.109.0: prijs per kwartier, een week vooruit, als staven in
+     de kleuren van de planning. Gevraagd: "staafdiagram van 7 dagen vooruit
+     met kleuren als in de andere grafiek". Binnen het plan: de geplande stand.
+     Daarna (verwachting, lichter): de dagregel van het EMS - goedkoop (laagste
+     prijs van de dag + 20 % van het bereik) = laden, boven de drempel voor duur
+     = verkopen, anders slim. */
   _prijsGrafiek() {
     const r = attr(this._s("prijsverwachting"), "kwartieren");
     const ct = (r && Array.isArray(r.ct)) ? r.ct.map(num) : [];
@@ -1969,52 +1979,76 @@ class EmsCockpitCard extends HTMLElement {
     const start = new Date(r.start).getTime();
     const stap = (num(r.stap_min) || 15) * 60000;
     const vanaf = num(r.verwacht_vanaf);
-    const bodem = Math.floor(Math.min(...waarden) / 5) * 5;
-    const top = Math.max(bodem + 5, Math.ceil(Math.max(...waarden) / 5) * 5);
-    const bereik = top - bodem;
-    const x = (i) => ((i + 0.5) / n) * 100;
-    const y = (v) => 100 - ((v - bodem) / bereik) * 100;
-    const lijnen = (van, tot) => {
-      const delen = [];
-      let deel = [];
-      for (let i = Math.max(0, van); i < Math.min(n, tot); i++) {
-        if (ct[i] == null) {
-          if (deel.length > 1) delen.push(deel.join(" "));
-          deel = [];
-          continue;
-        }
-        deel.push(`${x(i).toFixed(2)},${y(ct[i]).toFixed(2)}`);
-      }
-      if (deel.length > 1) delen.push(deel.join(" "));
-      return delen;
+    const tijd = (i) => new Date(start + i * stap);
+    // de geplande stand per kwartier
+    const plan = new Map();
+    const rijen = this._planRijen();
+    planTijden(rijen).forEach((d, i) => plan.set(Math.round(d.getTime() / stap), rijen[i].modus));
+    // per dag: de goedkope grens (laagste + 20 % van het bereik)
+    const perDag = new Map();
+    ct.forEach((v, i) => {
+      if (v == null) return;
+      const dag = tijd(i).toDateString();
+      const g = perDag.get(dag) || { min: v, max: v };
+      perDag.set(dag, { min: Math.min(g.min, v), max: Math.max(g.max, v) });
+    });
+    const drempel = num(attr(this._s("uitleg"), "expensive_price_threshold"));
+    const stand = (i) => {
+      const gepland = plan.get(Math.round(tijd(i).getTime() / stap));
+      if (gepland != null) return { m: modus(gepland), plan: true };
+      const g = perDag.get(tijd(i).toDateString());
+      if (g && ct[i] <= g.min + 0.2 * (g.max - g.min)) return { m: modus("laden)"), plan: false };
+      if (drempel != null && ct[i] >= drempel * 100) return { m: modus("verkopen"), plan: false };
+      return { m: modus("slim"), plan: false };
     };
-    const grens = vanaf == null ? n : vanaf;
-    const bekend = lijnen(0, grens).map((p) => `<polyline class="pv-bekend" points="${p}"/>`).join("");
-    const verwacht = vanaf == null ? "" : lijnen(vanaf - 1, n).map((p) => `<polyline class="pv-verwacht" points="${p}"/>`).join("");
+    const pMin = Math.min(0, ...waarden);
+    const top = Math.max(10, Math.ceil(Math.max(...waarden) / 10) * 10);
+    const bodem = pMin < 0 ? Math.floor(pMin / 5) * 5 : 0;
+    const bereik = Math.max(top - bodem, 1);
+    const y = (v) => 100 - ((v - bodem) / bereik) * 100;
+    const nul = y(0);
+    const staven = ct.map((v, i) => {
+      if (v == null) return "";
+      const s = stand(i);
+      const verwacht = vanaf != null && i >= vanaf;
+      const y1 = Math.min(y(v), nul);
+      const h = Math.max(Math.abs(nul - y(v)), 0.6);
+      const d = tijd(i);
+      const tip = `${d.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" })} ` +
+        `${d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })} \u00b7 ${fmt(v, 1)} ct \u00b7 ` +
+        `${s.m.label}${s.plan ? "" : verwacht ? " (verwachting)" : " (geen plan)"}`;
+      return `<rect x="${(i + 0.1).toFixed(1)}" y="${y1.toFixed(2)}" width="0.8" height="${h.toFixed(2)}" ` +
+        `fill="${s.m.kleur}" fill-opacity="${verwacht ? 0.45 : 0.9}"><title>${esc(tip)}</title></rect>`;
+    }).join("");
+    const x = (i) => ((i + 0.5) / n) * 100;
     const yLab = [0, 0.5, 1].map((f) => `<span style="top:${((1 - f) * 100).toFixed(1)}%">${fmt(bodem + f * bereik)}</span>`).join("");
     const yRaster = [0.5].map((f) => `<div class="g-raster" style="top:${((1 - f) * 100).toFixed(1)}%"></div>`).join("");
     const xLab = [];
-    const elk = n > 200 ? 12 : 6;
     for (let i = 0; i < n; i++) {
-      const d = new Date(start + i * stap);
-      if (d.getMinutes() !== 0) continue;
-      const uur = d.getHours();
-      if (uur === 0) xLab.push(`<span class="dag" style="left:${x(i).toFixed(2)}%">${esc(d.toLocaleDateString("nl-NL", { weekday: "short" }))}</span>`);
-      else if (uur % elk === 0) xLab.push(`<span style="left:${x(i).toFixed(2)}%">${String(uur).padStart(2, "0")}:00</span>`);
+      const d = tijd(i);
+      if (d.getMinutes() !== 0 || d.getHours() !== 0) continue;
+      xLab.push(`<span class="dag" style="left:${x(i).toFixed(2)}%">${esc(d.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric" }))}</span>`);
     }
     const scheiding = vanaf != null && vanaf > 0
-      ? `<div class="pv-grens" style="left:${x(vanaf - 0.5).toFixed(2)}%"><span>verwachting</span></div>`
+      ? `<div class="pv-grens" style="left:${(vanaf / n * 100).toFixed(2)}%"><span>verwachting</span></div>`
       : "";
     return (
+      `<div class="pl-legenda" style="margin-top:2px">` +
+      `<span><i style="background:var(--groen)"></i>laden</span>` +
+      `<span><i style="background:var(--oranje)"></i>verkopen</span>` +
+      `<span><i style="background:var(--blauw)"></i>sparen</span>` +
+      `<span><i style="background:var(--violet)"></i>slim</span>` +
+      `<span><i style="background:var(--violet);opacity:.45"></i>verwachting</span></div>` +
       `<div class="pv-wrap">` +
       `<div class="g-y">${yLab}</div>` +
       `<div class="g-plot">${yRaster}` +
-      `<svg class="g-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${bekend}${verwacht}</svg>` +
+      `<svg class="pv-svg" viewBox="0 0 ${n} 100" preserveAspectRatio="none" role="img" aria-label="prijs per kwartier, een week vooruit">${staven}</svg>` +
       `${scheiding}</div>` +
       `<div class="g-x">${xLab.join("")}</div>` +
       `</div>` +
-      `<div class="meternoot">Prijs per kwartier vanaf nu (ct/kWh). Doorgetrokken: bekende prijs. ` +
-      `Gestippeld: verwachting, met het kwartierpatroon van de afgelopen weken - alleen meten, stuurt niets.</div>`
+      `<div class="meternoot">Prijs per kwartier vanaf nu (ct/kWh), een week vooruit. Vol: bekende prijs in de kleur van de geplande stand. ` +
+      `Licht: verwachting, gekleurd naar de dagregel (goedkoopste deel van de dag = laden, boven de drempel voor duur = verkopen, anders slim). ` +
+      `De verwachting is alleen meten en stuurt niets.</div>`
     );
   }
 

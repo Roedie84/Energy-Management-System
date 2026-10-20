@@ -2976,7 +2976,12 @@ class PrijsverwachtingSensor(_V5100Sensor):
 
     @property
     def native_value(self):
-        dagen = (self._coordinator.get_prijsverwachting() or {}).get("dagen") or {}
+        from .prijsverwachting import KAART_VOORUIT
+
+        alle = (self._coordinator.get_prijsverwachting() or {}).get("dagen") or {}
+        # v5.109.0: de week vooruit staat in de grafiek; de staat blijft bij
+        # hooguit drie dagen vooruit, zoals sinds v5.100
+        dagen = {d: v for d, v in alle.items() if (v.get("vooruit_dagen") or 0) <= KAART_VOORUIT}
         if not dagen:
             return None
         laatste = dagen[sorted(dagen)[-1]]

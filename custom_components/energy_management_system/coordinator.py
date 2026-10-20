@@ -48571,7 +48571,9 @@ class EnergyManagementSystemCoordinator:
         dagen = pv.get("dagen") or {}
         live = (pv.get("live") or {}).get("d2") or {}
         return {
-            **P.kaart({d: v.get("model") for d, v in dagen.items() if v.get("model")}, pv.get("backtest"), pv.get("live"),
+            **P.kaart({d: v.get("model") for d, v in dagen.items()
+                       if v.get("model") and (v.get("vooruit") or 0) <= P.KAART_VOORUIT},
+                      pv.get("backtest"), pv.get("live"),
                       fout=pv.get("fout"), opnieuw_om=pv.get("opnieuw_om")),
             "beschikbaar": bool(pv.get("beschikbaar")),
             "dagen": {

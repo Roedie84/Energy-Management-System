@@ -1,3 +1,16 @@
+EMS v5.109.0 - prijzen een week vooruit als staafdiagram
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De grafiek onder "Prijsverwachting" (cockpit, paneel Geld) is nu een
+  staafdiagram per kwartier, zeven dagen vooruit.
+- Kleuren zoals in de planning: binnen het plan de geplande stand (laden,
+  verkopen, sparen, slim). Daarna, voor de verwachte prijzen, lichter en
+  naar de dagregel: het goedkoopste deel van de dag laden, boven de drempel
+  voor duur verkopen, anders slim.
+- Beweeg over een staaf voor dag, tijd, prijs en stand.
+- De staat van de sensor blijft de verwachting voor drie dagen vooruit.
+
 EMS v5.108.0 - prijsverwachting per kwartier als grafiek
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

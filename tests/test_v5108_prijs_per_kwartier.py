@@ -81,5 +81,7 @@ def test_bekend_tot_volgt_de_prijsreeks_niet_de_meetlog():
 
 def test_cockpit_tekent_de_kwartiergrafiek():
     assert "_prijsGrafiek()" in JS and 'attr(this._s("prijsverwachting"), "kwartieren")' in JS
-    assert ".pv-verwacht" in JS and "stroke-dasharray" in JS
-    assert all(ord(ch) < 128 for ch in JS[JS.index("_prijsGrafiek() {"):JS.index("/* ---- bediening ---- */")])
+    assert "<rect " in JS[JS.index("_prijsGrafiek() {"):]   # v5.109.0: staven
+    begin = JS.index("_prijsGrafiek() {")
+    stuk = JS[begin:JS.index("\n  }\n", begin)]
+    assert len(stuk) > 2000 and all(ord(ch) < 128 for ch in stuk)

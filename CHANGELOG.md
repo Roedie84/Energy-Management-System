@@ -33441,3 +33441,11 @@ Tests: `test_v5107_airco_verwachting.py` (10).
 - **Fout:** `_werk_prijsgeschiedenis_bij` telde de volle dagen over `paren`, dat na de meetloglus de laatste meetlogdag was (vandaag, half vol). `prijzen_bekend_tot` bleef `None`, dus `bekend_tot` viel terug op vandaag en morgen werd voorspeld (en als d1 gearchiveerd) terwijl de prijzen al bekend waren. Nu over de prijsreeks zelf (`_prijs_kwartierparen`).
 
 Tests: `test_v5108_prijs_per_kwartier.py` (7).
+
+## v5.109.0 — prijsverwachting een week vooruit, als staven in de plankleuren
+
+- **Gevraagd 20-10 19:18:** "Ik wil een staafdiagram van 7 dagen voor uit met kleuren als in de andere grafiek".
+- `prijsverwachting`: `VOORUIT_DAGEN` 8 (Open-Meteo), `VERWACHT_DAGEN` 7 in `maak_verwachting`. `KAART_VOORUIT` 3: kaarttekst en sensorstaat blijven bij hooguit drie dagen vooruit (zoals v5.100). Archief en live-beoordeling ongewijzigd (alleen d1/d2).
+- Cockpit `_prijsGrafiek`: SVG-staven per kwartier (`viewBox 0 0 n 100`), legenda zoals de planning. Kleur binnen het kwartierplan: `modus(r.modus)` op tijd gekoppeld via de nieuwe `planTijden` (ook gebruikt door `_planning`). Daarbuiten (fill-opacity .45): goedkoop = dagminimum + 20 % van het dagbereik (de dagdrempel van het laadblok) -> laden, >= `expensive_price_threshold` -> verkopen, anders slim. Tooltip per staaf.
+
+Tests: `test_v5108_prijs_per_kwartier.py` bijgewerkt.

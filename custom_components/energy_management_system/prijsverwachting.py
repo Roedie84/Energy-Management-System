@@ -45,7 +45,12 @@ OPEN_METEO_URL = (
     "&past_days={verleden}&forecast_days={vooruit}&timezone=UTC"
 )
 VERLEDEN_DAGEN = 92
-VOORUIT_DAGEN = 4
+#: v5.109.0: een week vooruit (gevraagd: "staafdiagram van 7 dagen vooruit").
+VOORUIT_DAGEN = 8
+#: Zo ver vooruit wordt verwacht (dagen na vandaag).
+VERWACHT_DAGEN = 7
+#: De kaart en de staat van de sensor blijven bij overmorgen + 1 (zoals v5.100).
+KAART_VOORUIT = 3
 RIDGE = 0.5
 NIVEAU_DAGEN = 7
 #: Zo veel uren met prijs en weer minimaal voordat er een model is.
@@ -497,7 +502,7 @@ def snoei(prijzen: dict, vandaag: date, dagen: int = 130) -> dict:
 
 def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date) -> dict:
     """Train op alles wat bekend is en verwacht de dagen na `bekend_tot`
-    (de laatste dag met gepubliceerde prijzen) tot en met drie dagen vooruit.
+    (de laatste dag met gepubliceerde prijzen) tot en met zeven dagen vooruit.
 
     Geeft per datum de verwachting en de 'zoals gisteren'-verwachting, en
     hoeveel dagen vooruit die datum lag (voor het archief).
@@ -510,7 +515,7 @@ def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date)
         return {"beschikbaar": False, "reden": "model niet op te lossen"}
     dagen = {}
     dag = bekend_tot + timedelta(days=1)
-    while dag <= vandaag + timedelta(days=3):
+    while dag <= vandaag + timedelta(days=VERWACHT_DAGEN):
         v = verwacht_dag(coefs, weer, prijzen, dag)
         if v:
             dagen[dag.isoformat()] = {"model": v, "naief": naief(prijzen, dag),
