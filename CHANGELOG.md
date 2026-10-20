@@ -33459,3 +33459,7 @@ Tests: `test_v5108_prijs_per_kwartier.py` bijgewerkt.
 - `gevoeligheid` krijgt `buurlanden_wind_ct_per_10_kmh`, `buurlanden_zon_ct_per_100_wm2`, `gas_ct_per_10_ct_m3`; `gas_dagen` telt de dagen met gasprijs.
 
 Tests: `test_v5110_prijs_buren_feest_gas.py` (7).
+
+## v5.111.1 — OilPriceAPI verwijderd
+
+- **Gevraagd 20-10 19:49:** "Verwijder alles maar met de api welke ik met je gedeeld heb". v5.111.0 (`_ttf_per_dag`, `ttf_uit_antwoord`, `kies_gas`, `gas_bron`, `test_v5111_ttf.py`) teruggedraaid; de gassprong rekent weer alleen met de Zonneplan-gasprijs (v5.110.0).

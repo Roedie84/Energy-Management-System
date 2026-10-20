@@ -1,3 +1,11 @@
+EMS v5.111.1 - OilPriceAPI weer verwijderd
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De koppeling met OilPriceAPI (TTF-gasprijs, v5.111.0) is er weer uit. De
+  prijsverwachting gebruikt de Zonneplan-gasprijs, zoals in v5.110.0.
+- Staat er `oilpriceapi_key` in secrets.yaml, dan kan die regel weg.
+
 EMS v5.110.0 - prijsverwachting met buurlanden, feestdagen en gasprijs
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
