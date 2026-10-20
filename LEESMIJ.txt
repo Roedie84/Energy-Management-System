@@ -1,3 +1,18 @@
+EMS v5.112.0 - hoe goed is de prijsverwachting, en bijstellen op de eigen fout
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Onder de prijsgrafiek (cockpit, paneel Geld) staat nu "Hoe goed is de
+  verwachting?": per termijn (morgen, overmorgen) hoeveel ct de verwachting
+  gemiddeld ernaast zat, tegen "zoals gisteren", en hoeveel van de vier
+  duurste en goedkoopste uren hij goed had. Daaronder de terugtoets over de
+  afgelopen weken, een staafdiagram van de afwijking per dag en een tabel
+  van de laatste tien dagen (live, aangevuld met de terugtoets).
+- Bijstellen: zat de verwachting de laatste week op een deel van de dag
+  steeds te hoog of te laag, dan schuift de volgende verwachting dat deel op
+  (per blok van drie uur, voorzichtig bij weinig dagen, hooguit 5 ct). Of
+  dat helpt, staat er live bij: met en zonder bijstelling.
+
 EMS v5.111.1 - OilPriceAPI weer verwijderd
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

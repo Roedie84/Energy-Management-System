@@ -332,7 +332,26 @@ def backtest(prijzen: dict, weer: dict, dagen: int = 21, vooruit: int = 2,
         mv, mn = vergelijk(v, echt), vergelijk(n, echt)
         if mv and mn:
             uitkomsten.append({"model": mv, "naief": mn})
-    return beoordeel(uitkomsten)
+    uit = beoordeel(uitkomsten)
+    uit["per_dag"] = [dagrij(u) for u in uitkomsten]   # v5.112.0
+    return uit
+
+
+def dagrij(u: dict) -> dict:
+    """v5.112.0: één vergeleken dag voor het dashboard, in ct."""
+    m, n, r = u["model"], u["naief"], u.get("ruw")
+    rij = {
+        "datum": m.get("datum"),
+        "verwacht_ct": round(m["verwacht_gemiddeld_eur"] * 100, 1),
+        "echt_ct": round(m["echt_gemiddeld_eur"] * 100, 1),
+        "afwijking_ct": round(m["gemiddelde_afwijking_eur"] * 100, 2),
+        "zoals_gisteren_ct": round(n["gemiddelde_afwijking_eur"] * 100, 2),
+        "duurste_geraakt": m["duurste_uren_geraakt"],
+        "goedkoopste_geraakt": m["goedkoopste_uren_geraakt"],
+    }
+    if r:
+        rij["zonder_bijstelling_ct"] = round(r["gemiddelde_afwijking_eur"] * 100, 2)
+    return rij
 
 
 def beoordeel(uitkomsten: list[dict]) -> dict:
@@ -393,7 +412,8 @@ def uitpakken(kort: dict | None) -> dict | None:
     return samenvatting(date.fromisoformat(kort["datum"]), uren)
 
 
-def archiveer(archief: dict, datum: str, vooruit: int, model: dict | None, zoals_gisteren: dict | None) -> None:
+def archiveer(archief: dict, datum: str, vooruit: int, model: dict | None, zoals_gisteren: dict | None,
+              ruw: dict | None = None) -> None:
     """De EERSTE verwachting per datum en vooruitkijktijd bewaren; een latere
     verwachting voor dezelfde dag en dezelfde termijn overschrijft hem niet
     (anders toets je achteraf de beste in plaats van die van toen)."""
@@ -403,6 +423,8 @@ def archiveer(archief: dict, datum: str, vooruit: int, model: dict | None, zoals
     sleutel = f"d{vooruit}"
     if sleutel not in plek:
         plek[sleutel] = {"model": compact(model), "naief": compact(zoals_gisteren)}
+        if ruw is not None:
+            plek[sleutel]["ruw"] = compact(ruw)   # v5.112.0: zonder bijstelling
 
 
 def ruim_archief_op(archief: dict, vandaag: date, dagen: int = 45) -> None:
@@ -426,10 +448,82 @@ def live_beoordeling(archief: dict, prijzen: dict) -> dict:
                 continue
             mv, mn = vergelijk(m, echt), vergelijk(n, echt)
             if mv and mn:
-                uitkomsten.append({"model": mv, "naief": mn})
+                r = uitpakken(plek.get("ruw"))
+                uitkomsten.append({"model": mv, "naief": mn, "ruw": vergelijk(r, echt) if r else None})
         uit[sleutel] = beoordeel(uitkomsten)
         uit[sleutel]["laatste"] = uitkomsten[-1]["model"] if uitkomsten else None
+        uit[sleutel]["per_dag"] = [dagrij(u) for u in uitkomsten][-14:]
+        ruw = [u["ruw"]["gemiddelde_afwijking_eur"] for u in uitkomsten if u.get("ruw")]
+        if ruw:
+            # hielp de bijstelling? dezelfde dagen, met en zonder
+            met = [u["model"]["gemiddelde_afwijking_eur"] for u in uitkomsten if u.get("ruw")]
+            uit[sleutel]["bijgesteld_dagen"] = len(ruw)
+            uit[sleutel]["zonder_bijstelling_ct"] = round(statistics.fmean(ruw) * 100, 2)
+            uit[sleutel]["met_bijstelling_ct"] = round(statistics.fmean(met) * 100, 2)
     return uit
+
+
+# --- bijstellen op de eigen fout (v5.112.0) -----------------------------
+#
+# Gevraagd 20-10: "en ook terug rekenen". Zat de verwachting de laatste week
+# structureel te laag of te hoog op een deel van de dag, dan schuift de
+# volgende verwachting dat deel op. Per blok van drie uur, per termijn
+# (morgen, overmorgen; verder dan dat als overmorgen), gemeten op de
+# verwachting ZONDER bijstelling - anders stuurt de bijstelling zichzelf bij.
+# Afgezwakt bij weinig dagen (n / (n + 3)) en hooguit 5 ct.
+
+BIJSTEL_DAGEN = 7
+BIJSTEL_MAX_EUR = 0.05
+BIJSTEL_DEMPING = 3
+
+
+def bijstelling(archief: dict, prijzen: dict, vooruit: int, vandaag: date) -> dict:
+    """Gemiddelde fout (echt - verwacht) per blok van drie uur, lokaal."""
+    sleutel = f"d{min(max(vooruit, 1), 2)}"
+    per_blok: dict = {}
+    dagen = 0
+    for dag in range(1, BIJSTEL_DAGEN + 1):
+        datum = (vandaag - timedelta(days=dag)).isoformat()
+        plek = (archief.get(datum) or {}).get(sleutel) or {}
+        kort = plek.get("ruw") or plek.get("model")
+        if not kort:
+            continue
+        paren = [(s, p, prijzen[s]) for s, p in kort.get("uren") or [] if s in prijzen]
+        if len(paren) < 20:
+            continue
+        dagen += 1
+        for s, v, e in paren:
+            per_blok.setdefault(_lokaal(s).hour // 3, []).append(e - v)
+    if not dagen:
+        return {"dagen": 0, "blokken_ct": [0.0] * 8}
+    demping = dagen / (dagen + BIJSTEL_DEMPING)
+    blokken = []
+    for b in range(8):
+        f = statistics.fmean(per_blok[b]) * demping if per_blok.get(b) else 0.0
+        blokken.append(max(-BIJSTEL_MAX_EUR, min(BIJSTEL_MAX_EUR, f)))
+    return {"dagen": dagen, "blokken_ct": [round(f * 100, 2) for f in blokken],
+            "gemiddeld_ct": round(statistics.fmean(blokken) * 100, 2)}
+
+
+def pas_bijstelling_toe(model: dict | None, bij: dict | None) -> dict | None:
+    if not model or not bij or not bij.get("dagen"):
+        return model
+    blokken = bij["blokken_ct"]
+    uren = [{**u, "prijs_eur": round(u["prijs_eur"] + blokken[int(u["uur"][:2]) // 3] / 100, 4)}
+            for u in model.get("uren") or []]
+    return samenvatting(date.fromisoformat(model["datum"]), uren)
+
+
+def stel_bij(dagen: dict, archief: dict, prijzen: dict, vandaag: date) -> dict:
+    """Stelt elke verwachte dag bij (model), met het origineel als `ruw`."""
+    bij = {v: bijstelling(archief, prijzen, v, vandaag) for v in (1, 2)}
+    # nog niets voor overmorgen gemeten: die van morgen
+    gebruik = {1: bij[1], 2: bij[2] if bij[2].get("dagen") else bij[1]}
+    for d in (dagen or {}).values():
+        if d.get("model") and "ruw" not in d:
+            d["ruw"] = d["model"]
+            d["model"] = pas_bijstelling_toe(d["model"], gebruik[min(max(d.get("vooruit") or 1, 1), 2)])
+    return {"d1": bij[1], "d2": bij[2]}
 
 
 def uurprijzen_uit_kwartieren(kwartieren) -> dict:

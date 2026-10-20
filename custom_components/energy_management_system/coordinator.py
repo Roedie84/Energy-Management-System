@@ -48556,9 +48556,14 @@ class EnergyManagementSystemCoordinator:
             uit = await self.hass.async_add_executor_job(
                 _reken_prijsverwachting, P, prijzen, weer, vandaag, bekend_tot or vandaag, doe_backtest, gas
             )
+            # v5.112.0: bijstellen op de eigen fout van de laatste week
+            uit["bijstelling"] = await self.hass.async_add_executor_job(
+                P.stel_bij, uit.get("dagen"), self.prijsverwachting_archief, prijzen, vandaag
+            )
             for datum, d in (uit.get("dagen") or {}).items():
                 if d.get("vooruit") in (1, 2):
-                    P.archiveer(self.prijsverwachting_archief, datum, d["vooruit"], d.get("model"), d.get("naief"))
+                    P.archiveer(self.prijsverwachting_archief, datum, d["vooruit"], d.get("model"), d.get("naief"),
+                                d.get("ruw"))
             P.ruim_archief_op(self.prijsverwachting_archief, vandaag)
             live = await self.hass.async_add_executor_job(
                 P.live_beoordeling, self.prijsverwachting_archief, prijzen
@@ -48614,6 +48619,7 @@ class EnergyManagementSystemCoordinator:
             "backtest_21_dagen": pv.get("backtest"),
             "rijp": bool(live.get("rijp")),
             "gevoeligheid": pv.get("gevoeligheid"),
+            "bijstelling": pv.get("bijstelling"),
             "gemaakt": pv.get("gemaakt"),
             "prijzen_bekend_tot": pv.get("prijzen_bekend_tot"),
             "uren_prijsgeschiedenis": pv.get("uren_prijsgeschiedenis"),

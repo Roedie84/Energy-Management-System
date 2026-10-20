@@ -33463,3 +33463,11 @@ Tests: `test_v5110_prijs_buren_feest_gas.py` (7).
 ## v5.111.1 — OilPriceAPI verwijderd
 
 - **Gevraagd 20-10 19:49:** "Verwijder alles maar met de api welke ik met je gedeeld heb". v5.111.0 (`_ttf_per_dag`, `ttf_uit_antwoord`, `kies_gas`, `gas_bron`, `test_v5111_ttf.py`) teruggedraaid; de gassprong rekent weer alleen met de Zonneplan-gasprijs (v5.110.0).
+
+## v5.112.0 — prestatie van de prijsverwachting en bijstelling op de eigen fout
+
+- **Gevraagd 20-10 19:54:** "Ja graag [de cijfers onder de grafiek] en ik wil de performance zien hoe goed de voorspellingen zijn en ook terug rekenen".
+- `bijstelling(archief, prijzen, vooruit, vandaag)`: gemiddelde (echt - verwacht) per lokaal blok van drie uur over de laatste 7 dagen, gemeten op de ONbijgestelde verwachting (`ruw` in het archief, oudere dagen `model`), gedempt n/(n+3), begrensd op 5 ct. `stel_bij` past dat toe op elke verwachte dag (d1, d2; verder als d2, zonder d2-metingen als d1) en bewaart het origineel als `ruw`; `archiveer` bewaart `ruw` mee. `live_beoordeling` geeft `per_dag` (laatste 14) en, op dagen met `ruw`, `met_bijstelling_ct` tegen `zonder_bijstelling_ct`. `backtest` geeft `per_dag`. Attribuut `bijstelling`.
+- Cockpit `_prijsKwaliteit`: regels morgen/overmorgen (live), terugtoets, bijstelling; staven per dag (afwijking tegen zoals gisteren, terugtoets lichter); tabel laatste 10 dagen.
+
+Tests: `test_v5112_prijs_prestatie.py` (6).

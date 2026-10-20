@@ -547,6 +547,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .pv-wrap .g-x { grid-column: 2; }
 .pv-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .pv-svg rect:hover { fill-opacity: 1; }
+.pv-klein { grid-template-rows: 80px 20px; }
 .pv-grens { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(167, 139, 250, .45); }
 .pv-grens span { position: absolute; top: 2px; left: 5px; font-size: 10px; font-weight: 700; color: var(--violet); white-space: nowrap; }
 .redenen { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12.5px; color: var(--tekst2); }
@@ -1959,6 +1960,7 @@ class EmsCockpitCard extends HTMLElement {
     return (
       `<div class="za-blok">${regels}` +
       this._prijsGrafiek() +
+      this._prijsKwaliteit() +
       (keuzes ? `<div class="za-s" style="margin-top:6px">Achteraf niet de beste (${esc(gisteren.datum || "")}):</div><ul class="za-l">${keuzes}</ul>` : "") +
       `</div>`
     );
@@ -2049,6 +2051,81 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="meternoot">Prijs per kwartier vanaf nu (ct/kWh), een week vooruit. Vol: bekende prijs in de kleur van de geplande stand. ` +
       `Licht: verwachting, gekleurd naar de dagregel (goedkoopste deel van de dag = laden, boven de drempel voor duur = verkopen, anders slim). ` +
       `De verwachting is alleen meten en stuurt niets.</div>`
+    );
+  }
+
+  /* v5.112.0: hoe goed is de prijsverwachting? Gevraagd: "ik wil de
+     performance zien hoe goed de voorspellingen zijn en ook terug rekenen".
+     Live (bewaarde verwachtingen tegen de echte prijzen), de terugtoets over
+     de afgelopen weken en de bijstelling op de eigen fout. */
+  _prijsKwaliteit() {
+    const s = this._s("prijsverwachting");
+    if (!s) return "";
+    const live = attr(s, "nauwkeurigheid_live") || {};
+    const bt = attr(s, "backtest_21_dagen") || {};
+    const bij = attr(s, "bijstelling") || {};
+    const ct = (v) => (num(v) == null ? STREEP : `${fmt(v, 1)} ct`);
+    const regel = (naam, r) => {
+      if (!r || !num(r.dagen)) return `<div class="za-s"><b>${esc(naam)}</b>: nog geen dagen gemeten</div>`;
+      const beter = num(r.winst_procent);
+      return (
+        `<div class="za-s"><b>${esc(naam)}</b>: gemiddeld ${ct(r.afwijking_model_ct)} ernaast, zoals gisteren ${ct(r.afwijking_zoals_gisteren_ct)}` +
+        (beter != null ? ` (${beter >= 0 ? fmt(beter) + "% beter" : fmt(-beter) + "% slechter"})` : "") +
+        ` over ${fmt(r.dagen)} dag${r.dagen === 1 ? "" : "en"} \u00b7 duurste uren ${fmt(r.duurste_uren_geraakt_van_4, 1)}/4, goedkoopste ${fmt(r.goedkoopste_uren_geraakt_van_4, 1)}/4` +
+        (num(r.bijgesteld_dagen) ? ` \u00b7 met bijstelling ${ct(r.met_bijstelling_ct)}, zonder ${ct(r.zonder_bijstelling_ct)}` : "") +
+        (r.rijp ? " \u00b7 rijp" : "") +
+        `</div>`
+      );
+    };
+    const bijRegel = ["d1", "d2"].map((k) => {
+      const b = bij[k] || {};
+      if (!num(b.dagen)) return "";
+      return `${k === "d1" ? "morgen" : "overmorgen"} ${fmtTeken(b.gemiddeld_ct, 1)} ct (uit ${fmt(b.dagen)} dagen)`;
+    }).filter(Boolean).join(", ");
+    // per dag: live (morgen) aangevuld met de terugtoets
+    const rijenLive = ((live.d1 || {}).per_dag || []).map((r) => ({ ...r, soort: "live" }));
+    const gezien = new Set(rijenLive.map((r) => r.datum));
+    const rijenBt = (bt.per_dag || []).filter((r) => !gezien.has(r.datum)).map((r) => ({ ...r, soort: "terugtoets" }));
+    const rijen = [...rijenBt, ...rijenLive].sort((a, b) => String(a.datum).localeCompare(String(b.datum))).slice(-14);
+    let grafiek = "";
+    if (rijen.length) {
+      const top = Math.max(2, ...rijen.map((r) => Math.max(num(r.afwijking_ct) || 0, num(r.zoals_gisteren_ct) || 0)));
+      const n = rijen.length;
+      const staaf = (i, v, plek, kleur, extra) => {
+        const h = ((num(v) || 0) / top) * 100;
+        return `<rect x="${(i + 0.12 + plek * 0.38).toFixed(2)}" y="${(100 - h).toFixed(2)}" width="0.36" height="${Math.max(h, 0.5).toFixed(2)}" fill="${kleur}"${extra}/>`;
+      };
+      const staven = rijen.map((r, i) =>
+        staaf(i, r.afwijking_ct, 0, "var(--violet)", r.soort === "terugtoets" ? ' fill-opacity="0.55"' : "") +
+        staaf(i, r.zoals_gisteren_ct, 1, "var(--tekst3)", ' fill-opacity="0.6"')
+      ).join("");
+      const xLab = rijen.map((r, i) => `<span style="left:${(((i + 0.5) / n) * 100).toFixed(2)}%">${esc(String(r.datum).slice(8, 10))}</span>`).join("");
+      grafiek =
+        `<div class="pl-legenda" style="margin-top:4px"><span><i style="background:var(--violet)"></i>afwijking verwachting</span>` +
+        `<span><i style="background:var(--tekst3)"></i>zoals gisteren</span><span><i style="background:var(--violet);opacity:.55"></i>terugtoets</span></div>` +
+        `<div class="pv-wrap pv-klein"><div class="g-y"><span style="top:0%">${fmt(top, 0)}</span><span style="top:100%">0</span></div>` +
+        `<div class="g-plot"><svg class="pv-svg" viewBox="0 0 ${n} 100" preserveAspectRatio="none" role="img" aria-label="afwijking per dag in ct">${staven}</svg></div>` +
+        `<div class="g-x">${xLab}</div></div>`;
+    }
+    const tabel = rijen.length
+      ? `<div class="tabelvak"><table class="tabel"><thead><tr><th>Dag</th><th class="r">Verwacht</th><th class="r">Echt</th>` +
+        `<th class="r">Ernaast</th><th class="r">Zoals gisteren</th><th class="r">Duurst</th><th></th></tr></thead><tbody>` +
+        rijen.slice(-10).reverse().map((r) =>
+          `<tr><td>${esc(String(r.datum).slice(5).split("-").reverse().join("-"))}</td><td class="r">${fmt(r.verwacht_ct, 1)}</td>` +
+          `<td class="r">${fmt(r.echt_ct, 1)}</td><td class="r">${fmt(r.afwijking_ct, 1)}</td><td class="r">${fmt(r.zoals_gisteren_ct, 1)}</td>` +
+          `<td class="r">${fmt(r.duurste_geraakt)}/4</td><td>${esc(r.soort)}</td></tr>`
+        ).join("") +
+        `</tbody></table></div>`
+      : "";
+    return (
+      `<div class="za-k" style="margin-top:6px">Hoe goed is de verwachting?</div>` +
+      regel("Morgen (live)", live.d1) +
+      regel("Overmorgen (live)", live.d2) +
+      regel("Terugtoets", bt) +
+      `<div class="za-s"><b>Bijstelling op de eigen fout</b>: ${bijRegel ? esc(bijRegel) : "nog niets bij te stellen"}</div>` +
+      grafiek + tabel +
+      `<div class="meternoot">Ernaast: gemiddelde afwijking per uur in ct/kWh. Live: de verwachting zoals hij toen was, tegen de echte prijs. ` +
+      `Terugtoets: teruggerekend over de afgelopen weken met het gemeten weer (de fout in het weerbericht zit daar niet in).</div>`
     );
   }
 
