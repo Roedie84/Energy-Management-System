@@ -3505,6 +3505,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "prijsverwachting_archief": {"type": "plain"},
     # v5.113.2: de laatste prijsreeks, voor een storing bij de prijsbron.
     "prijs_forecast_cache": {"type": "plain"},
+    # v5.114.0: laatste stand van zonvoorspellingen, dagtotalen, gasprijs, CO2.
+    "bronbuffer_opslag": {"type": "plain"},
     "keuzeoordelen": {"type": "plain"},
     "repetitie_2027": {"type": "plain"},
     # v5.102: het dagarchief - één regel per dag, blijvend.

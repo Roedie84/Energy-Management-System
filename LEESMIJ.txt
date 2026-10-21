@@ -1,3 +1,24 @@
+EMS v5.114.0 - bronnen die even wegvallen houden hun laatste waarde
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Na de prijzen (v5.113.2) nu ook de andere bronnen die een tijd geldig
+  blijven. Valt de dienst erachter even weg, dan geldt de laatste waarde nog:
+  - tot middernacht: de zonvoorspellingen (vandaag, morgen, dag 3-7, de
+    tweede zonvoorspelling, inclusief de verwachting per half uur), de
+    gasprijs en de dagtotalen in euro en m3 van Zonneplan;
+  - een uur: de rest van de zon vandaag;
+  - twee uur: de CO2-intensiteit;
+  - de buitentemperatuurverwachting: de vorige verwachting voor de uren die
+    nog komen.
+- Metingen (vermogens, laadstand, meterstanden) nooit: een oude meting is
+  erger dan geen meting.
+- Prijzen: zonder bewaarde kwartierreeks gaf de terugval uurprijzen. Nu
+  per kwartier: de uurprijs met het kwartierpatroon van de afgelopen weken
+  (een schatting; de echte kwartierprijzen zodra de bewaarde reeks er is).
+- De buffer blijft bewaard over een herstart. In het logboek staat één
+  regel als een bron uit de buffer komt; de diagnose toont welke.
+
 EMS v5.113.2 - laatst bekende prijzen bij een storing van Zonneplan
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -33500,3 +33500,15 @@ Tests: `test_v51131_prijs_grenzen.py` (2).
 - `_forecast_met_cache`: de laatste bruikbare `forecast` per sensor in `prijs_forecast_cache` (bewaard, `PERSISTED_FIELDS`); zonder forecast de items met `end_date` na nu. Geen bewaarde reeks: `_forecast_uit_geschiedenis` (uurprijzen uit `prijsgeschiedenis`). Eén waarschuwing bij het overschakelen, info bij herstel.
 
 Tests: `test_v51132_prijs_cache.py` (4).
+
+## v5.114.0 — bronbuffer voor bronnen die een tijd geldig blijven
+
+- **Gevraagd 21-10 15:10:** "Kan dit voor meer bronnen zijn? Als het er niet is is het er niet, maar als het er wel is geweest tijdelijk in buffer/cache opslaan?"
+- `bronbuffer.py` (zuiver Python): per entity de laatste bruikbare stand (state + `detailedForecast`/`detailedHourly`/`forecast`/eenheid), geldig volgens een regel: `dag` (zelfde lokale datum als gelezen) of `minuten`. `Bronbuffer.lees` geeft de echte staat als die bruikbaar is, anders een `BufferStaat` zolang geldig.
+- `_bron_regels(config)`: dag voor zonvoorspelling vandaag/morgen/dag 3-7, tweede PV-voorspelling, gasprijs, de zes vandaag-sensoren (euro/m3) en de kostensensor; 60 min voor de rest van de zon vandaag, 120 min voor CO2. Metingen niet.
+- `_staat(entity_id)` vervangt `hass.states.get` in `_read_sensor_float` en de twee lezers van `detailedForecast`; één waarschuwing per entity bij overschakelen. `bronbuffer_opslag` in `PERSISTED_FIELDS`. Diagnose: `bronbuffer` (regels, laatst gelezen, wat nu uit de buffer komt).
+- Buitentemperatuurverwachting: bij een mislukte ophaalbeurt blijft de vorige reeks voor de komende uren staan (was: leeg).
+
+- **Ruud 21-10 15:14:** "Nu uurprijzen? Expliciet gezegd dat ik kwartier wil toch?" Na de herstart tijdens de Zonneplan-storing was er nog geen bewaarde kwartierreeks (de prijssensor staat niet in de recorder) en gaf `_forecast_uit_geschiedenis` uurblokken. Nu kwartieren via `prijsverwachting.kwartieren_van_dag` met `_prijs_kwartiervorm` (uurgemiddelde gelijk).
+
+Tests: `test_v5114_bronbuffer.py` (7); `test_v51132_prijs_cache.py` bijgewerkt (kwartieren).

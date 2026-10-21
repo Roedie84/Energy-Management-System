@@ -66,4 +66,6 @@ def test_zonder_cache_de_prijsgeschiedenis(monkeypatch):
     c.prijsgeschiedenis = {f"2026-10-21T{h:02d}": 0.30 for h in range(24)}
     c.prijsgeschiedenis.update({f"2026-10-22T{h:02d}": 0.25 for h in range(22)})
     e = c._get_forecast_entries()
-    assert len(e) == 12 + 22 and round(e[-1][2] / 10_000_000, 2) == 0.25
+    # v5.114.0: per kwartier (12:45 nog lopend, 13-23 uur, morgen 22 uur)
+    assert len(e) == 1 + 11 * 4 + 22 * 4 and round(e[-1][2] / 10_000_000, 2) == 0.25
+    assert all((x[1] - x[0]).total_seconds() == 900 for x in e)

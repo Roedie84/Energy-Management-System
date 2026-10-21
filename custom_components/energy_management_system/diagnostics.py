@@ -1089,6 +1089,8 @@ async def async_get_config_entry_diagnostics(
             "zelfanalyse": _veilig("get_zelfanalyse", coordinator.get_zelfanalyse),
             "keuzeoordelen": _veilig("keuzeoordelen", lambda: coordinator.keuzeoordelen),
             "prijsverwachting": _veilig("get_prijsverwachting", coordinator.get_prijsverwachting),
+            # v5.114.0: welke bronnen gebufferd worden en welke nu uit de buffer komen
+            "bronbuffer": _veilig("bronbuffer", lambda: coordinator._bronbuffer.overzicht()),
             "repetitie_2027": _veilig("get_repetitie_2027", coordinator.get_repetitie_2027),
             # v5.102: het dagarchief (vergelijking, maanden, laatste dagen).
             "dagarchief": _veilig("get_dagarchief", coordinator.get_dagarchief),

@@ -3249,17 +3249,26 @@ class EnergyManagementSystemCoordinator:
         return nog
 
     def _forecast_uit_geschiedenis(self) -> list:
-        """v5.113.2: uurprijzen (UTC-sleutel, euro) als forecast-items."""
-        uit = []
+        """v5.113.2: uurprijzen (UTC-sleutel, euro) als forecast-items.
+
+        v5.114.0 (Ruud 21-10 15:14: "Nu uurprijzen? Expliciet gezegd dat ik
+        kwartier wil toch?"): per kwartier, met het kwartierpatroon binnen het
+        uur uit de eigen kwartierprijzen van de afgelopen weken (het
+        uurgemiddelde blijft gelijk). Een schatting; de echte kwartierprijzen
+        komen uit de bewaarde reeks zodra die er is.
+        """
+        from . import prijsverwachting as P
+
         sleutel_attr = self.instelling(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE)
-        for sleutel, prijs in sorted((self.prijsgeschiedenis or {}).items()):
-            try:
-                begin = datetime.strptime(sleutel, "%Y-%m-%dT%H").replace(tzinfo=timezone.utc)
-            except (TypeError, ValueError):
-                continue
-            uit.append({"start_date": begin.isoformat(), "end_date": (begin + timedelta(hours=1)).isoformat(),
-                        sleutel_attr: {"amount": float(prijs) * PRICE_SCALE_FACTOR}})
-        return uit
+        model = {"uren": [{"sleutel": k, "prijs_eur": float(p)}
+                          for k, p in sorted((self.prijsgeschiedenis or {}).items())
+                          if isinstance(p, (int, float))]}
+        try:
+            kwartieren = P.kwartieren_van_dag(model, getattr(self, "_prijs_kwartiervorm", None))
+        except (TypeError, ValueError):
+            return []
+        return [{"start_date": b.isoformat(), "end_date": (b + timedelta(minutes=15)).isoformat(),
+                 sleutel_attr: {"amount": prijs * PRICE_SCALE_FACTOR}} for b, prijs in kwartieren]
 
     def _controleer_prijsreeks(self, entries: list) -> dict:
         """Zijn er dubbele of ontbrekende kwartieren? (v3.90.0)
@@ -3519,7 +3528,8 @@ class EnergyManagementSystemCoordinator:
         """
         if not entity_id:
             return None
-        state = self.hass.states.get(entity_id)
+        # v5.114.0: voorspellingen en dagwaarden uit de buffer als de bron even weg is
+        state = self._staat(entity_id)
         if state is None or state.state in (None, "unknown", "unavailable"):
             return self._lokale_vervanging(entity_id)
         try:
@@ -3533,6 +3543,69 @@ class EnergyManagementSystemCoordinator:
         if unit == "mwh":
             return value * 1000
         return value
+
+    #: v5.114.0: de laatste bruikbare stand van bronnen die een tijd geldig blijven (bewaard)
+    bronbuffer_opslag: dict | None = None
+    _bronbuffer_obj = None
+    _bronregels_voor = None
+
+    @property
+    def _bronbuffer(self):
+        from .bronbuffer import Bronbuffer
+
+        if self._bronbuffer_obj is None:
+            self._bronbuffer_obj = Bronbuffer()
+        if self.bronbuffer_opslag is None:
+            self.bronbuffer_opslag = {}
+        if self._bronbuffer_obj.opslag is not self.bronbuffer_opslag:
+            self._bronbuffer_obj.opslag = self.bronbuffer_opslag   # na het herstellen
+        config = getattr(self, "config", None) or {}
+        if self._bronregels_voor is not config:
+            self._bronbuffer_obj.regels = self._bron_regels(config)
+            self._bronregels_voor = config
+        return self._bronbuffer_obj
+
+    @staticmethod
+    def _bron_regels(config) -> dict:
+        """v5.114.0: welke bronnen gebufferd worden en hoe lang ze gelden.
+
+        Zonvoorspellingen, dagtotalen in euro en m3 en de gasprijs gelden tot
+        middernacht; de rest van de zon vandaag een uur, de CO2-intensiteit
+        twee uur. Metingen nooit.
+        """
+        from . import const as K
+
+        dagregels = [K.CONF_SOLAR_FORECAST_SENSOR, K.CONF_SOLAR_TODAY_FORECAST_SENSOR,
+               K.CONF_TWEEDE_PV_VOORSPELLING_SENSOR, K.CONF_GAS_PRICE_SENSOR,
+               K.CONF_INKOOP_EUR_VANDAAG_SENSOR, K.CONF_INKOOP_EUR_VANDAAG_EXCL_SENSOR,
+               K.CONF_TERUGLEVER_EUR_VANDAAG_SENSOR, K.CONF_TERUGLEVER_EUR_VANDAAG_EXCL_SENSOR,
+               K.CONF_GAS_M3_VANDAAG_SENSOR, K.CONF_GAS_EUR_VANDAAG_SENSOR,
+               K.CONF_GAS_EUR_VANDAAG_EXCL_SENSOR, K.CONF_COST_ENERGY_SENSOR]
+        regels = {}
+        for sleutel in dagregels:
+            if config.get(sleutel):
+                regels[config.get(sleutel)] = ("dag", 0)
+        for e in config.get(K.CONF_SOLAR_EXTENDED_FORECAST_SENSORS) or []:
+            if e:
+                regels[e] = ("dag", 0)
+        for sleutel, minuten in ((K.CONF_SOLAR_REMAINING_TODAY_SENSOR, 60), (K.CONF_CO2_INTENSITY_SENSOR, 120)):
+            if config.get(sleutel):
+                regels[config.get(sleutel)] = ("minuten", minuten)
+        return regels
+
+    def _staat(self, entity_id: str | None):
+        """v5.114.0: hass.states.get, met de buffer als terugval."""
+        staat = self.hass.states.get(entity_id) if entity_id else None
+        try:
+            buf = self._bronbuffer
+            was = entity_id in buf.in_gebruik
+            uit = buf.lees(entity_id, staat, dt_util.now())
+        except Exception:  # noqa: BLE001 - de buffer mag nooit iets breken
+            return staat
+        if getattr(uit, "uit_buffer", False) and not was:
+            _LOGGER.warning("%s is onbeschikbaar; de laatste waarde (%s, gelezen %s) geldt nog",
+                            entity_id, uit.state, uit.gelezen.isoformat(timespec="minutes"))
+        return uit
 
     def _lokale_vervanging(self, entity_id: str) -> float | None:
         """Terugval bij lezen (v5.82): is een Zendure-entiteit onbeschikbaar,
@@ -20477,7 +20550,7 @@ class EnergyManagementSystemCoordinator:
         ):
             if not entity_id:
                 continue
-            state = self.hass.states.get(entity_id)
+            state = self._staat(entity_id)
             if state is None:
                 continue
             items = state.attributes.get("detailedForecast") or state.attributes.get(
@@ -21921,7 +21994,7 @@ class EnergyManagementSystemCoordinator:
         # `pv_estimate90` in één lijst. Losse sensoren zouden alleen het
         # dagtotaal geven; hiermee is de onzekerheid PER MOMENT bekend.
         entity_id = self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR)
-        staat = self.hass.states.get(entity_id) if entity_id else None
+        staat = self._staat(entity_id) if entity_id else None
         regels = (
             (staat.attributes.get("detailedForecast") or []) if staat else []
         )
@@ -42870,7 +42943,9 @@ class EnergyManagementSystemCoordinator:
 
         forecast = await self._async_fetch_hourly_outdoor_forecast(weather_entity)
         if not forecast:
-            self._climate_cached_forecast = None
+            # v5.114.0: de vorige verwachting blijft gelden voor de uren die nog komen
+            nog = [r for r in (self._climate_cached_forecast or []) if r and r[0] > now]
+            self._climate_cached_forecast = nog or None
             self._climate_forecast_fetch_note = (
                 "Kon geen uurlijkse buitentemperatuur-voorspelling ophalen "
                 f"bij {weather_entity}."
