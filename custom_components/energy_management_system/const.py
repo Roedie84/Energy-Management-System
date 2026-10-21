@@ -3503,6 +3503,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # de generale repetitie 2027.
     "prijsgeschiedenis": {"type": "plain"},
     "prijsverwachting_archief": {"type": "plain"},
+    # v5.113.2: de laatste prijsreeks, voor een storing bij de prijsbron.
+    "prijs_forecast_cache": {"type": "plain"},
     "keuzeoordelen": {"type": "plain"},
     "repetitie_2027": {"type": "plain"},
     # v5.102: het dagarchief - één regel per dag, blijvend.

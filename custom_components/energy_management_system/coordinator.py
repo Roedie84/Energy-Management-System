@@ -3126,10 +3126,9 @@ class EnergyManagementSystemCoordinator:
         if not prijssensor:
             return []
         state = self.hass.states.get(prijssensor)
-        if state is None:
-            return []
-
-        forecast = state.attributes.get("forecast")
+        forecast = state.attributes.get("forecast") if state is not None else None
+        # v5.113.2: bij een storing van de prijsbron de laatst bekende prijzen
+        forecast = self._forecast_met_cache(prijssensor, forecast)
         if not forecast:
             return []
 
@@ -3197,6 +3196,70 @@ class EnergyManagementSystemCoordinator:
                 ontdubbeld.append(regel)
             entries = ontdubbeld
         return entries
+
+    #: v5.113.2: de laatste bruikbare prijsreeks van de prijssensor (bewaard).
+    prijs_forecast_cache: dict | None = None
+    _prijs_uit_cache: bool = False
+
+    def _forecast_met_cache(self, sensor: str, forecast):
+        """v5.113.2: de prijsreeks, of bij een storing de laatst bekende.
+
+        Gemeld 21-10 14:58: "Kwartierprijzen waren bekend, maar schijnbaar na
+        een bepaald tijdstip niet meer. Waarom niet in de cache opgeslagen?"
+        Zonneplan gaf vanaf 14:43 502/503; de sensor werd onbeschikbaar en
+        verloor zijn forecast-attribuut, terwijl de prijzen tot en met
+        morgen al gepubliceerd waren. Dan geen kwartierplanning en geen
+        sturing op prijs. Nu: de laatste reeks wordt onthouden (ook over een
+        herstart) en gebruikt zolang hij nog kwartieren in de toekomst heeft.
+        """
+        if forecast:
+            cache = self.prijs_forecast_cache or {}
+            oud = cache.get("forecast") or []
+            if (cache.get("sensor") != sensor or len(oud) != len(forecast)
+                    or (oud and (oud[0] != forecast[0] or oud[-1] != forecast[-1]))):
+                self.prijs_forecast_cache = {
+                    "sensor": sensor, "om": dt_util.now().isoformat(),
+                    "forecast": [dict(i) for i in forecast if isinstance(i, dict)],
+                }
+            if self._prijs_uit_cache:
+                _LOGGER.info("Prijzen weer van %s", sensor)
+                self._prijs_uit_cache = False
+            return forecast
+        cache = self.prijs_forecast_cache or {}
+        bron = cache.get("forecast") if cache.get("sensor") == sensor else None
+        if not bron:
+            # nog geen bewaarde reeks (eerste storing na de update): de
+            # uurprijzen uit de prijsgeschiedenis van de verwachting
+            bron = self._forecast_uit_geschiedenis()
+            cache = {"om": "prijsgeschiedenis"}
+        if not bron:
+            return forecast
+        nu = dt_util.now()
+        nog = []
+        for item in bron:
+            eind = self._parse_forecast_datetime(item.get("end_date")) if isinstance(item, dict) else None
+            if eind is not None and (eind if eind.tzinfo else eind.replace(tzinfo=dt_util.UTC)) > nu:
+                nog.append(item)
+        if not nog:
+            return forecast
+        if not self._prijs_uit_cache:
+            _LOGGER.warning("Prijssensor %s zonder prijzen; de laatst bekende prijzen (van %s, %d kwartieren "
+                            "vooruit) worden gebruikt", sensor, cache.get("om"), len(nog))
+            self._prijs_uit_cache = True
+        return nog
+
+    def _forecast_uit_geschiedenis(self) -> list:
+        """v5.113.2: uurprijzen (UTC-sleutel, euro) als forecast-items."""
+        uit = []
+        sleutel_attr = self.instelling(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE)
+        for sleutel, prijs in sorted((self.prijsgeschiedenis or {}).items()):
+            try:
+                begin = datetime.strptime(sleutel, "%Y-%m-%dT%H").replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                continue
+            uit.append({"start_date": begin.isoformat(), "end_date": (begin + timedelta(hours=1)).isoformat(),
+                        sleutel_attr: {"amount": float(prijs) * PRICE_SCALE_FACTOR}})
+        return uit
 
     def _controleer_prijsreeks(self, entries: list) -> dict:
         """Zijn er dubbele of ontbrekende kwartieren? (v3.90.0)

@@ -33493,3 +33493,10 @@ Tests: `test_v5113_cockpit_compact.py` (4).
 - `grenzen(prijzen)`: laagste bekende uurprijs - 2 ct tot hoogste + 5 ct; `verwacht_dag` knipt elk uur daarop (ook in de terugtoets).
 
 Tests: `test_v51131_prijs_grenzen.py` (2).
+
+## v5.113.2 — prijsreeks onthouden bij een storing van de prijsbron
+
+- **Gemeld 21-10 14:58:** "Kwartierprijzen waren bekend, maar schijnbaar na een bepaald tijdstip niet meer. Waarom niet in de cache opgeslagen?" Zonneplan gaf vanaf 14:43 502/503; `sensor.zonneplan_current_quarter_hourly_electricity_tariff` werd `unavailable` zonder `forecast`, en `_get_forecast_entries` gaf `[]` (geen kwartierplanning, "No usable forecast entries").
+- `_forecast_met_cache`: de laatste bruikbare `forecast` per sensor in `prijs_forecast_cache` (bewaard, `PERSISTED_FIELDS`); zonder forecast de items met `end_date` na nu. Geen bewaarde reeks: `_forecast_uit_geschiedenis` (uurprijzen uit `prijsgeschiedenis`). Eén waarschuwing bij het overschakelen, info bij herstel.
+
+Tests: `test_v51132_prijs_cache.py` (4).
