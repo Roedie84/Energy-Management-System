@@ -199,7 +199,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Effect meten: per_dagdeel `ochtendpiek.vastgehouden_kwh` en netto nacht+ochtend over 7 dagen.
 
 ## L-EMS-027 · verkoop- en reservemeting die over dagen leesbaar blijft (meetbaarheid + meetfout)
-- Status: **gepland** (zelf bouwen: diagnose-/leerattribuut, stuurt niets; dagafsluiting).
+- Status: **gebouwd v5.115.1** (21-10, na akkoord Ruud in de meldronde): dagarchief `vk`/`vkm`/`vko`, `alleen_behoefte` + `reserve_sprongen_alleen_behoefte`, `grootste_onderdeel` = "basisbehoefte". Na installatie + 1 dag: effect meten.
 - Onderbouwing: (1) `verkoopkwartieren` toont alleen vandaag/gisteren; voor 14..19-10 (1,0-3,0 kWh verkoop per dag) is de marge tegen de verkoopreserve niet meer te toetsen → de harde regel kon 8 dagen niet volledig getoetst worden. (2) `reserve_sprongen` telt 29× op 21-10 terwijl `reserve_kwh_after_margin` gelijk bleef (10,37, boven capaciteit) en alle bijdragen 0 waren; `grootste_onderdeel` meldt dan "lange_horizon_extra_kwh".
 - Bouw: per dag in het dagarchief `vk` (verkochte kWh), `vkm` (kleinste marge bij verkoop), `vko` (aantal kwartieren onder de reserve); sprong alleen tellen als de reserve zelf > 0,3 kWh verandert, anders `grootste_onderdeel` = "basisbehoefte" en apart tellen.
 - Effect meten: harde regel per dag uit het dagarchief; `reserve_sprongen_aantal` 0 op dagen met afgekapte reserve.
