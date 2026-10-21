@@ -35,3 +35,11 @@ Regel: <dd-mm HH:MM> | <sleutel>
 21-10 19:51 | homewizard rest-sensoren time-outs scan_interval
 21-10 19:51 | gold scalper afstemming ig 2 trades uitstap afwijkend
 21-10 19:51 | zithoek-voorstel uit bij tv uit aanzetten
+21-10 20:55 | ems plan-tekort knippert, hysterese needed_kwh
+21-10 20:55 | ems meetlog boven limiet niet opgeruimd
+21-10 20:55 | gold scalper evaluaties-attributen > 16 KB recorder
+21-10 20:55 | gold scalper hervatting telt dubbel per markt
+21-10 20:55 | L-EMS-025 pv-voorspelling biascorrectie
+21-10 20:55 | L-EMS-026 nachtontlading sparen voor ochtendpiek
+21-10 20:55 | L-SC-013 naderingssnelheid celwissel
+21-10 20:55 | luchtreiniger niet uit bij vieze lucht (automation)
