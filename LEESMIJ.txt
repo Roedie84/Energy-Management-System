@@ -1,3 +1,12 @@
+EMS v5.113.1 - prijsverwachting binnen het bereik van de geschiedenis
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Voor de stormachtige zaterdag 24-10 rekende de verwachting door tot -3 ct
+  om 23:00, lager dan elke uurprijs van de afgelopen maanden. Een
+  verwachting blijft nu tussen de laagste bekende uurprijs min 2 ct en de
+  hoogste plus 5 ct.
+
 EMS v5.113.0 - cockpit compacter
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de cache van

@@ -235,13 +235,35 @@ def verwacht_dag(coefs: list[float], weer: dict, prijzen: dict, dag: date,
         return None
     uren = []
     sprong = gas_sprong(gas, dag)
+    laag, hoog = grenzen(prijzen)
     for sleutel in uren_van_dag(dag):
         rij = kenmerken(sleutel, weer, niveau, sprong)
         if rij is None:
             return None
+        prijs = min(hoog, max(laag, voorspel_rij(coefs, rij)))
         uren.append({"uur": _lokaal(sleutel).strftime("%H:%M"), "sleutel": sleutel,
-                     "prijs_eur": round(voorspel_rij(coefs, rij), 4)})
+                     "prijs_eur": round(prijs, 4)})
     return samenvatting(dag, uren)
+
+
+#: v5.113.1: zoveel mag een verwachting onder de laagste / boven de hoogste
+#: bekende uurprijs komen.
+GRENS_ONDER_EUR = 0.02
+GRENS_BOVEN_EUR = 0.05
+
+
+def grenzen(prijzen: dict) -> tuple[float, float]:
+    """v5.113.1: het bereik van de geschiedenis, met wat ruimte.
+
+    Het model is lineair: bij een storm buiten alles wat het geleerd heeft
+    (weekend 24/25-10, wind hier en in Duitsland) rekende het door tot
+    -3 ct all-in om 23:00 - lager dan elke uurprijs in drie maanden. Een
+    verwachting blijft binnen wat de markt de afgelopen maanden liet zien.
+    """
+    waarden = [p for p in (prijzen or {}).values() if isinstance(p, (int, float))]
+    if len(waarden) < 24:
+        return float("-inf"), float("inf")
+    return min(waarden) - GRENS_ONDER_EUR, max(waarden) + GRENS_BOVEN_EUR
 
 
 def samenvatting(dag: date, uren: list[dict]) -> dict:

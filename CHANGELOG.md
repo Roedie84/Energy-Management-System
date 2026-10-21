@@ -33486,3 +33486,10 @@ Tests: `test_v51121_slim_kop.py` (4).
 - `_uitklap`: `<details>` die open/dicht onthoudt over een nieuwe opbouw (`toggle` met capture, `_uitgeklapt`). Staven en tabel per dag ingeklapt. Kortere toelichting onder de grafiek.
 
 Tests: `test_v5113_cockpit_compact.py` (4).
+
+## v5.113.1 — prijsverwachting begrensd op de geschiedenis
+
+- **Gezien 21-10 07:25** (cockpit na de herstart): "16,8 ct verwacht" voor zaterdag 24-10 met -2,6 ct om 23:00 en 0,3 ct om 22:00 (storm, weekend; buurlandwind lineair doorgerekend). Het lineaire model extrapoleerde ver buiten de training.
+- `grenzen(prijzen)`: laagste bekende uurprijs - 2 ct tot hoogste + 5 ct; `verwacht_dag` knipt elk uur daarop (ook in de terugtoets).
+
+Tests: `test_v51131_prijs_grenzen.py` (2).
