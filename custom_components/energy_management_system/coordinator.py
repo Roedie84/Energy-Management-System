@@ -14978,6 +14978,63 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def get_accukosten(self, now: datetime | None = None) -> dict:
+        """Wat de accu werkelijk kost en oplevert, nagerekend (v5.115.0).
+
+        Gevraagd 21-10: "Op basis van data dus inkoop/ontlaadt/rendement
+        kosten etc bepalen". Zie `accukosten.py`. Eén keer per kwartier
+        doorgerekend; de rest van het kwartier uit het geheugen.
+        """
+        from . import accukosten as A
+
+        now = now or dt_util.now()
+        sleutel = f"{now:%Y-%m-%d %H}:{now.minute // 15}"
+        bewaard = getattr(self, "_accukosten_cache", None)
+        if bewaard and bewaard[0] == sleutel:
+            return bewaard[1]
+        heen_terug = (self.learned_battery_efficiency_percent or float(
+            self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
+        )) / 100
+        laden = self.learned_charge_efficiency_percent
+        ontladen = self.learned_discharge_efficiency_percent
+        eta_l = laden / 100 if laden else math.sqrt(heen_terug)
+        eta_o = ontladen / 100 if ontladen else heen_terug / eta_l
+        slijtage = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        try:
+            uit = A.doorreken(self.dagverloop or {}, eta_l, min(1.0, eta_o), (slijtage or 0.0) / 100, now)
+        except Exception as fout:  # noqa: BLE001 - nacalculatie mag de sturing nooit raken
+            _LOGGER.debug("Accukosten niet doorgerekend", exc_info=True)
+            uit = {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
+        uit["laadrendement_procent"] = round(eta_l * 100, 1)
+        uit["ontlaadrendement_procent"] = round(min(1.0, eta_o) * 100, 1)
+        uit["slijtage_bron"] = (
+            "aanname: aanschafprijs modules / (capaciteit x cycli); de gemeten "
+            "capaciteit kan cyclus- en kalenderslijtage nog niet scheiden"
+        )
+        self._accukosten_cache = (sleutel, uit)
+        return uit
+
+    def laadcorrectie_ct(self) -> float:
+        """De datacorrectie op netladen, in ct/kWh (v5.115.0)."""
+        return round(((self.get_accukosten().get("correctie") or {}).get("eur") or 0.0) * 100, 2)
+
+    def _laadkosten_ct(self) -> float | None:
+        """Wat een kWh die uit het net de accu in gaat, aan kosten bovenop de
+        inkoop moet goedmaken: slijtage plus de datacorrectie (v5.115.0).
+        Alleen voor laden uit het net; verkopen rekent met de slijtage."""
+        slijtage = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        if slijtage is None:
+            return None
+        return slijtage + self.laadcorrectie_ct()
+
+    def _laad_waarde_ct(self) -> float | None:
+        """Wat het laadbesluit van dit moment verwachtte dat een kWh uit het
+        net waard wordt (ct per kWh die erin gaat), als er geladen wordt."""
+        besluit = self.last_laadbesluit or {}
+        if not besluit.get("laden") or besluit.get("waarde_eur") is None or besluit.get("verdringt_zon"):
+            return None
+        return round(float(besluit["waarde_eur"]) * 100 + float(besluit.get("datacorrectie_ct") or 0.0), 2)
+
     def _dagen_in_bedrijf(self) -> int | None:
         """Hoeveel dagen de integratie draait (v4.9)."""
         if not self.first_seen_date:
@@ -21384,7 +21441,7 @@ class EnergyManagementSystemCoordinator:
             return uit
         prijs_nu = self.huidige_prijs_eur_per_kwh()
         ruimte = self._resterende_laadruimte_kwh()
-        slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        slijtage_ct = self._laadkosten_ct()  # v5.115.0: slijtage + datacorrectie
         duurste = plan.get("duurste_ongedekt_eur")
         rendement = self.learned_battery_efficiency_percent
         if rendement is None:
@@ -21417,6 +21474,7 @@ class EnergyManagementSystemCoordinator:
                 "waarde_eur": round(waarde, 4),
                 "marge_ct": round((waarde - prijs_nu) * 100, 1),
                 "gat_kwh": round(gat, 2),
+                "datacorrectie_ct": self.laadcorrectie_ct(),
                 "blok": plan.get("blok"),
                 "nu_bij_de_goedkoopste": goedkoopst,
                 "reden": (
@@ -21487,7 +21545,7 @@ class EnergyManagementSystemCoordinator:
                     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
                 )
             )
-        slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        slijtage_ct = self._laadkosten_ct()  # v5.115.0: slijtage + datacorrectie
         if prijs_nu is None or ruimte is None or slijtage_ct is None:
             uit["reden"] = "prijs, laadruimte of slijtage onbekend"
             return uit
@@ -21544,6 +21602,7 @@ class EnergyManagementSystemCoordinator:
             )
         )
         uit["voorzichtige_zon"] = salderen
+        uit["datacorrectie_ct"] = self.laadcorrectie_ct()
         return self._laad_op_goedkoopste(now, uit)
 
     def _laadt_uit_het_net(self) -> bool:
@@ -23870,7 +23929,7 @@ class EnergyManagementSystemCoordinator:
             "kwartieren": kwartieren,
             "volgend_blok": volgend_blok,
             "rendement": rendement,
-            "slijtage_ct": (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh"),
+            "slijtage_ct": self._laadkosten_ct(),  # v5.115.0: + datacorrectie
             "salderen": self._is_salderen_active(now),
             # v5.95: laadde het vorige kwartier uit het net? Begint bij de
             # sturing; de plan-lus werkt het per kwartier bij.
@@ -25491,6 +25550,9 @@ class EnergyManagementSystemCoordinator:
             # v5.79: de verkooptoets van dit kwartier, zodat achteraf te zien
             # is of er teruggeleverd werd terwijl het niet mocht.
             "mag_verkopen": (self.last_sell_check or {}).get("mag_verkopen"),
+            # v5.115.0: wat het laadbesluit verwachtte dat een kWh uit het net
+            # waard wordt, zodat de nacalculatie (accukosten.py) het kan toetsen.
+            "laad_waarde_ct": self._laad_waarde_ct(),
         }
         # v5.81 (L-EMS-018): de getallen van de verkooptoets en het
         # spaarplan erbij, zodat achteraf vast te stellen is of een verkoop

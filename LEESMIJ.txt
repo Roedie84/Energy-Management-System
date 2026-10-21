@@ -1,3 +1,22 @@
+EMS v5.115.0 - wat de accu werkelijk kost en oplevert, uit de eigen gegevens
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het EMS rekent elk kwartier van de afgelopen 40 dagen na: wat er in de accu
+  ging (uit het net of van de zon, met de prijs van dat moment), wat eruit
+  kwam en tegen welke prijs, met het gemeten laad- en ontlaadrendement, de
+  slijtage en het rustverbruik van de omvormer.
+- In de cockpit, paneel Accumodules, uitklapbaar: inkoop, opbrengst en marge
+  per kWh voor netladen en voor zon, en voor netladen verwacht tegen
+  gerealiseerd.
+- Bijladen uit het net rekent voortaan met die realisatie: leverde een
+  netlading de afgelopen 30 dagen stelselmatig minder op dan het laadbesluit
+  verwachtte, dan moet een nieuwe lading dat verschil extra opleveren
+  (hooguit 5 ct/kWh, nooit minder dan de gewone rekenregel). Pas na 5 dagen
+  en 10 kWh netlading met een vastgelegde verwachting; tot dan verandert er
+  niets.
+- Verkopen rekent zoals eerst.
+
 EMS v5.114.1 - de reden staat achter de status
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

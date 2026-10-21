@@ -3763,7 +3763,11 @@ class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        return {"history": self._coordinator.learned_efficiency_history}
+        return {
+            "history": self._coordinator.learned_efficiency_history,
+            # v5.115.0: wat de accu werkelijk kost en oplevert (cockpit)
+            "accukosten": self._coordinator.get_accukosten(),
+        }
 
     @_store_wint
     async def async_added_to_hass(self) -> None:

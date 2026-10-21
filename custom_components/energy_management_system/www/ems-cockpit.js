@@ -1792,7 +1792,37 @@ class EmsCockpitCard extends HTMLElement {
         `<div><div class="rn">Koeling ${attr(koeling, "ventilator_aan") ? "aan" : "uit"}</div><div class="rs">${esc(attr(koeling, "reden") || "")}</div></div>` +
         `<div class="rw">${fmt(attr(koeling, "accu_c"))}${GRAAD}C</div></div>`
       : "";
-    return paneelKop("cellen", "Accumodules", rechts, "detail-accu") + `<div class="pb"><div class="lijst">${lijst}</div>${koel}</div>`;
+    return paneelKop("cellen", "Accumodules", rechts, "detail-accu") + `<div class="pb"><div class="lijst">${lijst}</div>${koel}${this._accukosten()}</div>`;
+  }
+
+  /* v5.115.0: wat de accu werkelijk kost en oplevert, nagerekend uit het
+     dagverloop. Gevraagd: "Op basis van data dus inkoop/ontlaadt/rendement
+     kosten etc bepalen". */
+  _accukosten() {
+    const a = attr(this._s("rendement"), "accukosten");
+    if (!a || !a.beschikbaar) return "";
+    const ct = (v) => (num(v) == null ? STREEP : `${fmt(v, 1)} ct`);
+    const bron = (naam, b) =>
+      !b || !num(b.erin_kwh)
+        ? ""
+        : `<tr><td>${esc(naam)}</td><td class="r">${fmt(b.erin_kwh, 1)} kWh</td><td class="r">${ct(b.inkoop_ct)}</td>` +
+          `<td class="r">${fmt(b.ontladen_kwh, 1)} kWh</td><td class="r">${ct(b.opbrengst_ct)}</td>` +
+          `<td class="r">${fmtTeken(b.marge_ct_per_kwh, 1)} ct</td><td class="r">\u20ac ${fmt(b.marge_eur, 2)}</td></tr>`;
+    const net = a.net || {};
+    const corr = a.correctie || {};
+    const tabel =
+      `<div class="tabelvak"><table class="tabel"><thead><tr><th>Herkomst</th><th class="r">Erin</th><th class="r">Inkoop</th>` +
+      `<th class="r">Eruit</th><th class="r">Opbrengst</th><th class="r">Marge/kWh</th><th class="r">Totaal</th></tr></thead><tbody>` +
+      bron("Net", net) + bron("Zon", a.zon) + `</tbody></table></div>`;
+    const verwacht = num(net.verwacht_ct) != null
+      ? `<div class="za-s">Netladen: verwacht ${ct(net.verwacht_ct)}, gerealiseerd ${ct(net.gerealiseerd_ct)} per kWh.</div>`
+      : "";
+    const inhoud =
+      `<div class="za-s">Rendement laden ${fmt(a.laadrendement_procent, 1)}% \u00b7 ontladen ${fmt(a.ontlaadrendement_procent, 1)}% ` +
+      `\u00b7 slijtage ${ct(a.slijtage_ct)} \u00b7 rustverbruik ${fmt(a.rust_kwh, 1)} kWh (\u20ac ${fmt(a.rust_eur, 2)})</div>` +
+      tabel + verwacht +
+      `<div class="za-s">Datacorrectie op netladen: <b>${ct((num(corr.eur) || 0) * 100)}</b> \u00b7 ${esc(corr.status || "")}</div>`;
+    return this._uitklap("accukosten", `Wat de accu kost en oplevert (40 dagen): net ${fmtTeken(net.marge_eur, 2)} \u20ac`, inhoud);
   }
 
   /* ---- zon ---- */

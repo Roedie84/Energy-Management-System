@@ -997,6 +997,8 @@ async def async_get_config_entry_diagnostics(
             "wear_cost": _veilig(
                 "get_wear_cost_overview", coordinator.get_wear_cost_overview
             ),
+            # v5.115.0: inkoop, opbrengst en marge van de accu, nagerekend
+            "accukosten": _veilig("get_accukosten", coordinator.get_accukosten),
             "plan_review": _veilig("get_plan_review", coordinator.get_plan_review),
             "plan_snapshot": coordinator.plan_snapshot,
             "quarter_plan_summary": _veilig(

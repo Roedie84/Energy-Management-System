@@ -33520,3 +33520,15 @@ Tests: `test_v5114_bronbuffer.py` (7); `test_v51132_prijs_cache.py` bijgewerkt (
 - Cockpit `_kop`: bij een andere stand dan goed het eerste deel van `reden` (max 70 tekens, volledig als tooltip) in de statuschip.
 
 Tests: `test_v51141_storingstekst.py` (3); `test_cockpit_matrix.py` bijgewerkt.
+
+
+## v5.115.0 — accukosten uit de eigen gegevens, datacorrectie op netladen
+
+- **Gevraagd 21-10 20:33/20:44:** "Kijk vooral nog even naar of het rendabel is om bij te laden met kleinere prijsverschillen en het accu rendement" / "Op basis van data dus inkoop/ontlaadt/rendement kosten etc bepalen". Analyse 27 dagen uurprijzen: het laadbesluit laadt al bij elke positieve marge (latere prijs x 85,3% - 4,2 ct > prijs nu); marges onder 5 ct leveren samen ~1,30 euro/maand. Rendement: Zendure-tellers 20-9..20-10 82,3% inclusief rustverbruik, marginaal 85-87%: het geleerde 85,3% klopt.
+- `accukosten.py` (zuiver Python): `doorreken(dagverloop, eta_laad, eta_ontlaad, slijtage_eur, nu)` loopt het dagverloop (40 dagen) per kwartier door op `beschikbaar_kwh`. Toename = partij (herkomst net/zon uit `net_w`/`accu_w`, anders uit de reden; inkoop = kwartierprijs), afname eerst-erin-eerst-eruit, gewaardeerd tegen de kwartierprijs x ontlaadrendement; afname zonder ontladen = rustverbruik. Gat > 60 min: opnieuw beginnen (inhoud met onbekende inkoop telt niet mee). Uitkomst per herkomst: erin, inkoop, eruit, opbrengst, marge per kWh die erin ging (zelfde maat als het laadbesluit), per dag (14), rust, nog in de accu.
+- Datacorrectie (`correctie`): gewogen mediaan van verwacht - gerealiseerd over netpartijen met een vastgelegde verwachting, laatste 30 dagen; vanaf 5 dagen en 10 kWh; begrensd op 0..5 ct.
+- Dagverloop: nieuw veld `laad_waarde_ct` (`_laad_waarde_ct`: `waarde_eur` van het laadbesluit plus de correctie die erin zat, niet bij zonverdringing).
+- `_laadkosten_ct()` = slijtage + `laadcorrectie_ct()` in `laadbesluit_uit_het_net`, `_dipbesluit` en de netregels van het kwartierplan; beide besluiten tonen `datacorrectie_ct`. Verkooptoetsen ongewijzigd.
+- `get_accukosten()` (per kwartier in het geheugen) in de diagnose (`accukosten`), als attribuut van de rendementssensor en in de cockpit (Accumodules, uitklapblok).
+
+Tests: `test_v5115_accukosten.py` (14).
