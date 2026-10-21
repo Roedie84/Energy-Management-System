@@ -30,3 +30,8 @@ Regel: <dd-mm HH:MM> | <sleutel>
 13-10 02:50 | gold scalper ig-sessie vernieuwen voor verlopen (403 elk uur)
 13-10 03:51 | gold scalper vloercheck valse noodstop op één meting/risicobasis
 13-10 06:51 | gold scalper runs na herstart samentellen per configuratie
+21-10 19:51 | ems solarflow ac-limiet schommelt, deadband
+21-10 19:51 | adsb.lol 429 te vaak pollen (militair-package, p2000-heli)
+21-10 19:51 | homewizard rest-sensoren time-outs scan_interval
+21-10 19:51 | gold scalper afstemming ig 2 trades uitstap afwijkend
+21-10 19:51 | zithoek-voorstel uit bij tv uit aanzetten
