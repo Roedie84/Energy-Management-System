@@ -420,3 +420,38 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-21 20:20,automation_traces_fout,0,5,laatste 20:21
 2026-10-21 20:20,apparaat_pm25_max,601,1,uurmax 18-10 tegen Ultimate 345; 19-10 333 tegen 454; laag niveau vast op 2-8
 2026-10-17,schimmel_indicator_max,93,24,ook 18-10 93; daarna 78-81
+2026-10-21,pm25_gem,1.31,288,dag 21-10 5-min statistiek
+2026-10-21,pm25_mediaan,1.22,288,
+2026-10-21,pm25_p95,2.11,288,
+2026-10-21,pm25_max,3.37,288,
+2026-10-21,pm25_uren_gt15,0.00,288,
+2026-10-21,pm25_uren_gt25,0.00,288,
+2026-10-21,stand_auto_min,679,1,
+2026-10-21,pm25_gem_auto,1.27,132,5-min blokken
+2026-10-21,stand_mid_min,729,1,
+2026-10-21,pm25_gem_mid,1.36,148,5-min blokken
+2026-10-21,stand_unavailable_min,32,1,35 HA-herstarts
+2026-10-21,co2_gem,891,288,5-min statistiek; max 1326
+2026-10-21,co2_uren_gt1200,2.0,288,5-min blokken
+2026-10-21 16:59,kookmoment_pm25_max,2.14,10,kookplaat run 16:59-17:22 en oven run 16:58-17:21; ramen dicht (sinds 16:21); stand auto; geen piek
+2026-10-22 00:20,pm25_gem,0.88,48,5-min statistiek 20:20-00:20
+2026-10-22 00:20,pm25_mediaan,0.90,48,
+2026-10-22 00:20,pm25_p95,1.07,48,
+2026-10-22 00:20,pm25_max,1.31,48,
+2026-10-22 00:20,pm25_uren_gt15,0.00,48,
+2026-10-22 00:20,pm25_uren_gt25,0.00,48,
+2026-10-22 00:20,stand_auto_min,200,1,
+2026-10-22 00:20,pm25_gem_auto,0.93,39,5-min blokken
+2026-10-22 00:20,stand_mid_min,38,1,vanaf 23:41
+2026-10-22 00:20,pm25_gem_mid,0.59,8,5-min blokken
+2026-10-22 00:20,pm25_gem_aanwezig,0.94,37,tv/occupancy t/m 23:25
+2026-10-22 00:20,pm25_gem_afwezig,0.67,11,
+2026-10-22 00:20,co2_gem,1046,48,5-min; max 1326
+2026-10-22 00:20,co2_uren_gt1200,1.4,48,20:20-21:45
+2026-10-22 00:20,pm25_7d_gem,8.26,7,daggemiddelden 15-10 t/m 21-10
+2026-10-22 00:20,pm25_7d_mediaan_dag,1.70,7,
+2026-10-22 00:20,ha_herstarts,2,1,20:20 en 20:57
+2026-10-22 00:20,lokaal_mislukt,36,84677,uitval 0; 166 verbindingen
+2026-10-22 00:20,sturen_bevestigd,234,235,mediaan 0.15 s
+2026-10-22 00:20,filtergebruik_pct,0,1,
+2026-10-22 00:20,automation_traces_fout,0,5,mid 15 min na tv uit (23:26 -> 23:41)
