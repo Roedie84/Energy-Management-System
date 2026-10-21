@@ -91,4 +91,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ daalt 910 → 613 ppm (gem 714), schimmelindicator 72 → 71: in orde.
 - Hypotheses: H1 (n=4, gesteund), H2 auto halveert kookpiek ~5-12 min (n=2), H3 (n=2): geen nieuwe pieken, geen toets.
 
-laatste ronde: 13-10 04:25, gemeten t/m 04:20
+## 21-10 20:25 (ronde 12, inhaalslag 13-10 04:20 t/m 21-10 20:20; 8,5 dag geen ronde)
+- PM2.5 daggem 13-20/10: 1,1 / 1,5 / 0,8 / 1,7 / 30,9 / 14,8 / 7,0 / 1,3; 21-10 t/m nu 1,4 (max 3,4). 7d gem 8,3 (mediaan dag 1,7): rustige dagen ~1-2, gemiddelde gedragen door twee gebeurtenissen.
+- 17-10 19:15 tot 18-10 02:40: geen kookplaat/oven, ramen dicht, CO₂ tot 3.610 (veel mensen). In auto steeg PM2.5 10 → 59 in 50 min; 20:09 handmatig uit (low/auto/low/uit) → 335 om 00:30. Na aanzetten 00:40 (6 min auto, dan low) halvering ~27 min, < 10 om 02:40.
+- Kookpieken, ramen dicht, auto: 14-10 30 (halvering ~24 min, kleine piek), 19-10 454 (halvering ~8 min eerste 20 min, ~16 daarna; < 10 na 65 min). Device-PM2.5 volgt grof (601 vs 345, 333 vs 454).
+- Werking: stand volgt aanwezigheid 94% (06-24 u); afwijking vooral auto zonder aanwezigheid na HA-herstart. HA-herstarts/dag 3-34 (21-10: 34). Lokaal 36 mislukt op 83.305 (laatste = herstart 20:20), uitval 0, sturen 233/234, filter 0%. Traces 5/5 zonder fout.
+- CO₂ 13-18/10 elke dag 6-13 u > 1.200 (max 2.200; 17-10 3.610); 19-21/10 0-5 u. Schimmelindicator 17/18-10 max 93. Nu 1.260 en stijgend, ramen dicht. Ventileren.
+- Hypotheses: H1 koken met ramen dicht → piek, raam open niet (n=6: dicht 190/135/30/454, open 3,4) - sterk gesteund. H2 auto halveert kookpiek ~5-12 min (n=4: 5/12/8/24), low ~27 min (n=1): auto ~3x sneller dan low, voorkomt de piek niet; turbo niet getest. H3 (nieuw) bij aanhoudende bron/bezoek houdt auto het niet bij en uit laat het oplopen tot > 300 (n=1).
+
+laatste ronde: 21-10 20:25, gemeten t/m 20:20

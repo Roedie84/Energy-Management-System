@@ -259,3 +259,164 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-13 04:20,filtergebruik_pct,0,1,
 2026-10-13 04:20,ha_herstarts,0,1,uptime sinds 23:18
 2026-10-13 04:20,automation_traces_fout,0,5,laatste 04:15 (failed_conditions = geen wissel nodig)
+2026-10-13,pm25_gem,1.12,236,5-min statistiek 04:20-24:00
+2026-10-13,pm25_mediaan,0.85,236,
+2026-10-13,pm25_p95,3.20,236,
+2026-10-13,pm25_max,6.4,236,5-min max 16:20
+2026-10-13,pm25_uren_gt15,0.00,236,
+2026-10-13,pm25_uren_gt25,0.00,236,
+2026-10-13,stand_auto_min,850,1,
+2026-10-13,pm25_gem_auto,1.29,170,5-min blokken
+2026-10-13,stand_mid_min,295,1,
+2026-10-13,pm25_gem_mid,0.67,59,5-min blokken
+2026-10-13,stand_unavailable_min,35,1,
+2026-10-13,pm25_gem_aanwezig,1.39,123,occupancy of tv
+2026-10-13,pm25_gem_afwezig,0.84,113,
+2026-10-13,co2_gem,1096,20,uurstatistiek; max 1908
+2026-10-13,co2_uren_gt1200,8.7,20,"5-min waar beschikbaar, anders uurgemiddelde"
+2026-10-14,pm25_gem,1.52,288,5-min statistiek hele dag
+2026-10-14,pm25_mediaan,0.87,288,
+2026-10-14,pm25_p95,4.47,288,
+2026-10-14,pm25_max,30.1,288,5-min max 17:00
+2026-10-14,pm25_uren_gt15,0.17,288,
+2026-10-14,pm25_uren_gt25,0.00,288,
+2026-10-14,stand_auto_min,880,1,
+2026-10-14,pm25_gem_auto,2.24,176,5-min blokken
+2026-10-14,stand_mid_min,545,1,
+2026-10-14,pm25_gem_mid,0.36,109,5-min blokken
+2026-10-14,stand_unavailable_min,15,1,
+2026-10-14,pm25_gem_aanwezig,2.52,106,occupancy of tv
+2026-10-14,pm25_gem_afwezig,0.94,182,
+2026-10-14,co2_gem,1288,24,uurstatistiek; max 2056
+2026-10-14,co2_uren_gt1200,12.5,24,"5-min waar beschikbaar, anders uurgemiddelde"
+2026-10-15,pm25_gem,0.84,288,5-min statistiek hele dag
+2026-10-15,pm25_mediaan,0.76,288,
+2026-10-15,pm25_p95,1.71,288,
+2026-10-15,pm25_max,2.4,288,5-min max 15:05
+2026-10-15,pm25_uren_gt15,0.00,288,
+2026-10-15,pm25_uren_gt25,0.00,288,
+2026-10-15,stand_auto_min,775,1,
+2026-10-15,pm25_gem_auto,1.16,155,5-min blokken
+2026-10-15,stand_mid_min,640,1,
+2026-10-15,pm25_gem_mid,0.46,128,5-min blokken
+2026-10-15,stand_unavailable_min,25,1,
+2026-10-15,pm25_gem_aanwezig,1.21,117,occupancy of tv
+2026-10-15,pm25_gem_afwezig,0.58,171,
+2026-10-15,co2_gem,1239,24,uurstatistiek; max 2189
+2026-10-15,co2_uren_gt1200,10.2,24,"5-min waar beschikbaar, anders uurgemiddelde"
+2026-10-16,pm25_gem,1.70,288,5-min statistiek hele dag
+2026-10-16,pm25_mediaan,1.13,288,
+2026-10-16,pm25_p95,4.72,288,
+2026-10-16,pm25_max,6.6,288,5-min max 17:45
+2026-10-16,pm25_uren_gt15,0.00,288,
+2026-10-16,pm25_uren_gt25,0.00,288,
+2026-10-16,stand_auto_min,810,1,
+2026-10-16,pm25_gem_auto,2.59,162,5-min blokken
+2026-10-16,stand_mid_min,610,1,
+2026-10-16,pm25_gem_mid,0.51,122,5-min blokken
+2026-10-16,stand_unavailable_min,20,1,
+2026-10-16,pm25_gem_aanwezig,2.73,104,occupancy of tv
+2026-10-16,pm25_gem_afwezig,1.11,184,
+2026-10-16,co2_gem,1270,24,uurstatistiek; max 2210
+2026-10-16,co2_uren_gt1200,12.7,24,"5-min waar beschikbaar, anders uurgemiddelde"
+2026-10-17,pm25_gem,30.85,288,5-min statistiek hele dag
+2026-10-17,pm25_mediaan,0.66,288,
+2026-10-17,pm25_p95,228.86,288,
+2026-10-17,pm25_max,408.9,288,5-min max 23:55
+2026-10-17,pm25_uren_gt15,4.67,288,
+2026-10-17,pm25_uren_gt25,4.58,288,
+2026-10-17,stand_auto_min,575,1,
+2026-10-17,pm25_gem_auto,4.63,115,5-min blokken
+2026-10-17,stand_low_min,5,1,
+2026-10-17,pm25_gem_low,58.99,1,5-min blokken
+2026-10-17,stand_mid_min,630,1,
+2026-10-17,pm25_gem_mid,0.24,126,5-min blokken
+2026-10-17,stand_uit_min,230,1,
+2026-10-17,pm25_gem_uit,179.64,46,5-min blokken
+2026-10-17,pm25_gem_aanwezig,63.56,139,occupancy of tv
+2026-10-17,pm25_gem_afwezig,0.34,149,
+2026-10-17,co2_gem,1328,24,uurstatistiek; max 3610
+2026-10-17,co2_uren_gt1200,6.5,24,"5-min waar beschikbaar, anders uurgemiddelde"
+2026-10-18,pm25_gem,14.83,288,5-min statistiek hele dag
+2026-10-18,pm25_mediaan,0.82,288,
+2026-10-18,pm25_p95,86.72,288,
+2026-10-18,pm25_max,345.0,288,5-min max 00:30
+2026-10-18,pm25_uren_gt15,2.42,288,
+2026-10-18,pm25_uren_gt25,2.00,288,
+2026-10-18,stand_auto_min,535,1,
+2026-10-18,pm25_gem_auto,3.57,107,5-min blokken
+2026-10-18,stand_low_min,315,1,
+2026-10-18,pm25_gem_low,23.02,63,5-min blokken
+2026-10-18,stand_mid_min,545,1,
+2026-10-18,pm25_gem_mid,0.45,109,5-min blokken
+2026-10-18,stand_uit_min,40,1,
+2026-10-18,pm25_gem_uit,298.80,8,5-min blokken
+2026-10-18,stand_unavailable_min,5,1,
+2026-10-18,pm25_gem_aanwezig,25.18,96,occupancy of tv
+2026-10-18,pm25_gem_afwezig,9.66,192,
+2026-10-18,co2_gem,1224,24,uurstatistiek; max 3486
+2026-10-18,co2_uren_gt1200,8.1,24,"5-min waar beschikbaar, anders uurgemiddelde"
+2026-10-19,pm25_gem,6.96,288,5-min statistiek hele dag
+2026-10-19,pm25_mediaan,2.00,288,
+2026-10-19,pm25_p95,11.77,288,
+2026-10-19,pm25_max,453.8,288,5-min max 17:00
+2026-10-19,pm25_uren_gt15,1.08,288,
+2026-10-19,pm25_uren_gt25,0.83,288,
+2026-10-19,stand_auto_min,770,1,
+2026-10-19,pm25_gem_auto,11.70,154,5-min blokken
+2026-10-19,stand_mid_min,660,1,
+2026-10-19,pm25_gem_mid,1.49,132,5-min blokken
+2026-10-19,stand_unavailable_min,10,1,
+2026-10-19,pm25_gem_aanwezig,14.71,100,occupancy of tv
+2026-10-19,pm25_gem_afwezig,2.85,188,
+2026-10-19,co2_gem,927,24,uurstatistiek; max 1408
+2026-10-19,co2_uren_gt1200,4.6,24,"5-min waar beschikbaar, anders uurgemiddelde"
+2026-10-20,pm25_gem,1.27,288,5-min statistiek hele dag
+2026-10-20,pm25_mediaan,1.27,288,
+2026-10-20,pm25_p95,2.60,288,
+2026-10-20,pm25_max,3.2,288,5-min max 18:15
+2026-10-20,pm25_uren_gt15,0.00,288,
+2026-10-20,pm25_uren_gt25,0.00,288,
+2026-10-20,stand_auto_min,720,1,
+2026-10-20,pm25_gem_auto,1.80,144,5-min blokken
+2026-10-20,stand_mid_min,715,1,
+2026-10-20,pm25_gem_mid,0.73,143,5-min blokken
+2026-10-20,stand_unavailable_min,5,1,
+2026-10-20,pm25_gem_aanwezig,1.98,107,occupancy of tv
+2026-10-20,pm25_gem_afwezig,0.85,181,
+2026-10-20,co2_gem,870,24,uurstatistiek; max 1584
+2026-10-20,co2_uren_gt1200,4.0,24,"5-min waar beschikbaar, anders uurgemiddelde"
+2026-10-21 20:20,pm25_gem,1.39,244,5-min statistiek 00:00-20:20
+2026-10-21 20:20,pm25_mediaan,1.31,244,
+2026-10-21 20:20,pm25_p95,2.15,244,
+2026-10-21 20:20,pm25_max,3.4,244,5-min max 09:35
+2026-10-21 20:20,pm25_uren_gt15,0.00,244,
+2026-10-21 20:20,pm25_uren_gt25,0.00,244,
+2026-10-21 20:20,stand_auto_min,465,1,
+2026-10-21 20:20,pm25_gem_auto,1.41,93,5-min blokken
+2026-10-21 20:20,stand_mid_min,720,1,
+2026-10-21 20:20,pm25_gem_mid,1.38,144,5-min blokken
+2026-10-21 20:20,stand_unavailable_min,35,1,
+2026-10-21 20:20,pm25_gem_aanwezig,1.32,72,occupancy of tv
+2026-10-21 20:20,pm25_gem_afwezig,1.42,172,
+2026-10-21 20:20,co2_gem,852,20,uurstatistiek; max 1277
+2026-10-21 20:20,co2_uren_gt1200,0.0,20,"uurgemiddelden t/m 19:00; 5-min 20:15 = 1244 en stijgend"
+2026-10-21 20:20,pm25_7d_gem,8.28,7,daggemiddelden 14-10 t/m 20-10; 17/18-10 piek
+2026-10-21 20:20,pm25_7d_mediaan_dag,1.70,7,mediaan van daggemiddelden
+2026-10-14 16:55,piek_max,30.1,1,kookplaat run 16:24-17:04; ramen dicht; stand auto; < 10 om 17:30
+2026-10-14 16:55,halveringstijd_min_auto,24.2,8,fit 17:05-17:40 (achtergrond 1); kleine piek - achtergrond weegt zwaar
+2026-10-17 19:15,piek_max,408.9,1,max 23:55; geen kookplaat/oven; ramen dicht; CO2 tot 3610 (veel mensen); stand auto tot 20:09 daarna uit tot 00:40
+2026-10-17 19:15,pm25_stijging_auto,49,10,19:15-20:05 in auto van 10 naar 59 (aanhoudende bron)
+2026-10-17 20:09,stand_uit_min,271,1,handmatig low/auto/low/uit 20:06-20:09; PM2.5 59 -> 335; automation laat uit staan
+2026-10-18 00:40,halveringstijd_min_low,27.0,23,fit 00:50-02:40; 00:40-00:46 auto daarna low; < 10 om 02:40 (2 u na aanzetten)
+2026-10-18 00:46,stand_low_min,314,1,low tot 06:00 (nachtvenster 00-06 geen wissels), daarna mid
+2026-10-19 16:45,piek_max,453.8,1,kookplaat run 16:38-17:02; ramen dicht; stand auto; aanwezig; < 10 om 18:05 (65 min na max)
+2026-10-19 16:45,halveringstijd_min_auto,7.6,5,fit 17:00-17:20; 17:20-18:05 16.1 min; hele daling 9.8 min
+2026-10-21 20:20,ha_herstarts_per_dag,"23/14/9/11/3/3/15/16/34",9,select unavailable 13-10 t/m 21-10
+2026-10-21 20:20,stand_volgt_aanwezigheid_pct,94.4,7540,minuten 06-24 u; afwijking vooral auto zonder aanwezigheid na herstart
+2026-10-21 20:20,lokaal_mislukt,36,83305,rondes sinds 11-10; uitval 0; 165 verbindingen; laatste fout 20:20 timeout (HA-herstart)
+2026-10-21 20:20,sturen_bevestigd,233,234,mediaan 0.15 s
+2026-10-21 20:20,filtergebruik_pct,0,1,
+2026-10-21 20:20,automation_traces_fout,0,5,laatste 20:21
+2026-10-21 20:20,apparaat_pm25_max,601,1,uurmax 18-10 tegen Ultimate 345; 19-10 333 tegen 454; laag niveau vast op 2-8
+2026-10-17,schimmel_indicator_max,93,24,ook 18-10 93; daarna 78-81
