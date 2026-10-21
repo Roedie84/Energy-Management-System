@@ -371,3 +371,15 @@ laatste ronde: 12-10 23:40, gemeten t/m 12-10 23:41
 - Hypotheses: H-EMS-2 (PV te hoog, bevestigd), H-EMS-11 (nacht ontlaadt wat de ochtend nodig heeft), H-EMS-12 (MC te stellig bij lage accu, n=1). Geen release (inhaalronde; vandaag al v5.114.1 door andere sessie).
 
 laatste ronde: 21-10 19:40, gemeten t/m 21-10 19:00
+
+## 21-10 23:40 · tussenronde
+- 2 HA-herstarts (20:16, 20:58); actief **v5.115.0**, 0 EMS-fouten (alleen bronbuffer-WARNINGs bij de herstart). v5.115.1 (L-EMS-027) gereleased 22:23, nog niet geïnstalleerd; HACS ververst.
+- **PV 21-10: 5,03 kWh tegen day-ahead 7,82 → −35,7 %** (15e dag op rij te hoog; H-EMS-2).
+- 19-23 u: import 0,10, export 0,08, accu ontlaadt 2,41 kWh voor het huis. **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 0,25 kWh).
+- 17:00-17:20 `battery_saved_for_peak`: 0,70 kWh import bij 38,4 ct terwijl de accu 5,2 kWh beschikbaar had, bewaard voor 17:30-17:45 (43-45 ct). Bewuste keuze; oordeel in de nabeschouwing van 21-10.
+- Nacht 21→22: beschikbaar 1,38 kWh, nodig tot blok (10:45) 2,60 → marge −1,22; MC 100 %. Plan (gewijzigd 22:01, eerste nacht met v5.115.0-laadkosten): 00:30-03:30 sparen op 20 %, 03:45-05:30 laden (23-24 ct) tot 41 %, ochtendpiek (30-35 ct) uit de accu. Precies het L-EMS-026-patroon, nu door de lage stand afgedwongen → toets in de nabeschouwing 22-10.
+- **H-EMS-12 aangescherpt:** MC rekent vanaf de huidige inhoud zonder geplande netlading; de tekortnacht telt "> 0,5 kWh bijgekocht met lege accu". Spaart het plan op 20 % (niet leeg), dan kans 100 % zonder tekortnacht (zoals →20-10) = definitieverschil, geen slechte voorspelling. Toets 03:40/dagafsluiting 22-10.
+- Reservesprongen 21:18-23:00: 5, waarvan 4 met reserve gelijk (afgekapt) → v5.115.1 telt die apart; effect na installatie.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek), H-EMS-12 (MC-kalibratie: definitie). Geen release (tussenronde, niets acuut; v5.115.1 wacht op installatie).
+
+laatste ronde: 21-10 23:40, gemeten t/m 21-10 23:43
