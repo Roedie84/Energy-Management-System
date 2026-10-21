@@ -548,6 +548,12 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .pv-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .pv-svg rect:hover { fill-opacity: 1; }
 .pv-klein { grid-template-rows: 80px 20px; }
+.uitklap { border-top: 1px solid var(--rand); padding-top: 6px; }
+.uitklap > summary { cursor: pointer; font-size: 11.5px; font-weight: 700; color: var(--tekst2); letter-spacing: .04em; list-style: none; }
+.uitklap > summary::-webkit-details-marker { display: none; }
+.uitklap > summary::before { content: "+ "; color: var(--violet); }
+.uitklap[open] > summary::before { content: "- "; }
+.uitklap[open] > summary { margin-bottom: 6px; }
 .pv-grens { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(167, 139, 250, .45); }
 .pv-grens span { position: absolute; top: 2px; left: 5px; font-size: 10px; font-weight: 700; color: var(--violet); white-space: nowrap; }
 .redenen { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12.5px; color: var(--tekst2); }
@@ -557,7 +563,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 /* ---- raster ---- */
 .raster {
   display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "stroom" "planning" "verkoop" "modules" "zon" "huis" "bediening" "geld";
+  grid-template-areas: "stroom" "planning" "prijzen" "verkoop" "modules" "zon" "huis" "bediening" "geld";
 }
 .paneel {
   min-width: 0; border-radius: var(--r);
@@ -575,6 +581,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .p-huis { grid-area: huis; }
 .p-bediening { grid-area: bediening; }
 .p-geld { grid-area: geld; }
+.p-prijzen { grid-area: prijzen; }
 .ph { display: flex; align-items: center; gap: 8px; padding: 10px 14px 7px; color: var(--tekst2); min-width: 0; flex-wrap: wrap; }
 .ph h2 { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--tekst); }
 .ph .ic { color: var(--amber); }
@@ -764,6 +771,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
       "planning planning"
+      "prijzen prijzen"
       "stroom verkoop"
       "modules zon"
       "huis geld"
@@ -842,7 +850,8 @@ const AFHANKELIJK = {
   huis: ["fietsen", "stofzuiger", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis"],
   bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "meldingenAan", "achterhoeks"],
-  geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "prijsverwachting", "repetitie", "dagarchief"],
+  geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief"],
+  prijzen: ["prijsverwachting", "plan", "uitleg"],
   voet: ["meetlog", "gezondheid", "status"],
 };
 
@@ -1016,6 +1025,10 @@ class EmsCockpitCard extends HTMLElement {
       `<section class="paneel p-modules" data-p="modules"></section>` +
       `</div><div class="kol k2">` +
       `<section class="paneel p-planning" data-p="planning"></section>` +
+      // v5.113.0: prijzen een week vooruit en hoe goed de verwachting is -
+      // eigen paneel in de brede middenkolom; het paneel Geld was er bijna
+      // twee keer zo lang door ("cockpit is vrij groot geworden").
+      `<section class="paneel p-prijzen" data-p="prijzen"></section>` +
       `<section class="paneel p-huis" data-p="huis"></section>` +
       `</div><div class="kol k3">` +
       `<section class="paneel p-verkoop" data-p="verkoop"></section>` +
@@ -1031,6 +1044,12 @@ class EmsCockpitCard extends HTMLElement {
     this._el = {};
     for (const el of this.shadowRoot.querySelectorAll("[data-p]")) this._el[el.dataset.p] = el;
 
+    // v5.113.0: uitklapblokken blijven open of dicht bij een nieuwe opbouw
+    this._uitgeklapt = this._uitgeklapt || {};
+    this.shadowRoot.addEventListener("toggle", (ev) => {
+      const d = ev.target;
+      if (d && d.dataset && d.dataset.uitklap) this._uitgeklapt[d.dataset.uitklap] = d.open;
+    }, true);
     this.shadowRoot.addEventListener("click", (ev) => {
       const doel = ev.target.closest ? ev.target : null;
       if (!doel) return;
@@ -1940,7 +1959,6 @@ class EmsCockpitCard extends HTMLElement {
   _zelfanalyse() {
     const blokken = [
       ["zelfanalyse", "Zelfanalyse"],
-      ["prijsverwachting", "Prijsverwachting"],
       ["repetitie", "Generale repetitie 2027"],
       ["dagarchief", "Dagarchief"],
     ];
@@ -1959,10 +1977,32 @@ class EmsCockpitCard extends HTMLElement {
     ).join("");
     return (
       `<div class="za-blok">${regels}` +
-      this._prijsGrafiek() +
-      this._prijsKwaliteit() +
       (keuzes ? `<div class="za-s" style="margin-top:6px">Achteraf niet de beste (${esc(gisteren.datum || "")}):</div><ul class="za-l">${keuzes}</ul>` : "") +
       `</div>`
+    );
+  }
+
+  /* v5.113.0: eigen paneel voor de prijzen een week vooruit. */
+  _prijzen() {
+    const s = this._s("prijsverwachting");
+    if (!s) return null;
+    return (
+      paneelKop("grafiek", "Prijzen 7 dagen", chip(esc(attr(s, "kaart_primair") || ""))) +
+      `<div class="pb">` +
+      `<div class="za-s">${esc(attr(s, "kaart_secundair") || "")}</div>` +
+      this._prijsGrafiek() +
+      this._prijsKwaliteit() +
+      `</div>`
+    );
+  }
+
+  /* Uitklapbaar blok dat open blijft over een nieuwe opbouw heen. */
+  _uitklap(sleutel, kop, inhoud) {
+    if (!inhoud) return "";
+    const open = this._uitgeklapt && this._uitgeklapt[sleutel];
+    return (
+      `<details class="uitklap" data-uitklap="${esc(sleutel)}"${open ? " open" : ""}>` +
+      `<summary>${esc(kop)}</summary>${inhoud}</details>`
     );
   }
 
@@ -2048,9 +2088,8 @@ class EmsCockpitCard extends HTMLElement {
       `${scheiding}</div>` +
       `<div class="g-x">${xLab.join("")}</div>` +
       `</div>` +
-      `<div class="meternoot">Prijs per kwartier vanaf nu (ct/kWh), een week vooruit. Vol: bekende prijs in de kleur van de geplande stand. ` +
-      `Licht: verwachting, gekleurd naar de dagregel (goedkoopste deel van de dag = laden, boven de drempel voor duur = verkopen, anders slim). ` +
-      `De verwachting is alleen meten en stuurt niets.</div>`
+      `<div class="meternoot">ct/kWh per kwartier. Vol: bekend, in de kleur van het plan. Licht: verwachting, ` +
+      `gekleurd naar de dagregel (goedkoopste deel = laden, boven de drempel voor duur = verkopen). Alleen meten.</div>`
     );
   }
 
@@ -2123,9 +2162,10 @@ class EmsCockpitCard extends HTMLElement {
       regel("Overmorgen (live)", live.d2) +
       regel("Terugtoets", bt) +
       `<div class="za-s"><b>Bijstelling op de eigen fout</b>: ${bijRegel ? esc(bijRegel) : "nog niets bij te stellen"}</div>` +
-      grafiek + tabel +
-      `<div class="meternoot">Ernaast: gemiddelde afwijking per uur in ct/kWh. Live: de verwachting zoals hij toen was, tegen de echte prijs. ` +
-      `Terugtoets: teruggerekend over de afgelopen weken met het gemeten weer (de fout in het weerbericht zit daar niet in).</div>`
+      // v5.113.0: staven en tabel per dag ingeklapt
+      this._uitklap("prijs_per_dag", `Per dag (${rijen.length} dagen)`, grafiek + tabel +
+        `<div class="meternoot">Ernaast: gemiddelde afwijking per uur in ct/kWh. Live: de verwachting zoals hij toen was, tegen de echte prijs. ` +
+        `Terugtoets: teruggerekend over de afgelopen weken met het gemeten weer (de fout in het weerbericht zit daar niet in).</div>`)
     );
   }
 

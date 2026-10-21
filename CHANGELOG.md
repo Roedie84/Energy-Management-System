@@ -33478,3 +33478,11 @@ Tests: `test_v5112_prijs_prestatie.py` (6).
 - `get_why_now` krijgt `kop` (`_waarom_kop`): de titel uit `REASON_REGISTRY`; bij `default_smart` aangevuld met wat de accu nu doet (`_accu_doet_nu`, dezelfde dode band `MIN_BATTERY_POWER_IDLE_W` als `accu_stand`). De laatste reden bij `default_smart` noemt het vermogen van nu in plaats van "vangt zon op en voedt het huis" (ook 's avonds). Cockpit: `kop` boven `kort`.
 
 Tests: `test_v51121_slim_kop.py` (4).
+
+## v5.113.0 — cockpit compacter: eigen paneel Prijzen 7 dagen
+
+- **Gevraagd 21-10 07:03 (screenshot):** "De energie cockpit is nu vrij groot geworden, graag kijken of je de indeling kunt optimaliseren en het zo compacter kunt maken". Kolom 3 (verkoop, geld, zon) was bijna twee keer zo lang als kolom 1 en 2: de prijsgrafiek (v5.109), de kwaliteit en de tabel per dag (v5.112) zaten in Geld.
+- Nieuw paneel `prijzen` (`_prijzen`) in kolom 2 tussen planning en huis; op smallere schermen direct onder de planning (`"prijzen prijzen"`). Geld (`_zelfanalyse`) zonder prijsverwachting; `AFHANKELIJK.prijzen` = prijsverwachting, plan, uitleg.
+- `_uitklap`: `<details>` die open/dicht onthoudt over een nieuwe opbouw (`toggle` met capture, `_uitgeklapt`). Staven en tabel per dag ingeklapt. Kortere toelichting onder de grafiek.
+
+Tests: `test_v5113_cockpit_compact.py` (4).
