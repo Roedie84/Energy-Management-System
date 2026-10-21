@@ -43,3 +43,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 21-10 20:55 | L-EMS-026 nachtontlading sparen voor ochtendpiek
 21-10 20:55 | L-SC-013 naderingssnelheid celwissel
 21-10 20:55 | luchtreiniger niet uit bij vieze lucht (automation)
+21-10 21:51 | gold scalper herafstemming na herstart eigen db-transactie
+21-10 21:51 | L-EMS-027 verkoop-/reservemeting per dag in dagarchief
