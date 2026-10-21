@@ -33512,3 +33512,11 @@ Tests: `test_v51132_prijs_cache.py` (4).
 - **Ruud 21-10 15:14:** "Nu uurprijzen? Expliciet gezegd dat ik kwartier wil toch?" Na de herstart tijdens de Zonneplan-storing was er nog geen bewaarde kwartierreeks (de prijssensor staat niet in de recorder) en gaf `_forecast_uit_geschiedenis` uurblokken. Nu kwartieren via `prijsverwachting.kwartieren_van_dag` met `_prijs_kwartiervorm` (uurgemiddelde gelijk).
 
 Tests: `test_v5114_bronbuffer.py` (7); `test_v51132_prijs_cache.py` bijgewerkt (kwartieren).
+
+## v5.114.1 — korte reden achter de status, prijsbron weg met buffer = LET OP
+
+- **Gevraagd 21-10 15:35 (screenshot):** "waar is de storing? Graag korte tekst achter de storingsmelding". Stand STORING, reden alleen in het attribuut: "noodzakelijke koppeling kapot: price_sensor_entity" (Zonneplan 502/503).
+- `_ems_status`: namen via `_koppelingnaam` (friendly_name van de entiteit); "koppeling weg" in plaats van "kapot". Alleen de prijssensor weg en `_prijs_uit_cache` actief (v5.113.2): LET OP met "prijsbron weg (...), laatst bekende prijzen in gebruik".
+- Cockpit `_kop`: bij een andere stand dan goed het eerste deel van `reden` (max 70 tekens, volledig als tooltip) in de statuschip.
+
+Tests: `test_v51141_storingstekst.py` (3); `test_cockpit_matrix.py` bijgewerkt.

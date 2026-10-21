@@ -657,7 +657,8 @@ def test_een_kapotte_koppeling_wordt_bij_naam_genoemd(make_coordinator, hass):
     stand, regel = c._ems_status()
 
     assert stand == "LET OP"
-    assert regel.startswith("koppeling kapot: dishwasher_power_sensor_entity")
+    # v5.114.1: "weg", en de entiteit (zonder entiteit de instelling)
+    assert regel.startswith("koppeling weg: dishwasher_power_sensor_entity")
 
 
 def test_een_lopend_blok_geeft_geen_reserve_maar_ook_geen_onbekend(

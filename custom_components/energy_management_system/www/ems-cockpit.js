@@ -543,6 +543,7 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .za-s { font-size: 11.5px; color: var(--tekst2); overflow-wrap: anywhere; }
 .za-l { margin: 2px 0 0 16px; padding: 0; font-size: 11.5px; color: var(--tekst2); }
 .za-l i { opacity: .75; }
+.chip-reden { font-weight: 500; opacity: .85; margin-left: 2px; }
 .pv-wrap { position: relative; display: grid; grid-template-columns: 34px 1fr; grid-template-rows: 150px 22px; margin-top: 2px; min-width: 0; }
 .pv-wrap .g-x { grid-column: 2; }
 .pv-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -1212,7 +1213,12 @@ class EmsCockpitCard extends HTMLElement {
     const cockpit = this._s("cockpit");
     const st = bruikbaar(cockpit) ? String(cockpit.state) : null;
     const stKlasse = !st ? "" : /storing|fout/i.test(st) ? "gevaar" : /let op/i.test(st) ? "let" : "ok";
-    const status = st ? chip(`<span class="stip" style="--kleur:${stKlasse === "ok" ? "var(--groen)" : stKlasse === "let" ? "var(--oranje)" : "var(--rood)"}"></span>${esc(hoofd(st.toLowerCase()))}`, `groot ${stKlasse}`) : "";
+    // v5.114.1: bij iets anders dan goed de reden er kort achter
+    // (gevraagd 21-10 15:35: "waar is de storing? Graag korte tekst achter de storingsmelding")
+    const redenVol = stKlasse && stKlasse !== "ok" ? String(attr(cockpit, "reden") || "").split(" \u00b7 ")[0] : "";
+    const redenKort = redenVol.length > 70 ? redenVol.slice(0, 68) + "..." : redenVol;
+    const status = st ? chip(`<span class="stip" style="--kleur:${stKlasse === "ok" ? "var(--groen)" : stKlasse === "let" ? "var(--oranje)" : "var(--rood)"}"></span>${esc(hoofd(st.toLowerCase()))}` +
+      (redenKort ? ` <span class="chip-reden" title="${esc(redenVol)}">${esc(redenKort)}</span>` : ""), `groot ${stKlasse}`) : "";
 
     const accuModus = this._s("modus");
     const m = modus(attr(this._s("uitleg"), "expected_mode") || (bruikbaar(accuModus) ? accuModus.state : ""));

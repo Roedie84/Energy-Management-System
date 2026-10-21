@@ -16453,6 +16453,13 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _koppelingnaam(self, regel: dict) -> str:
+        """v5.114.1: de naam van de entiteit uit de configuratiecontrole."""
+        entiteit = regel.get("entiteit")
+        staat = self.hass.states.get(entiteit) if entiteit and self.hass else None
+        naam = (staat.attributes.get("friendly_name") if staat is not None else None) or entiteit
+        return str(naam or regel.get("instelling") or "?")
+
     def _ems_status(self) -> tuple[str, str]:
         """De gezondheid van het HELE EMS, als matrix (v5.18).
 
@@ -16547,16 +16554,25 @@ class EnergyManagementSystemCoordinator:
         if self.internal_failures:
             return "STORING", regel
         if kapot_noodzakelijk:
-            namen = ", ".join(str(r.get("instelling")) for r in kapot_noodzakelijk)
-            return "STORING", f"noodzakelijke koppeling kapot: {namen}"
+            # v5.114.1: met de naam van de entiteit, niet de instellingssleutel
+            # ("price_sensor_entity"). En valt alleen de prijsbron weg terwijl
+            # de bewaarde prijzen nog gelden, dan stuurt het EMS gewoon door:
+            # LET OP in plaats van STORING.
+            if self._prijs_uit_cache and all(
+                    r.get("instelling") == CONF_PRICE_SENSOR for r in kapot_noodzakelijk):
+                return "LET OP", met_reden(
+                    f"prijsbron weg ({self._koppelingnaam(kapot_noodzakelijk[0])}), "
+                    "laatst bekende prijzen in gebruik")
+            namen = ", ".join(self._koppelingnaam(r) for r in kapot_noodzakelijk)
+            return "STORING", f"noodzakelijke koppeling weg: {namen}"
         if fouten:
             onderwerp = (fouten[0] or {}).get("onderwerp")
             return "INGRIJPEN", met_reden(
                 f"fout: {onderwerp}" if onderwerp else f"{len(fouten)} fout(en)"
             )
         if kapot:
-            namen = ", ".join(str(r.get("instelling")) for r in kapot[:2])
-            return "LET OP", met_reden(f"koppeling kapot: {namen}")
+            namen = ", ".join(self._koppelingnaam(r) for r in kapot[:2])
+            return "LET OP", met_reden(f"koppeling weg: {namen}")
         if balans_klopt is False:
             # v5.19.8: dezelfde tekst als in de opsomming, zodat hij er niet
             # twee keer staat ("de energiebalans wijkt af · ... · balans
