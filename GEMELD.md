@@ -45,3 +45,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 21-10 20:55 | luchtreiniger niet uit bij vieze lucht (automation)
 21-10 21:51 | gold scalper herafstemming na herstart eigen db-transactie
 21-10 21:51 | L-EMS-027 verkoop-/reservemeting per dag in dagarchief
+21-10 21:51 | gold scalper pyramiding/tegengestelde posities max 1 per richting
