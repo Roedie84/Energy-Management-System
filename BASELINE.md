@@ -55,3 +55,13 @@
 | Besparing t.o.v. zonder accu-sturing (sensor, per dag) | € 1,09 (11-10) · € 1,06 (10-10) | 10..11-10 | 12-10 03:40 |
 | HA-herstarts per dag | 40 (11-10, supervisor) · 12 (10-10) | 10..11-10 | 12-10 03:40 |
 | Spaarplan vs verkooptoets tot blok (vóór v5.87) | 8,1 vs ≤ 5,5 kWh, werkelijk 4,58 | avond 10-10 | 12-10 03:40 |
+| PV-voorspelling MAE (dag, day-ahead tracker) | 11,3 % (30 d) · 17,3 % (14 d) · 17,4 % (7 d); bias −8,7 / −17,3 / −17,4; 14/14 dagen negatief | 21-09..20-10 | 21-10 19:40 |
+| Nabeschouwing: accu leverde / had kunnen (realisatie) | € 6,98 / € 7,69 (91 %) 7 d; gemist voorspelling € 1,11, reserve € 0,40 | 14..20-10 | 21-10 19:40 |
+| Ochtendpiek vastgehouden (nabeschouwing per dagdeel) | 1,2-2,3 kWh op 4/7 dagen; netto nacht+ochtend ~€ 1,3/week | 14..20-10 | 21-10 19:40 |
+| Tekortnachten | 0 / 7 (20-10 0,05 kWh) | 14..20-10 | 21-10 19:40 |
+| MC 22:00 Brier (tot blok) | 0,144 (n=7; →20-10 100 % zonder tekort) | 13..19-10 | 21-10 19:40 |
+| Planvolging volgens plan | 60,2 % (7 d, 47,9-72,6) | 14..20-10 | 21-10 19:40 |
+| Netimport / PV per dag | 6,24 / 7,33 kWh (7 d gem.) | 14..20-10 | 21-10 19:40 |
+| Huisverbruik per dag | 9,6 kWh (7,9-10,7) | 14..20-10 | 21-10 19:40 |
+| Accucapaciteit nominaal | 11,52 kWh (4 modules sinds 14-10) | v5.97.1 | 21-10 19:40 |
+

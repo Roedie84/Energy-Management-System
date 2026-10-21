@@ -2,36 +2,10 @@
 
 Doorlopende leerronde (elke 4 uur). Alleen gemeten getallen; KPI's in KPI.csv, referenties in BASELINE.md, voorstellen in VOORSTELLEN.md.
 
-## 07-10 23:15 · tussenronde (eerste ronde, baseline uit ~10 dagen historie)
-- Gemeten: PV, net, accu per dag 28-09..06-10 (statistics); PV-voorspelling 31 dagen (pv_forecast_accuracy); tekortnachten 7 n; uurlijkse teruglevering 's nachts.
-- PV-voorspelling: MAE 10,5% (30 d) → 5,2% (7 d); bias −4,4% / −1,7% (voorspelling iets te hoog). Geen duidelijk verschil bewolkt >70% vs ≤70% (bias −6,8 vs −4,6, n=16/13).
-- Tekortnachten 4 van 7 (5,68 kWh): 2 economisch, 2 planning, 0 capaciteit. Reserve te hoog: 0 van 7.
-- Opvallend: als de accu 's nachts levert, gaat er constant ~60 Wh/u naar het net (mediaan 60, n=50 uren, 00-07 u gem. 0,35 kWh/nacht). Oorzaak: smart-modus van zendure-ha volgt een P1-doel van ~−50 W (CHANGELOG v0.63.19). Steekproef 07-10 02:00: accu 290 W, P1 −50 W.
-- Gevolg: het geleerde nachtverbruik (`p1 + accu + pv`) is huisverbruik zonder dit lek; de accu levert ~50 W meer dan de reserve verwacht → ~0,5-0,8 kWh/nacht over het hele ontlaadvenster. Dit is energie die verkocht wordt terwijl de reserve nodig is (HARDE REGEL "huis gaat voor") → gemeld, voorstel L-EMS-001.
-- Hypothese H-EMS-1: het nachtlek verklaart een deel van de tekort-kWh in planning-nachten. Toets volgende ronden: lek-kWh per nacht naast tekort-kWh.
-- Hypothese H-EMS-2: PV-bias is nu klein (−2%) en daalt; geen correctie nodig. Volgen tot 14 dagen.
-- Niet gemeten (meetbaarheid): uurlijkse PV-voorspelling per uur (geen historie van uurvoorspelling in attributen gevonden; volgt), kwartierbeslissingen tegen achteraf-optimum (nog geen replay gebouwd), SoC-voorspelling tegen werkelijk.
-- Geen release (tussenronde; 10 releases vandaag door andere sessies, v5.44 geïnstalleerd).
-
-laatste ronde: 07-10 23:15, gemeten t/m 07-10 23:00
-
-## 07-10 23:40 · tussenronde (handmatig gestart)
-- Correctie: de vorige ronde was om 23:15, niet 23:30 (tijdstempels aangepast).
-- Sinds 23:15 geen nieuwe gebeurtenis om te meten; geen release.
-
-laatste ronde: 07-10 23:40, gemeten t/m 07-10 23:40
-
-## 07-10 23:45 · tussenronde
-- **Correctie 23:15:** de −50 W op de P1 ("nachtlek") is een bewuste instelling (Zendure regelt op P1+50) en zit sinds v5.20 in de reserve (`regelverschuiving_w` = 50, live gecontroleerd in gacs_zelfbeoordeling); de tekorttelling telt hem niet als verkoop (v5.42). Geen schending HARDE REGEL. L-EMS-001 vervallen.
-- H-EMS-1 getoetst met uurdata 29-09..07-10 (9 nachten): beide planning-tekortnachten volgden op avondverkoop via `expensive_quarter_peak` onder de reserve (03-10: 1,37 kWh → 0,68 kWh tekort; 04-10: 5,14 kWh, vanaf 19:55 beschikbaar < reserve → 1,68 kWh tekort). Al gevonden en hersteld in v5.28.4 (04-10 10:32). H-EMS-1 verworpen; oorzaak = piekregel.
-- Effect v5.28.4 gemeten: sinds 04-10 10:32 0× `expensive_quarter_peak`; 4 nachten (05-10..07-10 + 04→05) zonder tekort; avondverkoop 04-10 alleen boven de reserve (`expensive_quarter`).
-- MC-kalibratie (nieuw): tekortkans om 22:00 vs uitkomst, 8 nachten 30-09..07-10: tekortnachten 98/100/45/97%, overige 0/0/0/0% → Brier 0,038 (n=8). Goed onderscheid, n klein → H-EMS-3.
-- PV per uur (meetbaar via attribuut `profile` van pv_hourly_forecast_bias): werkelijk/Solcast mediaan 0,90-0,98 rond de middag, 0,52-0,69 om 06-07 en 15-17 UTC. De integratie leert en gebruikt dit profiel al zelf. Tweede voorspelling 13 d: Solcast 6,1% mediaanfout, tweede bron 31,6%.
-- Lopend vannacht (→08-10): beschikbaar 4,23 kWh, nodig 4,54 kWh tot blok 12:15 → verwacht tekort 0,31 kWh; MC 41,7%. Toetsen in de dagafsluiting van 09-10.
-- Meetbaarheid: MC-tekortkans heeft geen state_class → geen lange statistiek, alleen ~10 d historie. Kandidaat (zelf te bouwen, dagafsluiting): MC-waarde om 22:00 in het dagrecord bewaren.
-- Geen release (tussenronde, geen acute bug).
-
-laatste ronde: 07-10 23:45, gemeten t/m 07-10 23:44
+## 07-10 · samenvatting dag (3 tussenronden 23:15-23:45, eerste baseline uit ~10 d)
+- Baseline: PV-MAE 10,5 % (30 d) / 5,2 % (7 d), bias −4,4/−1,7 %; tekortnachten 4/7 (2 economisch, 2 planning); MC 22:00 Brier 0,038 (n=8).
+- −50 W P1-verschuiving 's nachts bleek bewust (`regelverschuiving_w` in de reserve) → L-EMS-001 vervallen; H-EMS-1 verworpen: planning-tekortnachten kwamen van `expensive_quarter_peak` (hersteld v5.28.4).
+- PV-uurprofiel werkelijk/Solcast: middag 0,90-0,98, randuren 0,52-0,69 (integratie leert dit zelf). Meetbaarheid: MC-kans 22:00 niet bewaard → L-EMS-002.
 
 ## 08-10 03:40 · dagafsluiting 07-10
 - Dag 07-10: PV 11,87 kWh (voorspeld 12,83, −7,5% bij 100% bewolking), import 0,72, export 2,23, accu 6,61 in / 5,67 uit, huis 9,41 kWh. Nacht 06→07 zonder tekort (SoC 30% om 09:00). 0× verkoop onder de reserve (harde regel gehaald). 15 herstarts.
@@ -383,3 +357,17 @@ laatste ronde: 12-10 19:40, gemeten t/m 12-10 19:46
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve; 1 avond zonder sprong). Geen release (tussenronde, niets acuut). L-EMS-022/023 in de dagafsluiting van 13-10.
 
 laatste ronde: 12-10 23:40, gemeten t/m 12-10 23:41
+
+## 21-10 19:40 · dagafsluiting-inhaalronde (gat 13-10 11:30 → 21-10; DAG 12..20-10 gemeten)
+- Gemeten (HA-statistiek, dagarchief, nabeschouwing_7d, planvolging, MC-kalibratie): PV, net, accu, huis per dag 12..20-10; 12-10 overgenomen uit analyse/2026-10-13 (bestand verwijderd). Context: 4e accumodule 14-10 (nominaal 11,52 kWh, v5.97.1); chatsessies bouwden v5.95-v5.114.1.
+- **PV day-ahead te hoog: 14 van 14 dagen negatief**, bias −17,3 % (14 d) / −17,4 % (7 d), mediaan −9 %; 30 d MAE 11,3 % bias −8,7 %. 17-10 −40 % (helder), 18-10 −40 %. `learned_bias_percent` null: correctie bewust ingehouden bij "twee soorten dagen" → H-EMS-2 bevestigd, voorstel L-EMS-025 (open). Vandaag t/m 19:00 5,03 tegen 7,82 kWh (−36 %).
+- **Nabeschouwing 14..20-10: accu leverde € 6,98 van € 7,69 haalbaar = 91 %** (06..12-10: 70 %); gemist € 0,71, waarvan voorspelling € 1,11 en reserve € 0,40 (rest: netladen boven het optimum zonder netladen).
+- **H-EMS-11 bevestigd (4/7 dagen):** ochtendpiek houdt 1,2-2,3 kWh vast (+€ 0,64-1,08), terwijl de nacht 1,2-1,5 kWh "te veel" ontlaadt (−€ 0,40-0,56); netto nacht+ochtend ~€ 0,3/dag → voorstel L-EMS-026 (open).
+- **Harde regel:** `verkoopkwartieren` 20/21-10 leeg (0 verkoop, regeloverschot 0,20/0,16 kWh). Verkoop uit de accu (uurstatistiek) op 14, 15, 16, 17 en 19-10 (1,0-2,9 kWh/dag); verkoopreserve per kwartier voor die dagen niet meer leesbaar. 14-10 19:30-20:08 verkocht met beschikbaar 7,7→6,0 onder de getoonde totaalreserve 9,7→7,5 (incl. lange horizon). Geen tekortnacht 14..19-10; 20-10 0,05 kWh (zonder verkoop). Onbeslist → meetbaarheid L-EMS-027 (zelf bouwen).
+- **H-EMS-10:** v5.98.1 (na herstart) en v5.99.11 (hysterese lange horizon, 47 sprongen op 17-10) gebouwd. Vandaag nog 29 "sprongen", alle met reserve gelijk (10,37 kWh, boven capaciteit) en bijdragen 0: de behoefte vóór marge schommelt 0,3-1,5 kWh per minuut; `grootste_onderdeel` zegt dan ten onrechte "lange_horizon" → meetfout, mee in L-EMS-027. Sturing raakt het niet (reserve afgekapt).
+- L-EMS-023 **geverifieerd**: `oorzaken.accu` == `afwijking_accu` op 13..21-10 (9 dagen; 12-10 nog 4 tegen 9). L-EMS-022 **deels**: 0 valse verkoopvlaggen 20/21-10, maar geen echte verkoop in die dagen om te toetsen.
+- Meetfout dagarchief (code nagelezen): `zon_verwacht_kwh` 0 op 19 en 20-10 (eerste kwartier 00:00 van de verwachting heeft nog geen zon) en `accu_opbrengst_eur` = kosten zonder accu − kosten, zonder voorraadverschil (20-10 −€ 1,02 terwijl er ~4 kWh extra in de accu stond) → L-EMS-024 (zelf bouwen).
+- MC 22:00: Brier 0,144 (n=7, was 0); nacht →20-10 kans 100 % zonder tekortnacht. Planvolging 60,2 % (7 d). Niet gemeten: HA-herstarts (logboek na 13-10 19:48 leeg), verkoopmarge per kwartier 13..19-10.
+- Hypotheses: H-EMS-2 (PV te hoog, bevestigd), H-EMS-11 (nacht ontlaadt wat de ochtend nodig heeft), H-EMS-12 (MC te stellig bij lage accu, n=1). Geen release (inhaalronde; vandaag al v5.114.1 door andere sessie).
+
+laatste ronde: 21-10 19:40, gemeten t/m 21-10 19:00
