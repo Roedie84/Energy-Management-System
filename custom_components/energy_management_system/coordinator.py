@@ -64,6 +64,7 @@ from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bron
 from . import thuiskomst as thuiskomst_mod
 from .const import (
     RESERVE_SPRONG_DREMPEL_KWH,
+    RESERVE_SPRONG_VERKLAARD_KWH,
     RESERVE_SPRONG_HERSTART_S,
     RESERVE_SPRONGEN_MAX,
     DIAGNOSE_REGEL_MAX_TEKENS,
@@ -23312,6 +23313,17 @@ class EnergyManagementSystemCoordinator:
                 regel["grootste_onderdeel"] = max(
                     bijdragen, key=lambda k: abs(bijdragen[k])
                 )
+            # v5.115.1 (L-EMS-027): op 21-10 telden 29 "sprongen" terwijl de
+            # reserve gelijk bleef (afgekapt, 10,37 kWh) en alle bijdragen 0
+            # waren; `grootste_onderdeel` noemde dan de eerste sleutel
+            # (lange_horizon_extra_kwh). Verklaren de onderdelen niets, dan
+            # zat het in de basisbehoefte. Verandert alleen de behoefte en
+            # niet de reserve zelf, dan apart tellen (geen reservesprong).
+            if not bijdragen or max(abs(v) for v in bijdragen.values()) < RESERVE_SPRONG_VERKLAARD_KWH:
+                regel["grootste_onderdeel"] = "basisbehoefte"
+            a, b = _f(oud, "reserve_kwh_after_margin"), _f(nieuw, "reserve_kwh_after_margin")
+            if a is not None and b is not None and abs(b - a) <= RESERVE_SPRONG_DREMPEL_KWH:
+                regel["alleen_behoefte"] = True
             sprongen = self.reserve_sprongen
             sprongen.append(regel)
             del sprongen[:-RESERVE_SPRONGEN_MAX]
@@ -23376,7 +23388,12 @@ class EnergyManagementSystemCoordinator:
             "reserve_sprongen": list(self.reserve_sprongen)[-24:],
             "reserve_sprongen_aantal": sum(
                 1 for r in self.reserve_sprongen
-                if not (isinstance(r, dict) and r.get("na_herstart"))
+                if not (isinstance(r, dict) and (r.get("na_herstart") or r.get("alleen_behoefte")))
+            ),
+            # v5.115.1 (L-EMS-027): behoefte sprong, reserve bleef gelijk.
+            "reserve_sprongen_alleen_behoefte": sum(
+                1 for r in self.reserve_sprongen
+                if isinstance(r, dict) and r.get("alleen_behoefte") and not r.get("na_herstart")
             ),
             "reserve_sprongen_na_herstart": sum(
                 1 for r in self.reserve_sprongen
@@ -48958,6 +48975,14 @@ class EnergyManagementSystemCoordinator:
                 if datum and datum in self.dagarchief["dagen"]:
                     D.vul_aan(self.dagarchief, datum, tn=r.get("tekortnacht_kwh"),
                               ov=r.get("excess"), so=r.get("laagste_soc_ochtend"))
+            # v5.115.1 (L-EMS-027): verkoop per afgesloten dag uit het
+            # dagverloop, zodat de harde regel ook na dagen te toetsen blijft.
+            for datum, regels in list((self.dagverloop or {}).items()):
+                if datum >= vandaag or datum not in self.dagarchief["dagen"]:
+                    continue
+                verkoop = D.verkoop_van_dag(regels)
+                if verkoop is not None:
+                    self.dagarchief["dagen"][datum].update(verkoop)
             if not self.dagarchief.get("gezaaid") and self._dagarchief_zaai_pogingen < 3:
                 self._dagarchief_zaai_pogingen += 1
                 self.dagarchief["gezaaid"] = await self._zaai_dagarchief(vandaag)

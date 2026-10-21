@@ -31,6 +31,9 @@ Velden (korte sleutels, uitgeschreven in `uitgeschreven`):
     ov     overschotdag (reserve achteraf te ruim)
     so     laagste laadstand in de ochtend (%)
     t/gd   gemiddelde temperatuur in Nederland (°C) / graaddagen (18 °C)
+    vk/vkm/vko  verkocht uit de accu (kWh) / kleinste marge tegen de
+           verkoopreserve bij verkoop (kWh) / kwartieren verkocht onder de
+           reserve (v5.115.1, L-EMS-027; uit het dagverloop)
 
 Zuivere functies, zonder Home Assistant.
 """
@@ -64,10 +67,13 @@ NAMEN = {
     "gm": "gemist_eur", "gr": "gemist_door_regel_eur", "r27": "accu_2027_eur",
     "tn": "tekortnacht_kwh", "ov": "overschotdag", "so": "laagste_soc_ochtend",
     "t": "temp_c", "gd": "graaddagen",
+    "vk": "verkocht_kwh", "vkm": "kleinste_verkoopmarge_kwh",
+    "vko": "kwartieren_onder_verkoopreserve",
 }
 BRONNEN = {"m": "meetlog", "s": "statistiek"}
 #: Velden die na de meting worden aangevuld en een nieuwe meting overleven.
-AANVULLING = ("pv", "vv", "gm", "gr", "r27", "tn", "ov", "so", "t", "gd")
+AANVULLING = ("pv", "vv", "gm", "gr", "r27", "tn", "ov", "so", "t", "gd",
+              "vk", "vkm", "vko")
 
 
 def _r(x, n=2):
@@ -180,6 +186,45 @@ def vul_aan(archief: dict, datum: str, **velden) -> None:
     for k, v in velden.items():
         if v is not None:
             dag[k] = v
+
+
+def verkoop_van_dag(regels: list, minimum: int = MIN_KWARTIEREN) -> dict | None:
+    """Verkoop van één dag uit de kwartieren van het dagverloop (v5.115.1, L-EMS-027).
+
+    De harde regel (nooit onder de verkoopreserve verkopen) was alleen te
+    toetsen voor vandaag en gisteren (`verkoopkwartieren`); voor 14..19-10 niet
+    meer. Nu per dag blijvend in het archief:
+
+        vk   kWh die uit de accu verkocht werd (`export_uit_accu_kwh`)
+        vkm  kleinste marge (beschikbaar min verkoopreserve) bij verkoop;
+             None als er niet verkocht werd
+        vko  kwartieren met verkoop onder de reserve (marge < 0)
+
+    Zelfde selectie als `verkoopkwartieren`: alleen echte verkoop (`verkocht`,
+    v5.94); oudere kwartieren zonder die vlag tellen als er een marge bij
+    export is. Een dag met minder dan `minimum` kwartieren geeft None: dan
+    zou "0 verkocht" niet te onderscheiden zijn van "niet gemeten".
+    Alleen meten; stuurt niets.
+    """
+    rijen = [r for r in regels or [] if isinstance(r, dict)]
+    if len(rijen) < minimum:
+        return None
+    vk, marges, vko = 0.0, [], 0
+    for r in rijen:
+        if "verkocht" in r:
+            if not r.get("verkocht"):
+                continue
+        elif r.get("marge_bij_export_min_kwh") is None:
+            continue
+        kwh = r.get("export_uit_accu_kwh")
+        if isinstance(kwh, (int, float)) and not isinstance(kwh, bool):
+            vk += float(kwh)
+        m = r.get("marge_bij_export_min_kwh")
+        if isinstance(m, (int, float)) and not isinstance(m, bool):
+            marges.append(float(m))
+            if m < 0:
+                vko += 1
+    return {"vk": round(vk, 3), "vkm": round(min(marges), 3) if marges else None, "vko": vko}
 
 
 def vul_weer(archief: dict, weer: dict[str, dict]) -> int:

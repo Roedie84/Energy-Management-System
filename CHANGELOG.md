@@ -33532,3 +33532,13 @@ Tests: `test_v51141_storingstekst.py` (3); `test_cockpit_matrix.py` bijgewerkt.
 - `get_accukosten()` (per kwartier in het geheugen) in de diagnose (`accukosten`), als attribuut van de rendementssensor en in de cockpit (Accumodules, uitklapblok).
 
 Tests: `test_v5115_accukosten.py` (14).
+
+
+## v5.115.1 — verkoop per dag in het dagarchief, behoeftesprongen apart (L-EMS-027)
+
+- **Leerronde 21-10 19:40:** de harde regel (nooit onder de verkoopreserve verkopen) was voor 14..19-10 niet meer te toetsen: `verkoopkwartieren` toont alleen vandaag en gisteren. En `reserve_sprongen` telde 29x op 21-10 terwijl de reserve gelijk bleef (10,37 kWh, afgekapt) en alle bijdragen 0 waren; `grootste_onderdeel` noemde dan `lange_horizon_extra_kwh`.
+- Dagarchief: per afgesloten dag `vk` (verkocht uit de accu, kWh), `vkm` (kleinste marge tegen de verkoopreserve bij verkoop) en `vko` (kwartieren verkocht onder de reserve), uit het dagverloop (`dagarchief.verkoop_van_dag`, zelfde selectie als `verkoopkwartieren`). Pas vanaf 80 kwartieren in het dagverloop; overleeft een nieuwe meting. De dagen die nog in het dagverloop staan (tot 40) worden bij de eerstvolgende ronde aangevuld.
+- Reservesprong: verandert alleen de behoefte en niet de reserve zelf (≤ 0,3 kWh), dan `alleen_behoefte` en apart geteld in `reserve_sprongen_alleen_behoefte`, niet in `reserve_sprongen_aantal`. Verklaart geen onderdeel de sprong (alle bijdragen < 0,05 kWh), dan `grootste_onderdeel` = `basisbehoefte`.
+- Alleen meten; stuurt niets.
+
+Tests: `test_v51151_verkoop_dagarchief.py` (9).

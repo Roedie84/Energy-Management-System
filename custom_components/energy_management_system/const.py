@@ -7181,6 +7181,8 @@ RESERVE_BODEM_FRACTIE = 0.15
 # v5.87 (L-EMS-020): een reservesprong vastleggen vanaf deze verandering
 # tussen twee rondes, en hoeveel sprongen bewaard blijven. Alleen meten.
 RESERVE_SPRONG_DREMPEL_KWH = 0.3
+#: v5.115.1 (L-EMS-027): kleiner dan dit verklaart geen onderdeel de sprong.
+RESERVE_SPRONG_VERKLAARD_KWH = 0.05
 # v5.98.1: sprongen binnen zoveel seconden na de start tellen niet (opstarten).
 RESERVE_SPRONG_HERSTART_S = 600
 RESERVE_SPRONGEN_MAX = 48
