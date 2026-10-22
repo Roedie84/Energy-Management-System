@@ -431,3 +431,14 @@ laatste ronde: 22-10 11:40, gemeten t/m 22-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek; plan spaart nacht 22→23 zelf), H-EMS-13 (gebouwd; toets). Geen release (tussenronde; v5.116.1 en v5.117.0 vandaag al door andere sessie).
 
 laatste ronde: 22-10 15:40, gemeten t/m 22-10 15:45
+
+## 22-10 19:40 · tussenronde
+- Actief **v5.119.0** (andere sessie 18:08; v5.118.0 17:09; beide geïnstalleerd). Daarmee gebouwd: L-EMS-025 en -026 (v5.118.0, akkoord Ruud 16:45), L-EMS-024, -029, -030 (v5.119.0, akkoord 18:05). 0 EMS-fouten; bij de herstart 19:06 4× bronbuffer-WARNING (Solcast/PV even onbeschikbaar, Solcast API-limiet 10/10).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 22-10 0,075 kWh). Reservesprongen 0.
+- **PV dag 22-10:** 4,21 kWh (SolarEdge) tegen day-ahead 4,58 (−8,1 %) en Solcast 4,47 (−5,8 %) → 16e dag op rij te hoog, maar klein. De nieuwe `eenzijdige_correctie` (−8,1 %, 14/14 dagen) had hem precies goed gezet (n=1). H-EMS-2 → toets L-EMS-025 over 7 dagen.
+- Avond: import 15-19 u 1,11 kWh (17-19 u 0,31), piek uit de accu; SoC 85 → 68 %. MC 99 % tot het blok 23-10 21:30, verwacht tekort 2,94 kWh "economisch" (laden loonde niet) → bewust bijkopen, geen reservefout.
+- **H-EMS-13 tussenstand:** sinds v5.117.0 (15:27) 0 nieuwe kwartieren "afwijking sturing" (n≈17). Planvolging vandaag 61,0 % (77 kw.). Toets nacht 22→23.
+- Digital twin: laadblok 11:45-16:45 nog +1,07..+2,15 te hoog (vóór v5.119.0); effect pas bij het volgende blok (23-10 21:30).
+- Hypotheses: H-EMS-2 (PV te hoog; correctie gebouwd), H-EMS-11 (nacht vs ochtendpiek; L-EMS-026 gebouwd, eerste nacht 22→23), H-EMS-13 (plan = beslissing; toets nacht). Geen release (tussenronde; vandaag al 6 releases door andere sessies).
+
+laatste ronde: 22-10 19:40, gemeten t/m 22-10 19:45
