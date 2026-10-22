@@ -66,3 +66,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 22-10 12:51 | ultimatesensor back light naam
 22-10 13:52 | ems sensor-gezondheid monsters overslaan bij niet aanstuurbaar
 22-10 15:51 | L-SC-014 celsnelheid > 120 km/u als onbekend
+22-10 16:51 | stormchase waarschuwingsniveau/verwachting volgt gemeten onweer niet
+22-10 16:51 | gold scalper sluitreden xauusd achteraf invullen uit broker-afstemming
+22-10 16:51 | hernoemen hue-zones zitgedeelte->zithoek en dubbele naam achtertuin
