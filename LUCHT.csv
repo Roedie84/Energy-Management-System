@@ -533,3 +533,23 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-22 16:20,sturen_bevestigd,244,245,mediaan 0.15 s
 2026-10-22 16:20,filtergebruik_pct,0,1,
 2026-10-22 16:20,automation_traces_fout,0,2,traces na herstart 16:21; oudere verloren
+2026-10-22 20:20,pm25_gem,1.02,48,5-min statistiek 16:20-20:20
+2026-10-22 20:20,pm25_mediaan,0.97,48,
+2026-10-22 20:20,pm25_p95,1.40,48,
+2026-10-22 20:20,pm25_max,1.64,48,blokmax 17:40
+2026-10-22 20:20,pm25_uren_gt15,0.00,48,
+2026-10-22 20:20,pm25_uren_gt25,0.00,48,
+2026-10-22 20:20,pm25_dag_tm_nu,0.60,240,00:20-20:20
+2026-10-22 20:20,kookmoment_pm25_max,1.55,4,kookplaat run 16:45-17:03; ramen dicht; auto; blokmax tijdens koken (voor 1.03 / tijdens 1.25)
+2026-10-22 20:20,stand_auto_min,231,1,hele periode auto; ~9 min unavailable (herstarts)
+2026-10-22 20:20,pm25_gem_auto,1.02,48,5-min blokken
+2026-10-22 20:20,stand_mid_min,0,1,
+2026-10-22 20:20,pm25_gem_aanwezig,1.02,48,hele periode aanwezig (occupancy/tv)
+2026-10-22 20:20,co2_gem,1010,48,5-min; max 1354 (20:15 stijgend)
+2026-10-22 20:20,co2_uren_gt1200,0.42,48,vanaf ~19:55
+2026-10-22 20:20,schimmel_indicator,69,48,64 -> 75
+2026-10-22 20:20,ha_herstarts,10,1,16:25 16:43 17:20 17:22 17:55 18:20 18:22 19:05 20:02 20:09
+2026-10-22 20:20,lokaal_mislukt,47,91213,uitval 0; 188 verbindingen; laatste fout 20:10 connection reset (herstart)
+2026-10-22 20:20,sturen_bevestigd,244,245,mediaan 0.15 s
+2026-10-22 20:20,filtergebruik_pct,0,1,
+2026-10-22 20:20,automation_traces_fout,0,4,oudere verloren bij herstart
