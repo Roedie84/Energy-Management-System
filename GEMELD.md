@@ -54,3 +54,13 @@ Regel: <dd-mm HH:MM> | <sleutel>
 22-10 07:51 | rolluiken woonkamer werkdag-voorstel (trigger eettafellamp uit) aanzetten
 22-10 08:52 | gold scalper papiersaldo bij herladen teruggezet naar starting_balance
 22-10 08:52 | gold scalper afstemming pepperstone xauusd 7 afwijkingen (trade niet bij broker)
+22-10 12:51 | 112 achterhoek-nieuws 5 rest-sensoren naar één resource (503)
+22-10 12:51 | eufy-lokaal image momentopname achtertuin/zolder unavailable
+22-10 12:51 | browser mod recorder-exclude
+22-10 12:51 | label airco-zuiniger-bij-koken automation
+22-10 12:51 | verweesde entiteiten (oven-knop, music assistant tv) + oude browser_mod verwijderen
+22-10 12:51 | tv dubbel via dlna uitschakelen
+22-10 12:51 | nordpool ongebruikt verwijderen of terugval prijssensor
+22-10 12:51 | dashboard home verwijderen
+22-10 12:51 | ems balanceerlading na 7 dagen zonder 100%
+22-10 12:51 | ultimatesensor back light naam
