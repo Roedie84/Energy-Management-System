@@ -455,3 +455,19 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-22 00:20,sturen_bevestigd,234,235,mediaan 0.15 s
 2026-10-22 00:20,filtergebruik_pct,0,1,
 2026-10-22 00:20,automation_traces_fout,0,5,mid 15 min na tv uit (23:26 -> 23:41)
+2026-10-22 04:20,pm25_gem,0.35,48,5-min statistiek 00:20-04:20
+2026-10-22 04:20,pm25_mediaan,0.35,48,
+2026-10-22 04:20,pm25_p95,0.48,48,
+2026-10-22 04:20,pm25_max,0.70,48,
+2026-10-22 04:20,pm25_uren_gt15,0.00,48,
+2026-10-22 04:20,pm25_uren_gt25,0.00,48,
+2026-10-22 04:20,stand_mid_min,240,1,hele periode; 3x kort unavailable (HA-herstart)
+2026-10-22 04:20,pm25_gem_mid,0.35,48,niemand aanwezig; tv uit; ramen dicht
+2026-10-22 04:20,co2_gem,565,48,5-min; max 669; daalt 659 -> 525
+2026-10-22 04:20,co2_uren_gt1200,0.0,48,
+2026-10-22 04:20,schimmel_indicator,71,48,
+2026-10-22 04:20,ha_herstarts,3,1,01:47 02:47 03:33
+2026-10-22 04:20,lokaal_mislukt,39,86100,uitval 0; 169 verbindingen; laatste fout 03:33 connection reset (herstart)
+2026-10-22 04:20,sturen_bevestigd,234,235,mediaan 0.15 s
+2026-10-22 04:20,filtergebruik_pct,0,1,
+2026-10-22 04:20,automation_traces_fout,0,5,alle failed_conditions (nachtvenster 00-06)
