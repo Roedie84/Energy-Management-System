@@ -64,4 +64,5 @@
 | Netimport / PV per dag | 6,24 / 7,33 kWh (7 d gem.) | 14..20-10 | 21-10 19:40 |
 | Huisverbruik per dag | 9,6 kWh (7,9-10,7) | 14..20-10 | 21-10 19:40 |
 | Accucapaciteit nominaal | 11,52 kWh (4 modules sinds 14-10) | v5.97.1 | 21-10 19:40 |
-
+| PV-voorspelling MAE (dag, day-ahead tracker) | 12,1 % (30 d) · 19,3 % (14 d) · 21,3 % (7 d); bias −10,2 / −19,3 / −21,3; 15 dagen op rij negatief | 22-09..21-10 | 22-10 03:40 |
+| Nabeschouwing: accu leverde / had kunnen (realisatie) | € 7,15 / € 8,50 (84 %) 7 d | 15..21-10 | 22-10 03:40 |

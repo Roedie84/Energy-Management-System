@@ -383,3 +383,15 @@ laatste ronde: 21-10 19:40, gemeten t/m 21-10 19:00
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek), H-EMS-12 (MC-kalibratie: definitie). Geen release (tussenronde, niets acuut; v5.115.1 wacht op installatie).
 
 laatste ronde: 21-10 23:40, gemeten t/m 21-10 23:43
+
+## 22-10 03:40 · dagafsluiting 21-10
+- Actief **v5.115.0**; v5.115.1 (L-EMS-027) staat klaar, niet geïnstalleerd → geen release (niet stapelen). 0 EMS-fouten; Solcast-limiet (10/10) en Zonneplan-sensoren even onbeschikbaar rond 00:02 (extern, bronbuffer vangt het op).
+- Dag 21-10: PV 5,03 kWh (day-ahead 7,82 → −35,7 %), import 2,14, export 0,58, accu 3,33 in / 6,77 uit, huis 10,03 kWh. Planvolging 68,1 %. Geen tekortnacht (→21-10). **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 0,25 kWh).
+- **H-EMS-2 sterker:** 15 dagen op rij te hoog; 7 d MAE/bias 21,3/−21,3 %, 14 d 19,3/−19,3 %, 30 d 12,1/−10,2 % (was 17,4/17,3/11,3). `learned_bias_percent` nog null → L-EMS-025 (open) blijft het voorstel.
+- **H-EMS-11 (5 van 8 dagen):** 21-10 ochtendpiek 2,70 kWh vastgehouden (+€ 1,17), nacht 1,38 kWh te veel ontladen (−€ 0,48). Realisatie 7 d (15..21-10) 84 % (€ 7,15 van € 8,50; was 91 % over 14..20-10). Nacht 21→22 doet het L-EMS-026-patroon zelf (lage stand): 00:00-03:45 sparen op 21 % (0,61 kWh import bij ~24 ct), laden 03:45-05:30 tot 42 %, ochtendpiek uit de accu → uitslag nabeschouwing 22-10.
+- **H-EMS-12:** avond 21-10 22:00 kans 100 % bij 1,84 kWh; accu staat op 21 % (boven min-SoC 15 %), import met niet-lege accu = geen tekortnacht volgens de definitie. Uitslag 09:00 → toets 11:40.
+- Nieuw gezien: om 00:00:00 springt de lange horizon 5,39 → 7,12 kWh en 33 s later terug naar 5,17 (reserve 9,74 → 10,37 → 9,78) = dagwissel-artefact. Kort, maar telt als echte sprong; volgende middernacht nogmaals toetsen vóór een voorstel.
+- Meetfout L-EMS-024 3e dag (zon_verwacht 0 op 19/20/21-10). 21-10 heeft geen kosten in het dagarchief (bewust: < 90 % kwartieren met prijs bij de prijsbronstoring). Bouw wacht tot v5.115.1 geïnstalleerd is.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek), H-EMS-12 (MC-definitie). Geen release.
+
+laatste ronde: 22-10 03:40, gemeten t/m 22-10 03:43

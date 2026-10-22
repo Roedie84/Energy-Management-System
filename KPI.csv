@@ -509,3 +509,23 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-21 23:40,TUSSEN,ems_marge_tot_blok_kwh,-1.22,1,"23:41 beschikbaar 1.38, nodig tot blok 10:45 2.60; MC 100 %; plan spaart 00:30-03:30 en laadt 03:45-05:30"
 2026-10-21 23:40,TUSSEN,ems_planvolging_volgens_plan_pct,68.5,92,"afwijking_accu 3 == oorzaken.accu 3"
 2026-10-21 23:40,TUSSEN,ems_reserve_sprongen,5,5,"21:18-23:00; 5.115.0 actief, 4 van 5 reserve gelijk (afgekapt)"
+2026-10-21,DAG,ems_pv_kwh,5.028,1,solaredge_i1_ac_energy statistics
+2026-10-21,DAG,ems_pv_afwijking_pct,-35.7,1,"day-ahead 7.82; bewolking 82.8 %"
+2026-10-21,DAG,ems_net_import_kwh,2.140,1,p1 statistics
+2026-10-21,DAG,ems_net_export_kwh,0.580,1,p1 statistics
+2026-10-21,DAG,ems_accu_laden_kwh,3.327,1,solarflow aggr
+2026-10-21,DAG,ems_accu_ontladen_kwh,6.772,1,solarflow aggr
+2026-10-21,DAG,ems_huisverbruik_kwh,10.033,1,pv+imp-exp+ontl-laad (dagarchief 9.98)
+2026-10-21,DAG,ems_planvolging_volgens_plan_pct,68.1,94,"planvolging.dagen; afwijking_accu 3 == oorzaken.accu 3"
+2026-10-21,DAG,ems_tekort_nacht_kwh,0,1,dagarchief tekortnacht_kwh (nacht 20->21)
+2026-10-21,DAG,ems_nabeschouwing_leverde_eur,1.54,1,"van 1.70 haalbaar; ochtendpiek vastgehouden 2.70 kWh (+1.17), nacht te veel ontladen 1.38 (-0.48)"
+2026-10-21,DAG,ems_verkoop_onder_reserve,0,0,"verkoopkwartieren leeg; regeloverschot 0.248 kWh"
+2026-10-21,DAG,ems_pv_mae_7d_pct,21.3,7,"bias -21.3; 7/7 negatief"
+2026-10-21,DAG,ems_pv_mae_14d_pct,19.3,14,"bias -19.3; mediaan -11.7; 14/14 negatief; 15 dagen op rij"
+2026-10-21,DAG,ems_pv_mae_30d_pct,12.1,30,"bias -10.2; mediaan -7.0; 24/30 negatief"
+2026-10-21,DAG,ems_nabeschouwing_realisatie_7d_pct,84.1,7,"15..21-10: 7.15 van 8.50 EUR"
+2026-10-21,DAG,ems_mc_kalibratie_brier,0.144,7,"nacht ->21-10 kans 0 % geen tekort; avond 21-10 22:00 kans 100 % (beschikbaar 1.84)"
+2026-10-21,DAG,ems_reserve_sprongen,6,6,"21:18-23:42 na herstart 20:58; 4 met reserve gelijk (afgekapt)"
+2026-10-21,DAG,ems_dagarchief_zon_verwacht_nul,1,3,"19, 20, 21-10 zon_verwacht_kwh 0 (L-EMS-024); 21-10 kosten niet gearchiveerd (<90 % kwartieren met prijs)"
+2026-10-22 03:40,TUSSEN,ems_net_import_kwh,0.608,1,"00:00-03:00 p1; accu in rust op 21 % (sparen), laden gepland 03:45-05:30 tot 42 %"
+2026-10-22 03:40,TUSSEN,ems_reserve_sprong_middernacht_kwh,1.73,2,"00:00:00 lange horizon 5.39->7.12, 00:00:33 terug 5.17 (dagwissel)"

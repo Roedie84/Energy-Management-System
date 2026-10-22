@@ -181,19 +181,21 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - 12-10 19:40: dag 26 kwartieren, `afwijking_accu` 8 tegen `oorzaken.accu` 3 (o.a. 17:45 "afwijking accu" met oorzaak zon) → tegenstrijdigheid groeit mee met de dag.
 
 ## L-EMS-024 · dagarchief: verwachting van de ochtend en accu-opbrengst met voorraadverschil (meetfout)
-- Status: **gepland** (zelf bouwen: meetfout in rapportage; dagafsluiting 22-10 03:40 of later, niet als er een niet-geïnstalleerde release klaarstaat).
+- Status: **gepland** (zelf bouwen: meetfout in rapportage). 22-10 03:40 niet gebouwd: v5.115.1 nog niet geïnstalleerd (niet stapelen); 21-10 is de 3e dag met `zon_verwacht_kwh` 0. Eerstvolgende dagafsluiting na installatie.
 - Onderbouwing: `laatste_dagen` 19 en 20-10 `zon_verwacht_kwh` 0 terwijl de day-ahead 6,70 en 11,40 kWh was. `_archiveer_zelfanalyse` neemt `verwachting[min(verwachting)]` = kwartier 00:00, dat in de snapshot nog geen zon heeft. En `accu_opbrengst_eur` = `kz − k` zonder voorraadverschil: 20-10 −€ 1,02 (geladen 9,65, ontladen 3,98 kWh; accu eindigde veel voller), 18-10 −€ 0,56, 15-10 −€ 0,35. Dagoverzicht kreeg die correctie al in v5.99.4.
 - Bouw: zon/verbruik-verwachting uit het eerste kwartier met een volledige dagverwachting (of de day-ahead van de PV-tracker); `b` met `get_savings_correction`-logica (voorraad begin/eind × terugleverwaarde). Test met de getallen van 20-10.
 - Effectmeting: `zon_verwacht_kwh` ≈ `predicted_kwh` van de tracker (±5 %); `accu_opbrengst_eur` per dag binnen € 0,20 van `nabeschouwing.accu_leverde_op_eur`.
 
 ## L-EMS-025 · PV day-ahead: corrigeren als alle dagen aan dezelfde kant liggen
 - Status: **open** (raakt planning/reserve → Ruud beslist).
+- Bijgewerkt 22-10: 15 dagen op rij te hoog; 7 d bias −21,3 %, 14 d −19,3 % (mediaan −11,7), 30 d −10,2 %.
 - Onderbouwing: day-ahead 14 van 14 dagen te hoog (07..20-10), bias −17,3 %, mediaan −9 %; 30 d 23/30 negatief, mediaan −6,4 %. `learned_bias_percent` is null: de tracker houdt de correctie bewust in bij "twee soorten dagen" (v3.33, −2..−14 % en −40 %). Gevolg: `gemist_door_voorspelling` € 1,11 in 14..20-10 (18-10 € 0,51, 19-10 € 0,34). Intraday vangt v5.96 (`_zon_realisatie`) het al op; de nacht- en blokplanning niet.
 - Voorstel: als ≥ 80 % van de laatste 14 dagen aan één kant ligt, toch corrigeren met de mediaan van de kleinste groep (nu ~−9 %), begrensd op −15 %.
 - Effect meten: PV-MAE 14 d (nu 17,3 %) en bias richting 0; `gemist_door_voorspelling` per week.
 
 ## L-EMS-026 · nacht niet leegtrekken als de ochtendpiek duurder is
 - Status: **open** (laad-/ontlaadstrategie → Ruud beslist).
+- Bijgewerkt 22-10: ook 21-10 (ochtendpiek 2,70 kWh vastgehouden +€ 1,17, nacht 1,38 te veel −€ 0,48) → 5 van 8 dagen.
 - Onderbouwing (nabeschouwing_7d 14..20-10, n=7): op 4 dagen (14, 15, 16, 19-10) ontlaadt de accu 's nachts 1,2-1,5 kWh "te veel" (−€ 0,40-0,56 t.o.v. optimum) en houdt hij in de ochtendpiek 1,2-2,3 kWh te weinig over (+€ 0,64-1,08). Netto nacht+ochtend +€ 0,09-0,60/dag, ~€ 1,3 per week. Op 17, 18, 20-10 niet (geen dure ochtend of netlading).
 - Voorstel: in de nacht `default_smart` alleen ontladen voor zover beschikbaar − behoefte tot en met de ochtendpiek > 0, als de ochtendpiek ≥ nachtprijs / rendement + slijtage; de rest uit het net. Reserve en "huis gaat voor" blijven gelijk.
 - Effect meten: per_dagdeel `ochtendpiek.vastgehouden_kwh` en netto nacht+ochtend over 7 dagen.
