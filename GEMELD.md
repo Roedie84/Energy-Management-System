@@ -52,3 +52,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 22-10 07:51 | ems lek-import feed-forward op P1 bij dalende pv
 22-10 07:51 | ems uitval prijssensor > 30 min zichtbaar in diagnose
 22-10 07:51 | rolluiken woonkamer werkdag-voorstel (trigger eettafellamp uit) aanzetten
+22-10 08:52 | gold scalper papiersaldo bij herladen teruggezet naar starting_balance
+22-10 08:52 | gold scalper afstemming pepperstone xauusd 7 afwijkingen (trade niet bij broker)
