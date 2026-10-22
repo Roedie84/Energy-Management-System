@@ -406,3 +406,15 @@ laatste ronde: 22-10 03:40, gemeten t/m 22-10 03:43
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek), H-EMS-13 (plan ≠ beslissing bij dip-laden). H-EMS-12 loopt af na 09:00.
 
 laatste ronde: 22-10 07:40, gemeten t/m 22-10 07:45
+
+## 22-10 11:40 · tussenronde
+- Actief **v5.116.0** (andere sessie, 08:36; geïnstalleerd, herstarts ~09:02 en ~11:03). 0 EMS-fouten; DNS-storing 10:24-10:40 (Zonneplan, Solcast e.a. via bronbuffer) en 2× "accu niet aanstuurbaar" (Zendure offline 10:50, 11:20) tijdens het laadblok — extern, laden liep door (11:30 −2381 W tegen plan −2386 W).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 22-10 0,04 kWh).
+- **Ochtendpiek 22-10 uit de accu:** import 07-10 u 0,10 kWh (07 u 0,02 · 08 u 0,05 · 09 u 0,03), SoC 18 → 14 %. Nacht 00-06 u 1,23 kWh import tegen ~23-24 ct (gespaard op 21 %). → H-EMS-11: het "sparen in de nacht, piek uit de accu"-deel werkte; de geplande nachtlading niet (H-EMS-13). Euro's in de nabeschouwing 22-10 (dagafsluiting 23-10).
+- **H-EMS-12 (MC-definitie) 2e keer bevestigd:** avond 21-10 22:00 kans 100 % (tot blok), nacht →22 géén tekortnacht (accu niet leeg, < 0,5 kWh met lege accu). Met →20 al eens: n=2/2. Brier wordt ~0,25 (n=8) zodra →22 in `kalibratie_22u` staat (nu nog 0,144 n=7). Oorzaak: MC rekent vanaf de huidige inhoud zonder geplande netlading/sparen; de definitie telt sparen-op-20 % niet als tekort. Kandidaat L-EMS-029 (meetbaarheid: kalibratie apart voor nachten met spaarplan) — eerst 1 nacht zonder lage stand vergelijken.
+- **H-EMS-13 nagelezen (code v5.116.0):** naast de schaling (L-EMS-028) nog twee verschillen tussen `_dipbesluit` en `_plan_dip_laadt`: (1) het spaarplan van de beslissing telt ook kwartieren ná het blok (`nodig_kwh`), het plan alleen tot het blok; (2) beslissing kiest het moment via `_goedkoopste_laadmomenten`, plan telt goedkopere kwartieren vóór het doel. **Meetbaarheid:** attributen van `diagnose_sturing` (o.a. `spaarplan_eigen/nodig_tot_blok_kwh`) staan niet in de recorder → offline narekening van de nacht kan alleen uit de diagnostiek/dagverloop; meenemen in L-EMS-028.
+- PV vandaag t/m 11:00: 0,70 kWh tegen Solcast-gedaan 0,61 (4,89 totaal − 4,28 rest); day-ahead 4,58. Eerste uren iets bóven de verwachting (n=3 uur).
+- Planvolging vandaag 58,7 % (46 kwartieren; sturing 8, accu 6) — geen nieuwe "afwijking sturing" sinds 07:40.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek), H-EMS-13 (plan ≠ beslissing). H-EMS-12 afgerond als definitieverschil (2/2). Geen release (tussenronde; v5.116.0 vandaag al door andere sessie).
+
+laatste ronde: 22-10 11:40, gemeten t/m 22-10 11:45
