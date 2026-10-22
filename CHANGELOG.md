@@ -33578,3 +33578,12 @@ Tests: `test_v51161_gezondheid_niet_aanstuurbaar.py` (3).
 - **Plan tegen beslissing, dip (L-EMS-028, H-EMS-13).** Het plan rekent een dip nu met de kwartieren van de beslissing (`_plan_dipkwartieren`: `_spaarkwartieren` + schaling naar de verkooptoets + DIP_MARGE, ook de kwartieren na het blok) en kiest het moment zoals `_goedkoopste_laadmomenten` (alle prijzen tot het doelkwartier, een heel kwartier op het laadvermogen). Nieuwe module `dipplan.py`.
 
 Tests: `test_v5117_balanceren_planblok.py` (16).
+
+
+## v5.117.1 — het plan toont de balanceerlading in een blok van morgen
+
+- Gezien na de installatie van v5.117.0: de accu was 6,7 dagen niet vol, het volgende blok begon morgen om 21:15 (dan 7,9 dagen). Het plan vroeg `balanceerlading()` voor "nu" en liet de lading weg die de beslissing in dat blok wel doet.
+- `balanceerlading()` geeft `vanaf` (laatst vol + 7 dagen, of + 4 bij celverschil); `_plan_balanceren` geeft dat moment (vandaag vult de zon: vanaf morgen) en `_plan_laadt` balanceert alleen blokkwartieren vanaf dat moment.
+- De beslissing verandert niet.
+
+Tests: `test_v5117_balanceren_planblok.py` (19).

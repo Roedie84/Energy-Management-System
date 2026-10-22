@@ -21864,6 +21864,12 @@ class EnergyManagementSystemCoordinator:
         dagen = (now - vol).total_seconds() / 86400
         uit["dagen_niet_vol"] = round(dagen, 1)
         delta = self.balanceer_max_delta_v
+        # v5.117.1: vanaf wanneer het nodig is - voor het kwartierplan, dat
+        # ook blokken van morgen plant.
+        vroeg = delta is not None and delta > BALANCEER_VROEG_CEL_DELTA_V
+        uit["vanaf"] = (
+            vol + timedelta(days=BALANCEER_VROEG_NA_DAGEN if vroeg else BALANCEER_NA_DAGEN)
+        ).isoformat()
         if dagen >= BALANCEER_NA_DAGEN:
             uit.update(nodig=True, reden=f"{dagen:.0f} dagen niet vol")
         elif dagen >= BALANCEER_VROEG_NA_DAGEN and delta is not None and delta > BALANCEER_VROEG_CEL_DELTA_V:
@@ -24281,19 +24287,30 @@ class EnergyManagementSystemCoordinator:
             for b, _e, p, t in kwartieren
         ]
 
-    def _plan_balanceren(self, now: datetime) -> bool:
-        """Laadt de beslissing in het blok vol voor de balans? (v5.117.0)"""
+    def _plan_balanceren(self, now: datetime) -> datetime | None:
+        """Vanaf wanneer laadt de beslissing in het blok vol voor de balans? (v5.117.0)
+
+        v5.117.1: een moment in plaats van ja/nee. Gezien na de installatie
+        van v5.117.0: de accu was 6,7 dagen niet vol, het blok begon morgen
+        om 21:15 (dan 7,9 dagen) - het plan vroeg het aan "nu" en liet de
+        balanceerlading weg die de beslissing morgen wel doet.
+        """
         try:
-            if not self.balanceerlading(now).get("nodig"):
-                return False
+            bal = self.balanceerlading(now)
+            if not bal.get("vanaf"):
+                return None
             ruimte = self._resterende_laadruimte_kwh()
             if ruimte is None or ruimte <= 0.05:
-                return False
-            return not self._balanceer_zon_vult_vandaag(
+                return None  # nu vol: de telling begint opnieuw
+            vanaf = datetime.fromisoformat(bal["vanaf"])
+            if vanaf <= now and self._balanceer_zon_vult_vandaag(
                 now, self.beschikbare_energie_kwh() or 0.0, ruimte
-            )
+            ):
+                # Vandaag doet de zon het; vanaf morgen weer bekijken.
+                vanaf = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            return vanaf
         except Exception:  # noqa: BLE001 - het plan mag nooit omvallen
-            return False
+            return None
 
     @staticmethod
     def _plan_dip_laadt(
@@ -24398,8 +24415,11 @@ class EnergyManagementSystemCoordinator:
         # blokeinde, tot vol (zonder de hysterese van 97 %).
         blok_start, blok_eind = netregels.get("blok") or (None, None)
         begin_kwartier = einde - timedelta(minutes=15)
+        balans_vanaf = netregels.get("balanceren")
         if (
-            netregels.get("balanceren")
+            balans_vanaf is not None and balans_vanaf is not False
+            # v5.117.1: vanaf het moment dat het nodig is (True = altijd).
+            and (balans_vanaf is True or begin_kwartier >= balans_vanaf)
             and blok_start is not None and blok_eind is not None
             and blok_start <= begin_kwartier < blok_eind
             and bruikbaar - soc > 0.05

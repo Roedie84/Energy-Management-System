@@ -170,3 +170,32 @@ def test_plan_balanceert_in_het_blok_zonder_hysterese(make_coordinator):
     # 98 % vol (boven de hysterese van 97 %), 0,2 kWh ruimte; 14:45 is het
     # laatste kwartier van het blok, dus nu laden.
     assert c._plan_laadt(netregels, _k(15), 0.229, 9.8, 10.0, 0.6, 0.4) > 0
+
+
+# --- v5.117.1: het plan kijkt vanaf wanneer het nodig is -------------------
+
+def test_vanaf_moment_in_balanceerlading(make_coordinator):
+    c = make_coordinator({})
+    c.balanceer_laatst_vol = (NU - timedelta(days=6, hours=18)).isoformat()
+    uit = c.balanceerlading(NU)
+    assert uit["nodig"] is False
+    assert datetime.fromisoformat(uit["vanaf"]) == NU + timedelta(hours=6)
+
+
+def test_plan_balanceert_pas_vanaf_het_moment(make_coordinator):
+    c = make_coordinator({})
+    blok = (_k(13), _k(15))
+    reeks = [(_k(13) + timedelta(minutes=15 * i), 0.22 + 0.001 * i) for i in range(8)]
+    basis = {"slijtage_ct": 11.0, "rendement": 84.0, "laad_per_kwartier": 0.6,
+             "reeks": reeks, "blok": blok, "laadde_vorig": False, "salderen": True}
+    later = {**basis, "balanceren": _k(16)}
+    eerder = {**basis, "balanceren": _k(12)}
+    assert c._plan_laadt(later, _k(15), 0.229, 9.8, 10.0, 0.6, 0.4) == 0.0
+    assert c._plan_laadt(eerder, _k(15), 0.229, 9.8, 10.0, 0.6, 0.4) > 0
+
+
+def test_plan_balanceren_geeft_het_moment(make_coordinator, monkeypatch):
+    c = make_coordinator({})
+    c.balanceer_laatst_vol = (NU - timedelta(days=6, hours=18)).isoformat()
+    monkeypatch.setattr(c, "_resterende_laadruimte_kwh", lambda: 5.0)
+    assert c._plan_balanceren(NU) == NU + timedelta(hours=6)
