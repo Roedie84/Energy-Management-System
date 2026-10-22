@@ -74,3 +74,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 22-10 17:51 | L-EMS-030 digital twin laden zonder laadrendement
 22-10 17:51 | L-GS-021 gold scalper logruis na herstart
 22-10 18:51 | gold scalper limiet per richting telt per strategie i.p.v. totaal (opstapelen shorts)
+22-10 19:51 | L-SC-015 naderingsreeks herstarten bij afstandsprong
