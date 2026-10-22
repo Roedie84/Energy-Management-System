@@ -491,3 +491,24 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-22 08:20,sturen_bevestigd,235,236,mediaan 0.15 s
 2026-10-22 08:20,filtergebruik_pct,0,1,
 2026-10-22 08:20,automation_traces_fout,0,5,
+2026-10-22 12:20,pm25_gem,0.54,48,5-min statistiek 08:20-12:20
+2026-10-22 12:20,pm25_mediaan,0.51,48,
+2026-10-22 12:20,pm25_p95,0.84,48,
+2026-10-22 12:20,pm25_max,1.15,48,blokmax 09:15
+2026-10-22 12:20,pm25_uren_gt15,0.00,48,
+2026-10-22 12:20,pm25_uren_gt25,0.00,48,
+2026-10-22 12:20,pm25_dag_tm_nu,0.39,144,00:20-12:20
+2026-10-22 12:20,stand_auto_min,62,1,08:20-09:24; 2x ~1 min unavailable (HA-herstart)
+2026-10-22 12:20,pm25_gem_auto,0.74,13,5-min blokken
+2026-10-22 12:20,stand_mid_min,176,1,vanaf 09:24 (15 min na laatste aanwezigheid 09:09)
+2026-10-22 12:20,pm25_gem_mid,0.46,35,5-min blokken
+2026-10-22 12:20,pm25_gem_aanwezig,0.69,10,08:20-09:10 (occupancy/tv tot 08:50)
+2026-10-22 12:20,pm25_gem_afwezig,0.50,38,
+2026-10-22 12:20,co2_gem,634,48,5-min; max 797; daalt 696 -> 500
+2026-10-22 12:20,co2_uren_gt1200,0.0,48,
+2026-10-22 12:20,schimmel_indicator,71,48,74 -> 69
+2026-10-22 12:20,ha_herstarts,3,1,08:26 09:01 11:19 (en 12:20)
+2026-10-22 12:20,lokaal_mislukt,41,88842,uitval 0; 174 verbindingen; laatste fout 12:20 connection reset (herstart)
+2026-10-22 12:20,sturen_bevestigd,236,237,mediaan 0.15 s
+2026-10-22 12:20,filtergebruik_pct,0,1,
+2026-10-22 12:20,automation_traces_fout,0,5,
