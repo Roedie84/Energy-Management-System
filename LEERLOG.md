@@ -418,3 +418,16 @@ laatste ronde: 22-10 07:40, gemeten t/m 22-10 07:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek), H-EMS-13 (plan ≠ beslissing). H-EMS-12 afgerond als definitieverschil (2/2). Geen release (tussenronde; v5.116.0 vandaag al door andere sessie).
 
 laatste ronde: 22-10 11:40, gemeten t/m 22-10 11:45
+
+## 22-10 15:40 · tussenronde
+- Actief **v5.117.0** (andere sessie 15:18; geïnstalleerd, herstart 15:27; v5.116.1 ~14:34). 0 EMS-fouten (alleen bronbuffer-WARNINGs Zonneplan bij de herstart, 1× cockpit-update 1,8 s).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 22-10 0,04 kWh).
+- **Laadblok:** import 11-15 u 8,43 kWh, accu AC-in 8,79 kWh, SoC 14 → 85 % (8,64 kWh). Volgend blok pas 23-10 21:15 → reserve 10,37 (afgekapt; nodig tot blok 11,46), MC 95 % tot blok, verwacht tekort 2,82 kWh "capaciteit". Plan: geen netlading, 22:00 57 %, sparen 02:00-05:30, 09:00 41 %, blok 15 %.
+- **PV vandaag** t/m 15:00 3,15 kWh tegen Solcast-uren 3,09 (+2 %): ochtend 08-11 u +52 %, 11-15 u −7 %. 15:43 3,63 kWh, Solcast dag 4,47, day-ahead 4,58 → mogelijk de eerste dag in 16 zonder te hoge day-ahead (H-EMS-2; telt in de dagafsluiting).
+- **H-EMS-13 gebouwd** (L-EMS-028 in v5.117.0, andere sessie, plus blokdrempel na het blok). 15:00 nog 1× "afwijking sturing" (precies het blokgeval dat v5.117.0 oplost); na 15:27 0 (n=1 kwartier). Planvolging vandaag 62,9 % (62 kw.; sturing 9, accu 9). Toets nacht 22→23.
+- **Nieuw, meetfout digital twin:** 6-uursvoorspelling accu-inhoud MAE 1,00 kWh (n=60, 20..22-10); tijdens laden +1,34 te hoog (22-10 14:45: 10,16 tegen 8,18), nacht −0,73, avond −1,21. Code: in het blok `soc += laadvermogen × tijd` zonder laadrendement (gemeten AC-in 2,4 → inhoud +1,8-2,1 kWh/u); spaarstand niet gemodelleerd. → **L-EMS-030** (zelf bouwen, dagafsluiting).
+- **MC-kalibratie, meetfout (L-EMS-029):** vanavond 22:00 meet de "kans tot het blok" 31 u (tot 23-10 21:15, nu 95 %) terwijl de tekortnacht 22-09 u telt; plan 09:00 41 % → vrijwel zeker de 3e "≈100 % zonder tekortnacht", nu door de horizon. Toets 03:40.
+- Reservesprongen 2 (15:28-15:29, beide na herstart, alleen behoefte, reserve gelijk) → v5.115.1 telt ze apart, zoals bedoeld.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek; plan spaart nacht 22→23 zelf), H-EMS-13 (gebouwd; toets). Geen release (tussenronde; v5.116.1 en v5.117.0 vandaag al door andere sessie).
+
+laatste ronde: 22-10 15:40, gemeten t/m 22-10 15:45

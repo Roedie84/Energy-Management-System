@@ -207,8 +207,20 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Effect meten: harde regel per dag uit het dagarchief; `reserve_sprongen_aantal` 0 op dagen met afgekapte reserve.
 
 ## L-EMS-028 · plan dip-laden met dezelfde behoefte als de beslissing (rapportage/meetfout)
-- Status: **gepland** (zelf bouwen als rapportagecorrectie; sturing ongewijzigd). Voorwaarde: offline narekening in de dagafsluiting 23-10 laat zien dat alleen de plan-/planvolgingsuitvoer verandert. Voedt de wijziging via `get_quarter_plan` een beslissing (sparen in het blok v5.75, MC-horizon v5.93), dan wordt dit een voorstel (open).
+- Status: **gebouwd v5.117.0** (andere sessie 22-10 15:18, `dipplan.py`; geïnstalleerd 15:27), samen met de blokdrempel na het blok. Eerste meting 15:40: na 15:27 0 kwartieren "afwijking sturing" (n=1). Toets: nacht 22→23 en 7 dagen "sturing" in de planvolging (was 8-16 op dagen met dip/blok). Was: **gepland** (zelf bouwen als rapportagecorrectie; sturing ongewijzigd). Voorwaarde: offline narekening in de dagafsluiting 23-10 laat zien dat alleen de plan-/planvolgingsuitvoer verandert. Voedt de wijziging via `get_quarter_plan` een beslissing (sparen in het blok v5.75, MC-horizon v5.93), dan wordt dit een voorstel (open).
 - Onderbouwing: nacht 21→22: plan laden 03:45-05:30 en 05:45-06:15, beslissing `battery_saved_for_peak` met laadbesluit "loont_niet", 0 kWh geladen; planvolging 8 kwartieren "afwijking sturing" (n=1 nacht). Code: `_dipbesluit` gebruikt `spaarplan(...)` met `_spaarkwartieren_op_verkooptoets` (v5.87), `_plan_netregels` per kwartier `_segmenten_verbruik_zon` zonder die schaling.
 - Bouw: `_plan_netregels` schaalt de kwartierbehoefte vóór het blok met dezelfde factor (doel verkooptoets / eigen schatting) als het spaarplan; test met een nacht waarin eigen schatting > verkooptoets (plan laadt niet als de beslissing niet laadt).
 - Effect meten: nachten met plan-dip-laden tegen werkelijk netladen; "afwijking sturing" in nachtkwartieren → 0.
 - 22-10 11:40 aanvulling (code v5.116.0 nagelezen): nog twee verschillen plan ↔ beslissing: het spaarplan van de beslissing telt ook kwartieren ná het blok mee (`nodig_kwh`, `duurste_ongedekt`), `_plan_dip_laadt` alleen tot het blok; en het moment (beslissing `_goedkoopste_laadmomenten`, plan: goedkopere kwartieren vóór het doel). Narekening moet alle drie dekken. `spaarplan_eigen/nodig_tot_blok_kwh` staat niet in de recorder → nachtwaarden alleen uit diagnostiek/dagverloop.
+
+## L-EMS-029 · MC-kalibratie op dezelfde horizon als de tekortnacht (meetfout/meetbaarheid)
+- Status: **gepland** (zelf bouwen: alleen kalibratie/rapportage; MC, reserve en sturing ongewijzigd). Eerst de avond van 22-10 toetsen (03:40), bouwen in de dagafsluiting.
+- Onderbouwing: `kalibratie_22u` vergelijkt de kans "tot het goedkope blok" met de tekortnacht (22-09 u, > 0,5 kWh met lege accu). Valt het blok ver na 09:00, dan meet de kans de dag erna mee: 22-10 15:43 blok 23-10 21:15 (31 u), kans 95 %, plan 09:00 41 %. Eerder al 2× 100 % zonder tekortnacht (→20, →22: sparen op ~20 %). Brier 0,144 (n=7) loopt daardoor op zonder dat de voorspelling slechter werd.
+- Bouw: bij de 22:00-stand ook het blokmoment (`horizon_tot`) en `uren_tot_blok` bewaren; Brier alleen over avonden met blok ≤ 12:00 de volgende dag, de rest apart tonen (`nachten_andere_horizon`). Test met een avond met blok 21:15 de volgende dag.
+- Effect meten: Brier over vergelijkbare avonden; aantal uitgesloten avonden per week.
+
+## L-EMS-030 · digital twin: laden met het laadrendement (meetfout)
+- Status: **gepland** (zelf bouwen: adviserende simulatie, stuurt niets; sturing ongewijzigd). Dagafsluiting.
+- Onderbouwing: `digital_twin_nauwkeurigheid` 6 u vooruit MAE 1,00 kWh (n=60, 20..22-10); tijdens laden bias +1,34 kWh (n=16), 22-10 14:45 voorspeld 10,16 tegen 8,18. Code `_run_digital_twin_simulation`: in het blok `soc_kwh += laadvermogen × tijd` (AC), terwijl de inhoud gemeten +1,8-2,1 kWh/u stijgt bij 2,4 kW AC; `learned_charge_efficiency_percent` bestaat al. Nacht/avond −0,7/−1,2: de twin ontlaadt waar het plan spaart (niet gemodelleerd; apart, groter).
+- Bouw: laadstap × laadrendement (geleerd, terugval √heen-en-terug); test: 1 u laden op 2,4 kW met 85 % → +2,04 kWh.
+- Effect meten: twin-bias in laaduren → |bias| < 0,4 kWh; MAE totaal < 0,8.
