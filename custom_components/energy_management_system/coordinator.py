@@ -219,6 +219,7 @@ from .const import (
     LAADBLOK_HERLAAD_DREMPEL,
     ZON_REALISATIE_MIN_KWH,
     DIP_MARGE,
+    MC_KALIBRATIE_BLOK_UITERLIJK_UUR,
     PLAN_SHORTFALL_MEDIAAN_MINUTEN,
     ENERGY_BALANCE_FOUT_VERLOOPT_UUR,
     ENERGY_BALANCE_STORING_AANLOOP_MIN,
@@ -39055,6 +39056,8 @@ class EnergyManagementSystemCoordinator:
                 round(float(beschikbaar_kwh), 3) if beschikbaar_kwh is not None else None
             ),
             "horizon_basis": self.monte_carlo_horizon_basis,
+            # v5.119.0 (L-EMS-029): tot wanneer de kans rekende.
+            **self._mc_22u_horizon(now),
         }
         for oud in sorted(self.mc_22u_per_avond)[:-MC_KALIBRATIE_BEWAAR_AVONDEN]:
             del self.mc_22u_per_avond[oud]
@@ -39062,6 +39065,39 @@ class EnergyManagementSystemCoordinator:
             self.schedule_persisted_state_save()
         except Exception:  # noqa: BLE001 - opslaan is bijzaak, de meting niet
             pass
+
+    def _mc_22u_horizon(self, now: datetime) -> dict:
+        """Het blok waartoe de kans van 22:00 rekent (v5.119.0, L-EMS-029)."""
+        blok = self.last_cheap_block_start
+        if blok is None or blok <= now:
+            return {"horizon_tot": None, "uren_tot_blok": None}
+        return {
+            "horizon_tot": blok.isoformat(),
+            "uren_tot_blok": round((blok - now).total_seconds() / 3600, 1),
+        }
+
+    @staticmethod
+    def _mc_horizon_vergelijkbaar(stand: dict, avond: str | None) -> bool:
+        """Meet de kans van 22:00 dezelfde nacht als de tekortnacht (22-09 u)?
+        (v5.119.0, L-EMS-029)
+
+        22-10 22:00: blok 23-10 21:15 (31 u), kans 95 %, terwijl de
+        tekortnacht om 09:00 afloopt. Zo'n avond telt apart. Standen zonder
+        `horizon_tot` (van vóór v5.119.0, of zonder blok in zicht) tellen
+        mee zoals voorheen.
+        """
+        tot = stand.get("horizon_tot")
+        if not tot or not avond:
+            return True
+        try:
+            blok = dt_util.as_local(datetime.fromisoformat(tot))
+            dag = date.fromisoformat(avond)
+        except (TypeError, ValueError):
+            return True
+        grens = datetime.combine(dag + timedelta(days=1), datetime.min.time()).replace(
+            hour=MC_KALIBRATIE_BLOK_UITERLIJK_UUR, tzinfo=blok.tzinfo
+        )
+        return blok <= grens
 
     def _mc_22u_voor_nacht(self, nacht_eind: date) -> dict | None:
         """De Monte-Carlo-stand van 22:00 op de avond vóór `nacht_eind` (v5.45).
@@ -39082,6 +39118,7 @@ class EnergyManagementSystemCoordinator:
         van 22:00 bewaard is (vanaf v5.45).
         """
         paren = []
+        andere: list = []
         oude_basis = 0
         for r in self.reserve_daily_records or []:
             stand = r.get("mc_22u") if isinstance(r, dict) else None
@@ -39095,7 +39132,14 @@ class EnergyManagementSystemCoordinator:
                 oude_basis += 1
                 continue
             uitkomst = 1 if r.get("shortfall") else 0
-            paren.append((r.get("date"), float(stand["kans_pct"]) / 100, uitkomst))
+            paar = (r.get("date"), float(stand["kans_pct"]) / 100, uitkomst)
+            # v5.119.0 (L-EMS-029): andere horizon apart.
+            avond = self._avond_voor(r.get("date"))
+            if not self._mc_horizon_vergelijkbaar(stand, avond):
+                andere.append({**self._nacht_paar(paar), "horizon_tot": stand.get("horizon_tot"),
+                               "uren_tot_blok": stand.get("uren_tot_blok")})
+                continue
+            paren.append(paar)
         brier = (
             round(sum((k - u) ** 2 for _d, k, u in paren) / len(paren), 3)
             if paren
@@ -39126,11 +39170,23 @@ class EnergyManagementSystemCoordinator:
             "avonden_bewaard": len(avonden),
             "basis": "kans tot het goedkope blok om 22:00 tegen de tekortnacht",
             "nachten_oude_basis_uitgesloten": oude_basis,
-            "per_nacht": [
-                {"nacht_tot": d, "kans_pct": round(k * 100, 1), "tekortnacht": bool(u)}
-                for d, k, u in paren
-            ],
+            "per_nacht": [self._nacht_paar(p) for p in paren],
+            # v5.119.0 (L-EMS-029): avonden met het blok na 12:00 de dag erna.
+            "nachten_andere_horizon": andere,
         }
+
+    @staticmethod
+    def _nacht_paar(paar: tuple) -> dict:
+        d, k, u = paar
+        return {"nacht_tot": d, "kans_pct": round(k * 100, 1), "tekortnacht": bool(u)}
+
+    @staticmethod
+    def _avond_voor(nacht_tot) -> str | None:
+        """De avond (datum) vóór de nacht die op `nacht_tot` afliep."""
+        try:
+            return (date.fromisoformat(str(nacht_tot)) - timedelta(days=1)).isoformat()
+        except ValueError:
+            return None
 
     # v5.45: de tekortkans van 22:00 per avond (sleutel: datum van de avond).
     # De sensor heeft geen state_class, dus zonder dit is de kalibratie na ~10
@@ -39618,6 +39674,31 @@ class EnergyManagementSystemCoordinator:
             }
         return resultaat
 
+    def _twin_laadfactor(self) -> float:
+        """Laadrendement (fractie) voor de tweeling (v5.119.0, L-EMS-030).
+
+        Geleerd laadrendement; anders de wortel van het heen-en-terug-
+        rendement (geleerd, of de instelling)."""
+        laden = self.learned_charge_efficiency_percent
+        if laden:
+            return max(0.5, min(1.0, laden / 100))
+        rond = self.learned_battery_efficiency_percent or float(
+            self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
+        )
+        return max(0.5, min(1.0, math.sqrt(rond / 100)))
+
+    def _twin_laadstap(self, ruimte_kwh: float, ac_kwh: float) -> tuple[float, float]:
+        """(erin, van het net) voor één laadstap van de tweeling (v5.119.0).
+
+        L-EMS-030: tijdens laden voorspelde de tweeling 6 u vooruit 1,34 kWh
+        te veel (n=16; 22-10 14:45 10,16 tegen 8,18): hij telde 2,4 kW AC als
+        2,4 kWh per uur erbij, gemeten +1,8-2,1. Nu AC x laadrendement, en
+        van het net alleen wat nodig is om de ruimte te vullen.
+        """
+        factor = self._twin_laadfactor()
+        erin = min(max(0.0, ruimte_kwh), ac_kwh * factor)
+        return erin, erin / factor
+
     def _run_digital_twin_simulation(self, now: datetime) -> None:
         """Digital Twin advisory engine (v0.63.36).
 
@@ -39709,9 +39790,11 @@ class EnergyManagementSystemCoordinator:
                 and self.last_cheap_block_start <= start < self.last_cheap_block_end
                 and usable_capacity_kwh is not None
             ):
-                headroom_kwh = max(0.0, usable_capacity_kwh - soc_kwh)
-                energy_kwh = min(headroom_kwh, (charge_power_w / 1000) * interval_hours)
-                soc_kwh += energy_kwh
+                # v5.119.0 (L-EMS-030): wat erin komt is AC x laadrendement.
+                stored_kwh, energy_kwh = self._twin_laadstap(
+                    max(0.0, usable_capacity_kwh - soc_kwh), (charge_power_w / 1000) * interval_hours
+                )
+                soc_kwh += stored_kwh
                 total_profit_eur -= energy_kwh * price
             else:
                 # v3.35.1: hier gebeurde niets, en dat was de hele fout.
@@ -49556,8 +49639,10 @@ class EnergyManagementSystemCoordinator:
             ruw = self._dagarchief_kwartierdagen(vandaag)
             if ruw:
                 nieuw = await self.hass.async_add_executor_job(_reken_dagarchief, D, ruw)
+                # v5.119.0 (L-EMS-024): met het verschil in accu-inhoud.
+                rendement = self._twin_laadfactor() ** 2
                 for datum, regel in nieuw.items():
-                    D.zet(self.dagarchief, datum, regel)
+                    D.zet(self.dagarchief, datum, D.met_voorraad(regel, rendement))
             for r in self.reserve_daily_records or []:
                 datum = r.get("date")
                 if datum and datum in self.dagarchief["dagen"]:
@@ -49646,8 +49731,7 @@ class EnergyManagementSystemCoordinator:
 
         if not isinstance(self.dagarchief, dict) or "dagen" not in self.dagarchief:
             self.dagarchief = D.leeg()
-        verwachting = invoer.get("verwachting") or {}
-        begin = verwachting.get(min(verwachting)) if verwachting else None
+        begin = self._ochtendverwachting(datum, invoer.get("verwachting") or {})
         regel_eur = sum(k.get("spijt_eur") or 0 for k in oordeel.get("niet_de_beste") or []
                         if k.get("oorzaak") == "regel" and not k.get("handmatig"))
         D.vul_aan(
@@ -49658,6 +49742,29 @@ class EnergyManagementSystemCoordinator:
             gr=round(regel_eur, 2) if oordeel.get("te_becijferen") else None,
             r27=repetitie.get("accu_levert_op_2027_eur") if repetitie.get("te_becijferen") else None,
         )
+
+    def _ochtendverwachting(self, datum: str, verwachting: dict) -> dict | None:
+        """De verwachting van de ochtend voor het dagarchief (v5.119.0, L-EMS-024).
+
+        Was het eerste kwartier (00:00); dat snapshot had nog geen zon voor
+        de nieuwe dag: `zon_verwacht_kwh` 0 op 19, 20 en 21-10 terwijl de
+        day-ahead 6,70, 11,40 en 7,82 kWh was. Nu het kwartier tot 09:00
+        met de meeste zon voor de rest van de dag (de eerste volledige
+        dagverwachting; daarna loopt de rest alleen af). Is daar geen zon in,
+        dan de day-ahead van de PV-tracker voor die dag.
+        """
+        vroeg = {k: v for k, v in verwachting.items() if k <= "09:00"} or verwachting
+        if not vroeg:
+            return None
+        sleutel = max(sorted(vroeg), key=lambda k: vroeg[k].get("zon_kwh") or 0.0)
+        begin = dict(vroeg[sleutel])
+        if (begin.get("zon_kwh") or 0.0) <= 0:
+            tracker = self.solar_tracker
+            if tracker is not None and str(getattr(tracker, "last_compared_date", "")) == datum:
+                dag_vooruit = getattr(tracker, "last_predicted_kwh", None)
+                if dag_vooruit is not None:
+                    begin["zon_kwh"] = dag_vooruit
+        return begin
 
     def get_dagarchief(self) -> dict:
         from . import dagarchief as D

@@ -33602,3 +33602,14 @@ Akkoord Ruud 22-10 16:45 per punt; tijden met de dag gemeld 22-10 16:49.
 - **Tijden met de dag.** Nieuwe module `tijdtekst.py` (`tijd_met_dag`, `periode_met_dag`): vandaag alleen de tijd, anders "morgen 21:15", "gisteren", de weekdag ("vr 21:15") of verder weg de datum. Gebruikt in o.a. de blokmeldingen, prijspiek/negatieve prijzen, de spaarmeldingen, `_plan_tijd_tekst` (nu weekdag in plaats van "overmorgen"), de tekortperioden, airco-pendelrust, Monte Carlo-horizon en de airco-verwachting (`tot_tekst`). Cockpit-JS: `klokDag`/`klokEind` voor terugvaltijden en het blok-einde (ASCII). Ruuds wasadvieskaart op `dashboard-tablet` (geen onderdeel van de integratie) is los bijgewerkt.
 
 Tests: `test_v5118_akkoordpunten.py` (22).
+
+
+## v5.119.0 — meetfouten: dagarchief (L-EMS-024), MC-kalibratie (L-EMS-029), digital twin (L-EMS-030)
+
+Akkoord Ruud 22-10 18:05. Alleen rapportage; de sturing verandert niet.
+
+- **L-EMS-024 · dagarchief.** (1) `zon_verwacht_kwh` stond op 19, 20 en 21-10 op 0: `_archiveer_zelfanalyse` nam het kwartier 00:00, waarvan het snapshot nog geen zon voor de nieuwe dag had. `_ochtendverwachting`: het kwartier tot 09:00 met de meeste zon voor de rest van de dag (de eerste volledige dagverwachting), bij gelijke stand het vroegste; geen zon daarin, dan `last_predicted_kwh` van de PV-tracker voor die dag. (2) `accu_opbrengst_eur` (`b`) was `kz - k` zonder voorraadverschil (20-10 -€ 1,02 bij 9,65 kWh geladen, 3,98 ontladen). `dagarchief.met_voorraad`: `bv` = (geladen × rendement heen en terug - ontladen) × gemiddelde dagprijs, `b` = `kz - k + bv`. Toegepast op de meetlogdagen; de gezaaide statistiekdagen blijven zoals ze waren.
+- **L-EMS-029 · MC-kalibratie.** De 22:00-stand bewaart `horizon_tot` (begin goedkoop blok) en `uren_tot_blok` (`_mc_22u_horizon`). `get_mc_kalibratie_22u` telt in de Brier alleen avonden met het blok uiterlijk `MC_KALIBRATIE_BLOK_UITERLIJK_UUR` (12:00) de volgende dag; de rest staat in `nachten_andere_horizon` (met horizon en uren). Standen zonder `horizon_tot` tellen mee zoals voorheen.
+- **L-EMS-030 · digital twin.** In het laadblok telde de tweeling laadvermogen × tijd als inhoud (6 u vooruit +1,34 kWh tijdens laden, n=16). `_twin_laadstap`: erin = min(ruimte, AC × laadrendement), van het net = erin / laadrendement (voor de opbrengst). `_twin_laadfactor`: geleerd laadrendement, anders √(heen-en-terug). Zonoverschot ongewijzigd.
+
+Tests: `test_v5119_meetfouten.py` (9).

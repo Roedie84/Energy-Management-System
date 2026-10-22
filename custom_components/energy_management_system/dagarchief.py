@@ -69,6 +69,7 @@ NAMEN = {
     "t": "temp_c", "gd": "graaddagen",
     "vk": "verkocht_kwh", "vkm": "kleinste_verkoopmarge_kwh",
     "vko": "kwartieren_onder_verkoopreserve",
+    "bv": "accu_voorraadcorrectie_eur",
 }
 BRONNEN = {"m": "meetlog", "s": "statistiek"}
 #: Velden die na de meting worden aangevuld en een nieuwe meting overleven.
@@ -103,6 +104,29 @@ def _vat_samen(blokken: list[dict], minimum: int, bron: str) -> dict | None:
         kz = sum((b["h"] - b["p"]) * b["prijs"] for b in met_prijs)
         regel.update(k=_r(k), kz=_r(kz), b=_r(kz - k))
     return regel
+
+
+def met_voorraad(regel: dict | None, rendement: float | None) -> dict | None:
+    """Accu-opbrengst met het verschil in accu-inhoud (v5.119.0, L-EMS-024).
+
+    `b` = kosten zonder accu - kosten rekende laden als kosten en de energie
+    die aan het eind van de dag nog in de accu zat niet als waarde: 20-10
+    -EUR 1,02 (geladen 9,65, ontladen 3,98 kWh; de accu eindigde veel
+    voller). Nu `bv` = (geladen x rendement heen en terug - ontladen) x de
+    gemiddelde prijs van de dag: de inhoud die er netto bij kwam, aan de
+    wisselstroomkant gewaardeerd tegen wat hij (onder salderen) waard is.
+    `b` wordt kz - k + bv. Zonder rendement, kosten of prijs: ongewijzigd.
+    """
+    if not regel or rendement is None or regel.get("k") is None or regel.get("pg") is None:
+        return regel
+    geladen, ontladen = regel.get("l"), regel.get("o")
+    if geladen is None or ontladen is None:
+        return regel
+    bv = (geladen * rendement - ontladen) * regel["pg"] / 100
+    uit = dict(regel)
+    uit["bv"] = _r(bv)
+    uit["b"] = _r((regel.get("kz") or 0.0) - regel["k"] + bv)
+    return uit
 
 
 def dag_uit_kwartieren(kwartieren: list[dict]) -> dict | None:

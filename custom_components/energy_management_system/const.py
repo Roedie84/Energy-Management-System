@@ -5415,6 +5415,11 @@ MONTE_CARLO_TERUGVAL_UUR = 9
 # kalibratie tegen de werkelijke tekortnacht; zoveel avonden blijven staan.
 MC_KALIBRATIE_UUR = 22
 MC_KALIBRATIE_BEWAAR_AVONDEN = 14
+# v5.119.0 (L-EMS-029, akkoord Ruud 22-10 18:05): de tekortnacht telt 22-09 u.
+# Valt het blok later dan dit uur op de volgende dag, dan meet de kans van
+# 22:00 ook de dag erna (22-10: blok 23-10 21:15, 31 u) en telt die avond niet
+# mee in de Brier, maar apart.
+MC_KALIBRATIE_BLOK_UITERLIJK_UUR = 12
 # v5.47: een bewaarde stand van 22:00 met deze basis is de kans TOT het
 # goedkope blok; standen zonder (v5.45-v5.46) telden de lange horizon mee.
 MC_KANS_BASIS_TOT_BLOK = "tot_blok"

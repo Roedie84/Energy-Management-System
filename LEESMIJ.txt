@@ -1,3 +1,19 @@
+EMS v5.119.0 - eerlijkere cijfers in dagarchief, kalibratie en digital twin
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+Alleen rapportage; de sturing verandert niet.
+
+- Dagarchief: de zonverwachting van de ochtend kwam uit het kwartier van
+  middernacht en stond daardoor op 0. Nu uit de eerste volledige
+  dagverwachting (of de day-ahead). De accu-opbrengst per dag telt nu ook
+  wat er aan het eind van de dag meer of minder in de accu zat.
+- Kalibratie van de tekortkans (22:00): avonden waarop het goedkope blok pas
+  na 12:00 de volgende dag valt, tellen apart. Die kans gaat over meer dan
+  de nacht en maakte de score onterecht slechter.
+- Digital twin: laden telt nu met het laadrendement. Tijdens laden
+  voorspelde hij ruim 1 kWh te veel.
+
 EMS v5.118.0 - zonvoorspelling bijgesteld, ochtendpiek beschermd, rustiger status
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
