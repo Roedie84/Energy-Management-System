@@ -442,3 +442,15 @@ laatste ronde: 22-10 15:40, gemeten t/m 22-10 15:45
 - Hypotheses: H-EMS-2 (PV te hoog; correctie gebouwd), H-EMS-11 (nacht vs ochtendpiek; L-EMS-026 gebouwd, eerste nacht 22→23), H-EMS-13 (plan = beslissing; toets nacht). Geen release (tussenronde; vandaag al 6 releases door andere sessies).
 
 laatste ronde: 22-10 19:40, gemeten t/m 22-10 19:45
+
+## 22-10 23:40 · tussenronde
+- Actief **v5.119.0** (geen nieuwe EMS-release; herstarts 20:10 en 22:11 door installaties elders). 0 EMS-fouten; 2× "accu niet aanstuurbaar" (Zendure offline 21:42 en 22:27, 8 time-outs) en bij 20:10 bronbuffer-WARNINGs Zonneplan/Solcast (API 10/10) — extern.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 22-10 0,139 kWh).
+- Avond 19-23 u: import 0,10 kWh, export 0,08 kWh; huis uit de accu, SoC 68 → 52 %.
+- **H-EMS-13:** planvolging 59,1 % (93 kw.), "sturing" blijft 9 → sinds v5.117.0 (15:27) 0 nieuwe in ~33 kwartieren. Nachttoets 03:40.
+- **Plan nacht 22→23 anders dan om 19:40:** blok schoof 23-10 21:30 → 23:00 (20:30, 20:45, 21:30 telkens later; kortere laadbehoefte), plan nu de hele nacht smart (~0,25 kW ontladen), 09:00 33 % (was: sparen 02:00-05:30, 09:00 41 %). Sparen pas 23-10 11:30-17:00 en 20:30-22:30 (25-28 ct), laden 23:00. Nachtprijs 29-31 ct, ochtendpiek 35-40 ct; de accu haalt de ochtend zonder sparen → `nacht_ochtendpiek` (L-EMS-026) hoeft niet. H-EMS-11-uitslag (ochtendpiek-import 07-10 u) in de ronde van 11:40.
+- MC 99,9 % tot het blok (23-10 23:00, 25 u), verwacht tekort 3,39 kWh "economisch". `kalibratie_22u.laatste_avond` 22-10 100 % (basis tot_blok); `nachten_andere_horizon` nog leeg → toets na 09:00 (L-EMS-029).
+- **Nieuw gezien:** sinds de herstart van 20:10 17 reservesprongen "alleen behoefte" (20:11-23:00; 19:45-20:10 en 15:30-19:45 0): `needed_kwh_before_margin` wisselt telkens ~1,49 kWh (8,90 ↔ 10,39) zonder verandering in lange horizon, airco of temperatuur; zonvoorspelling morgen wisselde niet. Reserve blijft 10,37 (afgekapt) → nu geen effect. Bron ligt in `_estimate_worst_case_deficit_kwh` (blok 25 u weg). Dagafsluiting: nalezen of dit een niet-afgekapte reserve (en dus de verkoopgrens) laat springen.
+- Hypotheses: H-EMS-2 (PV te hoog; correctie gebouwd), H-EMS-11 (nacht vs ochtendpiek), H-EMS-13 (plan = beslissing). Geen release (tussenronde).
+
+laatste ronde: 22-10 23:40, gemeten t/m 22-10 23:45
