@@ -3505,6 +3505,10 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "prijsverwachting_archief": {"type": "plain"},
     # v5.113.2: de laatste prijsreeks, voor een storing bij de prijsbron.
     "prijs_forecast_cache": {"type": "plain"},
+    # v5.116.0: storingen van de prijsbron en het begin van een lopende.
+    "prijsbron_storingen": {"type": "plain"},
+    "_prijsbron_weg_sinds": {"type": "plain"},
+    "_prijsbron_terugval": {"type": "plain"},
     # v5.114.0: laatste stand van zonvoorspellingen, dagtotalen, gasprijs, CO2.
     "bronbuffer_opslag": {"type": "plain"},
     "keuzeoordelen": {"type": "plain"},
@@ -3572,6 +3576,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_daily_report_counters": {"type": "plain"},
     "_last_plan_alert": {"type": "plain"},
     "_savings_day_start_available_kwh": {"type": "plain"},
+    # v5.116.0: voorraadcorrecties van afgesloten dagen (oplopende besparing).
+    "besparing_voorraadcorrectie_totaal_eur": {"type": "plain"},
     "_pv_geometry_day_peak_w": {"type": "plain"},
     "_pv_geometry_day_peak_azimuth": {"type": "plain"},
     "_pv_geometry_day_expected_peak_w": {"type": "plain"},
@@ -7495,3 +7501,10 @@ ACCU_AC_MIN_RENDEMENT = 0.75
 PRIJSVERWACHTING_MINUTEN = 180
 # v5.101.1: na een mislukte poging (Open-Meteo onbereikbaar) eerder opnieuw.
 PRIJSVERWACHTING_OPNIEUW_MINUTEN = 15
+
+# v5.116.0: een prijsbron die langer weg is dan dit staat in de diagnose.
+PRIJSBRON_MELDEN_MINUTEN = 30
+# v5.116.0: zoveel afgelopen storingen van de prijsbron blijven bewaard.
+PRIJSBRON_STORINGEN_BEWAARD = 20
+# v5.116.0: korter weg (de prijssensor na een herstart) telt niet als storing.
+PRIJSBRON_STORING_MIN_MINUTEN = 5

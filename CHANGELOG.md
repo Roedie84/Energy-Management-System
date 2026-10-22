@@ -33542,3 +33542,15 @@ Tests: `test_v5115_accukosten.py` (14).
 - Alleen meten; stuurt niets.
 
 Tests: `test_v51151_verkoop_dagarchief.py` (9).
+
+
+## v5.116.0 — dagbesparing met de accu-inhoud tegen de gemeten laadprijs, prijsbron in de diagnose
+
+- **Plan tegen werkelijkheid 22-10 (meetdag 21-10):** eigen berekening onder salderen € 0,35 (ontlading - lading tegen de kwartierprijs = € 1,55, min de daling van de accu-inhoud 60 → 21 %, -4,5 kWh à 26,7 ct). De meter "EMS Accubesparing - vandaag" gaf € 1,56 (de bronsensor `besparing_totaal_t_o_v_zonder_accu_sturing` was het rauwe totaal, zonder accu-inhoud) en de dagsensor € 0,06 (voorraad tegen de prijs van het moment: 's ochtends de ochtendpiek, dus schommelend met de prijs).
+- `accukosten.voorraad_kostprijs`: wat de energie die nu in de accu zit kostte, per opgeslagen kWh (inkoop per kWh die erin ging / laadrendement, eerst erin eerst eruit; beginvoorraad na een gat telt niet mee). In `get_accukosten()` als `voorraad_kostprijs`.
+- `_voorraad_kwh_waarde()`: waardeert het verschil in accu-inhoud tegen die gemeten laadprijs; zonder nacalculatie de kostprijs van het kostprijsmodel, daarna de terugleverwaarde van nu. `get_savings_correction` toont `kwh_waarde_eur` en `kwh_waarde_bron`.
+- `Besparing totaal t.o.v. zonder accu-sturing` = rauw totaal + de voorraadcorrectie van elke afgesloten dag (`besparing_voorraadcorrectie_totaal_eur`, bewaard, bijgeschreven bij de daggrens vóór het nieuwe dagbegin) + die van vandaag. Geen sprong om middernacht; de dagwaarde van de meters is gelijk aan de gecorrigeerde dagbesparing. Attributen: rauw totaal, correcties, waarde en bron.
+- **Prijsbron:** `sensor.stroomprijs_kwartier` was 21-10 van 14:46 tot 20:30 weg (Zonneplan-API-fouten). Nu bijgehouden: sinds wanneer (`_prijsbron_weg_sinds`, bewaard), welke terugval (bewaarde reeks, schatting uit de prijsgeschiedenis of geen) en de afgelopen storingen (`prijsbron_storingen`, 20, bewaard; korter dan 5 min, zoals na een herstart, telt niet). `get_prijsbron()` in de diagnose-export (`prijsbron`: bron, weg sinds/minuten, leeftijd van de bewaarde reeks, kwartieren vooruit, storingen 7 dagen). Langer dan 30 min weg: aandachtspunt in de diagnose met sinds wanneer, duur en met welke prijzen het EMS doorrekent; de LET OP-reden noemt "sinds HH:MM".
+- Alleen meten; stuurt niets.
+
+Tests: `test_v5116_besparing_prijsbron.py` (14); `test_v59910_rustverbruik.py` bijgewerkt (totaal uit de coordinator).

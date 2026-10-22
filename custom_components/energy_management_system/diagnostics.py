@@ -480,6 +480,9 @@ async def async_get_config_entry_diagnostics(
             "get_entiteittypecontrole", coordinator.get_entiteittypecontrole
         ),
         "prijsreeks": getattr(coordinator, "prijsreeks_bevindingen", None),
+        # v5.116.0: waar de prijzen vandaan komen, sinds wanneer de bron weg
+        # is en hoe oud de bewaarde prijzen zijn.
+        "prijsbron": _veilig("get_prijsbron", coordinator.get_prijsbron),
         # v3.65.0: uitkomsten die logisch niet kunnen. Elke bevinding
         # hier is een fout in de integratie zelf.
         "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),

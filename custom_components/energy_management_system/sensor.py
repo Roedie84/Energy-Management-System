@@ -2943,10 +2943,36 @@ class CounterfactualSavingsTotalSensor(SensorEntity):
 
     @property
     def native_value(self) -> float:
+        # v5.116.0: met de accu-inhoud gecorrigeerd. Gemeld 22-10 (Plan tegen
+        # werkelijkheid): de meter "EMS Accubesparing - vandaag" gaf voor
+        # 21-10 € 1,56 terwijl de accu van 60 naar 21 % ging; met de daling
+        # van de inhoud tegen de gemeten laadprijs was het € 0,35.
+        return round(self._coordinator.besparing_totaal_gecorrigeerd_eur(), 4)
+
+    @property
+    def extra_state_attributes(self) -> dict:
         c = self._coordinator
-        return round(
-            (c.counterfactual_cost_all_time_eur or 0.0) - (c.actual_cost_all_time_eur or 0.0), 4
-        )
+        corr = c.get_savings_correction() or {}
+        return {
+            "rauw_totaal_eur": round(
+                (c.counterfactual_cost_all_time_eur or 0.0) - (c.actual_cost_all_time_eur or 0.0), 2
+            ),
+            "voorraadcorrectie_afgesloten_dagen_eur": round(
+                c.besparing_voorraadcorrectie_totaal_eur or 0.0, 2
+            ),
+            "voorraadcorrectie_vandaag_eur": (
+                corr.get("voorraadwaarde_eur") if corr.get("correctie_beschikbaar") else None
+            ),
+            "kwh_waarde_eur": corr.get("kwh_waarde_eur"),
+            "kwh_waarde_bron": corr.get("kwh_waarde_bron"),
+            "rekenwijze": (
+                "Sinds v5.116.0: rauw totaal (de hele rekening tegen een huis "
+                "zonder sturing) plus per dag het verschil in accu-inhoud "
+                "(eind - begin) tegen wat de energie in de accu kostte om erin "
+                "te krijgen. Een meter op deze sensor geeft per dag dezelfde "
+                "waarde als 'Besparing t.o.v. zonder accu-sturing'."
+            ),
+        }
 
 
 class _V5100Sensor(SensorEntity):
@@ -3141,8 +3167,9 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
                 "opgeteld) - beide scenario's tegen dezelfde dynamische "
                 "prijs afgerekend. De dagwaarde is gecorrigeerd voor de "
                 "accu-inhoud: (beschikbare energie nu - bij het begin van de "
-                "dag) x wat een kWh nu waard is (de terugleverwaarde; zolang "
-                "salderen geldt de inkoopprijs plus premie). Laden telt op "
+                "dag) x wat die energie kostte om in de accu te krijgen "
+                "(v5.116.0: gemeten laadprijs van de voorraad; zonder "
+                "nacalculatie de kostprijs, dan de terugleverwaarde). Laden telt op "
                 "het moment zelf als kosten en de opbrengst volgt pas bij het "
                 "ontladen; zonder correctie leek de besparing 's avonds "
                 "negatief. Het rauwe cijfer staat in besparing_ongecorrigeerd. "
@@ -3163,11 +3190,15 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
                 correctie.get("voorraadverschil_kwh") if beschikbaar else None
             ),
             "accu_bij_dagbegin_kwh": correctie.get("accu_bij_dagbegin_kwh"),
+            # v5.116.0: de waarde waartegen de voorraad gewaardeerd is (eerst
+            # de gemeten laadprijs van de voorraad), niet meer de prijs nu.
+            "kwh_waarde_eur": correctie.get("kwh_waarde_eur") if beschikbaar else None,
             "kwh_waarde_nu_eur": (
                 self._coordinator.current_feedin_value_eur_per_kwh
                 if beschikbaar
                 else None
             ),
+            "kwh_waarde_bron": correctie.get("kwh_waarde_bron") if beschikbaar else None,
             "soc_correctie_toegepast": beschikbaar,
         }
 

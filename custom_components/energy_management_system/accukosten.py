@@ -127,7 +127,32 @@ def doorreken(
         else:
             _verwerk(partijen, tel, dag, r, inhoud - vorige_inhoud, eta_laad, eta_ontlaad, slijtage_eur)
         vorig_moment, vorige_inhoud = moment, inhoud
-    return _samenvatting(tel, partijen, eta_laad * eta_ontlaad, slijtage_eur, nu)
+    uit = _samenvatting(tel, partijen, eta_laad * eta_ontlaad, slijtage_eur, nu)
+    uit["voorraad_kostprijs"] = voorraad_kostprijs(partijen, eta_laad)
+    return uit
+
+
+#: Pas een kostprijs van de voorraad bij zoveel opgeslagen kWh met bekende inkoop.
+VOORRAAD_MIN_KWH = 0.1
+
+
+def voorraad_kostprijs(partijen: list, eta_laad: float) -> dict:
+    """Wat de energie die nu in de accu zit gekost heeft (v5.116.0).
+
+    Per OPGESLAGEN kWh: de inkoop per kWh die erin ging, gedeeld door het
+    laadrendement. Alleen partijen met een bekende inkoop (net en zon); een
+    beginvoorraad na een gat telt niet mee. Daarmee waardeert de dagbesparing
+    het verschil in accu-inhoud tegen wat het werkelijk kostte om erin te
+    krijgen, in plaats van tegen de prijs van het moment.
+    """
+    bekend = [p for p in partijen if p.bron in ("net", "zon") and p.kwh > 0]
+    kwh = sum(p.kwh for p in bekend)
+    uit = {"bekend_kwh": round(kwh, 2),
+           "onbekend_kwh": round(sum(p.kwh for p in partijen if p.bron == "begin"), 2),
+           "eur_per_kwh": None}
+    if kwh >= VOORRAAD_MIN_KWH and eta_laad > 0:
+        uit["eur_per_kwh"] = round(sum(p.kwh * p.inkoop_eur for p in bekend) / kwh / eta_laad, 4)
+    return uit
 
 
 def _verwerk(partijen, tel, dag, r, delta, eta_laad, eta_ontlaad, slijtage_eur) -> None:

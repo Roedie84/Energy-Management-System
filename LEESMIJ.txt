@@ -1,3 +1,17 @@
+EMS v5.116.0 - dagbesparing klopt met de accu-inhoud, prijsstoring zichtbaar
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De besparing per dag telt nu mee hoeveel energie er aan het eind van de dag
+  meer of minder in de accu zit, gewaardeerd tegen wat die energie werkelijk
+  kostte om erin te krijgen (niet meer tegen de prijs van het moment). De
+  meters "EMS Accubesparing - vandaag/deze maand" rekenen dat ook mee: voor
+  21-10 was dat € 0,35 in plaats van € 1,56.
+- Valt de prijsbron langer dan een half uur weg, dan staat in de diagnose
+  sinds wanneer, met welke prijzen het EMS doorrekent en hoe oud die zijn.
+  De diagnose-export houdt ook de storingen van de afgelopen week bij.
+- Alleen meten: de sturing verandert niet.
+
 EMS v5.115.1 - verkoop per dag blijft bewaard
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

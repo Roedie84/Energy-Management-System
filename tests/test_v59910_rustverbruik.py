@@ -46,7 +46,15 @@ def test_laadteller_naast_ontlaadteller():
 
 
 def test_totaalsensor():
-    c = SimpleNamespace(counterfactual_cost_all_time_eur=-30.03, actual_cost_all_time_eur=-70.87)
+    # v5.116.0: het totaal komt uit de coordinator (met de voorraadcorrectie);
+    # zonder correctie is het het rauwe verschil.
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+    c = object.__new__(C)
+    c.counterfactual_cost_all_time_eur = -30.03
+    c.actual_cost_all_time_eur = -70.87
+    c.get_savings_correction = lambda: {"correctie_beschikbaar": False}
     s = CounterfactualSavingsTotalSensor(c, "e")
     assert s.native_value == 40.84
     assert s._attr_state_class == "total"

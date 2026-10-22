@@ -689,6 +689,9 @@ from .const import (
     CONF_GAS_M3_VANDAAG_SENSOR,
     PRIJSDAG_VELDEN,
     PRIJSDAG_SLAAPT_TOT_UUR,
+    PRIJSBRON_MELDEN_MINUTEN,
+    PRIJSBRON_STORINGEN_BEWAARD,
+    PRIJSBRON_STORING_MIN_MINUTEN,
     PERSISTED_DATE_FIELDS,
     PERSISTED_FIELDS,
     PERSISTED_DATETIME_FIELDS,
@@ -3214,6 +3217,7 @@ class EnergyManagementSystemCoordinator:
         herstart) en gebruikt zolang hij nog kwartieren in de toekomst heeft.
         """
         if forecast:
+            self._prijsbron_hersteld(sensor)
             cache = self.prijs_forecast_cache or {}
             oud = cache.get("forecast") or []
             if (cache.get("sensor") != sensor or len(oud) != len(forecast)
@@ -3228,11 +3232,14 @@ class EnergyManagementSystemCoordinator:
             return forecast
         cache = self.prijs_forecast_cache or {}
         bron = cache.get("forecast") if cache.get("sensor") == sensor else None
+        soort = "bewaarde reeks"
         if not bron:
             # nog geen bewaarde reeks (eerste storing na de update): de
             # uurprijzen uit de prijsgeschiedenis van de verwachting
             bron = self._forecast_uit_geschiedenis()
             cache = {"om": "prijsgeschiedenis"}
+            soort = "prijsgeschiedenis (schatting)"
+        self._prijsbron_weg(sensor, soort if bron else "geen")
         if not bron:
             return forecast
         nu = dt_util.now()
@@ -3248,6 +3255,106 @@ class EnergyManagementSystemCoordinator:
                             "vooruit) worden gebruikt", sensor, cache.get("om"), len(nog))
             self._prijs_uit_cache = True
         return nog
+
+    #: v5.116.0: sinds wanneer de prijssensor geen prijzen geeft (ISO, bewaard),
+    #: welke terugval in gebruik is, en de laatste storingen (bewaard).
+    _prijsbron_weg_sinds: str | None = None
+    _prijsbron_terugval: str | None = None
+    prijsbron_storingen: list | None = None
+
+    def _prijsbron_weg(self, sensor: str, soort: str) -> None:
+        """v5.116.0: begin (of voortgang) van een storing van de prijsbron."""
+        if self._prijsbron_weg_sinds is None:
+            self._prijsbron_weg_sinds = dt_util.now().isoformat()
+        self._prijsbron_terugval = soort
+
+    def _prijsbron_hersteld(self, sensor: str) -> None:
+        """v5.116.0: de prijsbron geeft weer prijzen; de storing vastleggen."""
+        sinds = self._prijsbron_weg_sinds
+        if sinds is None:
+            return
+        nu = dt_util.now()
+        try:
+            begin = datetime.fromisoformat(sinds)
+            minuten = max(0, round((nu - begin).total_seconds() / 60))
+        except (TypeError, ValueError):
+            minuten = None
+        # een paar minuten weg (de prijssensor na een herstart) is geen storing
+        if minuten is None or minuten >= PRIJSBRON_STORING_MIN_MINUTEN:
+            storingen = list(self.prijsbron_storingen or [])
+            storingen.append({"sensor": sensor, "van": sinds, "tot": nu.isoformat(),
+                              "minuten": minuten, "terugval": self._prijsbron_terugval})
+            self.prijsbron_storingen = storingen[-PRIJSBRON_STORINGEN_BEWAARD:]
+        self._prijsbron_weg_sinds = None
+        self._prijsbron_terugval = None
+
+    def get_prijsbron(self, now: datetime | None = None) -> dict:
+        """Waar de prijzen vandaan komen en hoe oud ze zijn (v5.116.0).
+
+        Gezien 21-10 (Plan tegen werkelijkheid): `sensor.stroomprijs_kwartier`
+        was van 14:46 tot 20:30 onbeschikbaar (Zonneplan-API-fouten). Het EMS
+        rekende met de bewaarde reeks door, maar in de diagnose stond nergens
+        sinds wanneer, met welke prijzen en hoe oud die waren.
+        """
+        now = now or dt_util.now()
+        cache = self.prijs_forecast_cache or {}
+        sinds = self._prijsbron_weg_sinds
+        weg_min = None
+        if sinds:
+            try:
+                weg_min = max(0, round((now - datetime.fromisoformat(sinds)).total_seconds() / 60))
+            except (TypeError, ValueError):
+                weg_min = None
+        leeftijd = None
+        try:
+            if cache.get("om"):
+                leeftijd = max(0, round((now - datetime.fromisoformat(cache["om"])).total_seconds() / 60))
+        except (TypeError, ValueError):
+            leeftijd = None
+        vooruit = 0
+        for item in cache.get("forecast") or []:
+            eind = self._parse_forecast_datetime(item.get("end_date")) if isinstance(item, dict) else None
+            if eind is not None and (eind if eind.tzinfo else eind.replace(tzinfo=dt_util.UTC)) > now:
+                vooruit += 1
+        week = (now - timedelta(days=7)).isoformat()
+        recent = [s for s in (self.prijsbron_storingen or []) if str(s.get("tot") or "") >= week]
+        return {
+            "sensor": self.config.get(CONF_PRICE_SENSOR),
+            "bron": (self._prijsbron_terugval or "geen") if sinds else "prijssensor (live)",
+            "weg_sinds": sinds,
+            "weg_minuten": weg_min,
+            "melden_vanaf_minuten": PRIJSBRON_MELDEN_MINUTEN,
+            "bewaarde_reeks_van": cache.get("om"),
+            "bewaarde_reeks_leeftijd_minuten": leeftijd,
+            "bewaarde_kwartieren_vooruit": vooruit,
+            "storingen_7_dagen": len(recent),
+            "storingen_7_dagen_minuten": sum(s.get("minuten") or 0 for s in recent),
+            "laatste_storingen": list(reversed((self.prijsbron_storingen or [])[-5:])),
+        }
+
+    def _prijsbron_aandachtspunt(self, now: datetime | None = None) -> str | None:
+        """v5.116.0: tekst voor de diagnose als de prijsbron > 30 min weg is."""
+        pb = self.get_prijsbron(now)
+        minuten = pb.get("weg_minuten")
+        if minuten is None or minuten < PRIJSBRON_MELDEN_MINUTEN:
+            return None
+        try:
+            sinds = dt_util.as_local(datetime.fromisoformat(pb["weg_sinds"])).strftime("%d-%m %H:%M")
+        except (TypeError, ValueError, KeyError):
+            sinds = "?"
+        duur = f"{minuten // 60} u {minuten % 60:02d} min" if minuten >= 60 else f"{minuten} min"
+        bron = pb.get("bron")
+        if bron == "bewaarde reeks":
+            leeftijd = pb.get("bewaarde_reeks_leeftijd_minuten")
+            oud = f"{leeftijd / 60:.1f} u oud".replace(".", ",") if leeftijd is not None else "leeftijd onbekend"
+            terugval = (f"het EMS rekent met de bewaarde kwartierprijzen ({oud}, nog "
+                        f"{pb.get('bewaarde_kwartieren_vooruit')} kwartieren vooruit)")
+        elif bron == "prijsgeschiedenis (schatting)":
+            terugval = "het EMS rekent met een schatting uit de prijsgeschiedenis"
+        else:
+            terugval = "er zijn geen prijzen om mee te rekenen"
+        naam = pb.get("sensor") or "prijssensor"
+        return f"Prijsbron {naam} geeft sinds {sinds} geen prijzen ({duur}); {terugval}."
 
     def _forecast_uit_geschiedenis(self) -> list:
         """v5.113.2: uurprijzen (UTC-sleutel, euro) als forecast-items.
@@ -6676,12 +6783,12 @@ class EnergyManagementSystemCoordinator:
             }
 
         verschil_kwh = nu - begin
-        waarde = self.current_feedin_value_eur_per_kwh
+        waarde, waarde_bron = self._voorraad_kwh_waarde()
         if waarde is None:
             return {
                 "besparing_vandaag_eur": round(rauw, 2),
                 "correctie_beschikbaar": False,
-                "reden": "Geen terugleverwaarde bekend om de voorraad te waarderen.",
+                "reden": "Geen kostprijs of terugleverwaarde bekend om de voorraad te waarderen.",
             }
 
         correctie = verschil_kwh * waarde
@@ -6691,7 +6798,11 @@ class EnergyManagementSystemCoordinator:
             "accu_bij_dagbegin_kwh": round(begin, 2),
             "accu_nu_kwh": round(nu, 2),
             "voorraadverschil_kwh": round(verschil_kwh, 2),
+            # v5.116.0: ongerond, voor het oplopende totaal (dagafsluiting)
+            "voorraadwaarde_exact_eur": correctie,
             "voorraadwaarde_eur": round(correctie, 2),
+            "kwh_waarde_eur": round(waarde, 4),
+            "kwh_waarde_bron": waarde_bron,
             "besparing_gecorrigeerd_eur": round(rauw + correctie, 2),
             "toelichting": (
                 "Laden telt op het moment zelf als kosten; de opbrengst volgt "
@@ -6700,6 +6811,54 @@ class EnergyManagementSystemCoordinator:
                 "verzilverd - en dat scheelt in het dagcijfer."
             ),
         }
+
+    def _voorraad_kwh_waarde(self) -> tuple[float | None, str | None]:
+        """Waarde per opgeslagen kWh voor de voorraadcorrectie (v5.116.0).
+
+        Gemeten 21-10 (Plan tegen werkelijkheid): eigen berekening onder
+        salderen € 0,35 (ontlading - lading tegen de kwartierprijs, min de
+        daling van de accu-inhoud 60 -> 21 % tegen de gemeten laadprijs),
+        de dagsensor € 0,06 en de dagmeter € 1,56. De dagsensor waardeerde
+        de voorraad tegen de prijs van het moment (om 07:45 de ochtendpiek,
+        37 ct), dus schommelde hij met de prijs; de meter rekende de
+        voorraad helemaal niet mee.
+
+        Nu: wat de energie in de accu werkelijk kostte om erin te krijgen
+        (nacalculatie eerst erin, eerst eruit, `accukosten.py`). Is die er
+        niet (te weinig dagverloop), dan de kostprijs van het
+        kostprijsmodel, en pas daarna de terugleverwaarde van nu.
+        """
+        try:
+            kostprijs = (self.get_accukosten().get("voorraad_kostprijs") or {}).get("eur_per_kwh")
+        except Exception:  # noqa: BLE001 - een rapportagegetal mag niets breken
+            kostprijs = None
+        if isinstance(kostprijs, (int, float)) and kostprijs > 0:
+            return float(kostprijs), "gemeten laadprijs van de voorraad"
+        basis = self.battery_cost_basis_eur_per_kwh
+        if isinstance(basis, (int, float)) and basis > 0:
+            return float(basis), "kostprijsmodel"
+        nu = self.current_feedin_value_eur_per_kwh
+        if nu is not None:
+            return float(nu), "terugleverwaarde nu"
+        return None, None
+
+    #: v5.116.0: de voorraadcorrecties van afgesloten dagen, opgeteld (bewaard).
+    besparing_voorraadcorrectie_totaal_eur: float = 0.0
+
+    def besparing_totaal_gecorrigeerd_eur(self) -> float:
+        """Oplopende besparing t.o.v. zonder sturing, met de accu-inhoud (v5.116.0).
+
+        Het rauwe totaal plus de voorraadcorrectie van elke afgesloten dag en
+        die van vandaag. De meters "EMS Accubesparing - vandaag/deze maand"
+        lezen dit totaal; hun dagwaarde is dan gelijk aan de gecorrigeerde
+        dagbesparing en schommelt niet meer met de laadstand.
+        """
+        rauw = (self.counterfactual_cost_all_time_eur or 0.0) - (self.actual_cost_all_time_eur or 0.0)
+        totaal = rauw + (self.besparing_voorraadcorrectie_totaal_eur or 0.0)
+        corr = self.get_savings_correction() or {}
+        if corr.get("correctie_beschikbaar"):
+            totaal += corr.get("voorraadwaarde_exact_eur") or 0.0
+        return totaal
 
     def get_energy_cost_overview(self) -> dict:
         """Week-, maand- en jaarcijfers plus trends (v1.8.0).
@@ -16618,8 +16777,15 @@ class EnergyManagementSystemCoordinator:
             # LET OP in plaats van STORING.
             if self._prijs_uit_cache and all(
                     r.get("instelling") == CONF_PRICE_SENSOR for r in kapot_noodzakelijk):
+                sinds = ""
+                if self._prijsbron_weg_sinds:
+                    try:
+                        sinds = " sinds " + dt_util.as_local(
+                            datetime.fromisoformat(self._prijsbron_weg_sinds)).strftime("%H:%M")
+                    except (TypeError, ValueError):
+                        sinds = ""
                 return "LET OP", met_reden(
-                    f"prijsbron weg ({self._koppelingnaam(kapot_noodzakelijk[0])}), "
+                    f"prijsbron weg{sinds} ({self._koppelingnaam(kapot_noodzakelijk[0])}), "
                     "laatst bekende prijzen in gebruik")
             namen = ", ".join(self._koppelingnaam(r) for r in kapot_noodzakelijk)
             return "STORING", f"noodzakelijke koppeling weg: {namen}"
@@ -29837,6 +30003,15 @@ class EnergyManagementSystemCoordinator:
 
         today_key = now.date()
         if self._counterfactual_day_key != today_key:
+            # v5.116.0: de voorraadcorrectie van de dag die afloopt blijft in
+            # het oplopende totaal (vóór het nieuwe dagbegin). Geen vorige
+            # dag (eerste start): niets af te sluiten.
+            if self._counterfactual_day_key is not None:
+                afsluiting = self.get_savings_correction() or {}
+                if afsluiting.get("correctie_beschikbaar"):
+                    self.besparing_voorraadcorrectie_totaal_eur = (
+                        self.besparing_voorraadcorrectie_totaal_eur or 0.0
+                    ) + (afsluiting.get("voorraadwaarde_exact_eur") or 0.0)
             self._counterfactual_day_key = today_key
             self.actual_cost_today_eur = 0.0
             self.counterfactual_cost_today_eur = 0.0
@@ -40808,6 +40983,15 @@ class EnergyManagementSystemCoordinator:
         informatief = []
 
         aandachtspunten.extend(self._aandachtspunten_over_de_integratie())
+
+        # v5.116.0: een prijsbron die langer dan een half uur weg is, met
+        # sinds wanneer en met welke prijzen het EMS doorrekent.
+        try:
+            prijspunt = self._prijsbron_aandachtspunt()
+        except Exception:  # noqa: BLE001 - de diagnose mag hier niet op stuklopen
+            prijspunt = None
+        if prijspunt:
+            aandachtspunten.append(prijspunt)
 
         if (
             self.measurement_quality is not None
