@@ -69,3 +69,7 @@ Regel: <dd-mm HH:MM> | <sleutel>
 22-10 16:51 | stormchase waarschuwingsniveau/verwachting volgt gemeten onweer niet
 22-10 16:51 | gold scalper sluitreden xauusd achteraf invullen uit broker-afstemming
 22-10 16:51 | hernoemen hue-zones zitgedeelte->zithoek en dubbele naam achtertuin
+22-10 17:51 | L-EMS-024 dagarchief zon_verwacht 0 en accu_opbrengst zonder voorraadverschil
+22-10 17:51 | L-EMS-029 mc-kalibratie meetvenster tot blok i.p.v. tekortnacht
+22-10 17:51 | L-EMS-030 digital twin laden zonder laadrendement
+22-10 17:51 | L-GS-021 gold scalper logruis na herstart
