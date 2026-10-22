@@ -60,7 +60,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
-from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging
+from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging, dipplan
 from . import thuiskomst as thuiskomst_mod
 from .const import (
     RESERVE_SPRONG_DREMPEL_KWH,
@@ -218,6 +218,10 @@ from .const import (
     LAADBLOK_HERLAAD_DREMPEL,
     ZON_REALISATIE_MIN_KWH,
     DIP_MARGE,
+    BALANCEER_NA_DAGEN,
+    BALANCEER_VROEG_NA_DAGEN,
+    BALANCEER_VROEG_CEL_DELTA_V,
+    BALANCEER_VOL_PERCENT,
     NABESCHOUWING_MIN_KWARTIEREN,
     NACHTLAST_MIN_NACHTEN,
     NACHTLAST_MIN_STIJGING_FRACTIE,
@@ -21460,6 +21464,14 @@ class EnergyManagementSystemCoordinator:
                 regels.append(blok_tekst)
             return regels
         besluit = self.last_laadbesluit or {}
+        if besluit.get("soort") == "balanceren":
+            # v5.117.0
+            bal = besluit.get("balanceren") or {}
+            return [
+                f"stroom kost nu {besluit['prijs_nu_eur'] * 100:.1f} ct, een van de goedkoopste kwartieren van het blok",
+                f"de accu is {bal.get('dagen_niet_vol', '?')} dagen niet vol geweest",
+                "vol laden laat het accubeheer de cellen gelijk trekken",
+            ]
         if besluit.get("verdringt_zon") and besluit.get("exportprijs_eur") is not None:
             # v5.86 (L-EMS-021)
             vol = dt_util.parse_datetime(besluit.get("zon_vol_om") or "")
@@ -21716,6 +21728,10 @@ class EnergyManagementSystemCoordinator:
         if prijs_nu is None or ruimte is None or slijtage_ct is None:
             uit["reden"] = "prijs, laadruimte of slijtage onbekend"
             return uit
+        # v5.117.0: balanceerlading vóór de hysterese - die stopt bij 97 %,
+        # en juist de laatste procenten zijn nodig om te balanceren.
+        if (balans := self._balanceer_laadbesluit(now, blok_eind, prijs_nu, ruimte)) is not None:
+            return balans
         # v5.95: hysterese - zie `_laadblok_hysterese`.
         if self._laadblok_hysterese(
             self.beschikbare_energie_kwh() or 0.0,
@@ -21793,6 +21809,101 @@ class EnergyManagementSystemCoordinator:
         if laadt_al or bruikbaar <= 0:
             return False
         return beschikbaar >= LAADBLOK_HERLAAD_DREMPEL * bruikbaar - 1e-9
+
+    #: v5.117.0: wanneer de accu het laatst vol was (ISO, bewaard) en de
+    #: grootste celspreiding in het vlakke midden sinds die keer (bewaard).
+    balanceer_laatst_vol: str | None = None
+    balanceer_max_delta_v: float | None = None
+
+    def _volg_balanceren(self, now: datetime) -> None:
+        """Houdt bij wanneer de accu vol was en hoe ver de cellen uiteenlopen (v5.117.0)."""
+        soc = self.accustand_procent()
+        if soc is not None and soc >= BALANCEER_VOL_PERCENT:
+            self.balanceer_laatst_vol = now.isoformat()
+            self.balanceer_max_delta_v = None
+            return
+        if self.balanceer_laatst_vol is None:
+            self.balanceer_laatst_vol = self._balanceer_laatst_vol_uit_dagrapport(now)
+        for m in self.battery_module_live or []:
+            delta, msoc = m.get("cel_delta_v"), m.get("soc_percent")
+            if delta is None or msoc is None:
+                continue
+            # Alleen in het vlakke midden zegt de spreiding iets over balans;
+            # onderin en bovenin is ze bij LFP vanzelf groot.
+            if not (BATTERY_MODULE_FLAT_SOC_MIN_PERCENT <= msoc <= BATTERY_MODULE_FLAT_SOC_MAX_PERCENT):
+                continue
+            if self.balanceer_max_delta_v is None or delta > self.balanceer_max_delta_v:
+                self.balanceer_max_delta_v = round(delta, 3)
+
+    def _balanceer_laatst_vol_uit_dagrapport(self, now: datetime) -> str:
+        """Eerste start: de laatste dag in het dagrapport met een volle accu.
+
+        Staat er geen in, dan telt de oudste dag van het rapport (de accu was
+        dan minstens zo lang niet vol); zonder rapport begint de telling nu.
+        """
+        dagen = [d for d in (self.daily_report_history or []) if isinstance(d, dict) and d.get("datum")]
+        vol = [d["datum"] for d in dagen if (d.get("soc_max_procent") or 0) >= BALANCEER_VOL_PERCENT]
+        datum = max(vol) if vol else (min(d["datum"] for d in dagen) if dagen else None)
+        if datum is None:
+            return now.isoformat()
+        try:
+            dag = date.fromisoformat(datum)
+        except ValueError:
+            return now.isoformat()
+        return datetime(dag.year, dag.month, dag.day, 23, 59, tzinfo=now.tzinfo).isoformat()
+
+    def balanceerlading(self, now: datetime) -> dict:
+        """Is een balanceerlading nodig? (v5.117.0) - zie BALANCEER_NA_DAGEN."""
+        uit: dict = {"nodig": False, "laatst_vol": self.balanceer_laatst_vol,
+                     "max_cel_delta_v": self.balanceer_max_delta_v}
+        try:
+            vol = datetime.fromisoformat(self.balanceer_laatst_vol or "")
+        except ValueError:
+            uit["reden"] = "onbekend wanneer de accu het laatst vol was"
+            return uit
+        dagen = (now - vol).total_seconds() / 86400
+        uit["dagen_niet_vol"] = round(dagen, 1)
+        delta = self.balanceer_max_delta_v
+        if dagen >= BALANCEER_NA_DAGEN:
+            uit.update(nodig=True, reden=f"{dagen:.0f} dagen niet vol")
+        elif dagen >= BALANCEER_VROEG_NA_DAGEN and delta is not None and delta > BALANCEER_VROEG_CEL_DELTA_V:
+            uit.update(nodig=True, reden=f"{dagen:.0f} dagen niet vol en celverschil {delta:.2f} V")
+        else:
+            uit["reden"] = f"{dagen:.1f} dagen niet vol; nog niet nodig"
+        return uit
+
+    def _balanceer_zon_vult_vandaag(self, now: datetime, beschikbaar: float, ruimte: float) -> bool:
+        """Maakt de zon de accu vandaag zelf vol? Dan geen stroom kopen (v5.117.0)."""
+        vol_om = self._zon_vol_om(now, beschikbaar, ruimte, now + timedelta(hours=12))
+        return vol_om is not None and vol_om.date() == now.date()
+
+    def _balanceer_laadbesluit(
+        self, now: datetime, blok_eind: datetime, prijs_nu: float, ruimte: float
+    ) -> dict | None:
+        """Volladen voor de balans, in de goedkoopste kwartieren van het blok (v5.117.0).
+
+        None = geen balanceerlading in dit kwartier; dan beslist de gewone
+        laadregel (die kan nog steeds laden als het loont).
+        """
+        bal = self.balanceerlading(now)
+        if not bal.get("nodig") or ruimte <= 0.05:
+            return None
+        if self._balanceer_zon_vult_vandaag(now, self.beschikbare_energie_kwh() or 0.0, ruimte):
+            return None
+        if not self._goedkoopste_laadmomenten(now, prijs_nu, blok_eind.isoformat(), ruimte):
+            return None
+        return {
+            "laden": True,
+            "soort": "balanceren",
+            "prijs_nu_eur": round(prijs_nu, 4),
+            "gat_kwh": round(ruimte, 2),
+            "nu_bij_de_goedkoopste": True,
+            "balanceren": bal,
+            "reden": (
+                f"balanceerlading ({bal['reden']}): vol laden in de goedkoopste "
+                "kwartieren van het blok, zodat het accubeheer de cellen gelijk trekt"
+            ),
+        }
 
     def _lopend_blok(self, now: datetime, nieuw_start, nieuw_eind, entries=None) -> tuple:
         """Het lopende blok houden tot het eindigt (v5.28.5).
@@ -24106,7 +24217,16 @@ class EnergyManagementSystemCoordinator:
                 break
             tekort = max(0.0, sum(v - z for v, z in segmenten))
             kwartieren.append((begin, prijs_ruw / PRICE_SCALE_FACTOR, tekort))
+        laad_kw = abs(
+            float(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER))
+        ) / 1000
         return {
+            # v5.117.0 (L-EMS-028): de dipkwartieren van de BESLISSING zelf.
+            "dip_kwartieren": self._plan_dipkwartieren(now, entries, blok),
+            # v5.117.0: dezelfde maat per kwartier als `_goedkoopste_laadmomenten`.
+            "laad_per_kwartier": laad_kw * 0.25,
+            # v5.117.0: balanceerlading in het blok - zie `_balanceer_laadbesluit`.
+            "balanceren": self._plan_balanceren(now),
             # v5.27.2: de zonarme-dag-poort van de verkooptoets, per dag.
             "zonarm": self._zonarme_dagen(now),
             "kwartieren": kwartieren,
@@ -24139,6 +24259,42 @@ class EnergyManagementSystemCoordinator:
             or float("inf"),
         }
 
+    def _plan_dipkwartieren(self, now: datetime, entries, blok: datetime | None) -> list:
+        """De kwartieren van het spaarplan zoals `_dipbesluit` ze ziet (v5.117.0).
+
+        (begin, prijs, tekort): dezelfde horizon, dezelfde schaling naar de
+        verkooptoets en DIP_MARGE tot het blok. Leeg als de beslissing geen
+        dip kan laden (geen blok in zicht, geen smart_charging, geen
+        verbruiksinschatting) - dan laadt het plan ook niet.
+        """
+        if blok is None or blok <= now or not self.smart_charging_supported():
+            return []
+        try:
+            kwartieren = self._spaarkwartieren(now, entries, blok)
+            if kwartieren is None:
+                return []
+            kwartieren, _bron = self._spaarkwartieren_op_verkooptoets(kwartieren, blok)
+        except Exception:  # noqa: BLE001 - het plan mag nooit omvallen
+            return []
+        return [
+            (b, p, t * DIP_MARGE if b < blok and t > 0 else t)
+            for b, _e, p, t in kwartieren
+        ]
+
+    def _plan_balanceren(self, now: datetime) -> bool:
+        """Laadt de beslissing in het blok vol voor de balans? (v5.117.0)"""
+        try:
+            if not self.balanceerlading(now).get("nodig"):
+                return False
+            ruimte = self._resterende_laadruimte_kwh()
+            if ruimte is None or ruimte <= 0.05:
+                return False
+            return not self._balanceer_zon_vult_vandaag(
+                now, self.beschikbare_energie_kwh() or 0.0, ruimte
+            )
+        except Exception:  # noqa: BLE001 - het plan mag nooit omvallen
+            return False
+
     @staticmethod
     def _plan_dip_laadt(
         netregels: dict,
@@ -24158,6 +24314,9 @@ class EnergyManagementSystemCoordinator:
         slijtage = netregels.get("slijtage_ct")
         if volgend is None or slijtage is None:
             return 0.0
+        dip = netregels.get("dip_kwartieren")
+        if dip is not None:
+            return dipplan.plan_dip_laadt(netregels, dip, start, prijs, soc, bruikbaar, laad_kwh)
         # v5.96: met dezelfde marge als `_dipbesluit` (DIP_MARGE).
         toekomst = [
             (b, p, d * DIP_MARGE if d > 0 else d)
@@ -24203,10 +24362,21 @@ class EnergyManagementSystemCoordinator:
         de ochtend was veel goedkoper. Nu telt het lopende blok ook voor het
         plan, zodat het plan zegt wat de beslissing doet.
         """
-        if prijs <= drempel_voor(start):
-            return True
         blok_start, blok_eind = netregels.get("blok") or (None, None)
-        return blok_start is not None and blok_eind is not None and blok_start <= start < blok_eind
+        if blok_start is not None and blok_eind is not None:
+            if blok_start <= start < blok_eind:
+                return True
+            # v5.117.0: tot het einde van het blok dat de beslissing kent,
+            # telt ALLEEN dat blok. Gemeld 22-10 15:00 ("planning en
+            # werkelijkheid komen niet overeen"): het blok van 13:00-14:45 was
+            # voorbij, het volgende begon om 21:15. Het plan zag 15:00 (26,4 ct)
+            # met de dagdrempel (22,4 + 20 % van 25,4 = 27,5 ct) toch als
+            # blokkwartier en zette er "laden" op; de beslissing gebruikte de
+            # dipregel en spaarde. De dagdrempel blijft voor de kwartieren na
+            # dat blok, waarvoor de beslissing het blok nog niet kent.
+            if start < blok_eind:
+                return False
+        return prijs <= drempel_voor(start)
 
     def _plan_laadt(
         self,
@@ -24223,6 +24393,24 @@ class EnergyManagementSystemCoordinator:
         # beslissing (`_laad_uit_het_net_als_nodig`).
         if netregels.get("slijtage_ct") is None or per_kwartier <= 0:
             return 0.0
+        # v5.117.0: balanceerlading - dezelfde keuze als `_balanceer_laadbesluit`:
+        # in het blok van de beslissing, in de goedkoopste kwartieren tot het
+        # blokeinde, tot vol (zonder de hysterese van 97 %).
+        blok_start, blok_eind = netregels.get("blok") or (None, None)
+        begin_kwartier = einde - timedelta(minutes=15)
+        if (
+            netregels.get("balanceren")
+            and blok_start is not None and blok_eind is not None
+            and blok_start <= begin_kwartier < blok_eind
+            and bruikbaar - soc > 0.05
+        ):
+            per = netregels.get("laad_per_kwartier") or 0.0
+            nodig = max(1, math.ceil((bruikbaar - soc) / per)) if per > 0 else 1
+            goedkoper = [
+                p for b, p in netregels["reeks"] if begin_kwartier < b < blok_eind and p < prijs
+            ]
+            if len(goedkoper) < nodig:
+                return max(0.0, min(laad_kwh, bruikbaar - soc))
         # v5.95: niet opnieuw beginnen vanaf 97% - zie `_laadblok_hysterese`.
         if self._laadblok_hysterese(soc, bruikbaar, bool(netregels.get("laadde_vorig"))):
             return 0.0
@@ -45606,6 +45794,11 @@ class EnergyManagementSystemCoordinator:
         self._update_presence(now)
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
+        # v5.117.0: wanneer de accu het laatst vol was (balanceerlading).
+        try:
+            self._volg_balanceren(now)
+        except Exception as fout:  # noqa: BLE001 - veilig falen: geen balanceerlading
+            self.internal_failures["balanceren"] = f"{type(fout).__name__}: {fout}"
         _kalibratie_soc = self._read_sensor_float(
             self.config.get(CONF_SOC_SENSOR)
         )

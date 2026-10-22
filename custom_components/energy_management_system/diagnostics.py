@@ -483,6 +483,11 @@ async def async_get_config_entry_diagnostics(
         # v5.116.0: waar de prijzen vandaan komen, sinds wanneer de bron weg
         # is en hoe oud de bewaarde prijzen zijn.
         "prijsbron": _veilig("get_prijsbron", coordinator.get_prijsbron),
+        # v5.117.0: wanneer de accu het laatst vol was en of er een
+        # balanceerlading nodig is.
+        "balanceerlading": _veilig(
+            "balanceerlading", lambda: coordinator.balanceerlading(dt_util.now())
+        ),
         # v3.65.0: uitkomsten die logisch niet kunnen. Elke bevinding
         # hier is een fout in de integratie zelf.
         "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),

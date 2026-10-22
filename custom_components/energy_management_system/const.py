@@ -303,6 +303,19 @@ ZON_REALISATIE_MIN_KWH = 0.5
 # genoeg tot 11:30 en bleef de nachtdip (26-28 ct) voor een ochtendpiek van
 # 47-58 ct liggen.
 DIP_MARGE = 1.25
+# v5.117.0: balanceerlading. Het accubeheer (BMS) trekt de cellen alleen
+# gelijk als de accu vol is. Gezien 22-10: 8 dagen niet vol, module 4 met een
+# cel op 3,45 V bij 78 % die het laden afremde (2,0 in plaats van 2,4 kW) en
+# onderin 2,99 V. Zendure noemt geen termijn; voor LFP is eens per week tot
+# twee weken vol gebruikelijk. Na zoveel dagen zonder 100 % laadt het EMS de
+# accu één keer vol in de goedkoopste kwartieren van het goedkope blok -
+# tenzij de zon hem die dag zelf vol maakt.
+BALANCEER_NA_DAGEN = 7
+# Eerder als een module in het vlakke midden al zoveel uit balans is.
+BALANCEER_VROEG_NA_DAGEN = 4
+BALANCEER_VROEG_CEL_DELTA_V = 0.10
+# Vanaf deze stand telt de accu als vol (dezelfde als de kalibratie).
+BALANCEER_VOL_PERCENT = 99.0
 
 # Hoeveel dagen er minstens nodig zijn voordat de zonpersistentie een
 # richting noemt. Bij acht dagen was r=0,69 een aanwijzing en geen
@@ -3509,6 +3522,10 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "prijsbron_storingen": {"type": "plain"},
     "_prijsbron_weg_sinds": {"type": "plain"},
     "_prijsbron_terugval": {"type": "plain"},
+    # v5.117.0: wanneer de accu het laatst vol was, en de grootste
+    # celspreiding sinds die keer.
+    "balanceer_laatst_vol": {"type": "plain"},
+    "balanceer_max_delta_v": {"type": "plain"},
     # v5.114.0: laatste stand van zonvoorspellingen, dagtotalen, gasprijs, CO2.
     "bronbuffer_opslag": {"type": "plain"},
     "keuzeoordelen": {"type": "plain"},

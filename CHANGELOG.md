@@ -33564,3 +33564,17 @@ Tests: `test_v5116_besparing_prijsbron.py` (14); `test_v59910_rustverbruik.py` b
 - Alleen meten; stuurt niets.
 
 Tests: `test_v51161_gezondheid_niet_aanstuurbaar.py` (3).
+
+
+## v5.117.0 — balanceerlading, en het plan gelijk aan de beslissing bij blok en dip
+
+- **Balanceerlading.** 22-10: de accu was 8 dagen niet vol; module 4 had een cel op 3,45 V bij 78 % en remde het laden af (2,0 in plaats van 2,4 kW), onderin 2,99 V. Zendure noemt geen termijn; het accubeheer trekt de cellen alleen bovenin gelijk.
+  - `balanceer_laatst_vol` (bewaard): het laatste moment op ≥ 99 %; bij de eerste start uit het dagrapport (laatste dag met `soc_max_procent` ≥ 99, anders de oudste dag). `balanceer_max_delta_v` (bewaard): de grootste celspreiding in het vlakke midden (20-90 %) sinds die keer.
+  - `balanceerlading()`: nodig na 7 dagen zonder vol, of na 4 dagen als een module in het midden > 0,10 V uiteenloopt.
+  - In het goedkope blok (`laadbesluit_uit_het_net`, vóór de hysterese van 97 %): laden tot vol in de goedkoopste kwartieren tot het blokeinde (`_goedkoopste_laadmomenten`). Niet als de zon de accu vandaag zelf vol maakt (`_zon_vol_om`, voorzichtige zon). Buiten het blok verandert niets. Reden blijft `grid_charging_profitable`, `soort` = `balanceren`; de waarom-regels noemen het.
+  - Het kwartierplan laadt in dezelfde kwartieren (`netregels["balanceren"]`, `_plan_laadt`).
+  - Diagnose-export: `balanceerlading`.
+- **Plan tegen beslissing, blok.** 22-10 15:00: het blok van 13:00-14:45 was voorbij, het volgende begon om 21:15. `_plan_in_laadblok` zag 15:00 (26,4 ct) met de dagdrempel (27,5 ct) toch als blokkwartier en zette er "laden" op; de beslissing gebruikte de dipregel en spaarde ("afwijking sturing"). Tot het einde van het blok dat de beslissing kent telt nu alleen dat blok; de dagdrempel alleen daarna.
+- **Plan tegen beslissing, dip (L-EMS-028, H-EMS-13).** Het plan rekent een dip nu met de kwartieren van de beslissing (`_plan_dipkwartieren`: `_spaarkwartieren` + schaling naar de verkooptoets + DIP_MARGE, ook de kwartieren na het blok) en kiest het moment zoals `_goedkoopste_laadmomenten` (alle prijzen tot het doelkwartier, een heel kwartier op het laadvermogen). Nieuwe module `dipplan.py`.
+
+Tests: `test_v5117_balanceren_planblok.py` (16).
