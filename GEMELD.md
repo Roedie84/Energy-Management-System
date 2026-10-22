@@ -64,3 +64,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 22-10 12:51 | dashboard home verwijderen
 22-10 12:51 | ems balanceerlading na 7 dagen zonder 100%
 22-10 12:51 | ultimatesensor back light naam
+22-10 13:52 | ems sensor-gezondheid monsters overslaan bij niet aanstuurbaar
