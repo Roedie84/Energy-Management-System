@@ -47,3 +47,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 21-10 21:51 | L-EMS-027 verkoop-/reservemeting per dag in dagarchief
 21-10 21:51 | gold scalper pyramiding/tegengestelde posities max 1 per richting
 22-10 05:51 | gold scalper noodstop zonder marktnaam/entiteit per markt
+22-10 06:51 | updates installeren ems 5.115.1, gold scalper 2.19.2, stormchase 0.56.1 (hacs)
