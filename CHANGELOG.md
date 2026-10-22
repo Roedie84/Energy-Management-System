@@ -33554,3 +33554,13 @@ Tests: `test_v51151_verkoop_dagarchief.py` (9).
 - Alleen meten; stuurt niets.
 
 Tests: `test_v5116_besparing_prijsbron.py` (14); `test_v59910_rustverbruik.py` bijgewerkt (totaal uit de coordinator).
+
+
+## v5.116.1 — sensor-gezondheid telt niet mee terwijl de accu niet aanstuurbaar is
+
+- **Meldronde 22-10:** tijdens de Zendure-time-outs van 10:49-12:35 (EMS 4× *niet aanstuurbaar*) zakte de sensor-gezondheid van 95 naar 75 % en bleef dat ~10 uur: een tweede LET OP voor dezelfde storing.
+- `_update_energy_balance_validation`: zolang `aansturing_onbereikbaar["sinds"]` gezet is, wordt er geen monster geregistreerd (niet goed, niet fout) en telt de uitval per sensor niet op. Het anker (tijd, beschikbare energie, vermogensmonsters) wordt losgelaten, zodat de eerste vergelijking na herstel niet over de storing heen rekent.
+- Een sensor die wegvalt terwijl de accu wél aanstuurbaar is, telt nog steeds als fout.
+- Alleen meten; stuurt niets.
+
+Tests: `test_v51161_gezondheid_niet_aanstuurbaar.py` (3).

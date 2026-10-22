@@ -35438,6 +35438,20 @@ class EnergyManagementSystemCoordinator:
         if not available_entity or not battery_entity:
             return
 
+        # v5.116.1, meldronde 22-10: tijdens de Zendure-time-outs van
+        # 10:49-12:35 zakte de sensor-gezondheid van 95 naar 75 % en bleef
+        # daar uren hangen - een tweede LET OP voor één storing, die al
+        # als "accu niet aanstuurbaar" gemeld stond. Zolang dat zo is,
+        # meet deze check de storing en niet de sensoren: geen monster
+        # registreren (niet goed, niet fout), en het anker loslaten zodat
+        # de eerste vergelijking na herstel niet over de storing heen
+        # rekent.
+        if (getattr(self, "aansturing_onbereikbaar", None) or {}).get("sinds") is not None:
+            self._last_balance_check_time = None
+            self._last_balance_check_available_kwh = None
+            self._balance_power_samples = []
+            return
+
         available_kwh = self._read_sensor_float(available_entity)
         measured_battery_power_w = self._read_corrected_battery_power()
 
