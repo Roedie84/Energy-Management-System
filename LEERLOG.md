@@ -395,3 +395,14 @@ laatste ronde: 21-10 23:40, gemeten t/m 21-10 23:43
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek), H-EMS-12 (MC-definitie). Geen release.
 
 laatste ronde: 22-10 03:40, gemeten t/m 22-10 03:43
+
+## 22-10 07:40 · tussenronde
+- Actief **v5.115.1** (geïnstalleerd, herstart 07:07); 0 EMS-fouten (alleen bronbuffer-WARNINGs Solcast/Zonneplan bij de herstart). Back-upvenster voorbij; geen release (tussenronde).
+- **Nacht 21→22: gepland laden is niet gebeurd.** Plan (22:01/03:40): laden 03:45-05:30, om 05:56 nog 05:45-06:15. Werkelijk: accu 0 kWh geladen (grid_input 0), SoC 21 % → 18 % (07:43), beslissing hele nacht `battery_saved_for_peak`, `laadbesluit_sinds_9u` "loont_niet". Planvolging vandaag 50 % met 8 kwartieren "afwijking sturing", energieverschil +4,43 kWh. Import 23-07 u 1,35 kWh (03-07 u 0,73).
+- **Oorzaak (code nagelezen, H-EMS-13):** de beslissing (`_dipbesluit`) rekent met het spaarplan dat sinds v5.87 de behoefte tot het blok schaalt naar de verkooptoets; het plan (`_plan_netregels` → `_plan_dip_laadt`) gebruikt per kwartier nog het eigen profiel. Grotere kwartierbehoefte in het plan → de beschikbare kWh dekt minder dure kwartieren → het "doelkwartier" is duurder → plan zegt laden, beslissing niet. Rendement, laadkosten (v5.115.0) en blok zijn in beide gelijk. Gevolg: plan en planvolging tonen een lading die de sturing nooit doet ("afwijking sturing" telt onterecht). Niet acuut (huis gedekt, geen verkoop) → **L-EMS-028** gepland voor de dagafsluiting, eerst offline nagerekend.
+- H-EMS-11: het verwachte L-EMS-026-patroon kwam maar half: wel sparen op 21 %, geen nachtlading; de ochtendpiek (32-35 ct) draait op 0,92 kWh + net. Uitslag in de nabeschouwing 22-10.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 0,02 kWh). Reservesprongen sinds 07:07: 0 (v5.115.1).
+- H-EMS-12: tekortnacht tot nu 0 (accu 18 %, niet leeg); uitslag 09:00 → 11:40.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht vs ochtendpiek), H-EMS-13 (plan ≠ beslissing bij dip-laden). H-EMS-12 loopt af na 09:00.
+
+laatste ronde: 22-10 07:40, gemeten t/m 22-10 07:45

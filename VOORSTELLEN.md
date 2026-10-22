@@ -201,7 +201,13 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Effect meten: per_dagdeel `ochtendpiek.vastgehouden_kwh` en netto nacht+ochtend over 7 dagen.
 
 ## L-EMS-027 · verkoop- en reservemeting die over dagen leesbaar blijft (meetbaarheid + meetfout)
-- Status: **gebouwd v5.115.1** (21-10, na akkoord Ruud in de meldronde): dagarchief `vk`/`vkm`/`vko`, `alleen_behoefte` + `reserve_sprongen_alleen_behoefte`, `grootste_onderdeel` = "basisbehoefte". Na installatie + 1 dag: effect meten.
+- Status: **gebouwd v5.115.1, geïnstalleerd 22-10 07:07** (21-10, na akkoord Ruud in de meldronde); eerste meting 07:40: 0 sprongen, `alleen_behoefte` 0, verkoopkwartieren leeg. Effect na 1 volle dag (dagafsluiting 23-10). Was: dagarchief `vk`/`vkm`/`vko`, `alleen_behoefte` + `reserve_sprongen_alleen_behoefte`, `grootste_onderdeel` = "basisbehoefte". Na installatie + 1 dag: effect meten.
 - Onderbouwing: (1) `verkoopkwartieren` toont alleen vandaag/gisteren; voor 14..19-10 (1,0-3,0 kWh verkoop per dag) is de marge tegen de verkoopreserve niet meer te toetsen → de harde regel kon 8 dagen niet volledig getoetst worden. (2) `reserve_sprongen` telt 29× op 21-10 terwijl `reserve_kwh_after_margin` gelijk bleef (10,37, boven capaciteit) en alle bijdragen 0 waren; `grootste_onderdeel` meldt dan "lange_horizon_extra_kwh".
 - Bouw: per dag in het dagarchief `vk` (verkochte kWh), `vkm` (kleinste marge bij verkoop), `vko` (aantal kwartieren onder de reserve); sprong alleen tellen als de reserve zelf > 0,3 kWh verandert, anders `grootste_onderdeel` = "basisbehoefte" en apart tellen.
 - Effect meten: harde regel per dag uit het dagarchief; `reserve_sprongen_aantal` 0 op dagen met afgekapte reserve.
+
+## L-EMS-028 · plan dip-laden met dezelfde behoefte als de beslissing (rapportage/meetfout)
+- Status: **gepland** (zelf bouwen als rapportagecorrectie; sturing ongewijzigd). Voorwaarde: offline narekening in de dagafsluiting 23-10 laat zien dat alleen de plan-/planvolgingsuitvoer verandert. Voedt de wijziging via `get_quarter_plan` een beslissing (sparen in het blok v5.75, MC-horizon v5.93), dan wordt dit een voorstel (open).
+- Onderbouwing: nacht 21→22: plan laden 03:45-05:30 en 05:45-06:15, beslissing `battery_saved_for_peak` met laadbesluit "loont_niet", 0 kWh geladen; planvolging 8 kwartieren "afwijking sturing" (n=1 nacht). Code: `_dipbesluit` gebruikt `spaarplan(...)` met `_spaarkwartieren_op_verkooptoets` (v5.87), `_plan_netregels` per kwartier `_segmenten_verbruik_zon` zonder die schaling.
+- Bouw: `_plan_netregels` schaalt de kwartierbehoefte vóór het blok met dezelfde factor (doel verkooptoets / eigen schatting) als het spaarplan; test met een nacht waarin eigen schatting > verkooptoets (plan laadt niet als de beslissing niet laadt).
+- Effect meten: nachten met plan-dip-laden tegen werkelijk netladen; "afwijking sturing" in nachtkwartieren → 0.
