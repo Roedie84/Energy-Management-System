@@ -26,6 +26,10 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    SOLAR_EENZIJDIG_AANDEEL,
+    SOLAR_EENZIJDIG_DAGEN,
+    SOLAR_EENZIJDIG_MAX_PERCENT,
+    SOLAR_EENZIJDIG_MIN_DAGEN,
     CONF_SOLAR_ACTUAL_SENSOR,
     CONF_SOLAR_FORECAST_SENSOR,
     DEVIATION_HISTORY_DAYS,
@@ -393,6 +397,47 @@ class SolarForecastAccuracyTracker:
                 "gecorrigeerd."
             )
         return None
+
+    @property
+    def eenzijdige_correctie(self) -> dict | None:
+        """Correctie als de dagen bijna allemaal aan één kant liggen (v5.118.0).
+
+        L-EMS-025 (akkoord Ruud 22-10): 15 van 15 dagen te hoog voorspeld,
+        bias 14 d -19 %, terwijl `learned_bias_percent` null bleef omdat
+        de dagen "twee soorten" waren (-2..-14 % en -26..-48 %). Twee
+        soorten dagen die allebei te hoog zijn, zijn wel een verschuiving.
+
+        Liggen van de laatste SOLAR_EENZIJDIG_DAGEN dagen (minstens
+        SOLAR_EENZIJDIG_MIN_DAGEN bruikbaar) er SOLAR_EENZIJDIG_AANDEEL of
+        meer aan één kant, dan de mediaan van de dagen aan die kant die
+        niet ver mis zijn (de kleinste groep afwijkingen: een heldere dag
+        die klopte wordt zo niet bedorven), begrensd op
+        SOLAR_EENZIJDIG_MAX_PERCENT. None als dat niet zo is.
+        """
+        reeks = [
+            v for v in self.deviation_history[-SOLAR_EENZIJDIG_DAGEN:]
+            if abs(v) <= MAX_REASONABLE_DEVIATION_PERCENT
+        ]
+        if len(reeks) < SOLAR_EENZIJDIG_MIN_DAGEN:
+            return None
+        lager = [v for v in reeks if v < 0]
+        hoger = [v for v in reeks if v > 0]
+        kant = lager if len(lager) >= len(hoger) else hoger
+        aandeel = len(kant) / len(reeks)
+        if aandeel < SOLAR_EENZIJDIG_AANDEEL:
+            return None
+        klein = [v for v in kant if abs(v) < SOLAR_DAG_VER_MIS_PERCENT] or kant
+        mediaan = statistics.median(klein)
+        grens = SOLAR_EENZIJDIG_MAX_PERCENT
+        correctie = max(-grens, min(grens, mediaan))
+        return {
+            "bias_percent": round(correctie, 1),
+            "dagen": len(reeks),
+            "aan_een_kant": len(kant),
+            "richting": "te hoog" if kant is lager else "te laag",
+            "mediaan_kleinste_groep_percent": round(mediaan, 1),
+            "begrensd": abs(mediaan) > grens,
+        }
 
     @property
     def mean_bias_percent(self) -> float | None:

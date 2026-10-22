@@ -62,6 +62,7 @@ from homeassistant.helpers.storage import Store
 
 from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging, dipplan
 from . import thuiskomst as thuiskomst_mod
+from .tijdtekst import periode_met_dag, tijd_met_dag
 from .const import (
     RESERVE_SPRONG_DREMPEL_KWH,
     RESERVE_SPRONG_VERKLAARD_KWH,
@@ -218,6 +219,12 @@ from .const import (
     LAADBLOK_HERLAAD_DREMPEL,
     ZON_REALISATIE_MIN_KWH,
     DIP_MARGE,
+    PLAN_SHORTFALL_MEDIAAN_MINUTEN,
+    ENERGY_BALANCE_FOUT_VERLOOPT_UUR,
+    ENERGY_BALANCE_STORING_AANLOOP_MIN,
+    NACHT_SPAREN_TOT_UUR,
+    OCHTENDPIEK_TOT_UUR,
+    OCHTENDPIEK_VAN_UUR,
     BALANCEER_NA_DAGEN,
     BALANCEER_VROEG_NA_DAGEN,
     BALANCEER_VROEG_CEL_DELTA_V,
@@ -3315,11 +3322,13 @@ class EnergyManagementSystemCoordinator:
                 leeftijd = max(0, round((now - datetime.fromisoformat(cache["om"])).total_seconds() / 60))
         except (TypeError, ValueError):
             leeftijd = None
-        vooruit = 0
+        vooruit, bekend_tot = 0, None
         for item in cache.get("forecast") or []:
             eind = self._parse_forecast_datetime(item.get("end_date")) if isinstance(item, dict) else None
-            if eind is not None and (eind if eind.tzinfo else eind.replace(tzinfo=dt_util.UTC)) > now:
+            eind = (eind if eind.tzinfo else eind.replace(tzinfo=dt_util.UTC)) if eind is not None else None
+            if eind is not None and eind > now:
                 vooruit += 1
+                bekend_tot = max(bekend_tot or eind, eind)
         week = (now - timedelta(days=7)).isoformat()
         recent = [s for s in (self.prijsbron_storingen or []) if str(s.get("tot") or "") >= week]
         return {
@@ -3331,6 +3340,8 @@ class EnergyManagementSystemCoordinator:
             "bewaarde_reeks_van": cache.get("om"),
             "bewaarde_reeks_leeftijd_minuten": leeftijd,
             "bewaarde_kwartieren_vooruit": vooruit,
+            # v5.118.0: tot wanneer de bewaarde prijzen reiken.
+            "bewaarde_prijzen_tot": bekend_tot.isoformat() if bekend_tot else None,
             "storingen_7_dagen": len(recent),
             "storingen_7_dagen_minuten": sum(s.get("minuten") or 0 for s in recent),
             "laatste_storingen": list(reversed((self.prijsbron_storingen or [])[-5:])),
@@ -3351,8 +3362,10 @@ class EnergyManagementSystemCoordinator:
         if bron == "bewaarde reeks":
             leeftijd = pb.get("bewaarde_reeks_leeftijd_minuten")
             oud = f"{leeftijd / 60:.1f} u oud".replace(".", ",") if leeftijd is not None else "leeftijd onbekend"
+            tot = pb.get("bewaarde_prijzen_tot")
+            tot_tekst = f", tot {tijd_met_dag(datetime.fromisoformat(tot), now, eind=True)}" if tot else ""
             terugval = (f"het EMS rekent met de bewaarde kwartierprijzen ({oud}, nog "
-                        f"{pb.get('bewaarde_kwartieren_vooruit')} kwartieren vooruit)")
+                        f"{pb.get('bewaarde_kwartieren_vooruit')} kwartieren vooruit{tot_tekst})")
         elif bron == "prijsgeschiedenis (schatting)":
             terugval = "het EMS rekent met een schatting uit de prijsgeschiedenis"
         else:
@@ -4954,7 +4967,7 @@ class EnergyManagementSystemCoordinator:
             return None
         duurste = max(vandaag, key=lambda e: e[2])
         return (
-            f"Om {duurste[0]:%H:%M} kost stroom {piek:.4f} EUR/kWh, ruim het "
+            f"Om {tijd_met_dag(duurste[0])} kost stroom {piek:.4f} EUR/kWh, ruim het "
             f"dubbele van de mediaan van vandaag ({mediaan:.4f} EUR/kWh)."
         )
 
@@ -5092,7 +5105,7 @@ class EnergyManagementSystemCoordinator:
                     "negative_prices",
                     "⚡ Negatieve prijzen vandaag",
                     f"{len(negatief)} kwartier(en) met een negatieve prijs, "
-                    f"vanaf {eerste[0]:%H:%M}. Verbruiken levert dan geld op.",
+                    f"vanaf {tijd_met_dag(eerste[0])}. Verbruiken levert dan geld op.",
                 )
 
         # --- systeem ---
@@ -5216,7 +5229,7 @@ class EnergyManagementSystemCoordinator:
                     stuur(
                         "cheap_block_soon",
                         "⏰ Goedkoopste blok begint bijna",
-                        f"Om {cheap_block_start:%H:%M} begint het "
+                        f"Om {tijd_met_dag(cheap_block_start)} begint het "
                         f"goedkoopste blok dat er nog komt vandaag: "
                         f"{blok_prijs * 100:.1f} ct tegen een dagmediaan van "
                         f"{dag_mediaan * 100:.1f} ct. Een goed moment voor "
@@ -5293,7 +5306,7 @@ class EnergyManagementSystemCoordinator:
                 # uit de werkelijke tijd.
                 f"🔋 Lage accustand vlak voor de {self._dagdeel(discharge_start)}piek",
                 f"De accu staat op {soc_nu:.0f}% en om "
-                f"{discharge_start:%H:%M} begint het duurste blok dat er "
+                f"{tijd_met_dag(discharge_start)} begint het duurste blok dat er "
                 f"nog komt: {piek_prijs * 100:.1f} ct tegen een dagmediaan "
                 f"van {dag_mediaan_prijs * 100:.1f} ct. Er is nog "
                 f"{uren_tot_piek:.1f} uur om bij te laden.",
@@ -6780,6 +6793,18 @@ class EnergyManagementSystemCoordinator:
         nu = self.beschikbare_energie_kwh()
         rauw = self.counterfactual_cost_today_eur - self.actual_cost_today_eur
         if begin is None or nu is None:
+            # v5.118.0: valt de accustand even weg (Zendure-time-out, de
+            # daggrens), dan de laatste correctie van dezelfde dag. Anders
+            # sloot de dag af zonder voorraadcorrectie terwijl de dagsensor
+            # hem wel liet zien, en liepen dagsensor en dagmeter uiteen.
+            bewaard = self._laatste_voorraadcorrectie
+            if bewaard and begin is not None and bewaard[0] == getattr(self, "_counterfactual_day_key", None):
+                return {
+                    **bewaard[1],
+                    "besparing_vandaag_eur": round(rauw, 2),
+                    "besparing_gecorrigeerd_eur": round(rauw + bewaard[1]["voorraadwaarde_exact_eur"], 2),
+                    "uit_laatste_meting": True,
+                }
             return {
                 "besparing_vandaag_eur": round(rauw, 2),
                 "correctie_beschikbaar": False,
@@ -6796,7 +6821,7 @@ class EnergyManagementSystemCoordinator:
             }
 
         correctie = verschil_kwh * waarde
-        return {
+        uit = {
             "besparing_vandaag_eur": round(rauw, 2),
             "correctie_beschikbaar": True,
             "accu_bij_dagbegin_kwh": round(begin, 2),
@@ -6815,6 +6840,11 @@ class EnergyManagementSystemCoordinator:
                 "verzilverd - en dat scheelt in het dagcijfer."
             ),
         }
+        self._laatste_voorraadcorrectie = (getattr(self, "_counterfactual_day_key", None), dict(uit))
+        return uit
+
+    #: v5.118.0: (dag, correctie) van de laatste geslaagde berekening.
+    _laatste_voorraadcorrectie: tuple | None = None
 
     def _voorraad_kwh_waarde(self) -> tuple[float | None, str | None]:
         """Waarde per opgeslagen kWh voor de voorraadcorrectie (v5.116.0).
@@ -16784,8 +16814,8 @@ class EnergyManagementSystemCoordinator:
                 sinds = ""
                 if self._prijsbron_weg_sinds:
                     try:
-                        sinds = " sinds " + dt_util.as_local(
-                            datetime.fromisoformat(self._prijsbron_weg_sinds)).strftime("%H:%M")
+                        sinds = " sinds " + tijd_met_dag(
+                            datetime.fromisoformat(self._prijsbron_weg_sinds))
                     except (TypeError, ValueError):
                         sinds = ""
                 return "LET OP", met_reden(
@@ -16984,7 +17014,7 @@ class EnergyManagementSystemCoordinator:
                         f"{prijs * 100:.1f} ct/kWh".replace(".", ",")
                         if prijs is not None
                         else None,
-                        f"goedkoopste blok {blok:%H:%M}" if blok else None,
+                        f"goedkoopste blok {tijd_met_dag(blok)}" if blok else None,
                     )
                     if deel
                 )
@@ -21448,7 +21478,7 @@ class EnergyManagementSystemCoordinator:
             return [
                 f"stroom kost nu {besluit['prijs_nu_eur'] * 100:.1f} ct",
                 (
-                    f"de accu haalt het goedkope blok van {blok:%H:%M} niet: er "
+                    f"de accu haalt het goedkope blok van {tijd_met_dag(blok)} niet: er "
                     f"ontbreekt {besluit['gat_kwh']:.1f} kWh"
                     if blok
                     else f"er ontbreekt {besluit['gat_kwh']:.1f} kWh tot het goedkope blok"
@@ -24557,10 +24587,8 @@ class EnergyManagementSystemCoordinator:
                 vorig = t
                 continue
             eind = vorig + timedelta(minutes=15)
-            lokaal = dt_util.as_local(begin)
-            dag = lokaal.date() - dt_util.as_local(moment).date()
-            label = "" if dag.days == 0 else ("morgen " if dag.days == 1 else f"{lokaal:%d-%m} ")
-            blokken.append(f"{label}{lokaal:%H:%M}-{dt_util.as_local(eind):%H:%M}")
+            # v5.118.0: de dag erbij via `tijd_met_dag` (weekdag verder weg).
+            blokken.append(periode_met_dag(begin, eind, moment))
             if t is not None:
                 begin = vorig = t
         return ", ".join(blokken)
@@ -25002,20 +25030,8 @@ class EnergyManagementSystemCoordinator:
         smart - maar de kaart toonde alleen het uur. Een eindtijd van 00:00
         hoort bij de dag die dan afloopt: "24:00", of "morgen 24:00".
         """
-        lokaal = dt_util.as_local(moment) if moment.tzinfo else moment
-        dag = lokaal.date()
-        tekst = lokaal.strftime("%H:%M")
-        if eind and tekst == "00:00":
-            dag = dag - timedelta(days=1)
-            tekst = "24:00"
-        verschil = (dag - vandaag).days
-        if verschil == 0:
-            return tekst
-        if verschil == 1:
-            return f"morgen {tekst}"
-        if verschil == 2:
-            return f"overmorgen {tekst}"
-        return f"{lokaal.strftime('%d-%m')} {tekst}"
+        # v5.118.0: verder weg de weekdag ("vr 21:15"), zie `tijdtekst`.
+        return tijd_met_dag(moment, eind=eind, vandaag=vandaag)
 
     def get_plan_blokken(self, now: datetime | None = None) -> list[dict]:
         """Het kwartierplan, samengevoegd tot blokken (v5.26).
@@ -25502,6 +25518,27 @@ class EnergyManagementSystemCoordinator:
             "door in de reserve en in het uitstelplan."
         )
 
+    _plan_tekort_monsters: list | None = None
+
+    def _plan_tekort_gedempt(self, now: datetime, tekorten: int) -> int:
+        """De mediaan van het aantal tekortkwartieren over de laatste
+        PLAN_SHORTFALL_MEDIAAN_MINUTEN (v5.118.0).
+
+        21-10 13:16-22:03 tien keer "Den accu kump tekort" en weer hersteld,
+        22-10 08:51-09:33 nog eens: het aantal sprong per ronde rond de
+        drempel. Eén ronde boven de drempel is geen tekort; een kwartier lang
+        wel. De lage mediaan, zodat een gelijke stand niet naar boven
+        afrondt.
+        """
+        grens = now - timedelta(minutes=PLAN_SHORTFALL_MEDIAAN_MINUTEN)
+        monsters = [m for m in (self._plan_tekort_monsters or []) if m[0] > grens]
+        monsters.append((now, int(tekorten)))
+        self._plan_tekort_monsters = monsters
+        self.last_plan_shortfall["kwartieren_gedempt"] = statistics.median_low(
+            [m[1] for m in monsters]
+        )
+        return self.last_plan_shortfall["kwartieren_gedempt"]
+
     def _meld_planningswijzigingen(self, now: datetime) -> None:
         """Bericht bij belangrijke wijzigingen in de planning (v1.23.4).
 
@@ -25562,6 +25599,8 @@ class EnergyManagementSystemCoordinator:
             if perioden
             else "onbekend wanneer"
         )
+        # v5.118.0: de melding toetst de mediaan van de laatste 15 minuten.
+        tekorten = self._plan_tekort_gedempt(now, tekorten)
 
         if tekorten >= PLAN_SHORTFALL_ALERT_MIN_QUARTERS:
             self.last_plan_shortfall["vrij_sinds"] = None
@@ -29980,6 +30019,16 @@ class EnergyManagementSystemCoordinator:
         if not tracker:
             return None
         per_vak = tracker.bias_voor_bewolking(self._weather_cloud_cover_percent())
+        # v5.118.0 (L-EMS-025): liggen de laatste 14 dagen (vrijwel) allemaal
+        # aan één kant, dan is dat de ondergrens van de correctie - ook als
+        # de vlakke correctie zich inhoudt bij "twee soorten dagen". Een
+        # correctie per soort dag die verder dezelfde kant op gaat, wint.
+        eenzijdig = getattr(tracker, "eenzijdige_correctie", None)
+        if isinstance(eenzijdig, dict):
+            ondergrens = eenzijdig["bias_percent"]
+            if per_vak is not None and per_vak * ondergrens > 0 and abs(per_vak) > abs(ondergrens):
+                return per_vak
+            return ondergrens
         if per_vak is not None:
             return per_vak
         return tracker.learned_bias_percent
@@ -34013,7 +34062,7 @@ class EnergyManagementSystemCoordinator:
         uit = dt_util.as_local(moment)
         weer = dt_util.as_local(moment + timedelta(minutes=minuten))
         tekst = (
-            f"om {uit:%H:%M} uitgezet; weer aan vanaf {weer:%H:%M} "
+            f"om {tijd_met_dag(uit, moment)} uitgezet; weer aan vanaf {tijd_met_dag(weer, moment)} "
             f"({rust} rust tegen pendelen"
         )
         if grens is not None and not belast:
@@ -35654,6 +35703,7 @@ class EnergyManagementSystemCoordinator:
         # registreren (niet goed, niet fout), en het anker loslaten zodat
         # de eerste vergelijking na herstel niet over de storing heen
         # rekent.
+        self._verloop_balansmonsters(now)
         if (getattr(self, "aansturing_onbereikbaar", None) or {}).get("sinds") is not None:
             self._last_balance_check_time = None
             self._last_balance_check_available_kwh = None
@@ -35689,7 +35739,7 @@ class EnergyManagementSystemCoordinator:
                     self.balance_missing_by_entity[naam] = (
                         self.balance_missing_by_entity.get(naam, 0) + 1
                     )
-            self._record_balance_sample(None)
+            self._record_balance_sample(None, now)
             return
 
         # v1.1.3, gerapporteerd: "Kun je uitzoeken waarom de sensor
@@ -35764,7 +35814,7 @@ class EnergyManagementSystemCoordinator:
         implied_battery_power_w = -(delta_kwh / elapsed_hours) * 1000
         error_w = implied_battery_power_w - gemiddeld_gemeten_w
         self.last_energy_balance_error_w = round(error_w, 1)
-        self._record_balance_sample(abs(error_w))
+        self._record_balance_sample(abs(error_w), now)
 
     def get_sun_elevation_degrees(self) -> float | None:
         """Actuele zonshoogte in graden (v1.3.0).
@@ -36347,15 +36397,80 @@ class EnergyManagementSystemCoordinator:
         else:
             self.measurement_quality = "slecht"
 
-    def _record_balance_sample(self, abs_error_w: float | None) -> None:
+    #: v5.118.0: per monster het moment (iso), zodat fouten verlopen. De lijst
+    #: wordt altijd vervangen, nooit ter plekke aangepast.
+    energy_balance_sample_tijden: list = []
+
+    def _record_balance_sample(self, abs_error_w: float | None, now: datetime | None = None) -> None:
         """Append one sample (or None for a missing-sensor tick) to the
         rolling window and recompute the health score/quality label.
         """
+        tijden = self._balans_tijden_gelijk()
         self.energy_balance_error_history.append(abs_error_w)
+        tijden.append((now or dt_util.now()).isoformat())
         self.energy_balance_error_history = self.energy_balance_error_history[
             -ENERGY_BALANCE_ERROR_HISTORY_LENGTH:
         ]
+        self.energy_balance_sample_tijden = tijden[-ENERGY_BALANCE_ERROR_HISTORY_LENGTH:]
+        self._herbereken_sensorgezondheid()
 
+    def _balans_tijden_gelijk(self) -> list:
+        """De momenten naast de monsters, even lang (v5.118.0). Monsters van
+        vóór v5.118.0 hebben geen moment (None)."""
+        tijden = list(getattr(self, "energy_balance_sample_tijden", None) or [])
+        n = len(self.energy_balance_error_history)
+        if len(tijden) > n:
+            tijden = tijden[len(tijden) - n:]
+        return [None] * (n - len(tijden)) + tijden
+
+    def _is_fout_monster(self, waarde) -> bool:
+        return waarde is None or waarde > ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W
+
+    def _verloop_balansmonsters(self, now: datetime) -> None:
+        """Fouten uit een storing laten verlopen (v5.118.0).
+
+        22-10 11:20: sensor-gezondheid 75 % (4 van 20 vergelijkingen fout
+        door de Zendure-time-outs van 10:49-12:35). Daarna kwamen er geen
+        vergelijkingen bij (de accu bewoog te weinig), dus bleef de score
+        uren op 75 % en de cockpit op LET OP. Nu:
+
+        - een fout monster ouder dan ENERGY_BALANCE_FOUT_VERLOOPT_UUR telt
+          niet meer (monsters van vóór v5.118.0 krijgen het eerste moment
+          dat ze gezien worden);
+        - is de accu niet aanstuurbaar, dan vervallen de fouten vanaf
+          ENERGY_BALANCE_STORING_AANLOOP_MIN voor het begin van die storing.
+
+        Goede monsters blijven staan. Een sensor die echt stuk is, levert
+        elke ronde een nieuw fout monster en blijft dus zichtbaar.
+        """
+        historie = self.energy_balance_error_history
+        if not historie:
+            return
+        # Monsters zonder moment (opslag van vóór v5.118.0) krijgen nu een
+        # moment: ze verlopen dan net als de rest.
+        tijden = [t or now.isoformat() for t in self._balans_tijden_gelijk()]
+        grens = now - timedelta(hours=ENERGY_BALANCE_FOUT_VERLOOPT_UUR)
+        storing = None
+        sinds = (getattr(self, "aansturing_onbereikbaar", None) or {}).get("sinds")
+        if sinds is not None:
+            storing = sinds if isinstance(sinds, datetime) else dt_util.parse_datetime(str(sinds))
+            if storing is not None:
+                storing -= timedelta(minutes=ENERGY_BALANCE_STORING_AANLOOP_MIN)
+        houden_h, houden_t = [], []
+        for waarde, tijd in zip(historie, tijden):
+            moment = dt_util.parse_datetime(tijd)
+            vervalt = self._is_fout_monster(waarde) and moment is not None and (
+                moment < grens or (storing is not None and moment >= storing)
+            )
+            if not vervalt:
+                houden_h.append(waarde)
+                houden_t.append(tijd)
+        self.energy_balance_error_history = houden_h
+        self.energy_balance_sample_tijden = houden_t
+        self._herbereken_sensorgezondheid()
+
+    def _herbereken_sensorgezondheid(self) -> None:
+        """Score en label uit de monsters die er nu staan."""
         total = len(self.energy_balance_error_history)
         if total < MEASUREMENT_QUALITY_MIN_SAMPLES:
             # v0.63.121: pas oordelen zodra er genoeg metingen zijn -
@@ -39188,7 +39303,7 @@ class EnergyManagementSystemCoordinator:
         if start > now:
             self.monte_carlo_horizon_basis += (
                 f"; gesimuleerd vanaf het einde van het laadblok "
-                f"({dt_util.as_local(start):%H:%M}, +{extra:.2f} kWh gepland)"
+                f"({tijd_met_dag(start, now)}, +{extra:.2f} kWh gepland)"
             )
         return start, extra, horizon
 
@@ -40123,6 +40238,7 @@ class EnergyManagementSystemCoordinator:
         # worden, in het tweede is er niets om te wissen - dus
         # onvoorwaardelijk doorgaan is in beide gevallen juist.
         self.energy_balance_error_history = []
+        self.energy_balance_sample_tijden = []
         self.sensor_health_score = None
         self.measurement_quality = None
         self.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION
@@ -46806,6 +46922,62 @@ class EnergyManagementSystemCoordinator:
                 perioden.append([begin, eind])
         return [f"{van:%H:%M}-{tot:%H:%M}" for van, tot in perioden]
 
+    @staticmethod
+    def _spaarplan_bloktijd(blok: datetime, plan: dict) -> str:
+        """Het blok in de spaarmelding, met de dag als het niet vandaag is
+        (v5.118.0); vandaag ten opzichte van het moment van het plan."""
+        om = dt_util.parse_datetime(str(plan.get("berekend_om") or ""))
+        return tijd_met_dag(blok, om) if om is not None else f"{blok:%H:%M}"
+
+    def _nacht_voor_ochtendpiek(
+        self, now: datetime, entries, blok: datetime | None
+    ) -> dict:
+        """Houdt de nacht de ochtendpiek vrij? (v5.118.0, L-EMS-026)
+
+        Akkoord Ruud 22-10. Nabeschouwing 14..21-10: op 5 van 8 dagen
+        ontlaadde de accu 's nachts 1,2-1,5 kWh meer dan optimaal (-EUR
+        0,40-0,56) en hield hij in de ochtendpiek 1,2-2,7 kWh te weinig over
+        (+EUR 0,64-1,17), ~EUR 1,3 per week. Het spaarplan zag de nacht en
+        de ochtend als gedekt, de werkelijke behoefte lag hoger.
+
+        Tussen middernacht en NACHT_SPAREN_TOT_UUR, met de ochtendpiek
+        (OCHTENDPIEK_VAN_UUR-OCHTENDPIEK_TOT_UUR) vóór het goedkope blok en
+        het duurste ochtendkwartier >= prijs nu / rendement + slijtage:
+        actief. Het spaarplan rekent dan met DIP_MARGE op de behoefte tot
+        het blok, zodat de lading eerder naar de duurste kwartieren gaat en
+        de goedkopere nachtkwartieren van het net komen. Reserve, verkopen
+        en "huis gaat voor" veranderen niet.
+        """
+        uit: dict = {"actief": False}
+        lokaal = dt_util.as_local(now)
+        if lokaal.hour >= NACHT_SPAREN_TOT_UUR or blok is None or blok <= now:
+            uit["reden"] = "niet in de nacht, of geen goedkoop blok in zicht"
+            return uit
+        van = lokaal.replace(hour=OCHTENDPIEK_VAN_UUR, minute=0, second=0, microsecond=0)
+        tot = min(lokaal.replace(hour=OCHTENDPIEK_TOT_UUR, minute=0, second=0, microsecond=0), blok)
+        piek = [p / PRICE_SCALE_FACTOR for b, _e, p in (entries or []) if van <= b < tot]
+        prijs_nu = self.huidige_prijs_eur_per_kwh()
+        rendement = self.learned_battery_efficiency_percent or float(
+            self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
+        )
+        slijtage = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        if not piek or prijs_nu is None or not rendement or slijtage is None:
+            uit["reden"] = "geen ochtendpiek voor het blok, of prijs/rendement/slijtage onbekend"
+            return uit
+        drempel = prijs_nu / (rendement / 100) + slijtage / 100
+        uit.update({
+            "ochtendpiek_max_eur": round(max(piek), 4),
+            "drempel_eur": round(drempel, 4),
+            "marge": DIP_MARGE,
+        })
+        uit["actief"] = max(piek) >= drempel
+        uit["reden"] = (
+            "ochtendpiek duurder dan de nacht met rendement en slijtage: "
+            "het spaarplan rekent met marge"
+            if uit["actief"] else "ochtendpiek niet duur genoeg"
+        )
+        return uit
+
     async def _spaar_accu_als_nodig(
         self, now: datetime, entries, cheap_block_start: datetime | None
     ) -> bool:
@@ -46813,7 +46985,12 @@ class EnergyManagementSystemCoordinator:
 
         True als er gespaard wordt; de beslissing is dan klaar.
         """
-        plan = self.spaarplan(now, entries, cheap_block_start)
+        # v5.118.0 (L-EMS-026): 's nachts met marge als de ochtendpiek loont.
+        nacht = self._nacht_voor_ochtendpiek(now, entries, cheap_block_start)
+        marge = DIP_MARGE if nacht.get("actief") else 1.0
+        plan = self.spaarplan(now, entries, cheap_block_start, marge=marge)
+        plan["nacht_ochtendpiek"] = nacht
+        plan["berekend_om"] = now.isoformat()
         self.last_spaarplan = plan
         self._meld_spaarplan(plan)
         if not plan.get("sparen_nu"):
@@ -47102,7 +47279,7 @@ class EnergyManagementSystemCoordinator:
         if a.get("grond") == "netladen_in_blok" and a.get("besluit"):
             om = dt_util.parse_datetime(str(a.get("netladen_om") or ""))
             return (
-                f"Goedkoop blok: om {om:%H:%M} laadt de accu uit het net. Nu "
+                f"Goedkoop blok: om {tijd_met_dag(om)} laadt de accu uit het net. Nu "
                 f"ontladen naar het huis spaart {_nl(a['prijs_nu_ct'])} ct, maar "
                 f"die kWh straks terugladen kost {_nl(a['rondtrip_ct'])} ct "
                 "(blokprijs / rendement + slijtage). Daarom tot dan alleen zon "
@@ -47201,11 +47378,11 @@ class EnergyManagementSystemCoordinator:
         if leeg_om is None:
             tekst = (
                 f"Gelukt: de accu dekte de duurste kwartieren tot het goedkope "
-                f"blok van {blok:%H:%M}. " + spaardeel
+                f"blok van {tijd_met_dag(blok, now)}. " + spaardeel
             )
         else:
             tekst = (
-                f"De accu raakte om {leeg_om:%H:%M} leeg, eerder dan gepland. In "
+                f"De accu raakte om {tijd_met_dag(leeg_om, now)} leeg, eerder dan gepland. In "
                 f"de dure kwartieren daarna kwam {getal(gedekt_net_kwh)} kWh van "
                 f"het net. " + spaardeel
             )
@@ -47242,11 +47419,11 @@ class EnergyManagementSystemCoordinator:
             (
                 # v5.56: haalt hij het blok wel en schiet hij pas erna
                 # tekort, dan zegt de kop dat.
-                f"De accu haalt het goedkope blok van {blok:%H:%M} wel, maar "
+                f"De accu haalt het goedkope blok van {self._spaarplan_bloktijd(blok, plan)} wel, maar "
                 "niet de dure kwartieren erna: er zit "
                 if (plan.get("nodig_tot_blok_kwh") is not None
                     and plan["nodig_tot_blok_kwh"] <= plan["beschikbaar_kwh"])
-                else f"De accu haalt het goedkope blok van {blok:%H:%M} niet: er zit "
+                else f"De accu haalt het goedkope blok van {self._spaarplan_bloktijd(blok, plan)} niet: er zit "
             )
             + f"{getal(plan['beschikbaar_kwh'])} kWh in, er is "
             + self._spaarplan_nodig_tekst(plan, getal)
@@ -48577,7 +48754,7 @@ class EnergyManagementSystemCoordinator:
         return {
             "beschikbaar": True,
             "tot": tot.isoformat(),
-            "tot_tekst": dt_util.as_local(tot).strftime("%H:%M"),
+            "tot_tekst": tijd_met_dag(tot),
             "verwacht": bool(uren) or (ochtend.get("extra_kwh") or 0) > 0,
             "tekst": tekst,
             "in_reserve_kwh": round(reserve_som, 2),

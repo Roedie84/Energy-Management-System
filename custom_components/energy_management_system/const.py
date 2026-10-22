@@ -303,6 +303,15 @@ ZON_REALISATIE_MIN_KWH = 0.5
 # genoeg tot 11:30 en bleef de nachtdip (26-28 ct) voor een ochtendpiek van
 # 47-58 ct liggen.
 DIP_MARGE = 1.25
+# v5.118.0 (L-EMS-026, akkoord Ruud 22-10): 's nachts niet leegtrekken wat de
+# duurdere ochtendpiek nodig heeft. Op 5 van 8 dagen ontlaadde de accu 's
+# nachts 1,2-1,5 kWh "te veel" en kwam de ochtendpiek (7-10 u) van het net
+# (~EUR 1,3/week). In de nacht rekent het spaarplan daarom met dezelfde marge
+# als de reserve en het dip-laden (DIP_MARGE), als de ochtendpiek de moeite
+# waard is: duurste ochtendkwartier >= nachtprijs / rendement + slijtage.
+NACHT_SPAREN_TOT_UUR = 7
+OCHTENDPIEK_VAN_UUR = 7
+OCHTENDPIEK_TOT_UUR = 10
 # v5.117.0: balanceerlading. Het accubeheer (BMS) trekt de cellen alleen
 # gelijk als de accu vol is. Gezien 22-10: 8 dagen niet vol, module 4 met een
 # cel op 3,45 V bij 78 % die het laden afremde (2,0 in plaats van 2,4 kW) en
@@ -2002,6 +2011,15 @@ MAX_HOUR_TRACKING_GAP_MINUTES = 20
 # per-tick errors feeds a 0-100 sensor_health_score.
 ENERGY_BALANCE_ERROR_HISTORY_LENGTH = 20
 ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W = 300.0
+# v5.118.0: een fout monster telt zo lang mee in de sensor-gezondheid. Gezien
+# 22-10: 4 van 20 vergelijkingen fout door Zendure-time-outs (10:49-12:35);
+# daarna bewoog de accu nauwelijks, kwamen er geen vergelijkingen bij en
+# stond de cockpit tot 's avonds op LET OP. Een sensor die echt stuk is,
+# levert elke ronde een nieuw fout monster en blijft dus zichtbaar.
+ENERGY_BALANCE_FOUT_VERLOOPT_UUR = 3.0
+# Fouten vlak voor "niet aanstuurbaar" (de time-outs gaan aan de melding
+# vooraf) horen bij dezelfde storing.
+ENERGY_BALANCE_STORING_AANLOOP_MIN = 15.0
 # v0.63.121, twee keer waargenomen in de praktijk: "slecht (0.0%, 1
 # metingen)" en "verminderd (50.0%, 2 metingen)". Bij zo weinig
 # metingen zegt dat percentage niets - één ongelukkige meting maakt het
@@ -3534,6 +3552,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "dagarchief": {"type": "plain"},
     "battery_module_health": {"type": "plain"},
     "energy_balance_error_history": {"type": "plain"},
+    # v5.118.0: wanneer elk monster van de sensor-gezondheid is genomen.
+    "energy_balance_sample_tijden": {"type": "plain"},
     "energy_balance_method_version": {"type": "plain"},
     "mode_change_log": {"type": "plain"},
     "discharge_floor_events": {"type": "plain"},
@@ -5061,6 +5081,16 @@ MELDING_OVERLAPT_MET = {
 # (v3.33.0). Met drie dagen is één uitschieter al genoeg om de correctie
 # in te houden, en dan wordt er nooit meer geleerd.
 SOLAR_BIAS_MIN_DAGEN = 5
+
+# v5.118.0 (L-EMS-025, akkoord Ruud 22-10): liggen de dagen wel uiteen maar
+# bijna allemaal aan DEZELFDE kant, dan is "twee soorten dagen" geen reden om
+# niet te corrigeren. Gemeten 22-10: 15 van 15 dagen te hoog, bias 14 d -19 %,
+# `learned_bias_percent` null. Dan corrigeren met de mediaan van de dagen die
+# niet ver mis zijn (de kleinste afwijkingen, nu ~-8 %), begrensd.
+SOLAR_EENZIJDIG_DAGEN = 14
+SOLAR_EENZIJDIG_MIN_DAGEN = 10
+SOLAR_EENZIJDIG_AANDEEL = 0.8
+SOLAR_EENZIJDIG_MAX_PERCENT = 15.0
 
 # Grenzen tussen de drie soorten dagen, en hoeveel er per soort nodig
 # zijn voordat de correctie meetelt (v3.45.0).
@@ -6685,6 +6715,12 @@ PLAN_SHORTFALL_ALERT_MIN_QUARTERS = 3
 # wordt elke ronde opnieuw gebouwd en schommelt rond de grens; zonder
 # wachttijd krijg je bij elke passage een bericht.
 PLAN_SHORTFALL_RECOVERY_STABLE_MINUTES = 30.0
+# v5.118.0: de toets op het plantekort over de mediaan van de laatste
+# zoveel minuten. Gezien 21-10 13:16-22:03 10x "Den accu kump tekort" en
+# 22-10 08:51-09:33: het aantal tekortkwartieren sprong per ronde rond de
+# drempel van 3 (een economisch tekort, zonder gevolg voor de sturing).
+# Alleen de melding; de verkooprem blijft op het actuele aantal.
+PLAN_SHORTFALL_MEDIAAN_MINUTEN = 15.0
 
 PLAN_CHANGE_MIN_QUARTERS = 1
 

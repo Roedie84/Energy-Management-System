@@ -370,6 +370,8 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
             ATTR_DEVIATION_CONTEXT: self._tracker.deviation_context,
             ATTR_DEVIATION_STDEV_HISTORY: self._tracker.deviation_stdev_history,
             ATTR_LEARNED_BIAS_PERCENT: self._tracker.learned_bias_percent,
+            # v5.118.0 (L-EMS-025): correctie als de dagen aan één kant liggen.
+            "eenzijdige_correctie": self._tracker.eenzijdige_correctie,
             ATTR_FORECAST_VALUE_HISTORY: self._tracker.forecast_value_history,
             ATTR_LEARNED_TYPICAL_FORECAST_KWH: self._tracker.learned_typical_forecast_kwh,
             "bootstrapped_from_history": self._tracker.was_bootstrapped_from_history,

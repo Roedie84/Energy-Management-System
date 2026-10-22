@@ -1559,6 +1559,8 @@ async def async_get_config_entry_diagnostics(
             # is niet te zien of dat komt door te weinig dagen of door
             # twee soorten dagen.
             "bias_ingehouden_reden": solar_tracker.bias_ingehouden_reden,
+            # v5.118.0 (L-EMS-025): de correctie als de dagen aan één kant liggen.
+            "eenzijdige_correctie": solar_tracker.eenzijdige_correctie,
             # v3.45.0: de correctie per soort dag, en hoe vol de drie
             # vakjes zitten. Zonder dit is niet te zien of er niet
             # gecorrigeerd wordt omdat het niet kan, of omdat er nog te

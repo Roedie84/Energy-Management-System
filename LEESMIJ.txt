@@ -1,3 +1,25 @@
+EMS v5.118.0 - zonvoorspelling bijgesteld, ochtendpiek beschermd, rustiger status
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Zonvoorspelling: lag de voorspelling de afgelopen 14 dagen bijna altijd aan
+  dezelfde kant (nu 15 van 15 dagen te hoog), dan corrigeert het EMS hem nu,
+  met hoogstens 15 %. Op dit moment zo'n -8 %.
+- 's Nachts houdt de accu meer vast voor de duurdere ochtendpiek (7-10 uur):
+  de goedkopere nachtkwartieren komen dan van het net. Alleen als de
+  ochtendpiek duurder is dan de nacht met rendement en slijtage erbij.
+- Dagbesparing: valt de accustand even weg, dan blijft de correctie voor de
+  accu-inhoud staan. Zo lopen de dagsensor en de dagmeter niet uiteen.
+- Prijsbron weg: de diagnose zegt nu ook tot wanneer de bewaarde prijzen
+  reiken ("tot morgen 00:00").
+- Sensor-gezondheid: fouten door een storing (bijvoorbeeld Zendure-time-outs)
+  tellen na 3 uur niet meer mee, zodat de cockpit niet de hele dag op LET OP
+  blijft staan.
+- De melding "Accu komt tekort" kijkt naar een kwartier, niet naar één ronde:
+  geen heen-en-weer meer rond de grens.
+- Tijden die niet vandaag vallen krijgen de dag erbij: "morgen 21:15" of
+  "vr 21:15" (meldingen, planning, cockpit en de wasadvieskaart).
+
 EMS v5.117.1 - balanceerlading ook zichtbaar in de planning van morgen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

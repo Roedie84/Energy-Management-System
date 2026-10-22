@@ -249,6 +249,19 @@ const dagLabel = (d) => {
   if (d.toDateString() === morgen.toDateString()) return "morgen ";
   return d.toLocaleDateString("nl-NL", { weekday: "short" }) + " ";
 };
+/* v5.118.0: een tijdstip met de dag erbij als het niet vandaag is
+   ("21:15", "morgen 21:15", "vr 21:15"). */
+const klokDag = (w) => {
+  const d = alsDatum(w);
+  return d ? dagLabel(d) + klok(d) : null;
+};
+/* v5.118.0: eindtijd met een eigen dag alleen als die anders is dan het begin. */
+const klokEind = (start, eind) => {
+  const s = alsDatum(start);
+  const e = alsDatum(eind);
+  if (!e) return null;
+  return s && s.toDateString() === e.toDateString() ? klok(e) : klokDag(e);
+};
 
 /* ------------------------------------------------------------------ */
 /* Modi                                                                */
@@ -1346,7 +1359,7 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="tekst-m">${esc(kort)}</div>` +
       (redenen.length ? `<ul class="redenen">${redenen.map((r) => `<li>${esc(hoofd(r))}</li>`).join("")}</ul>` : "") +
       (blok
-        ? `<div class="sub" style="margin-top:10px">Daarna: <b>${esc(modus(blok.mode).label)}</b> vanaf ${esc(blok.van_tekst || klok(blok.start) || "")}</div>`
+        ? `<div class="sub" style="margin-top:10px">Daarna: <b>${esc(modus(blok.mode).label)}</b> vanaf ${esc(blok.van_tekst || klokDag(blok.start) || "")}</div>`
         : "") +
       `</div>`
     );
@@ -1368,7 +1381,7 @@ class EmsCockpitCard extends HTMLElement {
     let blokTekst = STREEP;
     if (start) {
       const loopt = start.getTime() <= Date.now() && (!eind || eind.getTime() > Date.now());
-      blokTekst = `${dagLabel(start)}${klok(start)}${eind ? "\u2013" + klok(eind) : ""}`;
+      blokTekst = `${dagLabel(start)}${klok(start)}${eind ? "\u2013" + klokEind(start, eind) : ""}`;
       blokTekst += loopt ? " (loopt)" : ` (${overTijd(start)})`;
     }
     return (
@@ -1663,8 +1676,8 @@ class EmsCockpitCard extends HTMLElement {
             const prijs = lo == null ? STREEP : hi == null || hi - lo < 0.0005 ? ct(lo) : `${ct(lo)}\u2013${ct(hi)}`;
             const accu = b.accu_tekst || this._accuTekst(b.soc_begin, b.soc_eind);
             return (
-              `<tr class="${loopt ? "nu" : ""}"><td>${esc(b.van_tekst || klok(b.start) || "")}</td>` +
-              `<td>${esc(b.tot_tekst || klok(b.end) || "")}</td>` +
+              `<tr class="${loopt ? "nu" : ""}"><td>${esc(b.van_tekst || klokDag(b.start) || "")}</td>` +
+              `<td>${esc(b.tot_tekst || klokDag(b.end) || "")}</td>` +
               `<td><span class="modus" style="--kleur:${m.kleur}"><i></i>${esc(m.label)}</span></td>` +
               `<td class="r">${prijs}</td><td class="r soc-pijl">${esc(accu)}</td></tr>`
             );
