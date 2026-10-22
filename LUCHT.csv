@@ -553,3 +553,27 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-22 20:20,sturen_bevestigd,244,245,mediaan 0.15 s
 2026-10-22 20:20,filtergebruik_pct,0,1,
 2026-10-22 20:20,automation_traces_fout,0,4,oudere verloren bij herstart
+2026-10-22 23:59,pm25_dag_gem,0.65,288,dag 22-10; mediaan 0.58; P95 1.25; max 2.03 (13:05)
+2026-10-22 23:59,pm25_dag_uren_gt15,0.00,288,
+2026-10-22 23:59,co2_dag_uren_gt1200,4.08,288,dag 22-10; max 1731 (21:35)
+2026-10-22 23:59,pm25_7d_gem,8.22,7,daggem 16-22/10; mediaan dag 1.70
+2026-10-23 00:20,pm25_gem,0.86,48,5-min statistiek 20:20-00:20
+2026-10-23 00:20,pm25_mediaan,0.93,48,
+2026-10-23 00:20,pm25_p95,1.19,48,
+2026-10-23 00:20,pm25_max,1.36,48,blokmax 22:45
+2026-10-23 00:20,pm25_uren_gt15,0.00,48,
+2026-10-23 00:20,pm25_uren_gt25,0.00,48,
+2026-10-23 00:20,stand_auto_min,176,1,20:20-23:16
+2026-10-23 00:20,pm25_gem_auto,0.98,35,5-min blokken
+2026-10-23 00:20,stand_mid_min,64,1,mid 23:16 (15 min na laatste aanwezigheid 23:01)
+2026-10-23 00:20,pm25_gem_mid,0.52,12,5-min blokken; daling 0.88 -> 0.21
+2026-10-23 00:20,pm25_gem_aanwezig,0.97,32,tv/occupancy tot 23:01
+2026-10-23 00:20,pm25_gem_afwezig,0.63,15,
+2026-10-23 00:20,co2_gem,1555,48,5-min; max 1731 (21:35); ramen dicht
+2026-10-23 00:20,co2_uren_gt1200,4.00,48,hele periode
+2026-10-23 00:20,schimmel_indicator,77,48,75 -> 79
+2026-10-23 00:20,ha_herstarts,0,1,stand stabiel sinds 20:10
+2026-10-23 00:20,lokaal_mislukt,47,92645,uitval 0; 188 verbindingen; geen nieuwe fout
+2026-10-23 00:20,sturen_bevestigd,245,246,mediaan 0.15 s
+2026-10-23 00:20,filtergebruik_pct,0,1,
+2026-10-23 00:20,automation_traces_fout,0,5,
