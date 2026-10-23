@@ -3104,10 +3104,13 @@ class P1RegeldoelSensor(_V5100Sensor):
         self._uitkomst: dict = {}
 
     def _bronnen(self) -> tuple:
-        from .const import CONF_CONSUMPTION_POWER_SENSOR, CONF_REGEL_P1_SENSOR
+        from .const import CONF_CONSUMPTION_POWER_SENSOR
 
-        cfg = self._coordinator.config
-        return cfg.get(CONF_REGEL_P1_SENSOR), cfg.get(CONF_CONSUMPTION_POWER_SENSOR)
+        try:
+            bron = self._coordinator.p1_regeldoel_bron_entity()
+        except Exception:  # noqa: BLE001
+            bron = None
+        return bron, self._coordinator.config.get(CONF_CONSUMPTION_POWER_SENSOR)
 
     def _lees(self, entity_id):
         staat = self.hass.states.get(entity_id) if entity_id and self.hass else None
@@ -3117,11 +3120,13 @@ class P1RegeldoelSensor(_V5100Sensor):
             return None
 
     def _bereken(self) -> None:
-        regel, echt = self._bronnen()
-        self._uitkomst = self._coordinator.p1_regeldoel(self._lees(regel), self._lees(echt))
+        regel, echt = getattr(self, "_gevolgd", None) or self._bronnen()
+        self._uitkomst = {**self._coordinator.p1_regeldoel(self._lees(regel), self._lees(echt)),
+                          "spiegelt": regel}
 
     async def async_added_to_hass(self) -> None:
-        bronnen = [b for b in self._bronnen() if b]
+        self._gevolgd = self._bronnen()
+        bronnen = [b for b in self._gevolgd if b]
         if bronnen:
             self.async_on_remove(async_track_state_change_event(self.hass, bronnen, self._bij_wijziging))
         self._bereken()

@@ -1,3 +1,22 @@
+EMS v5.123.0 - echte dagen opnieuw afspelen (regressietest in euro's)
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+Alleen meten; de sturing verandert niet.
+
+- Elke nacht (en na een herstart) speelt het EMS de laatste 40 dagen
+  opnieuw af en zet per dag in euro's naast elkaar, onder salderen en onder
+  2027: wat het werkelijk kostte, de gekozen standen door het accumodel,
+  het beste plan in de eigen standen achteraf, best mogelijk en gemist.
+  Per versie bewaard, zodat voor en na een update te vergelijken is
+  (Zelfanalyse -> herspeel; volledig in de diagnose).
+- tools_herspeel.py doet hetzelfde buiten Home Assistant op een export of
+  het opslagbestand, met --vergelijk voor voor-en-na.
+- De sensor P1 regeldoel spiegelt nu de sensor waarop de Zendure regelt
+  (met het Quooker-filter), niet de regelsensor uit de instellingen.
+- Hersteld: de sensor Generale repetitie 2027 rekende sinds v5.121.0 bij
+  elke lezing in een kringetje (P1-doel); nu niet meer.
+
 EMS v5.122.0 - scenarioplan (proefstand), sluimerverbruik, rendement per vermogen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

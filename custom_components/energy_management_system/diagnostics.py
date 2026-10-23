@@ -1107,6 +1107,8 @@ async def async_get_config_entry_diagnostics(
             # v5.122.0: sluimerverbruik (punt 4) en rendement per band (punt 7)
             "sluimerverbruik": _veilig("get_sluimerverbruik", coordinator.get_sluimerverbruik),
             "rendement_per_band": _veilig("get_rendement_per_band", coordinator.get_rendement_per_band),
+            # v5.123.0 (punt 5): echte dagen opnieuw afgespeeld
+            "herspeel": _veilig("get_herspeel", coordinator.get_herspeel),
             # v5.102: het dagarchief (vergelijking, maanden, laatste dagen).
             "dagarchief": _veilig("get_dagarchief", coordinator.get_dagarchief),
             # v3.99.18: wat de lange horizon werkelijk opleverde.

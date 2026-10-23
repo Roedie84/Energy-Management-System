@@ -294,3 +294,10 @@ def test_r27_velden_dragen_begrenzen_en_ruimte(make_coordinator, hass):
     c._negatief_invoer = lambda now: {"teruglever_nu": -0.01, "inkoop_nu": 0.12, "kwartieren": []}
     uit = c._r27_velden(NU_2026)
     assert uit["r27_begrens"] is True and uit["r27_ruimte"] is False
+
+
+def test_repetitie_sensor_zonder_recursie(make_coordinator, hass):
+    """v5.123.0: get_p1_doel las get_repetitie_2027, dat get_p1_doel weer las."""
+    c = _coord(make_coordinator, hass)
+    uit = c.get_repetitie_2027()
+    assert "verschuiving_w" in uit["p1_doel"], uit["p1_doel"]

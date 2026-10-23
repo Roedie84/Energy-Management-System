@@ -65,6 +65,8 @@ from . import thuiskomst as thuiskomst_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .const import (
     ACCU_MEETREEKS_DAGEN,
+    HERSPEEL_DAGEN,
+    HERSPEEL_VERSIES,
     P1_VERSCHIL_MONSTERS,
     WITGOED_HORIZON_UUR,
     WITGOED_KWARTIEREN,
@@ -49272,6 +49274,12 @@ class EnergyManagementSystemCoordinator:
         open_dagen = [d for d in sorted(self.dagverloop or {})
                       if d < vandaag and d not in gedaan
                       and len(self.dagverloop[d]) >= NABESCHOUWING_MIN_KWARTIEREN][-14:]
+        if not open_dagen and self.hass is not None:
+            # v5.123.0: niets te beoordelen, wel opnieuw afspelen (punt 5)
+            self._zelfanalyse_bezig = True
+            if not self._start_achtergrondtaak(self._async_zelfanalyse_dagen([]), f"{DOMAIN} herspeel"):
+                self._zelfanalyse_bezig = False
+            return
         self._plan_zelfanalyse(open_dagen)
 
     async def _async_zelfanalyse_dagen(self, datums: list[str]) -> None:
@@ -49282,8 +49290,67 @@ class EnergyManagementSystemCoordinator:
                     await self._async_zelfanalyse(datum, melden=len(datums) == 1)
                 datums = getattr(self, "_zelfanalyse_wachtrij", [])
                 self._zelfanalyse_wachtrij = []
+            # v5.123.0 (punt 5): daarna de echte dagen opnieuw afspelen
+            await self._async_herspeel()
         finally:
             self._zelfanalyse_bezig = False
+
+    herspeel_resultaat: dict | None = None
+    herspeel_per_versie: dict | None = None
+
+    async def _async_herspeel(self) -> None:
+        """De laatste HERSPEEL_DAGEN volledige dagen opnieuw afspelen
+        (`herspeel.py`), in de achtergrond. Per versie bewaard, zodat voor en
+        na een wijziging naast elkaar staan. Stuurt niets."""
+        from . import herspeel as H
+
+        try:
+            vandaag = dt_util.now().date().isoformat()
+            verloop = {d: r for d, r in (self.dagverloop or {}).items() if d < vandaag}
+            dagen = sorted(verloop)[-HERSPEEL_DAGEN:]
+            gemeten = {d: self._gemeten_kwartieren(d) for d in dagen}
+            capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
+            if not dagen or capaciteit <= 0:
+                return
+            model = dict(
+                capaciteit_kwh=capaciteit, min_soc_procent=float(self.effective_min_soc_percent()),
+                laad_kw=abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)) / 1000,
+                ontlaad_kw=self.slimme_ontlaadgrens_w() / 1000,
+                rendement=(self.learned_battery_efficiency_percent or 84.0) / 100,
+                slijtage_eur=((self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh") or 0.0) / 100,
+            )
+            uit = await self.hass.async_add_executor_job(
+                lambda: H.herspeel({d: verloop[d] for d in dagen}, gemeten, dagen=HERSPEEL_DAGEN, **model)
+            )
+            versie = getattr(self, "_manifest_versie", None) or self._lees_manifest_versie() or "?"
+            uit.update(versie=versie, berekend_om=dt_util.now().isoformat())
+            self.herspeel_resultaat = uit
+            per = dict(self.herspeel_per_versie or {})
+            per[versie] = {"berekend_om": uit["berekend_om"], "van": dagen[0], "tot": dagen[-1],
+                           "samenvatting": uit["samenvatting"]}
+            self.herspeel_per_versie = dict(sorted(per.items(), key=lambda x: x[1]["berekend_om"])[-HERSPEEL_VERSIES:])
+            self.internal_failures.pop("herspeel", None)
+            self.schedule_persisted_state_save()
+        except Exception as fout:  # noqa: BLE001 - meten mag de sturing nooit raken
+            self.internal_failures["herspeel"] = f"{type(fout).__name__}: {fout}"
+            _LOGGER.debug("Herspelen mislukt", exc_info=True)
+
+    def get_herspeel(self) -> dict:
+        """Het laatste herspeelresultaat en de samenvatting per versie (punt 5)."""
+        uit = dict(self.herspeel_resultaat or {"dagen": [], "samenvatting": {"dagen": 0}})
+        uit["per_versie"] = self.herspeel_per_versie or {}
+        versies = list((self.herspeel_per_versie or {}).items())
+        if len(versies) >= 2:
+            (_vo, oud), (_vn, nieuw) = versies[-2], versies[-1]
+            uit["laatste_twee_versies"] = {
+                "oud": _vo, "nieuw": _vn,
+                "per_dag_verschil_eur": {
+                    k: round(nieuw["samenvatting"][k] - oud["samenvatting"][k], 3)
+                    for k in nieuw["samenvatting"]
+                    if k.endswith("_per_dag_eur") and k in oud["samenvatting"]
+                },
+            }
+        return uit
 
     async def _async_zelfanalyse(self, datum: str, melden: bool = True) -> None:
         from . import keuzeoordeel, regime2027
@@ -49486,6 +49553,11 @@ class EnergyManagementSystemCoordinator:
             "gisteren": laatste,
             "dertig_dagen": dertig,
             "laatste_poging": dagen[-1] if dagen else None,
+            # v5.123.0 (punt 5): de echte dagen opnieuw afgespeeld (samenvatting)
+            "herspeel": {
+                "versie": (self.herspeel_resultaat or {}).get("versie"),
+                "samenvatting": (self.herspeel_resultaat or {}).get("samenvatting"),
+            },
             "toelichting": (
                 "Elke nacht vergelijkt het EMS elke keuze van de vorige dag met de beste keuze "
                 "die achteraf mogelijk was, vanuit de laadstand die er toen werkelijk was. "
@@ -51309,15 +51381,41 @@ class EnergyManagementSystemCoordinator:
             return None
         return None
 
+    p1_regeldoel_bron: str | None = None
+
+    def p1_regeldoel_bron_entity(self) -> str | None:
+        """De sensor die "P1 regeldoel" spiegelt (v5.123.0).
+
+        De sensor waarop zendure_ha regelt (bij Ruud het template met het
+        Quooker-filter), onthouden over een herstart. Regelt de Zendure al op
+        "P1 regeldoel" zelf, dan de onthouden bron; zonder die de regelsensor
+        uit de instellingen.
+        """
+        meter = self._zendure_p1meter()
+        staat = self.hass.states.get(meter) if meter and self.hass is not None else None
+        eigen = staat is not None and (staat.attributes or {}).get(self.P1_REGELDOEL_KENMERK)
+        if meter and not eigen:
+            if self.p1_regeldoel_bron != meter:
+                self.p1_regeldoel_bron = meter
+                try:
+                    self.schedule_persisted_state_save()
+                except Exception:  # noqa: BLE001
+                    pass
+            return meter
+        return self.p1_regeldoel_bron or self.config.get(CONF_REGEL_P1_SENSOR)
+
     def get_p1_doel(self) -> dict:
         """Het P1-doel en wat de extra teruglevering in 2027 kost (punt 3)."""
         meter = self._zendure_p1meter()
         staat = self.hass.states.get(meter) if meter and self.hass else None
         volgt = bool(staat is not None and (staat.attributes or {}).get(self.P1_REGELDOEL_KENMERK))
-        rep = (self.get_repetitie_2027().get("samenvatting") or {})
+        from . import regime2027
+
+        rep = regime2027.samenvatting(self.repetitie_2027 or [])
         return {
             "verschuiving_w": round(self.regelverschuiving_kw() * 1000),
             "zendure_regelt_op": meter,
+            "p1_regeldoel_spiegelt": self.p1_regeldoel_bron_entity(),
             "zendure_volgt_ems_regeldoel": volgt,
             "kosten_2027_eur_per_dag": rep.get("p1_doel_kosten_2027_eur_per_dag"),
             "kosten_2027_eur_per_jaar": rep.get("p1_doel_kosten_2027_eur_per_jaar"),

@@ -297,12 +297,17 @@ def optimaliseer_scenarios(
     slijtage_eur: float,
     gewichten: tuple = SCENARIO_GEWICHTEN,
     stap_kwh: float = STAP_KWH,
+    klaar: bool = False,
+    eindwaarde_eur: float | None = None,
 ) -> dict:
-    """Het modusplan met de laagste VERWACHTE kosten over drie scenario's."""
+    """Het modusplan met de laagste VERWACHTE kosten over drie scenario's.
+
+    `klaar`: de kwartieren dragen al `zon` en `verbruik` per scenario (één
+    per gewicht) - zo rekent de herspeeltool met kennis achteraf."""
     if not kwartieren or bruikbaar_kwh <= 0 or rendement <= 0:
         return {"beschikbaar": False}
-    kws = scenario_kwartieren(kwartieren)
-    eind = eindwaarde_laagste_inkoop(kws, slijtage_eur)
+    kws = kwartieren if klaar else scenario_kwartieren(kwartieren)
+    eind = eindwaarde_laagste_inkoop(kws, slijtage_eur) if eindwaarde_eur is None else eindwaarde_eur
     n = max(1, int(round(bruikbaar_kwh / stap_kwh)))
     stap = bruikbaar_kwh / n
     arg = dict(cap=bruikbaar_kwh, laad_kwh=laad_kwh, ontlaad_kwh=ontlaad_kwh, rendement=rendement)
@@ -331,7 +336,7 @@ def optimaliseer_scenarios(
     for kw, keuze in zip(kws, beleid):
         m = keuze[min(n, max(0, int(round(s / stap))))]
         modi.append(m)
-        s, _net, _uit = stap_modus(m, s, kw, 1, **arg)
+        s, _net, _uit = stap_modus(m, s, kw, min(1, len(gewichten) - 1), **arg)
     return {
         "beschikbaar": True,
         "modi": modi,
@@ -351,11 +356,13 @@ def waardeer_modi(
     rendement: float,
     slijtage_eur: float,
     gewichten: tuple = SCENARIO_GEWICHTEN,
+    klaar: bool = False,
+    eindwaarde_eur: float | None = None,
 ) -> dict:
     """Een vaste modusreeks per scenario doorrekenen: verwachte en
     per-scenario kosten (positief = kosten), met de eindwaarde verrekend."""
-    kws = scenario_kwartieren(kwartieren)
-    eind = eindwaarde_laagste_inkoop(kws, slijtage_eur)
+    kws = kwartieren if klaar else scenario_kwartieren(kwartieren)
+    eind = eindwaarde_laagste_inkoop(kws, slijtage_eur) if eindwaarde_eur is None else eindwaarde_eur
     arg = dict(cap=bruikbaar_kwh, laad_kwh=laad_kwh, ontlaad_kwh=ontlaad_kwh, rendement=rendement)
     per = []
     for k in range(len(gewichten)):

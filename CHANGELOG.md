@@ -33649,3 +33649,18 @@ Opdracht 23-10 "Wat verbetert toepassen".
 
 Tests: `test_v5122_scenario_sluimer_banden.py` (14).
 
+
+## v5.123.0 — echte dagen opnieuw afspelen (punt 5), P1 regeldoel volgt de Zendure-bron
+
+Opdracht 23-10 "Wat verbetert toepassen". Alleen meten.
+
+- **Herspelen.** Nieuwe zuivere module `herspeel.py`: `dag_kwartieren` (dagverloop + meetlaag, terugval vermogen), `score_dag` per dag in € onder salderen en 2027 met dezelfde beginstand en restwaarde (gemiddelde inkoop x √rendement): `werkelijk`, `beslisboom` (de vastgelegde standen via `modus_van` door `vooruitplan.stap_modus`), `scenarioplan` (het DP van v5.122.0 met kennis achteraf, één scenario), `best_mogelijk_salderen` en `gemist_salderen` (keuzeoordeel), `regels_2027`/`best_mogelijk_2027` (generale repetitie). `samenvatting` en `vergelijk` (per veld en per dag, negatief = goedkoper). `vooruitplan.optimaliseer_scenarios`/`waardeer_modi` kregen `klaar` en `eindwaarde_eur`.
+- **In de integratie.** `_async_herspeel` na de zelfanalyse (dagwissel) en na een herstart (`_plan_zelfanalyse_achterstand`, ook zonder open dagen), in de executor, `HERSPEEL_DAGEN` 40. `herspeel_per_versie` (bewaard, `HERSPEEL_VERSIES` 10) met de samenvatting per versie; `get_herspeel` met `laatste_twee_versies`. Samenvatting op de sensor Zelfanalyse (`herspeel`), alles in de diagnose (`herspeel`).
+- **Tool.** `tools_herspeel.py <bron.json> [--storage config/.storage] [--uit] [--vergelijk]`: zelfde rekenwerk zonder Home Assistant op het opslagbestand of een diagnose-export; leest de meetlaag uit de opslag.
+- **Wat ontbreekt.** De beslisboom zelf (`_async_update_locked`) opnieuw laten beslissen kan niet zonder grote verbouwing: hij leest live toestanden, reserve, verkooptoets, prijsreeks en kwartierplan uit Home Assistant. `beslisboom` speelt daarom de vastgelegde keuzes af; een wijziging aan de regels toont zich in de dagen die met de nieuwe versie zijn vastgelegd (per versie te volgen). Wijzigingen aan model, waardering of plan zijn direct voor en na te vergelijken.
+- **P1 regeldoel** (v5.121.0) spiegelt de sensor waarop zendure_ha regelt (`p1_regeldoel_bron_entity`, bewaard in `p1_regeldoel_bron`), zodat een filter in dat template (Quooker) blijft; terugval de regelsensor uit de instellingen.
+
+- **Fout uit v5.121.0 hersteld.** `get_p1_doel` las `get_repetitie_2027`, dat via `_repetitie_v5121` weer `get_p1_doel` las: een oneindige lus, afgevangen als `p1_doel` met een RecursionError en traag bij elke lezing van de sensor Generale repetitie 2027. Nu leest `get_p1_doel` `regime2027.samenvatting` rechtstreeks.
+
+Tests: `test_v5123_herspeel.py` (9), `test_v5121_overschot_p1_negatief.py` +1 (recursie).
+

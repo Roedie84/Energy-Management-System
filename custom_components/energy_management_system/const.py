@@ -3548,6 +3548,10 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "bronbuffer_opslag": {"type": "plain"},
     "keuzeoordelen": {"type": "plain"},
     "repetitie_2027": {"type": "plain"},
+    # v5.123.0: de sensor waarop de Zendure regelde voordat hij op "P1 regeldoel" ging
+    "p1_regeldoel_bron": {"type": "plain"},
+    # v5.123.0 (punt 5): de herspeelsamenvatting per versie, voor voor-en-na
+    "herspeel_per_versie": {"type": "plain"},
     # v5.102: het dagarchief - één regel per dag, blijvend.
     "dagarchief": {"type": "plain"},
     "battery_module_health": {"type": "plain"},
@@ -7585,3 +7589,9 @@ P1_VERSCHIL_MONSTERS = 300
 # --- v5.122.0: sluimerverbruik en rendement per band (punten 4 en 7) ---------
 #: Zoveel dagen dagverloop en meetlaag voor de accu-meetreeks.
 ACCU_MEETREEKS_DAGEN = 40
+
+# --- v5.123.0: echte dagen opnieuw afspelen (punt 5) --------------------------
+#: Zoveel volledige dagen speelt de herspeeltool af.
+HERSPEEL_DAGEN = 40
+#: Zoveel versies blijven bewaard voor de voor-en-navergelijking.
+HERSPEEL_VERSIES = 10
