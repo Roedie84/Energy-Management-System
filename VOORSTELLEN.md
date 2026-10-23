@@ -194,7 +194,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Effect meten: PV-MAE 14 d (nu 17,3 %) en bias richting 0; `gemist_door_voorspelling` per week.
 
 ## L-EMS-026 · nacht niet leegtrekken als de ochtendpiek duurder is
-- Status: **gebouwd v5.118.0** (andere sessie 22-10 17:09, akkoord Ruud 16:45; geïnstalleerd 17:09). Eerste toets nacht 22→23 (`nacht_ochtendpiek` in het spaarplan, ochtendpiek-import 07-10 u, nabeschouwing per dagdeel). Was: **open** (laad-/ontlaadstrategie → Ruud beslist).
+- Status: **gebouwd v5.118.0** (andere sessie 22-10 17:09, akkoord Ruud 16:45; geïnstalleerd 17:09). 23-10 07:40: nacht 22→23 1 uur sparen (04:00-05:00 `battery_saved_for_peak`, import 0,19 kWh); uitslag ochtendpiek 07-10 u om 11:40. Eerste toets nacht 22→23 (`nacht_ochtendpiek` in het spaarplan, ochtendpiek-import 07-10 u, nabeschouwing per dagdeel). Was: **open** (laad-/ontlaadstrategie → Ruud beslist).
 - Bijgewerkt 22-10: ook 21-10 (ochtendpiek 2,70 kWh vastgehouden +€ 1,17, nacht 1,38 te veel −€ 0,48) → 5 van 8 dagen.
 - Onderbouwing (nabeschouwing_7d 14..20-10, n=7): op 4 dagen (14, 15, 16, 19-10) ontlaadt de accu 's nachts 1,2-1,5 kWh "te veel" (−€ 0,40-0,56 t.o.v. optimum) en houdt hij in de ochtendpiek 1,2-2,3 kWh te weinig over (+€ 0,64-1,08). Netto nacht+ochtend +€ 0,09-0,60/dag, ~€ 1,3 per week. Op 17, 18, 20-10 niet (geen dure ochtend of netlading).
 - Voorstel: in de nacht `default_smart` alleen ontladen voor zover beschikbaar − behoefte tot en met de ochtendpiek > 0, als de ochtendpiek ≥ nachtprijs / rendement + slijtage; de rest uit het net. Reserve en "huis gaat voor" blijven gelijk.
@@ -230,3 +230,14 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: 22-10 20:11-23:00 17 sprongen "alleen behoefte" met `needed_kwh_before_margin` telkens 1,47-1,51 kWh heen en weer, alle bijdragen 0 → `grootste_onderdeel` "basisbehoefte". Code: `_segmenten_verbruik_zon` telt de live correctie (mediaan live / uurprofiel, uitgedempt over 4 u) op tot `CONSUMPTION_CORRECTION_MAX_EXTRA_KWH` = 1,5 kWh — precies het verschil. Na 00:00 (reserve niet afgekapt) 3 echte reservesprongen (10,37→9,85, 9,81→10,21, 9,64→9,26 kWh).
 - Bouw: `_laatste_live_correctie` na elke wandeling; uitsplitsing + sprongen krijgen `live_correctie_extra_kwh` en `live_correctie_verhouding`; bijdrage telt mee in `grootste_onderdeel`.
 - Meten na installatie: aandeel sprongen met `grootste_onderdeel` = live_correctie_extra_kwh; hoe vaak verandert daardoor een NIET-afgekapte reserve en tijdens verkoopkwartieren de verkoopgrens (`verkoopkwartieren`). Bij > 0 verkoopkwartieren geraakt: voorstel (hysterese/uitdemping = sturing → Ruud).
+
+## L-EMS-032 · plantoetsing: "structureel" ook bij een vaste richting (rapportage)
+- Status: **gepland** (zelf bouwen: alleen het oordeel-tekstje in `plantoetsing.structureel`; sturing, reserve en correcties ongewijzigd). Dagafsluiting.
+- Onderbouwing: 23-10 07:40 — `dagen_overzicht` 09..22-10: 14 van 14 dagen zon werkelijk < voorspeld (−4 … −45 %), gemiddelde −20,0 % = tolerantie 20 → "loopt niet structureel uit de pas". `_duid_plan_review` kijkt alleen naar |gemiddelde| > 20 %; een reeks met steeds hetzelfde teken (tekentoets 14/14, p < 0,001) telt niet mee.
+- Voorstel: ook "structureel te hoog/te laag" als ≥ 80 % van de dagen (min. 7) dezelfde richting heeft en de mediaan |≥ 5 %|; tekst noemt dan aantal dagen en mediaan.
+- Verwacht effect: het dashboard zegt wat de leerronde al 16 dagen meet. Meten: oordeel tegen KPI ems_pv_* over 7 dagen.
+
+## L-EMS-033 · reservesprongen bewaren over een herstart (meetbaarheid)
+- Status: **gepland** (zelf bouwen: diagnose-attribuut; sturing ongewijzigd). Dagafsluiting, na nalezen of `na_herstart` dan nog klopt.
+- Onderbouwing: 23-10 — `reserve_sprongen` staat alleen in het geheugen (`__dict__['_reserve_sprongen']`); na de herstarts van 06:09 en 07:39 leeg; attributen staan niet in de recorder. De toets van H-EMS-14 moest via de state-string van Diagnose sturing.
+- Meten na bouw: na een herstart blijven de sprongen van vandaag/gisteren zichtbaar, `na_herstart` apart.

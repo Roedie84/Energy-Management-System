@@ -585,3 +585,10 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-22,DAG,ems_dagarchief_accu_opbrengst_eur,0.49,1,"L-EMS-024: kz-k -0.41 + voorraad bv 0.90"
 2026-10-23 03:40,TUSSEN,ems_net_import_kwh,0.041,3,"00-03 u p1; accu ontlaadt 0.59 kWh (plan smart, ~0.2 kW)"
 2026-10-23 03:40,TUSSEN,ems_reserve_sprong_live_correctie_kwh,1.49,17,"needed_kwh_before_margin wisselt 1.47-1.51 kWh = CONSUMPTION_CORRECTION_MAX_EXTRA_KWH 1.5"
+2026-10-23 07:40,TUSSEN,ems_verkoop_onder_reserve,0,0,verkoopkwartieren leeg; regeloverschot 23-10 0.093 kWh
+2026-10-23 07:40,TUSSEN,ems_net_import_kwh,0.243,4,03-07 u p1 (0.013/0.194/0.015/0.021); 04-05 u sparen battery_saved_for_peak; export 0.048
+2026-10-23 07:40,TUSSEN,ems_nacht_ochtendpiek_sparen_uur,1,1,04:00-05:00 battery_saved_for_peak (L-EMS-026 eerste keer actief); import 0.19 kWh; SoC 42 % vast
+2026-10-23 07:40,TUSSEN,ems_soc_pct,37,1,07:42; beschikbaar 3.11 kWh; reserve 7.52 (nodig tot blok 23:00)
+2026-10-23 07:40,TUSSEN,ems_reserve_sprong_live_correctie_kwh,0,0,03:50-07:39 geen 1.5-kWh-wissels in diagnose_sturing-state; grootste stap +0.32 (05:13); sprongenlijst na herstarts 06:09/07:39 leeg (alleen in geheugen)
+2026-10-23 07:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,99.7,1,07:42; blok 23-10 23:00
+2026-10-23 07:40,TUSSEN,ems_plantoetsing_zon_gem_14d_pct,-20.0,14,"plantoetsing: 14/14 dagen zon < voorspeld, gemiddelde -20.0 = tolerantie 20 -> 'niet structureel'"

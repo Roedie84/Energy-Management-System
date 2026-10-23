@@ -467,3 +467,14 @@ laatste ronde: 22-10 23:40, gemeten t/m 22-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog; correctie gebouwd), H-EMS-11 (nacht/avond vs ochtendpiek), H-EMS-14 (reservesprong door live correctie). H-EMS-13 → toets via L-EMS-028. **Release v5.120.0** (L-EMS-031).
 
 laatste ronde: 23-10 03:40, gemeten t/m 23-10 03:55
+
+## 23-10 07:40 · tussenronde
+- Actief **v5.120.0** (geïnstalleerd; herstarts 06:09 en 07:39 door installaties elders). 0 EMS-fouten; WARNINGs bronbuffer (Solcast/Zonneplan even onbeschikbaar bij de herstart) — extern.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 23-10 0,093 kWh).
+- Nacht 03-07 u: import 0,243 kWh, waarvan 0,194 in 04-05 u: **L-EMS-026 voor het eerst actief** (`battery_saved_for_peak` 04:00-05:00, SoC 42 % vast); om 23:40 stond nog "hele nacht smart". Daarna smart, SoC 42 → 37 % (07:42), beschikbaar 3,11 kWh tegen reserve 7,52 (blok 23:00). Uitslag ochtendpiek 07-10 u (H-EMS-11) om 11:40.
+- **H-EMS-14:** 03:50-07:39 geen 1,5-kWh-wissels (reserve uit de state-string: glijdend −0,01/2 min, grootste stap +0,32 om 05:13; herstarts −0,16 en −0,03). Reserve ≫ beschikbaar → geen effect. **Meetbaarheid:** `reserve_sprongen` staat alleen in het geheugen en is na elke herstart leeg (2× vannacht); attributen niet in de recorder → reconstructie alleen via de state-string. Kandidaat L-EMS-033 (bewaren over herstart).
+- **Nieuw (classificatie):** `plantoetsing.structureel` zegt "loopt niet structureel uit de pas" terwijl 14 van 14 dagen zon < voorspeld (gem. −20,0 %, precies op de tolerantie 20; mediaan 30 d −7,4 %). Het oordeel kijkt alleen naar |gemiddelde| > 20, niet naar de vaste richting → kandidaat L-EMS-032 (rapportage, zelf bouwen in de dagafsluiting).
+- MC 99,7 % tot het blok (23:00). H-EMS-13: geen dip-lading gepland → niets te toetsen.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht/avond vs ochtendpiek; L-EMS-026 1 u actief), H-EMS-14 (reservesprong live correctie). Geen release (tussenronde).
+
+laatste ronde: 23-10 07:40, gemeten t/m 23-10 07:45
