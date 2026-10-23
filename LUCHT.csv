@@ -658,3 +658,24 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-23 16:20,filtergebruik_pct,0,1,
 2026-10-23 16:20,automation_traces_fout,0,5,
 2026-10-23 16:20,kookautomation_traces,4,4,alleen HA-start; geen kookmoment; voorrang bleef uit
+2026-10-23 20:20,pm25_gem,0.27,48,5-min statistiek 16:20-20:20
+2026-10-23 20:20,pm25_mediaan,0.21,48,
+2026-10-23 20:20,pm25_p95,0.63,48,
+2026-10-23 20:20,pm25_max,0.77,48,blokmax 16:20
+2026-10-23 20:20,pm25_uren_gt15,0.00,48,
+2026-10-23 20:20,pm25_uren_gt25,0.00,48,
+2026-10-23 20:20,stand_auto_min,17,1,16:20-16:37
+2026-10-23 20:20,stand_mid_min,223,1,
+2026-10-23 20:20,pm25_gem_auto,0.64,4,5-min blokken
+2026-10-23 20:20,pm25_gem_mid,0.24,44,5-min blokken
+2026-10-23 20:20,pm25_gem_aanwezig,0.65,1,laatste aanwezigheid 16:22
+2026-10-23 20:20,pm25_gem_afwezig,0.26,47,
+2026-10-23 20:20,co2_gem,632,48,5-min; 723 -> 529; ramen dicht
+2026-10-23 20:20,co2_uren_gt1200,0.00,48,
+2026-10-23 20:20,schimmel_indicator,74,48,70 -> 76; binnen 62.8 -> 65.5% / 16.7 C; buiten 99% 12 C
+2026-10-23 20:20,ha_herstarts,0,1,uptime sinds 15:17
+2026-10-23 20:20,lokaal_mislukt,48,99637,uitval 0; 194 verbindingen; geen nieuwe fout
+2026-10-23 20:20,sturen_bevestigd,265,266,mediaan 0.14 s
+2026-10-23 20:20,filtergebruik_pct,0,1,
+2026-10-23 20:20,automation_traces_fout,0,5,
+2026-10-23 20:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment
