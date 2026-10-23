@@ -592,3 +592,10 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-23 07:40,TUSSEN,ems_reserve_sprong_live_correctie_kwh,0,0,03:50-07:39 geen 1.5-kWh-wissels in diagnose_sturing-state; grootste stap +0.32 (05:13); sprongenlijst na herstarts 06:09/07:39 leeg (alleen in geheugen)
 2026-10-23 07:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,99.7,1,07:42; blok 23-10 23:00
 2026-10-23 07:40,TUSSEN,ems_plantoetsing_zon_gem_14d_pct,-20.0,14,"plantoetsing: 14/14 dagen zon < voorspeld, gemiddelde -20.0 = tolerantie 20 -> 'niet structureel'"
+2026-10-23 11:40,TUSSEN,ems_verkoop_onder_reserve,0,0,verkoopkwartieren leeg; regeloverschot 23-10 0.108 kWh
+2026-10-23 11:40,TUSSEN,ems_ochtendpiek_import_kwh,0.078,3,"07-10 u p1 (0.018/0.038/0.022); 14..22-10: 0.06-0.30 (mediaan 0.10, 18-10 0.55); accu dekte de piek, SoC 37->33 %"
+2026-10-23 11:40,TUSSEN,ems_net_import_kwh,0.098,4,07-11 u p1; export 0.072
+2026-10-23 11:40,TUSSEN,ems_soc_pct,34,1,11:39; beschikbaar 2.76 kWh; reserve 6.42 (blok 23:15); battery_saved_for_peak 10:45-11:00 en sinds 11:15
+2026-10-23 11:40,TUSSEN,ems_reserve_sprong_live_correctie_kwh,0,0,"07:42-11:39 geen 1.5-kWh-wissels; stappen +0.25 (08:11), -0.18 (09:12), -0.25 (10:13), +0.08 (10:15 blok 23:00->23:15)"
+2026-10-23 11:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,99.8,1,11:41; blok 23:15
+2026-10-23 11:40,TUSSEN,ems_pv_tot_nu_kwh,0.744,1,pv_opbrengst_vandaag 11:43; Solcast rest 3.77 -> ~4.5 verwacht (incl. gemeten)

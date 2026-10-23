@@ -478,3 +478,14 @@ laatste ronde: 23-10 03:40, gemeten t/m 23-10 03:55
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht/avond vs ochtendpiek; L-EMS-026 1 u actief), H-EMS-14 (reservesprong live correctie). Geen release (tussenronde).
 
 laatste ronde: 23-10 07:40, gemeten t/m 23-10 07:45
+
+## 23-10 11:40 · tussenronde
+- Actief **v5.120.0**; v5.121.0 (11:12) en v5.122.0 (11:25) van een andere sessie zijn via HACS gedownload maar pas actief na een herstart (diagnose meldt nog v5.120.0). 0 EMS-fouten; 1× Zendure offline 07:56 (extern).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 23-10 0,108 kWh).
+- **H-EMS-11 / L-EMS-026, ochtendpiek 07-10 u:** netimport 0,078 kWh (0,018/0,038/0,022); de accu dekte de piek (SoC 37 → 33 %). Vergelijking 14..22-10 zonder sparen: 0,06-0,30 kWh (mediaan 0,10). Het spaaruur 04-05 u (0,19 kWh netstroom à ~30 ct) was deze nacht niet nodig: de accu had om 09:00 nog 2,65 kWh beschikbaar. Effect ~€ 0,01 (n=1); de energie blijft in de accu. Meer nachten nodig; een nacht waarin de accu vóór 10:00 leeg zou raken is de echte toets.
+- Na 10:45 weer `battery_saved_for_peak` (10:45-11:00, sinds 11:15) bij 26,6 ct: sparen voor de middag-/avondpiek (plan 03:40: sparen 11:30-17:00 en 20:30-22:30).
+- **H-EMS-14:** 07:42-11:39 geen 1,5-kWh-wissels; reservestappen +0,25/−0,18/−0,25 en +0,08 bij blokverschuiving 23:00 → 23:15. Reserve 6,42 ≫ beschikbaar 2,76 → geen effect.
+- MC 99,8 % tot het blok (23:15). PV tot 11:43 0,74 kWh, Solcast-rest 3,77 → ~4,5 kWh; afrekening in de dagafsluiting (correctie −8,1 %).
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht/avond vs ochtendpiek; 1e nacht: sparen onnodig, geen schade), H-EMS-14 (reservesprong live correctie). Geen release (tussenronde; vandaag al 3 EMS-releases door andere sessies). L-EMS-032/033 blijven gepland voor de dagafsluiting.
+
+laatste ronde: 23-10 11:40, gemeten t/m 23-10 11:45
