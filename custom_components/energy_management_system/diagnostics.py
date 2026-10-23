@@ -1102,6 +1102,8 @@ async def async_get_config_entry_diagnostics(
             # v5.114.0: welke bronnen gebufferd worden en welke nu uit de buffer komen
             "bronbuffer": _veilig("bronbuffer", lambda: coordinator._bronbuffer.overzicht()),
             "repetitie_2027": _veilig("get_repetitie_2027", coordinator.get_repetitie_2027),
+            # v5.121.0: witgoedadvies met de overschotwaarde
+            "witgoedadvies": _veilig("get_witgoedadvies", coordinator.get_witgoedadvies),
             # v5.102: het dagarchief (vergelijking, maanden, laatste dagen).
             "dagarchief": _veilig("get_dagarchief", coordinator.get_dagarchief),
             # v3.99.18: wat de lange horizon werkelijk opleverde.

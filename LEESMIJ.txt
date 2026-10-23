@@ -1,3 +1,25 @@
+EMS v5.121.0 - waarde van zonoverschot, P1-doel 2027, negatieve teruglevering
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+Tot en met 2026 verandert de sturing niet; alles hieronder rekent in de
+schaduw en gaat op 1 januari 2027 vanzelf sturen.
+
+- Waarde van zonoverschot: per moment wat een extra kWh kost. Zon over en
+  de accu vol (of op max laden): de terugleverwaarde, anders de inkoop.
+  Vanaf 2027 (kaal + 2 ct + 10 % zonnebonus) rekenen het airco-advies en
+  de fietsladers daarmee; tot dan staat het in de Generale repetitie 2027.
+  Nieuwe sensor Witgoedadvies: het goedkoopste blok van twee uur.
+- P1-doel 2027: de repetitie rekent uit wat de vaste extra teruglevering
+  op de P1-meter in 2027 kost. Nieuwe sensor P1 regeldoel: tot en met 2026
+  gelijk aan je regelsensor, vanaf 2027 zonder de verschuiving (0 W op de
+  meter). Werkt pas als zendure_ha op die sensor regelt; het template
+  blijft zoals het is.
+- Negatieve teruglevering 2027: is kaal + bonus onder nul terwijl de
+  inkoop positief is, dan regelt het EMS de panelen terug tot ~0 W
+  teruglevering (in plaats van uit), en houdt de accu er vooraf ruimte
+  voor. Tot 2027 alleen in de repetitie.
+
 EMS v5.120.0 - reservesprongen tonen de live verbruikscorrectie
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

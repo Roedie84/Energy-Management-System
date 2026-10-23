@@ -123,6 +123,8 @@ async def async_setup_entry(
         PrijsverwachtingSensor(coordinator, entry.entry_id),
         ZelfanalyseSensor(coordinator, entry.entry_id),
         Repetitie2027Sensor(coordinator, entry.entry_id),
+        WitgoedadviesSensor(coordinator, entry.entry_id),
+        P1RegeldoelSensor(coordinator, entry.entry_id),
         DagarchiefSensor(coordinator, entry.entry_id),
         SelfSufficiencySensor(coordinator, entry.entry_id),
         SelfConsumptionSensor(coordinator, entry.entry_id),
@@ -3060,6 +3062,82 @@ class Repetitie2027Sensor(_V5100Sensor):
     @property
     def extra_state_attributes(self):
         return self._coordinator.get_repetitie_2027()
+
+
+class WitgoedadviesSensor(_V5100Sensor):
+    """Wanneer witgoed het goedkoopst draait, met de overschotwaarde (v5.121.0).
+
+    Staat: het begin van het goedkoopste blok van twee uur in de komende 24
+    uur (tekst). Alleen advies; het EMS zet geen witgoed aan.
+    """
+
+    _attr_name = "Witgoedadvies"
+    _attr_icon = "mdi:washing-machine"
+    _sleutel = "witgoedadvies"
+
+    @property
+    def native_value(self):
+        return self._coordinator.get_witgoedadvies().get("beste_start_tekst")
+
+    @property
+    def extra_state_attributes(self):
+        return self._coordinator.get_witgoedadvies()
+
+
+class P1RegeldoelSensor(_V5100Sensor):
+    """De P1-meting waarop de Zendure kan regelen (v5.121.0, punt 3).
+
+    Tot en met 2026 gelijk aan de regelsensor (het template "P1 + verschuiving");
+    vanaf 1-1-2027 zonder die verschuiving, dus 0 W op de echte meter. Volgt
+    de bronnen direct (bij elke meting), niet per ronde, zodat de nulregeling
+    net zo snel blijft.
+    """
+
+    _attr_name = "P1 regeldoel"
+    _attr_icon = "mdi:target"
+    _attr_native_unit_of_measurement = "W"
+    _attr_device_class = SensorDeviceClass.POWER
+    _sleutel = "p1_regeldoel"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id)
+        self._uitkomst: dict = {}
+
+    def _bronnen(self) -> tuple:
+        from .const import CONF_CONSUMPTION_POWER_SENSOR, CONF_REGEL_P1_SENSOR
+
+        cfg = self._coordinator.config
+        return cfg.get(CONF_REGEL_P1_SENSOR), cfg.get(CONF_CONSUMPTION_POWER_SENSOR)
+
+    def _lees(self, entity_id):
+        staat = self.hass.states.get(entity_id) if entity_id and self.hass else None
+        try:
+            return float(staat.state) if staat is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _bereken(self) -> None:
+        regel, echt = self._bronnen()
+        self._uitkomst = self._coordinator.p1_regeldoel(self._lees(regel), self._lees(echt))
+
+    async def async_added_to_hass(self) -> None:
+        bronnen = [b for b in self._bronnen() if b]
+        if bronnen:
+            self.async_on_remove(async_track_state_change_event(self.hass, bronnen, self._bij_wijziging))
+        self._bereken()
+
+    @callback
+    def _bij_wijziging(self, _event) -> None:
+        self._bereken()
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self):
+        return self._uitkomst.get("waarde_w")
+
+    @property
+    def extra_state_attributes(self):
+        return {**self._uitkomst, self._coordinator.P1_REGELDOEL_KENMERK: True}
 
 
 class DagarchiefSensor(_V5100Sensor):

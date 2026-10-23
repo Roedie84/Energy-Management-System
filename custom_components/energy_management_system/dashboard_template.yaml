@@ -2207,6 +2207,22 @@ views:
         tap_action:
           action: more-info
       - type: custom:mushroom-template-card
+        primary: 'Witgoed: {{ states(''sensor.woonkamer_energy_management_system_witgoedadvies'') }}'
+        secondary: '{% set a = states.sensor.woonkamer_energy_management_system_witgoedadvies.attributes if states.sensor.woonkamer_energy_management_system_witgoedadvies else {} %}{% if a.get(''gemiddeld_ct'') is not none %}gem. {{ a.gemiddeld_ct }} ct (nu {{ a.nu_starten_ct }} ct){% set s = a.get(''schaduw_2027'') or {} %}{% if a.get(''regime'') == ''salderen'' and s.get(''beste_start_tekst'') %} · 2027: {{ s.beste_start_tekst }} ({{ s.gemiddeld_ct }} ct){% endif %}{% else %}nog geen plan{% endif %}'
+        icon: mdi:washing-machine
+        icon_color: teal
+        entity: sensor.woonkamer_energy_management_system_witgoedadvies
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
+        primary: 'P1 regeldoel: {{ states(''sensor.woonkamer_energy_management_system_p1_regeldoel'') }} W'
+        secondary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_generale_repetitie_2027'', ''p1_doel'') or {} %}{{ state_attr(''sensor.woonkamer_energy_management_system_p1_regeldoel'', ''modus'') }}{% if p.get(''kosten_2027_eur_per_jaar'') is not none %} · extra teruglevering kost in 2027 € {{ p.kosten_2027_eur_per_jaar }}/jaar{% endif %}'
+        icon: mdi:target
+        icon_color: blue
+        entity: sensor.woonkamer_energy_management_system_p1_regeldoel
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
         primary: '{{ state_attr(''sensor.woonkamer_energy_management_system_prijsverwachting'', ''kaart_primair'') }}'
         secondary: '{{ state_attr(''sensor.woonkamer_energy_management_system_prijsverwachting'', ''kaart_secundair'') }}'
         icon: mdi:chart-timeline-variant-shimmer

@@ -64,6 +64,11 @@ from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bron
 from . import thuiskomst as thuiskomst_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .const import (
+    P1_VERSCHIL_MONSTERS,
+    WITGOED_HORIZON_UUR,
+    WITGOED_KWARTIEREN,
+    FIETS_OVERSCHOT_MIN_W,
+    FIETS_OVERSCHOT_HOUD_MINUTEN,
     RESERVE_SPRONG_DREMPEL_KWH,
     RESERVE_SPRONG_VERKLAARD_KWH,
     RESERVE_SPRONG_HERSTART_S,
@@ -21256,6 +21261,13 @@ class EnergyManagementSystemCoordinator:
         if stempel is not None and bewaard is not None and bewaard[0] == stempel:
             return bewaard[1]
         regel = self.config.get(CONF_REGEL_P1_SENSOR)
+        # v5.121.0 (punt 3): regelt de Zendure op de eigen sensor "P1 regeldoel",
+        # dan is DIE de regelsensor (vanaf 2027 zonder de verschuiving).
+        meter = self._zendure_p1meter() if self.hass is not None else None
+        if meter and meter != regel:
+            staat = self.hass.states.get(meter)
+            if staat is not None and (staat.attributes or {}).get(self.P1_REGELDOEL_KENMERK):
+                regel = meter
         waarde = 0.0
         if regel:
             regel_w = self._read_sensor_float(regel)
@@ -27918,6 +27930,9 @@ class EnergyManagementSystemCoordinator:
         """
         if not should_postpone_charging:
             return False
+        if getattr(self, "_ruimte_houden_nu", False):
+            # v5.121.0 (punt 6, alleen in 2027): ruimte houden gaat voor opvangen
+            return False
 
         pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
         expected_pv_power_w = self._get_expected_pv_power_w(now)
@@ -30126,8 +30141,7 @@ class EnergyManagementSystemCoordinator:
                 return None
             return import_price + FEEDIN_PREMIUM_EUR_PER_KWH
 
-        feedin_key = self.instelling(CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE)
-        feedin_entries = self._get_forecast_entries(price_key_override=feedin_key)
+        feedin_entries = self._kale_entries()
         market_price = self._get_current_price_per_kwh(feedin_entries, now)
         if market_price is None:
             # Het teruglever-attribuut ontbreekt op deze prijssensor -
@@ -30139,7 +30153,11 @@ class EnergyManagementSystemCoordinator:
             self.instelling(CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH)
             or 0.0
         )
-        return market_price + FEEDIN_PREMIUM_EUR_PER_KWH - feedin_cost
+        # v5.121.0: vanaf 2027 betaalt Zonneplan kaal + premie + 10 % zonnebonus
+        # (over een positieve kale prijs) - zie `overschotwaarde.terugleverwaarde_2027`.
+        from . import overschotwaarde as OW
+
+        return OW.terugleverwaarde_2027(market_price, feedin_cost)
 
     def _split_discharge_export_vs_load(
         self, discharged_kwh: float, elapsed_hours: float
@@ -45959,7 +45977,9 @@ class EnergyManagementSystemCoordinator:
         # spikes. Solar is used productively either way; only the
         # destination (export vs. storage) differs, which is exactly what
         # the price-driven decision below should determine.
-        should_postpone_charging = self._should_postpone_charging(
+        # v5.121.0 (punt 6): in 2027 ook uitstellen zolang de accu ruimte moet
+        # houden voor de uren met een negatieve terugleverwaarde.
+        should_postpone_charging = self._uitstellen_met_ruimte(
             entries, now, cheap_block_start
         )
         # v0.63.70/.77: evaluate the solar-capture check early, purely
@@ -46190,9 +46210,10 @@ class EnergyManagementSystemCoordinator:
             )
         except Exception:  # noqa: BLE001
             self._noteer_staartfout("gepland apparaat")
+        # v5.121.0 (punt 1): in 2027 ook op zonoverschot; tot dan alleen gemeten.
         await self._async_update_scheduled_charge_appliance(
             now,
-            is_currently_cheapest_block,
+            is_currently_cheapest_block or self._fiets_overschot_veilig(now),
             switch_entity=self.config.get(CONF_FIETSLADERS_SWITCH),
             power_entity=self.config.get(CONF_FIETSLADERS_POWER_SENSOR),
             complete_threshold_w=FIETSLADERS_COMPLETE_THRESHOLD_W,
@@ -46341,12 +46362,10 @@ class EnergyManagementSystemCoordinator:
             self._finish_decision_tick(now)
             return
 
-        if self._is_negative_price_active:
-            # Price just turned positive again - restore the panels, then
-            # fall through to the normal decision logic below (whichever
-            # mode it determines now takes over, as requested).
-            self._is_negative_price_active = False
-            self._start_solar_ramp(100.0)
+        # Price just turned positive again - restore the panels, then fall
+        # through to the normal decision logic below. v5.121.0: daarna de
+        # negatieve terugleverwaarde (punt 6) - zie `_async_na_negatieve_prijs`.
+        await self._async_na_negatieve_prijs(now)
 
         # Winter guard: if the battery was force-charged from the grid
         # today (low solar), don't also manual-discharge at high prices
@@ -49008,6 +49027,11 @@ class EnergyManagementSystemCoordinator:
         import threading
 
         entries = self._get_forecast_entries() or []
+        # v5.121.0: de plankwartieren voor de ruimtetoets BUITEN de draad
+        try:
+            negatief_invoer = self._negatief_invoer(now)
+        except Exception:  # noqa: BLE001
+            negatief_invoer = None
         # de prijsreeks wordt onder het regime van 2027 met een andere sleutel
         # gelezen; de bevindingen van de echte reeks blijven staan
         bevindingen = getattr(self, "prijsreeks_bevindingen", None)
@@ -49016,6 +49040,8 @@ class EnergyManagementSystemCoordinator:
             opvangen = bool(self.should_capture_surplus_over_selling(now))
             verkoop = self._verkoop_loont_na_saldering(now)
             export = self._get_feedin_value_per_kwh(entries, now)
+            negatief = (self._negatieve_teruglevering_besluit(now, negatief_invoer)
+                        if negatief_invoer is not None else {})
         finally:
             self._regime_2027_draad = None
             self.prijsreeks_bevindingen = bevindingen
@@ -49023,6 +49049,8 @@ class EnergyManagementSystemCoordinator:
             "r27_opvangen": opvangen,
             "r27_verkoop": not (isinstance(verkoop, dict) and verkoop.get("mag_verkopen") is False),
             "r27_export": round(export, 5) if export is not None else None,
+            "r27_begrens": bool(negatief.get("begrenzen")),
+            "r27_ruimte": bool(negatief.get("ruimte_houden")),
         }
 
     def _start_achtergrondtaak(self, coro, naam: str) -> bool:
@@ -49281,7 +49309,9 @@ class EnergyManagementSystemCoordinator:
             kwartieren.append({**m, "tijd": r["tijd"], "prijs_eur": r["prijs_ct"] / 100,
                                "reden": r.get("reden"), "stand": r.get("stand"),
                                "r27_opvangen": r.get("r27_opvangen"), "r27_verkoop": r.get("r27_verkoop"),
-                               "r27_export": r.get("r27_export"), "gemeten": r.get("tijd") in gemeten})
+                               "r27_export": r.get("r27_export"), "gemeten": r.get("tijd") in gemeten,
+                               "r27_begrens": r.get("r27_begrens"), "r27_ruimte": r.get("r27_ruimte"),
+                               "regelt": self._regelde_op_p1(r)})
         capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
         min_soc = float(self.effective_min_soc_percent())
         schaal = max(1.0, 100.0 - min_soc)
@@ -49304,7 +49334,21 @@ class EnergyManagementSystemCoordinator:
             "ontlaad_kw": self.slimme_ontlaadgrens_w() / 1000,
             "rendement": (self.learned_battery_efficiency_percent or 84.0) / 100,
             "slijtage": ((self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh") or 0.0) / 100,
+            "verschuiving_kw": self.regelverschuiving_kw(),
         }
+
+    def _regelde_op_p1(self, r: dict) -> bool:
+        """Regelde de Zendure in dit kwartier op de P1-meter? (v5.121.0)
+
+        In een slimme stand, niet vol en niet leeg: dan houdt hij de template
+        op nul en staat de echte meter op -verschuiving.
+        """
+        if not str(r.get("stand") or "").startswith("smart"):
+            return False
+        soc = r.get("soc")
+        if soc is None:
+            return False
+        return float(self.effective_min_soc_percent()) + 1 < soc < self._bovengrens_procent() - 1
 
     def _meld_keuzes_achteraf(self, oordeel: dict) -> None:
         """Eén bericht per dag met de regelkeuzes die achteraf duur waren."""
@@ -49357,7 +49401,24 @@ class EnergyManagementSystemCoordinator:
             "samenvatting": samen,
             "salderen_tot": str(self.instelling(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)),
             "dagen_tot_einde_saldering": self._salderen_days_remaining(),
+            **self._repetitie_v5121(),
         }
+
+    def _repetitie_v5121(self) -> dict:
+        """v5.121.0: overschotwaarde, fietsladers, negatieve teruglevering en
+        P1-doel naast de repetitie - in de schaduw tot 2027."""
+        uit = {}
+        for sleutel, maak in (
+            ("overschotwaarde", self.get_overschotwaarde),
+            ("p1_doel", self.get_p1_doel),
+        ):
+            try:
+                uit[sleutel] = maak()
+            except Exception as fout:  # noqa: BLE001 - een attribuut mag de sensor niet breken
+                uit[sleutel] = {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
+        uit["fietsladers_op_overschot"] = self.last_fiets_overschot
+        uit["negatieve_teruglevering"] = self.last_negatieve_teruglevering
+        return uit
 
     # --- prijsverwachting -------------------------------------------------
 
@@ -49874,16 +49935,48 @@ class EnergyManagementSystemCoordinator:
         return laag.samenvatting() if laag is not None else {"status": "start nog"}
 
     def get_verwarmingsadvies(self) -> dict:
-        """Verwarmen met de airco of met de cv? (v5.14)"""
-        return slimme_bronnen.verwarmingsadvies(
-            self._lees_optionele_sensor(CONF_GAS_PRICE_SENSOR),
-            self.huidige_prijs_eur_per_kwh(),
-            self._get_live_outdoor_temp_c(dt_util.now()),
+        """Verwarmen met de airco of met de cv? (v5.14)
+
+        v5.121.0 (punt 1): met de overschotwaarde. Een kWh uit zonoverschot
+        met een volle accu kost de terugleverwaarde, niet de inkoopprijs. Onder
+        het salderen zijn die gelijk; vanaf 2027 rekent het advies (en dus de
+        airco-sturing) met de overschotwaarde. Tot dan staat de afweging in
+        `schaduw_2027`.
+        """
+        nu = dt_util.now()
+        gas = self._lees_optionele_sensor(CONF_GAS_PRICE_SENSOR)
+        buiten = self._get_live_outdoor_temp_c(nu)
+        cop = dict(
             cop_bij_7c=self.instelling(CONF_AIRCO_COP_BIJ_7C, None),
             cop_per_graad=self.instelling(
                 CONF_AIRCO_COP_PER_GRAAD, DEFAULT_AIRCO_COP_PER_GRAAD
             ),
         )
+        inkoop = self.huidige_prijs_eur_per_kwh()
+        try:
+            waarde = self.get_overschotwaarde(nu)
+        except Exception:  # noqa: BLE001 - het advies mag hier nooit op stuklopen
+            waarde = {}
+        stroom = inkoop
+        if waarde.get("sturend") and waarde.get("eur") is not None:
+            stroom = waarde["eur"]
+        uit = slimme_bronnen.verwarmingsadvies(gas, stroom, buiten, **cop)
+        if waarde.get("beschikbaar"):
+            r27 = waarde.get("schaduw_2027") or {}
+            schaduw = slimme_bronnen.verwarmingsadvies(gas, r27.get("eur"), buiten, **cop)
+            uit["overschotwaarde"] = {
+                "sturend": bool(waarde.get("sturend")),
+                "stroomprijs_eur": round(stroom, 5) if stroom is not None else None,
+                "bron": waarde.get("bron") if waarde.get("sturend") else "inkoop",
+            }
+            uit["schaduw_2027"] = {
+                "advies": schaduw.get("advies"),
+                "stroomprijs_eur": r27.get("eur"),
+                "bron": r27.get("bron"),
+                "airco_eur_per_kwh_warmte": schaduw.get("airco_eur_per_kwh_warmte"),
+                "anders_dan_nu": schaduw.get("advies") != uit.get("advies"),
+            }
+        return uit
 
     def get_pv_ensemble(self) -> dict:
         """Solcast naast een tweede zonvoorspelling (v5.14)."""
@@ -50822,6 +50915,420 @@ class EnergyManagementSystemCoordinator:
         return gelijk
 
 
+    # --- v5.121.0: overschotwaarde (punt 1), P1-doel (punt 3), negatieve teruglevering (punt 6) ---
+
+    def _kale_entries(self) -> list:
+        """De kale prijsreeks (het teruglevertarief na de saldering), ruw."""
+        feedin_key = self.instelling(CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE)
+        return self._get_forecast_entries(price_key_override=feedin_key)
+
+    def _kale_prijzen(self) -> list:
+        """De kale prijsreeks (zonder belasting), (start, eind, €/kWh)."""
+        try:
+            return [(a, b, p / PRICE_SCALE_FACTOR) for a, b, p in (self._kale_entries() or [])]
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            return []
+
+    @staticmethod
+    def _prijs_op(reeks: list, moment: datetime) -> float | None:
+        for a, b, p in reeks:
+            if a <= moment < b:
+                return p
+        return None
+
+    def _terugleverwaarde_2027(self, now: datetime, kale: list | None = None) -> float | None:
+        """Wat een teruggeleverde kWh vanaf 2027 oplevert: kaal + € 0,02 + 10 % bonus."""
+        from . import overschotwaarde as OW
+
+        kosten = float(self.instelling(CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH) or 0.0)
+        return OW.terugleverwaarde_2027(self._prijs_op(kale if kale is not None else self._kale_prijzen(), now),
+                                        kosten)
+
+    def _overschot_toestand(self) -> dict:
+        """Zon, huis en accu van dit moment voor de overschotwaarde."""
+        from . import overschotwaarde as OW
+
+        pv = self._lees_pv_vermogen_w()
+        huis = self._read_corrected_consumption_power()
+        accu = self._read_corrected_battery_power()
+        return {
+            "overschot_w": (pv - huis) if pv is not None and huis is not None else None,
+            "accu_vol": OW.is_vol(self.accustand_procent(), self._bovengrens_procent()),
+            "laadt_op_max": OW.laadt_op_max(
+                -accu if accu is not None else None,
+                abs(float(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0.0)),
+            ),
+        }
+
+    def get_overschotwaarde(self, now: datetime | None = None) -> dict:
+        """De marginale waarde van een extra kWh nu (v5.121.0, punt 1).
+
+        Onder het salderen is de terugleverwaarde de inkoopprijs plus premie:
+        de waarde verandert dan niets aan de keuzes en staat er alleen in de
+        schaduw (`schaduw_2027`). Vanaf 2027 stuurt hij de airco-afweging en
+        de fietsladers.
+        """
+        from . import overschotwaarde as OW
+
+        now = now or dt_util.now()
+        try:
+            salderen = self._is_salderen_active(now)
+            inkoop = self.huidige_prijs_eur_per_kwh(now)
+            entries = self._get_forecast_entries() or []
+            regime = self._get_feedin_value_per_kwh(entries, now) if entries else None
+            t27 = self._terugleverwaarde_2027(now)
+            toestand = self._overschot_toestand()
+        except Exception as fout:  # noqa: BLE001 - meten mag de sturing nooit raken
+            return {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
+        nu = OW.marginale_waarde(inkoop_eur=inkoop, teruglever_eur=regime, **toestand)
+        r27 = OW.marginale_waarde(inkoop_eur=inkoop, teruglever_eur=t27, **toestand)
+        ow = toestand["overschot_w"]
+        return {
+            "beschikbaar": inkoop is not None,
+            "regime": "salderen" if salderen else "2027",
+            "sturend": not salderen,
+            **nu,
+            "inkoop_eur": round(inkoop, 5) if inkoop is not None else None,
+            "terugleverwaarde_eur": round(regime, 5) if regime is not None else None,
+            "terugleverwaarde_2027_eur": round(t27, 5) if t27 is not None else None,
+            "overschot_w": round(ow, 0) if ow is not None else None,
+            "accu_vol": toestand["accu_vol"],
+            "laadt_op_max": toestand["laadt_op_max"],
+            "schaduw_2027": r27,
+        }
+
+    def _overschotwaarde_plan(self, now: datetime, regime_2027: bool) -> list[dict]:
+        """De marginale waarde per kwartier van het kwartierplan."""
+        from . import overschotwaarde as OW
+
+        plan = self.get_quarter_plan(now) or []
+        capaciteit = self._read_sensor_float(self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR))
+        beschikbaar = self.beschikbare_energie_kwh()
+        if not plan or capaciteit is None:
+            return []
+        bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
+        kale = self._kale_prijzen() if regime_2027 else []
+        kosten = float(self.instelling(CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH) or 0.0)
+        kwartieren = []
+        for r in plan:
+            moment = dt_util.parse_datetime(r.get("start") or "")
+            prijs = (r.get("prijs_ct") or 0.0) / 100
+            if regime_2027:
+                teruglever = OW.terugleverwaarde_2027(self._prijs_op(kale, moment) if moment else None, kosten)
+            else:
+                teruglever = prijs + FEEDIN_PREMIUM_EUR_PER_KWH
+            kwartieren.append({"start": r.get("start"), "zon_kwh": r.get("zon_kwh"),
+                               "verbruik_kwh": r.get("verbruik_kwh"), "soc_kwh": r.get("soc_kwh"),
+                               "inkoop_eur": prijs, "teruglever_eur": teruglever})
+        laad = abs(float(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0.0)) / 4000
+        return OW.per_kwartier(kwartieren, start_kwh=min(beschikbaar or 0.0, bruikbaar),
+                               bruikbaar_kwh=bruikbaar, laad_kwh_max=laad)
+
+    def get_witgoedadvies(self, now: datetime | None = None) -> dict:
+        """Wanneer witgoed (2 uur) het goedkoopst draait, met de overschotwaarde
+        (v5.121.0, punt 1). Alleen advies: het EMS zet geen witgoed aan."""
+        from . import overschotwaarde as OW
+
+        now = now or dt_util.now()
+        sleutel = f"{now:%Y-%m-%d %H}:{now.minute // 15}"
+        bewaard = getattr(self, "_witgoed_cache", None)
+        if bewaard and bewaard[0] == sleutel:
+            return bewaard[1]
+        try:
+            salderen = self._is_salderen_active(now)
+            nu_plan = self._overschotwaarde_plan(now, regime_2027=not salderen)
+            plan27 = nu_plan if not salderen else self._overschotwaarde_plan(now, regime_2027=True)
+        except Exception as fout:  # noqa: BLE001
+            uit = {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
+            self._witgoed_cache = (sleutel, uit)
+            return uit
+        horizon = now + timedelta(hours=WITGOED_HORIZON_UUR)
+
+        def _binnen(reeks):
+            return [w for w in reeks if (m := dt_util.parse_datetime(w.get("start") or "")) and m < horizon]
+
+        n = WITGOED_KWARTIEREN
+        beste = OW.beste_venster(_binnen(nu_plan), n)
+        beste27 = OW.beste_venster(_binnen(plan27), n)
+        meteen = OW.beste_venster(_binnen(nu_plan)[:n], n)
+        uit = {
+            "beschikbaar": beste is not None,
+            "regime": "salderen" if salderen else "2027",
+            "duur_uur": n / 4,
+            "beste_start": beste["start"] if beste else None,
+            "beste_start_tekst": tijd_met_dag(dt_util.parse_datetime(beste["start"]), now) if beste and beste.get("start") else None,
+            "gemiddeld_ct": round(beste["gemiddeld_eur"] * 100, 1) if beste else None,
+            "nu_starten_ct": round(meteen["gemiddeld_eur"] * 100, 1) if meteen else None,
+            "uit_overschot_kwartieren": beste["uit_overschot_kwartieren"] if beste else 0,
+            "schaduw_2027": {
+                "beste_start": beste27["start"] if beste27 else None,
+                "beste_start_tekst": tijd_met_dag(dt_util.parse_datetime(beste27["start"]), now) if beste27 and beste27.get("start") else None,
+                "gemiddeld_ct": round(beste27["gemiddeld_eur"] * 100, 1) if beste27 else None,
+                "uit_overschot_kwartieren": beste27["uit_overschot_kwartieren"] if beste27 else 0,
+            },
+            "toelichting": (
+                "Het goedkoopste blok van twee uur in de komende 24 uur, met per kwartier de waarde "
+                "van een extra kWh: uit zonoverschot met een volle (of op max ladende) accu de "
+                "terugleverwaarde, anders de inkoopprijs. Onder het salderen zijn die gelijk; vanaf "
+                "2027 is overschot veel goedkoper. Alleen advies."
+            ),
+        }
+        self._witgoed_cache = (sleutel, uit)
+        return uit
+
+    _fiets_overschot_tot: datetime | None = None
+    last_fiets_overschot: dict | None = None
+
+    def _fietsladers_op_overschot(self, now: datetime) -> bool:
+        """Mogen de fietsladers op zonoverschot laden? (v5.121.0, punt 1)
+
+        Sturend alleen in het regime van 2027 (dan is overschot kaal + premie
+        + bonus waard, veel minder dan de inkoop in het goedkope blok). Tot
+        dan alleen vastgelegd in `last_fiets_overschot`. Eenmaal begonnen
+        houdt het venster FIETS_OVERSCHOT_HOUD_MINUTEN aan, zodat een wolk de
+        laders niet aan en uit laat klapperen.
+        """
+        w = self.get_overschotwaarde(now)
+        geschikt = (
+            bool(w.get("beschikbaar"))
+            and w.get("schaduw_2027", {}).get("bron") == "teruglevering"
+            and (w.get("overschot_w") or 0.0) >= FIETS_OVERSCHOT_MIN_W
+        )
+        sturend = bool(w.get("sturend"))
+        if sturend and w.get("bron") == "teruglevering" and (w.get("overschot_w") or 0.0) >= FIETS_OVERSCHOT_MIN_W:
+            self._fiets_overschot_tot = now + timedelta(minutes=FIETS_OVERSCHOT_HOUD_MINUTEN)
+        aan = sturend and self._fiets_overschot_tot is not None and now < self._fiets_overschot_tot
+        self.last_fiets_overschot = {
+            "moment": now.isoformat(),
+            "zou_laden_in_2027": geschikt,
+            "sturend": sturend,
+            "laadt_op_overschot": aan,
+            "overschot_w": w.get("overschot_w"),
+            "waarde_2027_ct": (round(w["schaduw_2027"]["eur"] * 100, 1)
+                               if (w.get("schaduw_2027") or {}).get("eur") is not None else None),
+        }
+        return aan
+
+    # --- punt 3: P1-doel 2027 ---------------------------------------------
+
+    #: Kenmerk op de staat van de eigen regelsensor, zodat het EMS ziet dat de
+    #: Zendure hem volgt.
+    P1_REGELDOEL_KENMERK = "ems_p1_regeldoel"
+    _p1_verschil_monsters: list | None = None
+
+    def p1_regeldoel(self, regel_w: float | None, echt_w: float | None, now: datetime | None = None) -> dict:
+        """De waarde voor de sensor "P1 regeldoel" (v5.121.0, punt 3).
+
+        Tot en met 2026 precies de regelsensor (het template "P1 + verschuiving"):
+        wie de Zendure op deze sensor zet, merkt nu niets. Vanaf 1-1-2027 haalt
+        hij de vaste verschuiving van het template eraf (de mediaan van
+        regel - echt, zodat een Quooker-filter in het template blijft werken)
+        en mikt op `P1_DOEL_2027_W` op de echte meter. Het template hoeft niet
+        te veranderen.
+        """
+        from .regime2027 import P1_DOEL_2027_W
+
+        now = now or dt_util.now()
+        if regel_w is not None and echt_w is not None:
+            monsters = list(self._p1_verschil_monsters or [])
+            monsters.append(regel_w - echt_w)
+            self._p1_verschil_monsters = monsters[-P1_VERSCHIL_MONSTERS:]
+        monsters = self._p1_verschil_monsters or []
+        verschuiving = statistics.median(monsters) if monsters else 0.0
+        salderen = self._is_salderen_active(now)
+        if regel_w is None:
+            waarde = None
+        elif salderen:
+            waarde = regel_w
+        else:
+            waarde = regel_w - verschuiving - P1_DOEL_2027_W
+        return {
+            "waarde_w": round(waarde, 1) if waarde is not None else None,
+            "modus": "spiegel van de regelsensor (salderen)" if salderen else f"2027: doel {P1_DOEL_2027_W:.0f} W op de meter",
+            "template_verschuiving_w": round(verschuiving, 1),
+            "doel_w": -round(verschuiving, 1) if salderen else P1_DOEL_2027_W,
+            "monsters": len(monsters),
+        }
+
+    def _zendure_p1meter(self) -> str | None:
+        """De P1-sensor waarop zendure_ha regelt (uit zijn opties)."""
+        try:
+            for entry in self.hass.config_entries.async_entries("zendure_ha"):
+                meter = (entry.options or {}).get("p1meter") or (entry.data or {}).get("p1meter")
+                if meter:
+                    return meter
+        except Exception:  # noqa: BLE001
+            return None
+        return None
+
+    def get_p1_doel(self) -> dict:
+        """Het P1-doel en wat de extra teruglevering in 2027 kost (punt 3)."""
+        meter = self._zendure_p1meter()
+        staat = self.hass.states.get(meter) if meter and self.hass else None
+        volgt = bool(staat is not None and (staat.attributes or {}).get(self.P1_REGELDOEL_KENMERK))
+        rep = (self.get_repetitie_2027().get("samenvatting") or {})
+        return {
+            "verschuiving_w": round(self.regelverschuiving_kw() * 1000),
+            "zendure_regelt_op": meter,
+            "zendure_volgt_ems_regeldoel": volgt,
+            "kosten_2027_eur_per_dag": rep.get("p1_doel_kosten_2027_eur_per_dag"),
+            "kosten_2027_eur_per_jaar": rep.get("p1_doel_kosten_2027_eur_per_jaar"),
+            "toelichting": (
+                "Vanaf 1-1-2027 mikt de sensor 'P1 regeldoel' op 0 W op de echte meter; tot dan "
+                "is hij gelijk aan de regelsensor. Het werkt pas als zendure_ha op die sensor regelt "
+                "(eenmalig de P1-sensor in de Zendure-integratie omzetten); het template blijft."
+                if not volgt else
+                "De Zendure regelt op de sensor 'P1 regeldoel': vanaf 1-1-2027 vanzelf 0 W op de meter."
+            ),
+        }
+
+    def _fiets_overschot_veilig(self, now: datetime) -> bool:
+        if not self.config.get(CONF_FIETSLADERS_SWITCH):
+            return False
+        try:
+            return self._fietsladers_op_overschot(now)
+        except Exception:  # noqa: BLE001 - bij twijfel alleen het goedkope blok
+            _LOGGER.debug("Fietsladers op overschot niet bepaald", exc_info=True)
+            return False
+
+    # --- punt 6: negatieve terugleverwaarde in 2027 -----------------------
+
+    def _uitstellen_met_ruimte(self, entries, now: datetime, cheap_block_start) -> bool:
+        """`_should_postpone_charging`, en in 2027 ook als de accu ruimte moet
+        houden voor de uren met een negatieve terugleverwaarde (punt 6)."""
+        uitstellen = self._should_postpone_charging(entries, now, cheap_block_start)
+        self._ruimte_houden_nu = self._ruimte_houden_sturend(now)
+        return uitstellen or self._ruimte_houden_nu
+
+    async def _async_na_negatieve_prijs(self, now: datetime) -> None:
+        """Na een negatieve all-in prijs de panelen terug, en dan de
+        negatieve terugleverwaarde (v5.121.0)."""
+        if self._is_negative_price_active:
+            self._is_negative_price_active = False
+            self._start_solar_ramp(100.0)
+        try:
+            await self._async_negatieve_teruglevering(now)
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Negatieve teruglevering mislukt", exc_info=True)
+
+    _teruglevering_begrensd: bool = False
+    last_negatieve_teruglevering: dict | None = None
+
+    def _negatief_invoer(self, now: datetime) -> dict:
+        """De kwartieren voor de ruimtetoets, opgehaald BUITEN de draad van de
+        generale repetitie (het plan mag niet onder het regime van 2027 in de
+        cache komen).
+
+        Zolang salderen geldt, alleen het plan dat deze ronde AL gebouwd is:
+        de schaduw mag niet bepalen wanneer in de ronde het plan ontstaat.
+        """
+        if self._is_salderen_active(now):
+            plan = self._kwartierplan_uit_cache(now)
+        else:
+            plan = self.get_quarter_plan(now) or []
+        kale = self._kale_prijzen()
+        capaciteit = self._read_sensor_float(self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR))
+        bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100 if capaciteit else None
+        kwartieren = []
+        for r in plan:
+            moment = dt_util.parse_datetime(r.get("start") or "")
+            if moment is None:
+                continue
+            kwartieren.append({
+                "start": moment,
+                "overschot_kwh": max(0.0, (r.get("zon_kwh") or 0.0) - (r.get("verbruik_kwh") or 0.0)),
+                "inkoop_eur": (r.get("prijs_ct") or 0.0) / 100,
+                "teruglever_2027_eur": self._terugleverwaarde_2027(moment, kale),
+            })
+        return {
+            "kwartieren": kwartieren,
+            "bruikbaar_kwh": bruikbaar,
+            "beschikbaar_kwh": self.beschikbare_energie_kwh(),
+            "laad_kwh": abs(float(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0.0)) / 4000,
+            "teruglever_nu": self._terugleverwaarde_2027(now, kale),
+            "inkoop_nu": self.huidige_prijs_eur_per_kwh(now),
+            "overschot_w": self._overschot_toestand().get("overschot_w"),
+        }
+
+    def _kwartierplan_uit_cache(self, now: datetime) -> list:
+        """Het kwartierplan van deze ronde als het al gebouwd is, anders leeg."""
+        bewaard = getattr(self, "_kwartierplan_cache", None)
+        ronde = getattr(self, "_forecast_cache_ronde", None)
+        sleutel = (ronde, now.replace(minute=now.minute // 15 * 15, second=0, microsecond=0))
+        if ronde is not None and bewaard is not None and bewaard[0] == sleutel:
+            return bewaard[1] or []
+        return []
+
+    def _negatieve_teruglevering_besluit(self, now: datetime, invoer: dict | None = None) -> dict:
+        """Begrenzen en ruimte houden voor de uren met een negatieve
+        terugleverwaarde (v5.121.0, punt 6). Zuiver het besluit; sturen doet
+        `_async_negatieve_teruglevering`, en alleen in 2027."""
+        from . import overschotwaarde as OW
+
+        invoer = invoer if invoer is not None else self._negatief_invoer(now)
+        t = invoer.get("teruglever_nu")
+        inkoop = invoer.get("inkoop_nu")
+        begrenzen = t is not None and t < 0 and inkoop is not None and inkoop >= 0
+        ruimte = OW.ruimte_voor_negatief(
+            [k for k in invoer.get("kwartieren") or [] if k["start"] >= now - timedelta(minutes=15)],
+            now=now, bruikbaar_kwh=invoer.get("bruikbaar_kwh"), beschikbaar_kwh=invoer.get("beschikbaar_kwh"),
+            laad_kwh=invoer.get("laad_kwh") or 0.0, teruglever_nu=t, overschot_w=invoer.get("overschot_w"),
+        )
+        return {"begrenzen": begrenzen, **ruimte, "terugleverwaarde_2027_eur": round(t, 5) if t is not None else None}
+
+    def _ruimte_houden_sturend(self, now: datetime) -> bool:
+        """In 2027: de zon nu niet opslaan, zodat de accu de uren met een
+        negatieve terugleverwaarde kan opvangen (punt 6)."""
+        if self._is_salderen_active(now):
+            return False
+        try:
+            return bool(self._negatieve_teruglevering_besluit(now).get("ruimte_houden"))
+        except Exception:  # noqa: BLE001 - bij twijfel het bestaande gedrag
+            _LOGGER.debug("Ruimtetoets negatieve teruglevering mislukt", exc_info=True)
+            return False
+
+    async def _async_negatieve_teruglevering(self, now: datetime) -> None:
+        """Teruglevering naar ~0 bij een negatieve terugleverwaarde (punt 6).
+
+        Tot en met 2026 alleen de schaduw in `last_negatieve_teruglevering`.
+        Vanaf 2027: de omvormergrens zo regelen dat de P1-meter rond nul staat
+        (de accu vangt eerst op in zijn slimme stand), in plaats van de
+        panelen op 0 %. Een negatieve ALL-IN prijs blijft de bestaande tak
+        (`_is_negatieve_prijs`): die gaat voor.
+        """
+        try:
+            besluit = self._negatieve_teruglevering_besluit(now)
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Negatieve teruglevering niet bepaald", exc_info=True)
+            return
+        sturend = not self._is_salderen_active(now)
+        besluit.update(moment=now.isoformat(), sturend=sturend)
+        self.last_negatieve_teruglevering = besluit
+        entity = self.config.get(CONF_SOLAR_POWER_LIMIT_ENTITY)
+        if not sturend or not entity or self.learning_only or self._is_negative_price_active:
+            return
+        if not besluit.get("begrenzen"):
+            if self._teruglevering_begrensd:
+                self._teruglevering_begrensd = False
+                self._start_solar_ramp(100.0)
+            return
+        taak = getattr(self, "_solar_ramp_task", None)
+        if taak is not None and not taak.done():
+            return
+        from . import overschotwaarde as OW
+
+        doel = OW.grens_voor_nul_teruglevering(
+            huidig_procent=self._read_sensor_float(entity),
+            pv_w=self._lees_pv_vermogen_w(),
+            net_w=self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR)),
+        )
+        besluit["grens_procent"] = doel
+        if doel is None:
+            return
+        self._teruglevering_begrensd = True
+        self._start_solar_ramp(doel)
+
+
 # --- v5.100: rekenwerk voor de executor (geen toegang tot de coordinator) ---
 
 def _reken_zelfanalyse(invoer: dict, keuzeoordeel, regime2027) -> tuple[dict, dict]:
@@ -50855,13 +51362,16 @@ def _reken_zelfanalyse(invoer: dict, keuzeoordeel, regime2027) -> tuple[dict, di
         regime2027.Kwartier(huis_kwh=k["huis_kwh"], pv_kwh=k["pv_kwh"], import_eur=k["prijs_eur"],
                             export_eur=k.get("r27_export"), accu_kwh=k["accu_kwh"],
                             opvangen=k.get("r27_opvangen"), verkoop=k.get("r27_verkoop"),
-                            dekt=str(k.get("stand") or "") in ("smart", "smart_discharging"))
+                            dekt=str(k.get("stand") or "") in ("smart", "smart_discharging"),
+                            begrens=k.get("r27_begrens"), ruimte=k.get("r27_ruimte"),
+                            regelt=bool(k.get("regelt")))
         for k in kw
     ]
     repetitie = regime2027.repetitie(
         r27, begin_kwh=invoer["begin_kwh"], eind_kwh=invoer["eind_kwh"],
         capaciteit_kwh=invoer["capaciteit_kwh"], laad_kw=invoer["laad_kw"], ontlaad_kw=invoer["ontlaad_kw"],
         rendement=invoer["rendement"], slijtage_eur_per_kwh=invoer["slijtage"],
+        verschuiving_kw=invoer.get("verschuiving_kw") or 0.0,
     )
     repetitie["datum"] = datum
     return oordeel, repetitie

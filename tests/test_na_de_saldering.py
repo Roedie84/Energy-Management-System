@@ -40,7 +40,8 @@ def test_de_terugleverwaarde_na_de_saldering(make_coordinator, hass):
     waarde = c._get_feedin_value_per_kwh([], NA)
 
     assert waarde is not None
-    assert round(waarde, 4) == round(0.08 + FEEDIN_PREMIUM_EUR_PER_KWH - (
+    assert round(waarde, 4) == round(0.08 + FEEDIN_PREMIUM_EUR_PER_KWH + 0.10 * 0.08 - (  # v5.121.0: + zonnebonus
+
         float(c.instelling("feedin_cost_eur_per_kwh", 0.0) or 0.0)
     ), 4)
 

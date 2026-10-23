@@ -49,11 +49,23 @@ class Kwartier:
     opvangen: bool | None = None   # r27_opvangen
     verkoop: bool | None = None    # r27_verkoop
     dekt: bool = False             # de stand dekte het huis (smart/smart_discharging)
+    begrens: bool | None = None    # r27_begrens: teruglevering naar ~0 (v5.121.0)
+    ruimte: bool | None = None     # r27_ruimte: zon niet opslaan, ruimte voor straks (v5.121.0)
+    regelt: bool = False           # de Zendure regelde op de P1-meter (v5.121.0)
 
 
 def _netkosten(net_kwh: float, k: Kwartier) -> float:
     """Inkoop tegen de volle prijs, teruglevering tegen het kale tarief."""
     return net_kwh * k.import_eur if net_kwh >= 0 else net_kwh * k.export_eur
+
+
+def _begrensd(net_kwh: float, k: Kwartier) -> float:
+    """v5.121.0: met de terugleverbegrenzing van 2027 (punt 6) gaat er bij
+    een negatieve terugleverwaarde niets het net op - de panelen worden tot
+    het huis plus de accu teruggeregeld."""
+    if net_kwh < 0 and k.begrens and k.export_eur is not None and k.export_eur < 0:
+        return 0.0
+    return net_kwh
 
 
 def zonder_accu(kwartieren: list[Kwartier]) -> float:
@@ -100,12 +112,12 @@ def regels_2027(kwartieren: list[Kwartier], *, begin_kwh: float, capaciteit_kwh:
         if k.accu_kwh < 0:   # het EMS laadde: uit zon en/of net
             uit_zon = min(overschot, -k.accu_kwh)
             uit_net = -k.accu_kwh - uit_zon
-            laden = uit_zon + uit_net
-            if k.opvangen:
+            laden = uit_net if k.ruimte else uit_zon + uit_net
+            if k.opvangen and not k.ruimte:
                 laden = max(laden, overschot)
             laden = min(laden, laad_max, (capaciteit_kwh - e) / eta)
             accu = -max(0.0, laden)
-        elif overschot > 0 and k.opvangen:
+        elif overschot > 0 and k.opvangen and not k.ruimte:
             accu = -min(overschot, laad_max, (capaciteit_kwh - e) / eta)
         elif k.accu_kwh > 0 or (k.dekt and tekort > 0):
             # een dekkende stand dekt het huis zolang er energie is - ook met
@@ -118,7 +130,7 @@ def regels_2027(kwartieren: list[Kwartier], *, begin_kwh: float, capaciteit_kwh:
         if abs(accu - k.accu_kwh) > 0.01:
             verschil_kwartieren += 1
         e = e - accu / eta if accu > 0 else e - accu * eta
-        kosten += _netkosten(k.huis_kwh - k.pv_kwh - accu, k) + max(0.0, accu) * slijtage
+        kosten += _netkosten(_begrensd(k.huis_kwh - k.pv_kwh - accu, k), k) + max(0.0, accu) * slijtage
     return {
         "kosten_eur": kosten - _restwaarde(e, kwartieren, eta),
         "eind_kwh": e,
@@ -154,7 +166,10 @@ def best_mogelijk(kwartieren: list[Kwartier], *, begin_kwh: float, capaciteit_kw
                     extra = (-d * stap_kwh) * slijtage
                 else:
                     accu = extra = 0.0
-                w = _netkosten(k.huis_kwh - k.pv_kwh - accu, k) + extra + v[s2]
+                net = k.huis_kwh - k.pv_kwh - accu
+                if net < 0 and k.export_eur < 0:
+                    net = 0.0   # v5.121.0: teruglevering kan altijd worden begrensd
+                w = _netkosten(net, k) + extra + v[s2]
                 if w < beste:
                     beste = w
             nieuw.append(beste)
@@ -163,7 +178,8 @@ def best_mogelijk(kwartieren: list[Kwartier], *, begin_kwh: float, capaciteit_kw
 
 
 def repetitie(kwartieren: list[Kwartier], *, begin_kwh: float, eind_kwh: float, capaciteit_kwh: float,
-              laad_kw: float, ontlaad_kw: float, rendement: float, slijtage_eur_per_kwh: float = 0.0) -> dict:
+              laad_kw: float, ontlaad_kw: float, rendement: float, slijtage_eur_per_kwh: float = 0.0,
+              verschuiving_kw: float = 0.0) -> dict:
     """De dag onder het tarief van 2027, vier keer doorgerekend."""
     met_export = [k.export_eur for k in kwartieren if k.export_eur is not None]
     if len(met_export) < 80 or len(met_export) < len(kwartieren) - 16:
@@ -210,8 +226,58 @@ def repetitie(kwartieren: list[Kwartier], *, begin_kwh: float, eind_kwh: float, 
         "uit_accu_teruggeleverd_kwh": round(teruggeleverd_uit_accu, 2),
         "gemiddelde_export_ct": round(sum(k.export_eur for k in bruikbaar) / len(bruikbaar) * 100, 1),
         "gemiddelde_import_ct": round(sum(k.import_eur for k in bruikbaar) / len(bruikbaar) * 100, 1),
+        # v5.121.0: negatieve teruglevering (punt 6) en het P1-doel (punt 3), in de schaduw
+        "begrenzen_kwartieren": sum(1 for k in bruikbaar if k.begrens),
+        "ruimte_kwartieren": sum(1 for k in bruikbaar if k.ruimte),
+        "p1_doel": p1_doel_kosten(bruikbaar, verschuiving_kw, rendement),
     }
     return uit
+
+
+#: v5.121.0: het P1-doel vanaf 1-1-2027 (W op de echte meter, 0 = nul op de meter).
+P1_DOEL_2027_W = 0.0
+
+
+def p1_doel_kosten(kwartieren: list[Kwartier], verschuiving_kw: float, rendement: float) -> dict:
+    """Wat de structurele extra teruglevering op de P1-meter kost (v5.121.0, punt 3).
+
+    De Zendure regelt op een template "P1 + verschuiving" en houdt die op nul;
+    de echte meter staat dan op -verschuiving. In elk kwartier waarin hij
+    regelt, gaat er `verschuiving x 0,25 h` extra het net op die anders in de
+    accu was gebleven (of er niet uit was gekomen). Die kWh had later inkoop
+    vermeden: de gemiddelde inkoopprijs van de dag x het ontlaadrendement.
+
+    Onder het salderen levert die kWh de inkoopprijs plus premie op - dus
+    vrijwel niets kwijt. Vanaf 2027 alleen kaal + premie + bonus. Het verschil
+    per dag, en x 365 per jaar.
+    """
+    bruikbaar = [k for k in kwartieren if k.import_eur is not None]
+    if not bruikbaar or verschuiving_kw <= 0:
+        return {"te_becijferen": bool(bruikbaar), "verschuiving_w": round(max(0.0, verschuiving_kw) * 1000),
+                "kosten_2027_eur_per_dag": 0.0, "kosten_2026_eur_per_dag": 0.0, "regelkwartieren": 0}
+    eta = max(0.0, min(1.0, rendement)) ** 0.5
+    gem = sum(k.import_eur for k in bruikbaar) / len(bruikbaar)
+    vasthouden = gem * eta
+    kwh = verschuiving_kw * 0.25
+    k27 = k26 = 0.0
+    regel = 0
+    for k in bruikbaar:
+        if not k.regelt:
+            continue
+        regel += 1
+        export27 = k.export_eur if k.export_eur is not None else 0.0
+        k27 += kwh * (vasthouden - export27)
+        k26 += kwh * (vasthouden - k.import_eur)   # salderen: de kWh brengt de inkoopprijs op
+    return {
+        "te_becijferen": True,
+        "verschuiving_w": round(verschuiving_kw * 1000),
+        "regelkwartieren": regel,
+        "extra_teruglevering_kwh": round(kwh * regel, 3),
+        "kosten_2027_eur_per_dag": round(k27, 3),
+        "kosten_2026_eur_per_dag": round(k26, 3),
+        "kosten_2027_eur_per_jaar": round(k27 * 365, 2),
+        "doel_2027_w": P1_DOEL_2027_W,
+    }
 
 
 def samenvatting(dagen: list[dict], laatste: int = 30) -> dict:
@@ -219,6 +285,7 @@ def samenvatting(dagen: list[dict], laatste: int = 30) -> dict:
     goed = [d for d in dagen if d.get("te_becijferen")][-laatste:]
     if not goed:
         return {"dagen": 0, "oordeel": "nog geen dag doorgerekend"}
+    p1 = [d["p1_doel"] for d in goed if isinstance(d.get("p1_doel"), dict) and d["p1_doel"].get("te_becijferen")]
 
     def som(veld):
         waarden = [d.get(veld) for d in goed if d.get(veld) is not None]
@@ -245,6 +312,13 @@ def samenvatting(dagen: list[dict], laatste: int = 30) -> dict:
         "per_dag_2027_eur": round(opbrengst / len(goed), 2) if opbrengst is not None else None,
         "slechtste_dagen": [{"datum": d.get("datum"), "laten_liggen_eur": d["regels_laten_liggen_eur"]} for d in slechtste],
         "oordeel": oordeel,
+        # v5.121.0 (punt 3): wat de extra teruglevering op de P1-meter in 2027 kost
+        "p1_doel_kosten_2027_eur_per_dag": (round(sum(p["kosten_2027_eur_per_dag"] for p in p1) / len(p1), 3)
+                                            if p1 else None),
+        "p1_doel_kosten_2027_eur_per_jaar": (round(sum(p["kosten_2027_eur_per_dag"] for p in p1) / len(p1) * 365, 2)
+                                             if p1 else None),
+        "begrenzen_kwartieren": sum(d.get("begrenzen_kwartieren") or 0 for d in goed),
+        "ruimte_kwartieren": sum(d.get("ruimte_kwartieren") or 0 for d in goed),
     }
 
 

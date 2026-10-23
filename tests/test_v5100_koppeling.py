@@ -31,7 +31,9 @@ def test_r27_velden_vragen_de_regels_in_het_regime_van_2027(make_coordinator, ha
     c._get_feedin_value_per_kwh = lambda entries, now: 0.0712345
     uit = c._r27_velden(NU)
     assert gezien == [False]
-    assert uit == {"r27_opvangen": True, "r27_verkoop": False, "r27_export": 0.07123}
+    # v5.121.0: plus de schaduw van punt 6 (begrenzen, ruimte houden)
+    assert {k: uit[k] for k in ("r27_opvangen", "r27_verkoop", "r27_export")} == {
+        "r27_opvangen": True, "r27_verkoop": False, "r27_export": 0.07123}
     assert c._regime_2027_draad is None and c._is_salderen_active(NU) is True
 
 

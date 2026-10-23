@@ -7566,3 +7566,18 @@ PRIJSBRON_MELDEN_MINUTEN = 30
 PRIJSBRON_STORINGEN_BEWAARD = 20
 # v5.116.0: korter weg (de prijssensor na een herstart) telt niet als storing.
 PRIJSBRON_STORING_MIN_MINUTEN = 5
+
+
+# --- v5.121.0: overschotwaarde (punt 1) -----------------------------------
+#: Het witgoedadvies zoekt een blok van zoveel kwartieren (2 uur) ...
+WITGOED_KWARTIEREN = 8
+#: ... binnen zoveel uur vooruit.
+WITGOED_HORIZON_UUR = 24
+#: Fietsladers op zonoverschot (alleen in 2027): minstens zoveel overschot.
+FIETS_OVERSCHOT_MIN_W = 150.0
+#: Eenmaal begonnen, houdt het overschotvenster zoveel minuten aan.
+FIETS_OVERSCHOT_HOUD_MINUTEN = 20
+
+# --- v5.121.0: P1-doel 2027 (punt 3) -----------------------------------------
+#: Zoveel meldingen van (regel - echt) voor de mediaan van de templateverschuiving.
+P1_VERSCHIL_MONSTERS = 300

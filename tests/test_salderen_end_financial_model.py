@@ -1,3 +1,4 @@
+import pytest
 """Saldering-bewuste financiële waardering (v0.63.117).
 
 Gevraagd: "Als de accu terug levert aan mijn woning bespaart dit
@@ -41,6 +42,8 @@ NA_SALDEREN = datetime(2027, 3, 5, 12, 0, tzinfo=TZ)
 # €0,30/kWh inkoop (incl. belasting), €0,08/kWh kale marktprijs.
 INKOOP_EUR = 0.30
 MARKT_EUR = 0.08
+# v5.121.0: vanaf 2027 betaalt Zonneplan ook 10 % zonnebonus over de kale prijs
+ZONNEBONUS_EUR = 0.10 * MARKT_EUR
 
 
 def _entries(moment, prijs_eur):
@@ -121,7 +124,7 @@ def test_feedin_value_drops_to_market_rate_after_salderen(make_coordinator, hass
     waarde = coordinator._get_feedin_value_per_kwh(
         _entries(NA_SALDEREN, INKOOP_EUR), NA_SALDEREN
     )
-    assert waarde == MARKT_EUR + FEEDIN_PREMIUM_EUR_PER_KWH
+    assert waarde == pytest.approx(MARKT_EUR + FEEDIN_PREMIUM_EUR_PER_KWH + ZONNEBONUS_EUR)
 
 
 def test_feedin_costs_are_subtracted_after_salderen(make_coordinator, hass):
@@ -134,7 +137,7 @@ def test_feedin_costs_are_subtracted_after_salderen(make_coordinator, hass):
     waarde = coordinator._get_feedin_value_per_kwh(
         _entries(NA_SALDEREN, INKOOP_EUR), NA_SALDEREN
     )
-    assert abs(waarde - (MARKT_EUR + FEEDIN_PREMIUM_EUR_PER_KWH - 0.05)) < 1e-9
+    assert abs(waarde - (MARKT_EUR + FEEDIN_PREMIUM_EUR_PER_KWH + ZONNEBONUS_EUR - 0.05)) < 1e-9
 
 
 def test_feedin_value_may_go_negative(make_coordinator, hass):
@@ -242,7 +245,7 @@ def test_pv_charged_energy_is_much_cheaper_after_salderen(make_coordinator, hass
 
     _charge_once(coordinator, hass, NA_SALDEREN, 1.0, 2.0)
 
-    verwacht = MARKT_EUR + FEEDIN_PREMIUM_EUR_PER_KWH
+    verwacht = MARKT_EUR + FEEDIN_PREMIUM_EUR_PER_KWH + ZONNEBONUS_EUR
     assert abs(coordinator.battery_cost_basis_eur_per_kwh - verwacht) < 1e-6
     assert coordinator.battery_cost_basis_eur_per_kwh < INKOOP_EUR
 
@@ -297,7 +300,7 @@ def test_exporting_earns_far_less_after_salderen(make_coordinator, hass):
 
     _discharge_once(coordinator, hass, NA_SALDEREN, 2.0, 1.0)
 
-    verwacht = MARKT_EUR + FEEDIN_PREMIUM_EUR_PER_KWH
+    verwacht = MARKT_EUR + FEEDIN_PREMIUM_EUR_PER_KWH + ZONNEBONUS_EUR
     assert abs(coordinator.total_battery_savings_eur - verwacht) < 1e-6
     assert coordinator.total_battery_savings_eur < INKOOP_EUR
 
