@@ -93,3 +93,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 13:51 | gold scalper xauusd oordeel failed bij te weinig clusters i.p.v. insufficient_data
 23-10 16:51 | luchtreiniger binnen 15 min na herstart stand laten (controle niet naar mid)
 23-10 17:51 | gold scalper noodstop per markt i.p.v. per hele mand
+23-10 19:51 | L-SC-018 stormchase radar-vooruitblik referentietijd van getoond beeld
+23-10 19:51 | L-GS-023 gold scalper geen "HA sluit af" bij mandwissel
