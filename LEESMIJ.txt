@@ -1,3 +1,15 @@
+EMS v5.124.0 - verkopen en reserve: getallen ook bij een vroege rem
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+Alleen weergave; de sturing verandert niet.
+
+- In de cockpit (Verkopen en reserve) stonden bij een zonarme dag of een
+  voorzien tekort streepjes bij Tot het blok, Na het blok en Vrij te
+  verkopen. De verkooptoets gaf dan alleen 'niet verkopen' en een reden.
+  Nu worden de beschikbare kWh, wat nodig is tot en na het blok en 0 kWh
+  vrij te verkopen ook in die gevallen ingevuld.
+
 EMS v5.123.0 - echte dagen opnieuw afspelen (regressietest in euro's)
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

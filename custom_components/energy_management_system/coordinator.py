@@ -33481,6 +33481,29 @@ class EnergyManagementSystemCoordinator:
             "nodig_na_blok_kwh": round(na, 2),
         }
 
+    def _verkooptoets_weergave(self, toets: dict, beschikbaar) -> dict:
+        """De verkooptoets voor de cockpit, met de getallen ingevuld (v5.124.0).
+
+        Gemeld 23-10: "Waar -- in plaats van waarden?". Bij een vroege
+        rem (zonarme dag, planning voorziet een tekort, ...) gaf de toets
+        alleen 'mag_verkopen' en een reden terug; de tegels Tot het blok,
+        Na het blok en de meter bleven leeg. Nu worden de ontbrekende
+        weergavevelden aangevuld. Alleen weergave: de beslissing en de
+        reden blijven precies zoals de toets ze gaf.
+        """
+        uit = dict(toets or {})
+        if uit.get("mag_verkopen") is not False:
+            return uit
+        if "beschikbaar_kwh" not in uit and beschikbaar is not None:
+            try:
+                uit["beschikbaar_kwh"] = round(float(beschikbaar), 2)
+            except (TypeError, ValueError):
+                pass
+        uit.setdefault("vrij_te_verkopen_kwh", 0.0)
+        if uit.get("nodig_tot_blok_kwh") is None and uit.get("nodig_na_blok_kwh") is None:
+            uit.update(self._tot_en_na_blok_velden())
+        return uit
+
     @staticmethod
     def _diepste_tekort_gesplitst(u: dict, diepste) -> dict:
         """Het diepste tekort van de uitlegtabel, rond het blok (v5.56)."""
@@ -46493,7 +46516,9 @@ class EnergyManagementSystemCoordinator:
         verkoopruimte = self._verkoopruimte_met_piek(
             now, entries, cheap_block_start, projection_available_kwh
         )
-        self.last_sell_check = verkoopruimte
+        self.last_sell_check = self._verkooptoets_weergave(
+            verkoopruimte, projection_available_kwh
+        )
         if is_expensive and not verkoopruimte.get("mag_verkopen"):
             _LOGGER.debug(
                 "Geen verkoop in dit dure kwartier: %s",

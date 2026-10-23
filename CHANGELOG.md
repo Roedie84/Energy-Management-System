@@ -33664,3 +33664,12 @@ Opdracht 23-10 "Wat verbetert toepassen". Alleen meten.
 
 Tests: `test_v5123_herspeel.py` (9), `test_v5121_overschot_p1_negatief.py` +1 (recursie).
 
+
+## v5.124.0 — verkooptoets: getallen ook bij een vroege rem
+
+Gemeld 23-10: "Waar -- in plaats van waarden?" (cockpit, Verkopen en reserve, zonarme dag).
+
+- `may_sell_now` stopt bij een vroege rem (zonarme dag, planning voorziet een tekort, ...) met alleen `mag_verkopen` en `reden`; de tegels Tot het blok / Na het blok en de meter bleven leeg. Nieuw `_verkooptoets_weergave`: vult voor `last_sell_check` (alleen weergave) `beschikbaar_kwh`, `vrij_te_verkopen_kwh` = 0 en `_tot_en_na_blok_velden()` aan als ze ontbreken. De beslissing gebruikt nog steeds de oorspronkelijke toets.
+
+Tests: `test_v5124_verkooptoets_weergave.py` (3).
+
