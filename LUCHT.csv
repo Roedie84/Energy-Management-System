@@ -679,3 +679,32 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-23 20:20,filtergebruik_pct,0,1,
 2026-10-23 20:20,automation_traces_fout,0,5,
 2026-10-23 20:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment
+2026-10-23 23:59,dag_pm25_gem,0.28,288,dag 23-10; schoonste dag sinds 11-10
+2026-10-23 23:59,dag_pm25_mediaan,0.24,288,
+2026-10-23 23:59,dag_pm25_p95,0.57,288,
+2026-10-23 23:59,dag_pm25_max,0.86,288,blokmax 08:55
+2026-10-23 23:59,dag_pm25_uren_gt15,0.00,288,
+2026-10-23 23:59,dag_co2_gem,766,288,max 1424 om 00:00 (staart 22-10)
+2026-10-23 23:59,dag_co2_uren_gt1200,1.58,288,alleen 00:00-01:35
+2026-10-23 23:59,pm25_7d_gem,8.02,7,daggem 17-23/10; mediaan dag 1.31
+2026-10-24 00:20,pm25_gem,0.30,48,5-min statistiek 20:20-00:20
+2026-10-24 00:20,pm25_mediaan,0.26,48,
+2026-10-24 00:20,pm25_p95,0.51,48,
+2026-10-24 00:20,pm25_max,0.84,48,blokmax 22:25 (vertrek na tv)
+2026-10-24 00:20,pm25_uren_gt15,0.00,48,
+2026-10-24 00:20,pm25_uren_gt25,0.00,48,
+2026-10-24 00:20,stand_auto_min,125,1,20:39-22:44
+2026-10-24 00:20,stand_mid_min,115,1,
+2026-10-24 00:20,pm25_gem_auto,0.31,25,5-min blokken
+2026-10-24 00:20,pm25_gem_mid,0.29,23,5-min blokken
+2026-10-24 00:20,pm25_gem_aanwezig,0.28,22,20:39-22:30 (mmWave/tv)
+2026-10-24 00:20,pm25_gem_afwezig,0.31,26,
+2026-10-24 00:20,co2_gem,574,48,5-min; max 790 om 22:05; ramen dicht
+2026-10-24 00:20,co2_uren_gt1200,0.00,48,
+2026-10-24 00:20,schimmel_indicator,75,4,uurgem 75 -> 73 -> 75 -> 76; binnen 65 -> 58 -> 62% / 17.0 C; buiten 99% 10.4 C
+2026-10-24 00:20,ha_herstarts,0,1,uptime sinds 15:17
+2026-10-24 00:20,lokaal_mislukt,48,101073,uitval 0; 194 verbindingen; geen nieuwe fout
+2026-10-24 00:20,sturen_bevestigd,267,268,mediaan 0.14 s
+2026-10-24 00:20,filtergebruik_pct,0,1,
+2026-10-24 00:20,automation_traces_fout,0,5,
+2026-10-24 00:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment
