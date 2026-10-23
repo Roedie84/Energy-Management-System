@@ -64,6 +64,7 @@ from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bron
 from . import thuiskomst as thuiskomst_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .const import (
+    ACCU_MEETREEKS_DAGEN,
     P1_VERSCHIL_MONSTERS,
     WITGOED_HORIZON_UUR,
     WITGOED_KWARTIEREN,
@@ -11735,6 +11736,7 @@ class EnergyManagementSystemCoordinator:
             self._kandidaat_bijkopen,
             self._kandidaat_niet_ontladen_bij_lage_prijs,
             self._kandidaat_mpc,
+            self._kandidaat_scenarioplan,
         ):
             t0 = time.perf_counter()
             k = maak()
@@ -13346,7 +13348,101 @@ class EnergyManagementSystemCoordinator:
             if not uitkomst.get("beschikbaar"):
                 return
             meting[sleutel] = uitkomst
+        # v5.122.0 (punt 2): het plan gewogen over drie scenario's, alleen gemeten
+        try:
+            scenario = self._meet_scenarioplan(now)
+        except Exception as fout:  # noqa: BLE001 - meten mag de sturing nooit raken
+            scenario = {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
+        if scenario.get("beschikbaar"):
+            meting["scenario"] = scenario
         self.vooruitplan_history = (self.vooruitplan_history + [meting])[-PROEFSTAND_LEDGER_DAYS:]
+
+    def _zon_band_factoren(self) -> list:
+        """Per interval van de zonvoorspelling (start, eind, p10/mediaan, p90/mediaan)."""
+        band = self._pv_band_per_interval()
+        uit = []
+        for start, eind, kwh in self._get_pv_forecast_entries() or []:
+            if start in band and kwh > 0.01:
+                lo, hi = band[start]
+                uit.append((start, eind, max(0.0, lo / kwh), max(0.0, hi / kwh)))
+        return uit
+
+    def _meet_scenarioplan(self, now: datetime) -> dict:
+        """Het scenarioplan tegen de modi van het kwartierplan (v5.122.0).
+
+        Zelfde kwartieren, startstand, grenzen, nachtreserve en waardering als
+        `_vooruitplan_invoer` (huidige regels). Per kwartier de zon in p10,
+        mediaan en p90 uit de Solcast-band (naar rato van de mediaan van dat
+        interval), anders de terugvalfactoren. Stuurt niets.
+        """
+        invoer = self._vooruitplan_invoer(now, False)
+        plan = self.get_quarter_plan(now) or []
+        if not invoer or len(plan) != len(invoer["kwartieren"]):
+            return {"beschikbaar": False, "reden": "geen plan"}
+        factoren = self._zon_band_factoren()
+        kwartieren = []
+        for kw, r in zip(invoer["kwartieren"], plan):
+            moment = dt_util.parse_datetime(r.get("start") or "")
+            f = next((x for x in factoren if moment is not None and x[0] <= moment < x[1]), None)
+            extra = {"zon_p10_kwh": kw["zon_kwh"] * f[2], "zon_p90_kwh": kw["zon_kwh"] * f[3]} if f else {}
+            kwartieren.append({**kw, **extra})
+        uit = vooruitplan.vergelijk_scenarios(
+            kwartieren, invoer["start_kwh"], [r.get("modus") for r in plan], invoer["bruikbaar_kwh"],
+            laad_kwh=invoer["laad_kwh"], ontlaad_kwh=invoer["ontlaad_kwh"],
+            rendement=invoer["rendement"], slijtage_eur=invoer["slijtage_eur"],
+        )
+        uit["met_band_kwartieren"] = sum(1 for k in kwartieren if "zon_p10_kwh" in k)
+        return uit
+
+    def _kandidaat_scenarioplan(self) -> dict:
+        """15. Plan gewogen over drie scenario's (v5.122.0, punt 2).
+
+        Een dynamisch programma kiest per kwartier een van de eigen modi
+        (smart, sparen, uitstellen, laden, verkopen) met de laagste VERWACHTE
+        kosten over p10, mediaan en p90 van de zon (0,15/0,7/0,15, verbruik
+        x 1,10/1,00/0,95), met de nachtreserve als harde grens voor verkopen
+        en als eindwaarde de laagste inkoopprijs die nog komt. Vergeleken met
+        de modi van het kwartierplan (de beslisboom), beide als vaste reeks
+        over dezelfde scenario's. Stuurt niets.
+        """
+        naam = "Plan gewogen over drie scenario's"
+        reeks = [r for r in self.vooruitplan_history if isinstance(r.get("scenario"), dict)]
+        if len(reeks) < MPC_MIN_METINGEN:
+            return {
+                "naam": naam,
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": f"{len(reeks)} van {MPC_MIN_METINGEN} dagen gemeten sinds v5.122.0.",
+                },
+                "betrouwbaarheid": (
+                    "Verwachte kosten over drie zonscenario's (Solcast p10/mediaan/p90) van het "
+                    "scenarioplan tegen de modi van het kwartierplan. Stuurt niets."
+                ),
+            }
+        winsten = [r["scenario"]["verschil_eur"] for r in reeks]
+        mediaan = statistics.median(winsten)
+        opbrengst = {
+            "te_becijferen": True,
+            "bedrag_per_dag_eur": round(mediaan, 3),
+            "bedrag_per_jaar_eur": round(mediaan * 365, 2),
+            "dagen": len(reeks),
+            "aandeel_gunstig_procent": round(100 * sum(1 for w in winsten if w > 0.01) / len(winsten), 1),
+            "metingen": sum(r["scenario"].get("kwartieren_anders") or 0 for r in reeks),
+            "reden": (
+                "Beide plannen met dezelfde voorspelling, reserve en waardering, over dezelfde drie "
+                "scenario's. Het kwartierplan is een voorspelling van de beslisboom; de echte "
+                "beslissingen staan in de nabeschouwing."
+            ),
+        }
+        return {
+            "naam": naam,
+            "waarde": f"{mediaan:+.2f} euro per dag",
+            "status": RELIABILITY_RELIABLE,
+            "zou_hebben_opgeleverd": opbrengst,
+            "betrouwbaarheid": "Stochastisch DP over de laadstand, per kwartier een modus. Stuurt niets.",
+        }
 
     @staticmethod
     def _vooruitplan_opbrengst(reeks: list[dict], sleutel: str) -> dict:
@@ -15200,13 +15296,21 @@ class EnergyManagementSystemCoordinator:
         eta_l = laden / 100 if laden else math.sqrt(heen_terug)
         eta_o = ontladen / 100 if ontladen else heen_terug / eta_l
         slijtage = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        banden = self.get_rendement_per_band(now)
         try:
-            uit = A.doorreken(self.dagverloop or {}, eta_l, min(1.0, eta_o), (slijtage or 0.0) / 100, now)
+            uit = A.doorreken(self.dagverloop or {}, eta_l, min(1.0, eta_o), (slijtage or 0.0) / 100, now,
+                              banden=banden)
         except Exception as fout:  # noqa: BLE001 - nacalculatie mag de sturing nooit raken
             _LOGGER.debug("Accukosten niet doorgerekend", exc_info=True)
             uit = {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
         uit["laadrendement_procent"] = round(eta_l * 100, 1)
         uit["ontlaadrendement_procent"] = round(min(1.0, eta_o) * 100, 1)
+        # v5.122.0 (punt 7): per vermogensband, sturend via de datacorrectie
+        # zodra een band betrouwbaar is
+        uit["rendement_per_band"] = banden
+        huis_w = self._read_corrected_consumption_power()
+        uit["afweging_huis_of_verkopen"] = A.afweging_huis_of_verkopen(
+            banden, max(100.0, float(huis_w or 400.0)), self.slimme_ontlaadgrens_w(), min(1.0, eta_o))
         uit["slijtage_bron"] = (
             "aanname: aanschafprijs modules / (capaciteit x cycli); de gemeten "
             "capaciteit kan cyclus- en kalenderslijtage nog niet scheiden"
@@ -51108,6 +51212,50 @@ class EnergyManagementSystemCoordinator:
                                if (w.get("schaduw_2027") or {}).get("eur") is not None else None),
         }
         return aan
+
+    # --- v5.122.0: meetreeks accu, sluimerverbruik (punt 4), rendement per band (punt 7) ---
+
+    def _accu_meetreeks(self, now: datetime | None = None) -> list[dict]:
+        """De kwartierparen uit dagverloop en meetlaag, eens per uur opgebouwd."""
+        from . import accukosten as A
+
+        now = now or dt_util.now()
+        sleutel = f"{now:%Y-%m-%d %H}"
+        bewaard = getattr(self, "_accu_meetreeks_cache", None)
+        if bewaard and bewaard[0] == sleutel:
+            return bewaard[1]
+        verloop = self.dagverloop or {}
+        gemeten = {}
+        for dag in sorted(verloop)[-ACCU_MEETREEKS_DAGEN:]:
+            try:
+                gemeten[dag] = self._gemeten_kwartieren(dag)
+            except Exception:  # noqa: BLE001 - zonder meetlaag het vermogen
+                gemeten[dag] = {}
+        dagen = {d: verloop[d] for d in sorted(verloop)[-ACCU_MEETREEKS_DAGEN:]}
+        try:
+            reeks = A.kwartierreeks(dagen, gemeten)
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Accu-meetreeks niet opgebouwd", exc_info=True)
+            reeks = []
+        self._accu_meetreeks_cache = (sleutel, reeks)
+        return reeks
+
+    def get_sluimerverbruik(self, now: datetime | None = None) -> dict:
+        """Wat de accu gebruikt als hij stilstaat, per stand (v5.122.0, punt 4).
+        Alleen meten: lokaal schrijven naar de Zendure is niet goedgekeurd."""
+        from . import accukosten as A
+
+        reeks = self._accu_meetreeks(now)
+        uit = A.sluimerverbruik(reeks, float(self.effective_min_soc_percent()), self._bovengrens_procent())
+        uit["kwartieren_uit_de_meetlaag"] = sum(1 for q in reeks if q.get("bron") == "meetlaag")
+        uit["dagen"] = len({q["dag"] for q in reeks})
+        return uit
+
+    def get_rendement_per_band(self, now: datetime | None = None) -> dict:
+        """Laad- en ontlaadrendement per vermogensband (v5.122.0, punt 7)."""
+        from . import accukosten as A
+
+        return A.rendement_per_band(self._accu_meetreeks(now))
 
     # --- punt 3: P1-doel 2027 ---------------------------------------------
 

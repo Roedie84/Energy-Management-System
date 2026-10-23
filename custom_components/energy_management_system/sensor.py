@@ -3241,6 +3241,8 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
             # v5.99.10: het hoofdgetal; de kostprijsmethode is een tweede blik.
             "hoofdgetal": True,
             "rustverbruik_omvormer": c.get_rustverbruik(),
+            # v5.122.0 (punt 4): sluimerverbruik per stilstand-uur, per stand
+            "sluimerverbruik_per_stand": c.get_sluimerverbruik(),
             "note": (
                 "Tegenfeitelijk scenario: zelfde PV-opbrengst als nu, maar "
                 "geen accu-sturing (accu-vermogen bij de netmeter-aflezing "

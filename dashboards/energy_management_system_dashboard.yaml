@@ -2182,7 +2182,7 @@ views:
           action: more-info
       - type: custom:mushroom-template-card
         primary: €{{ states('sensor.woonkamer_energy_management_system_besparing_totaal_t_o_v_zonder_accu_sturing') }} totaal
-        secondary: '{% set r = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''rustverbruik_omvormer'') or {} %}Besparing sinds de start{% if r.get(''beschikbaar'') %} · rustverbruik omvormer {{ r.gemiddeld_w }} W (al verrekend){% endif %}'
+        secondary: '{% set r = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''rustverbruik_omvormer'') or {} %}Besparing sinds de start{% if r.get(''beschikbaar'') %} · rustverbruik omvormer {{ r.gemiddeld_w }} W (al verrekend){% endif %}{% set z = (state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''sluimerverbruik_per_stand'') or {}).get(''per_stand'') or {} %}{% for k, v in z.items() if v.betrouwbaar %}{% if loop.first %} · sluimer{% endif %} {{ k }} {{ v.gemiddeld_w }} W{% endfor %}'
         icon: mdi:cash-plus
         icon_color: green
         entity: sensor.woonkamer_energy_management_system_besparing_totaal_t_o_v_zonder_accu_sturing

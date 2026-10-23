@@ -108,9 +108,14 @@ def doorreken(
     eta_ontlaad: float,
     slijtage_eur: float,
     nu: datetime | None = None,
+    banden: dict | None = None,
 ) -> dict:
     """Reken het dagverloop door. Rendementen als fractie (0,92), slijtage in
-    euro per kWh die erin gaat - dezelfde eenheden als het laadbesluit."""
+    euro per kWh die erin gaat - dezelfde eenheden als het laadbesluit.
+
+    v5.122.0 (punt 7): met `banden` (`rendement_per_band`) het rendement van
+    de vermogensband van dat kwartier, zolang die band betrouwbaar is; anders
+    `eta_laad`/`eta_ontlaad`."""
     if not (0 < eta_laad <= 1 and 0 < eta_ontlaad <= 1):
         return {"beschikbaar": False, "reden": "geen rendement"}
     partijen: list[Partij] = []
@@ -125,7 +130,10 @@ def doorreken(
             # (opnieuw) beginnen: wat erin zit heeft een onbekende inkoop
             partijen = [Partij(inhoud, 0.0, "begin", dag, None)] if inhoud > 0 else []
         else:
-            _verwerk(partijen, tel, dag, r, inhoud - vorige_inhoud, eta_laad, eta_ontlaad, slijtage_eur)
+            vermogen = _getal(r, "accu_w")
+            _verwerk(partijen, tel, dag, r, inhoud - vorige_inhoud,
+                     band_rendement(banden, "laden", vermogen, eta_laad),
+                     band_rendement(banden, "ontladen", vermogen, eta_ontlaad), slijtage_eur)
         vorig_moment, vorige_inhoud = moment, inhoud
     uit = _samenvatting(tel, partijen, eta_laad * eta_ontlaad, slijtage_eur, nu)
     uit["voorraad_kostprijs"] = voorraad_kostprijs(partijen, eta_laad)
@@ -296,4 +304,191 @@ def _samenvatting(tel: _Teller, partijen: list, eta: float, slijtage_eur: float,
                             for b in ("net", "zon", "begin")},
         "per_dag": dagen,
         "correctie": correctie(tel.afwijking, nu),
+    }
+
+
+# --- v5.122.0: sluimerverbruik per stilstand-uur (punt 4) en rendement per
+# vermogensband (punt 7) -------------------------------------------------------
+#
+# Beide uit dezelfde kwartierreeks: per kwartier de beschikbare energie aan
+# het eind (dagverloop) en wat de accu aan de netkant deed (meetlaag:
+# uit - in, of het accuvermogen als terugval).
+
+#: Een kwartier is stilstand als er minder dan dit door de accu ging (kWh, 50 W).
+STIL_KWH = 0.0125
+#: Pas na zoveel stilstand-uren per stand een betrouwbaar getal.
+SLUIMER_MIN_UUR = 6.0
+#: Binnen zoveel procentpunt van de bovengrens/ondergrens telt de accu als vol/leeg.
+GRENS_MARGE_PROCENT = 2.0
+#: De vermogensbanden (W, aan de netkant): bovengrenzen.
+BANDEN_W = (500.0, 1500.0)
+BAND_NAMEN = ("<500 W", "500-1500 W", ">1500 W")
+#: Een band is betrouwbaar met zoveel kwartieren en zoveel kWh.
+BAND_MIN_KWARTIEREN = 40
+BAND_MIN_KWH = 5.0
+#: Een kwartier telt alleen mee als er minstens dit door de accu ging (kWh).
+BAND_MIN_KWARTIER_KWH = 0.03
+#: Rendementen buiten deze grenzen zijn meetfouten (SoC-stap, gat).
+BAND_RENDEMENT_MIN = 0.5
+BAND_RENDEMENT_MAX = 1.0
+
+
+def kwartierreeks(dagverloop: dict, gemeten: dict | None = None) -> list[dict]:
+    """Opeenvolgende kwartierparen: Δinhoud en de netkant van de accu.
+
+    `gemeten[dag]["HH:MM"]["accu_kwh"]` (meetlaag: uit - in) als het er is,
+    anders het accuvermogen van het dagverloop / 4000. Een gat van meer dan
+    een kwartier begint opnieuw.
+    """
+    uit = []
+    vorige = None
+    for dag, r in _regels(dagverloop):
+        moment = _moment(dag, str(r.get("tijd")))
+        inhoud = _getal(r, "beschikbaar_kwh")
+        if moment is None or inhoud is None:
+            vorige = None
+            continue
+        if vorige is not None and timedelta(0) < moment - vorige[0] <= timedelta(minutes=16):
+            m = ((gemeten or {}).get(dag) or {}).get(str(r.get("tijd")))
+            if m is not None and m.get("accu_kwh") is not None:
+                accu = float(m["accu_kwh"])
+                bron = "meetlaag"
+            else:
+                accu = (_getal(r, "accu_w") or 0.0) / 4000
+                bron = "vermogen"
+            uit.append({
+                "dag": dag, "tijd": r.get("tijd"), "delta_kwh": inhoud - vorige[1], "accu_kwh": accu,
+                "bron": bron, "soc": _getal(r, "soc"), "stand": str(r.get("stand") or ""),
+                "reden": str(r.get("reden") or ""),
+            })
+        vorige = (moment, inhoud)
+    return uit
+
+
+def _stilstand_soort(q: dict, min_soc: float, bovengrens: float) -> str:
+    soc = q.get("soc")
+    if soc is not None and soc >= bovengrens - GRENS_MARGE_PROCENT:
+        return "vol"
+    if soc is not None and soc <= min_soc + GRENS_MARGE_PROCENT:
+        return "leeg"
+    if "sparen" in q["stand"] or "spaar" in q["reden"] or q["stand"].startswith("smart_charging"):
+        return "sparen"
+    return "overig"
+
+
+def sluimerverbruik(reeks: list[dict], min_soc: float, bovengrens: float) -> dict:
+    """Wat de accu gebruikt als hij stilstaat, per stand (punt 4).
+
+    Per stilstandkwartier: sluimer = afname van de inhoud + wat er van het
+    net in ging (min wat eruit kwam). Vol of leeg trekt hij het uit het net,
+    halverwege (sparen) uit de cellen. Alleen meten; stuurt niets.
+    """
+    per: dict = {}
+    for q in reeks:
+        if abs(q["accu_kwh"]) * 1 > STIL_KWH:
+            continue
+        sluimer = -q["delta_kwh"] - q["accu_kwh"]
+        if sluimer < -0.05 or sluimer > 0.1:
+            continue   # een SoC-stap of meetfout, geen sluimer
+        soort = _stilstand_soort(q, min_soc, bovengrens)
+        t = per.setdefault(soort, {"kwartieren": 0, "kwh": 0.0})
+        t["kwartieren"] += 1
+        t["kwh"] += sluimer
+    uit = {}
+    for soort in ("sparen", "vol", "leeg", "overig"):
+        t = per.get(soort)
+        if not t:
+            continue
+        uren = t["kwartieren"] / 4
+        uit[soort] = {
+            "uren": round(uren, 1),
+            "kwh": round(t["kwh"], 3),
+            "gemiddeld_w": round(max(0.0, t["kwh"]) / uren * 1000, 1) if uren else None,
+            "betrouwbaar": uren >= SLUIMER_MIN_UUR,
+        }
+    totaal_uren = sum(v["uren"] for v in uit.values())
+    totaal_kwh = sum(v["kwh"] for v in uit.values())
+    return {
+        "per_stand": uit,
+        "stilstand_uren": round(totaal_uren, 1),
+        "gemiddeld_w": round(max(0.0, totaal_kwh) / totaal_uren * 1000, 1) if totaal_uren else None,
+        "toelichting": (
+            "Per kwartier zonder laden of ontladen (< 50 W): afname van de inhoud plus wat er van "
+            "het net in ging. Vol of leeg komt het uit het net, bij sparen uit de cellen. "
+            "Alleen meten; schrijven naar de Zendure is niet goedgekeurd."
+        ),
+    }
+
+
+def _band(kw: float) -> int:
+    w = kw * 1000
+    for i, grens in enumerate(BANDEN_W):
+        if w < grens:
+            return i
+    return len(BANDEN_W)
+
+
+def rendement_per_band(reeks: list[dict]) -> dict:
+    """Laad- en ontlaadrendement per vermogensband (punt 7).
+
+    Laden: toename inhoud / wat er aan de netkant in ging. Ontladen: wat er
+    aan de netkant uit kwam / afname inhoud. Opgeteld per band (een enkel
+    kwartier is te grof: de inhoud komt uit de laadstand).
+    """
+    som = {(r, b): [0, 0.0, 0.0] for r in ("laden", "ontladen") for b in range(len(BAND_NAMEN))}
+    for q in reeks:
+        a, d = q["accu_kwh"], q["delta_kwh"]
+        if abs(a) < BAND_MIN_KWARTIER_KWH:
+            continue
+        if a < 0 and d > 0:            # laden: a = -(in)
+            eta = d / -a
+            sleutel = ("laden", _band(-a * 4))
+            teller, noemer = d, -a
+        elif a > 0 and d < 0:          # ontladen
+            eta = a / -d
+            sleutel = ("ontladen", _band(a * 4))
+            teller, noemer = a, -d
+        else:
+            continue
+        if not BAND_RENDEMENT_MIN <= eta <= BAND_RENDEMENT_MAX + 0.1:
+            continue
+        t = som[sleutel]
+        t[0] += 1
+        t[1] += teller
+        t[2] += noemer
+    uit: dict = {"laden": {}, "ontladen": {}}
+    for (richting, b), (n, teller, noemer) in som.items():
+        eta = min(BAND_RENDEMENT_MAX, teller / noemer) if noemer > 0 else None
+        uit[richting][BAND_NAMEN[b]] = {
+            "kwartieren": n,
+            "kwh": round(noemer, 2),
+            "rendement_procent": round(eta * 100, 1) if eta is not None else None,
+            "betrouwbaar": n >= BAND_MIN_KWARTIEREN and noemer >= BAND_MIN_KWH and eta is not None,
+        }
+    return uit
+
+
+def band_rendement(banden: dict | None, richting: str, vermogen_w: float | None, terugval: float) -> float:
+    """Het rendement bij dit vermogen als die band betrouwbaar is, anders de terugval."""
+    if not banden or vermogen_w is None:
+        return terugval
+    b = (banden.get(richting) or {}).get(BAND_NAMEN[_band(abs(vermogen_w) / 1000)]) or {}
+    if b.get("betrouwbaar") and b.get("rendement_procent"):
+        return b["rendement_procent"] / 100
+    return terugval
+
+
+def afweging_huis_of_verkopen(banden: dict | None, huis_w: float, verkoop_w: float, terugval: float) -> dict:
+    """Het ontlaadrendement bij het huis dekken (laag vermogen) tegen verkopen
+    (hoog vermogen): een kWh uit de cellen levert bij verkopen zoveel meer of
+    minder op."""
+    huis = band_rendement(banden, "ontladen", huis_w, terugval)
+    verkoop = band_rendement(banden, "ontladen", verkoop_w, terugval)
+    return {
+        "huis_dekken_w": round(huis_w),
+        "huis_dekken_rendement_procent": round(huis * 100, 1),
+        "verkopen_w": round(verkoop_w),
+        "verkopen_rendement_procent": round(verkoop * 100, 1),
+        "verkopen_per_kwh_uit_de_cellen_procent": round((verkoop - huis) * 100, 1),
+        "uit_de_meting": huis != terugval or verkoop != terugval,
     }

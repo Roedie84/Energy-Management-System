@@ -33637,3 +33637,15 @@ Opdracht 23-10 "Wat verbetert toepassen". Gedrag van 2026 ongewijzigd; sturen al
 
 Tests: `test_v5121_overschot_p1_negatief.py` (21).
 
+
+## v5.122.0 — plan over drie scenario's (punt 2, proefstand), sluimerverbruik (punt 4), rendement per vermogensband (punt 7)
+
+Opdracht 23-10 "Wat verbetert toepassen".
+
+- **Scenarioplan (proefstand, stuurt niets).** `vooruitplan.optimaliseer_scenarios`: stochastisch DP over de laadstand; per kwartier één van de modi `smart`, `sparen`, `uitstellen`, `laden`, `verkopen` (`stap_modus`) met de laagste verwachte kosten over p10/mediaan/p90 (`SCENARIO_GEWICHTEN` 0,15/0,7/0,15, verbruik x `SCENARIO_VERBRUIK` 1,10/1,00/0,95). Zon per scenario uit de Solcast-band (`_zon_band_factoren`: p10 en p90 naar rato van de mediaan van dat interval), anders `SCENARIO_ZON_TERUGVAL`. Eindwaarde: `eindwaarde_laagste_inkoop` (laagste inkoopprijs van de horizon min slijtage; het laadverlies is al betaald). Verkopen nooit onder de nachtreserve van het kwartier (hard in `stap_modus`; het huis dekken mag eronder). `vergelijk_scenarios` rekent het scenarioplan en de modi van het kwartierplan (`PLAN_MODUS`) als vaste reeks over dezelfde scenario's door. `_meet_scenarioplan` eens per dag in `_meet_vooruitplan` (`vooruitplan_history[...]["scenario"]`); kandidaat 15 `_kandidaat_scenarioplan` ("Plan gewogen over drie scenario's").
+- **Sluimerverbruik (alleen meten).** `accukosten.kwartierreeks` (kwartierparen uit dagverloop + meetlaag, terugval accuvermogen) en `accukosten.sluimerverbruik`: per stilstandkwartier (< 50 W door de accu) afname van de inhoud plus netafname, per stand `sparen`/`vol`/`leeg`/`overig`, in W, betrouwbaar vanaf 6 uur. `get_sluimerverbruik` (eens per uur, `ACCU_MEETREEKS_DAGEN` 40); attribuut `sluimerverbruik_per_stand` op de besparingssensor en in de diagnose. Geen schrijfactie naar de Zendure.
+- **Rendement per vermogensband (sturend zodra betrouwbaar).** `accukosten.rendement_per_band` (laden: toename / in; ontladen: uit / afname; som per band <500, 500-1500, >1500 W; meetfouten buiten 50-110 % tellen niet), betrouwbaar bij `BAND_MIN_KWARTIEREN` 40 en `BAND_MIN_KWH` 5. `doorreken(..., banden=)` gebruikt per kwartier het rendement van zijn band (`band_rendement`), anders het geleerde gemiddelde - daarmee volgt de datacorrectie op netladen. `get_accukosten` toont `rendement_per_band` en `afweging_huis_of_verkopen` (ontlaadrendement bij het huisvermogen tegen de ontlaadgrens).
+- Dashboard: de besparingskaart noemt het sluimerverbruik per stand zodra het betrouwbaar is. Diagnose: `sluimerverbruik`, `rendement_per_band`.
+
+Tests: `test_v5122_scenario_sluimer_banden.py` (14).
+

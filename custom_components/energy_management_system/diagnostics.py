@@ -1104,6 +1104,9 @@ async def async_get_config_entry_diagnostics(
             "repetitie_2027": _veilig("get_repetitie_2027", coordinator.get_repetitie_2027),
             # v5.121.0: witgoedadvies met de overschotwaarde
             "witgoedadvies": _veilig("get_witgoedadvies", coordinator.get_witgoedadvies),
+            # v5.122.0: sluimerverbruik (punt 4) en rendement per band (punt 7)
+            "sluimerverbruik": _veilig("get_sluimerverbruik", coordinator.get_sluimerverbruik),
+            "rendement_per_band": _veilig("get_rendement_per_band", coordinator.get_rendement_per_band),
             # v5.102: het dagarchief (vergelijking, maanden, laatste dagen).
             "dagarchief": _veilig("get_dagarchief", coordinator.get_dagarchief),
             # v3.99.18: wat de lange horizon werkelijk opleverde.

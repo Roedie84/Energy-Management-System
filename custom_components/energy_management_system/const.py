@@ -7581,3 +7581,7 @@ FIETS_OVERSCHOT_HOUD_MINUTEN = 20
 # --- v5.121.0: P1-doel 2027 (punt 3) -----------------------------------------
 #: Zoveel meldingen van (regel - echt) voor de mediaan van de templateverschuiving.
 P1_VERSCHIL_MONSTERS = 300
+
+# --- v5.122.0: sluimerverbruik en rendement per band (punten 4 en 7) ---------
+#: Zoveel dagen dagverloop en meetlaag voor de accu-meetreeks.
+ACCU_MEETREEKS_DAGEN = 40

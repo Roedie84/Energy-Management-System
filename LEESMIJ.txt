@@ -1,3 +1,18 @@
+EMS v5.122.0 - scenarioplan (proefstand), sluimerverbruik, rendement per vermogen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Plan over drie scenario's: een nieuwe proefstandkandidaat rekent elke dag
+  het beste modusplan over de zonverwachting p10, mediaan en p90 (gewogen
+  0,15/0,7/0,15) en zet dat naast het kwartierplan. Stuurt niets.
+- Sluimerverbruik: wat de accu gebruikt als hij stilstaat (sparen, vol,
+  leeg), per stand in W, op de sensor Besparing t.o.v. zonder accu-sturing.
+  Alleen meten.
+- Rendement per vermogensband (<500 W, 500-1500 W, >1500 W) uit de eigen
+  metingen. De nacalculatie van de accu (en zo de laadcorrectie) rekent
+  ermee zodra een band genoeg metingen heeft (40 kwartieren, 5 kWh);
+  anders met het gemiddelde zoals nu. Ook: huis dekken tegen verkopen.
+
 EMS v5.121.0 - waarde van zonoverschot, P1-doel 2027, negatieve teruglevering
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
