@@ -167,6 +167,7 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Stand: mid 180 min (gem 0,21), auto 57 min (gem 0,27). Aanwezig 0,25 vs afwezig 0,22: bron, geen standeffect.
 - Werking: auto bij aanwezigheid (06:05, 08:01), mid precies 15 min na vertrek (06:32 → 06:47). Na herstart 06:08 1,5 min mid terwijl net aanwezig (06:10:51) - bekende timer-reset. 5/5 traces zonder fout. 2 HA-herstarts (06:08, 07:38). Lokaal 48 mislukt op 95.422 (geen nieuwe), uitval 0, sturen 250/251, filter 0%. Apparaat-PM2.5 vast op 2.
 - CO₂ daalt 957 → 751 (gem 845), 0 u > 1.200. Schimmelindicator 77, binnen 64% / 17,0 °C, buiten 99%: vocht blijft hoog na de avond - kort luchten na douchen/koken.
-- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5), H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1): geen nieuwe piek, geen toets.
+- Nieuw (23-10, Ruud): automation.luchtreiniger_mid_bij_koken_auto_bij_vieze_lucht - alleen starttrace 07:39, nog geen kookmoment: ongetoetst.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
 laatste ronde: 23-10 08:25, gemeten t/m 08:20
