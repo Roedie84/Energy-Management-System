@@ -83,3 +83,10 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 08:52 | updates installeren gold scalper 2.21.1 (hacs)
 23-10 09:52 | ems oordeel zonvoorspelling structureel alleen op gemiddelde, niet op vaste richting
 23-10 09:52 | ems reserve-sprongenlijst bewaren over herstart
+23-10 12:51 | labels 3 automations (alle verlichting uit controle, rookmelder offline, luchtreiniger mid bij koken)
+23-10 12:51 | hernoemen automation.opladers_aan en rolluiken_sluiten_automatisch
+23-10 12:51 | browser mod-browsers herkenbare naam (wandtablet)
+23-10 12:51 | sonos test-/voorbeeldscripts verwijderen
+23-10 12:51 | handmatige back-up voor_zigbee_ember_flash verwijderen
+23-10 12:51 | gold scalper bitvavo-mand verliest op kosten, marktkeuze herzien
+23-10 12:51 | gold scalper negatieve kosten bruto eigen koers vs netto broker
