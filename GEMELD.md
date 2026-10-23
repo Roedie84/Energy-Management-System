@@ -77,3 +77,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 22-10 19:51 | L-SC-015 naderingsreeks herstarten bij afstandsprong
 22-10 23:51 | gold scalper afstemming xauusd uitstapprijs van broker overnemen (1 afwijking)
 23-10 00:51 | gold scalper saldosprong bitvavo-mand papier zonder trade (veldproef-p&l, referentie 7634,71)
+23-10 04:51 | L-SC-017 windstootverwachting bijsturen met halve fout laatste uur
+23-10 04:51 | updates installeren ems 5.120.0, stormchase 0.58.4 (hacs)
