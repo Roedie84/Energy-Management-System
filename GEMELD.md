@@ -80,3 +80,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 04:51 | L-SC-017 windstootverwachting bijsturen met halve fout laatste uur
 23-10 04:51 | updates installeren ems 5.120.0, stormchase 0.58.4 (hacs)
 23-10 05:51 | gold scalper markt noemen bij 'openen geweigerd (papermarge)'
+23-10 08:52 | updates installeren gold scalper 2.21.1 (hacs)
