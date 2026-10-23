@@ -33673,3 +33673,13 @@ Gemeld 23-10: "Waar -- in plaats van waarden?" (cockpit, Verkopen en reserve, zo
 
 Tests: `test_v5124_verkooptoets_weergave.py` (3).
 
+
+## v5.124.1 — P1 regeldoel kiest nooit zichzelf als bron
+
+Live 23-10 14:55, na een herstart terwijl zendure_ha op `sensor.woonkamer_energy_management_system_p1_regeldoel` regelde: de sensor had bij `async_added_to_hass` nog geen kenmerk (`ems_p1_regeldoel`), dus `p1_regeldoel_bron_entity` zag hem niet als zichzelf, nam hem als bron en volgde zichzelf: 'unknown', en de Zendure Manager State werd 'unknown'. Hersteld door de P1-sensor van zendure_ha tijdelijk terug te zetten.
+
+- Nieuw `_is_eigen_p1_regeldoel(meter, staat)`: eigen entity_id (gezet door de sensor vóór het kiezen van de bron), het kenmerk, of de unique_id op `p1_regeldoel` in het entiteitenregister. Gebruikt in `p1_regeldoel_bron_entity`, `get_p1_doel` en `regelverschuiving_kw`.
+- De sensor volgt nooit zijn eigen entity_id.
+
+Tests: `test_v5124_verkooptoets_weergave.py` +2.
+

@@ -49,3 +49,29 @@ def test_bestaande_waarden_niet_overschreven(make_coordinator, hass):
     uit = c._verkooptoets_weergave(toets, 9.9)
     assert uit["beschikbaar_kwh"] == 2.0
     assert uit["nodig_tot_blok_kwh"] == 4.0
+
+
+# --- v5.124.1: P1 regeldoel kiest nooit zichzelf als bron ------------------
+
+
+def test_p1_regeldoel_kiest_zichzelf_niet_na_herstart(make_coordinator, hass):
+    """Live 23-10 14:55: na een herstart (eigen sensor nog zonder kenmerk)
+    werd de eigen sensor zijn eigen bron en bleef 'onbekend'."""
+    c = make_coordinator({})
+    c.p1_regeldoel_entity_id = "sensor.ems_p1"
+    c.p1_regeldoel_bron = "sensor.regel_quooker"
+    c._zendure_p1meter = lambda: "sensor.ems_p1"
+    # eigen sensor bestaat nog niet / heeft geen kenmerk
+    assert c.p1_regeldoel_bron_entity() == "sensor.regel_quooker"
+    hass.states.set("sensor.ems_p1", "unknown")
+    assert c.p1_regeldoel_bron_entity() == "sensor.regel_quooker"
+    assert c._is_eigen_p1_regeldoel("sensor.ems_p1", hass.states.get("sensor.ems_p1"))
+
+
+def test_p1_regeldoel_volgt_andere_bron(make_coordinator, hass):
+    c = make_coordinator({})
+    c.p1_regeldoel_entity_id = "sensor.ems_p1"
+    c._zendure_p1meter = lambda: "sensor.regel_quooker"
+    hass.states.set("sensor.regel_quooker", "12")
+    assert c.p1_regeldoel_bron_entity() == "sensor.regel_quooker"
+    assert c.p1_regeldoel_bron == "sensor.regel_quooker"

@@ -1,3 +1,12 @@
+EMS v5.124.1 - P1 regeldoel na een herstart hersteld
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Regelde de Zendure op de sensor P1 regeldoel, dan koos die sensor na een
+  herstart zichzelf als bron en bleef op 'onbekend'. De Zendure had dan
+  niets meer om op te regelen (23-10 14:55). Nu herkent de sensor zichzelf
+  ook zonder staat en volgt hij altijd de echte regelsensor.
+
 EMS v5.124.0 - verkopen en reserve: getallen ook bij een vroege rem
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

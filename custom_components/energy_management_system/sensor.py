@@ -3125,8 +3125,11 @@ class P1RegeldoelSensor(_V5100Sensor):
                           "spiegelt": regel}
 
     async def async_added_to_hass(self) -> None:
+        # v5.124.1: eerst het eigen entity_id doorgeven, zodat de bron nooit
+        # deze sensor zelf wordt (na een herstart heeft hij nog geen kenmerk).
+        self._coordinator.registreer_p1_regeldoel(self.entity_id)
         self._gevolgd = self._bronnen()
-        bronnen = [b for b in self._gevolgd if b]
+        bronnen = [b for b in self._gevolgd if b and b != self.entity_id]
         if bronnen:
             self.async_on_remove(async_track_state_change_event(self.hass, bronnen, self._bij_wijziging))
         self._bereken()

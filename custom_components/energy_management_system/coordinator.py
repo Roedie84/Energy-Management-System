@@ -21372,7 +21372,7 @@ class EnergyManagementSystemCoordinator:
         meter = self._zendure_p1meter() if self.hass is not None else None
         if meter and meter != regel:
             staat = self.hass.states.get(meter)
-            if staat is not None and (staat.attributes or {}).get(self.P1_REGELDOEL_KENMERK):
+            if self._is_eigen_p1_regeldoel(meter, staat):
                 regel = meter
         waarde = 0.0
         if regel:
@@ -51407,6 +51407,36 @@ class EnergyManagementSystemCoordinator:
         return None
 
     p1_regeldoel_bron: str | None = None
+    p1_regeldoel_entity_id: str | None = None
+
+    def registreer_p1_regeldoel(self, entity_id: str | None) -> None:
+        """De sensor P1 regeldoel meldt zijn eigen entity_id (v5.124.1)."""
+        self.p1_regeldoel_entity_id = entity_id
+
+    def _is_eigen_p1_regeldoel(self, meter, staat) -> bool:
+        """Is `meter` de eigen sensor "P1 regeldoel"? (v5.124.1)
+
+        Live 23-10 14:55: na een herstart had de eigen sensor nog geen
+        kenmerk (staat onbekend, zonder attributen). Regelde de Zendure op
+        die sensor, dan koos hij zichzelf als bron en bleef 'onbekend';
+        de Zendure regelde daardoor nergens meer op. Nu telt ook het eigen
+        entity_id en de unique_id-achtervoegsel, ook zonder staat.
+        """
+        if not meter:
+            return False
+        if self.p1_regeldoel_entity_id and meter == self.p1_regeldoel_entity_id:
+            return True
+        if staat is not None and (staat.attributes or {}).get(self.P1_REGELDOEL_KENMERK):
+            return True
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            invoer = er.async_get(self.hass).async_get(meter) if self.hass is not None else None
+        except Exception:  # noqa: BLE001
+            invoer = None
+        if invoer is not None and invoer.platform == DOMAIN and str(invoer.unique_id or "").endswith("p1_regeldoel"):
+            return True
+        return False
 
     def p1_regeldoel_bron_entity(self) -> str | None:
         """De sensor die "P1 regeldoel" spiegelt (v5.123.0).
@@ -51418,7 +51448,7 @@ class EnergyManagementSystemCoordinator:
         """
         meter = self._zendure_p1meter()
         staat = self.hass.states.get(meter) if meter and self.hass is not None else None
-        eigen = staat is not None and (staat.attributes or {}).get(self.P1_REGELDOEL_KENMERK)
+        eigen = self._is_eigen_p1_regeldoel(meter, staat)
         if meter and not eigen:
             if self.p1_regeldoel_bron != meter:
                 self.p1_regeldoel_bron = meter
@@ -51433,7 +51463,7 @@ class EnergyManagementSystemCoordinator:
         """Het P1-doel en wat de extra teruglevering in 2027 kost (punt 3)."""
         meter = self._zendure_p1meter()
         staat = self.hass.states.get(meter) if meter and self.hass else None
-        volgt = bool(staat is not None and (staat.attributes or {}).get(self.P1_REGELDOEL_KENMERK))
+        volgt = bool(self._is_eigen_p1_regeldoel(meter, staat))
         from . import regime2027
 
         rep = regime2027.samenvatting(self.repetitie_2027 or [])
