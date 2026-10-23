@@ -33613,3 +33613,13 @@ Akkoord Ruud 22-10 18:05. Alleen rapportage; de sturing verandert niet.
 - **L-EMS-030 · digital twin.** In het laadblok telde de tweeling laadvermogen × tijd als inhoud (6 u vooruit +1,34 kWh tijdens laden, n=16). `_twin_laadstap`: erin = min(ruimte, AC × laadrendement), van het net = erin / laadrendement (voor de opbrengst). `_twin_laadfactor`: geleerd laadrendement, anders √(heen-en-terug). Zonoverschot ongewijzigd.
 
 Tests: `test_v5119_meetfouten.py` (9).
+
+
+## v5.120.0 — reservesprongen: live verbruikscorrectie apart (H-EMS-14, meetbaarheid)
+
+Leerronde 23-10 (dagafsluiting). Alleen meten; reserve, verkoop en sturing veranderen niet.
+
+- **Aanleiding.** 22-10 20:11-23:00 telde `reserve_sprongen` 17 sprongen "alleen behoefte" waarin `needed_kwh_before_margin` telkens ~1,49 kWh wisselde (8,90 <-> 10,39 kWh) met alle bijdragen 0, dus `grootste_onderdeel` "basisbehoefte". Het verschil is precies `CONSUMPTION_CORRECTION_MAX_EXTRA_KWH` (1,5): de live verbruikscorrectie in `_segmenten_verbruik_zon` die aan en uit ging (mediaan live boven het geleerde uurprofiel). Na middernacht (blok 23-10 23:00, reserve niet meer afgekapt) veranderde zo ook de reserve zelf: 00:00 10,37 -> 9,85, 00:09 9,81 -> 10,21, 02:13 9,64 -> 9,26 kWh.
+- **Wat.** `_segmenten_verbruik_zon` legt na de wandeling `_laatste_live_correctie` vast (`extra_kwh` = wat de correctie in totaal toevoegde, `verhouding` = live/profiel). `_bereken_dynamische_reserve_kwh` zet die in de uitsplitsing als `live_correctie_extra_kwh` en `live_correctie_verhouding` (None als de wandeling niet liep). Beide velden staan in `_RESERVE_SPRONG_VELDEN`; `live_correctie_extra_kwh` telt mee in `bijdragen_kwh`, zodat `grootste_onderdeel` de correctie noemt in plaats van "basisbehoefte".
+
+Tests: `test_v5120_live_correctie.py` (4).

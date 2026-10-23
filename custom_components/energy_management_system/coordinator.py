@@ -21361,6 +21361,13 @@ class EnergyManagementSystemCoordinator:
             segmenten.append((consumption_kwh, pv_kwh))
             cursor = segment_end
 
+        # v5.120.0 (H-EMS-14): wat de live correctie in deze wandeling
+        # toevoegde, zodat de reserve-uitsplitsing het kan tonen. Alleen
+        # meten; stuurt niets.
+        self._laatste_live_correctie = {
+            "extra_kwh": round(correctie_extra_totaal, 3),
+            "verhouding": round(consumption_correction_ratio, 3),
+        }
         return segmenten
 
     async def _laad_uit_het_net_als_nodig(
@@ -23544,6 +23551,8 @@ class EnergyManagementSystemCoordinator:
         "airco_ochtend_extra_kwh",
         "airco_gebruik_extra_kwh",
         "temperatuur_extra_kwh",
+        "live_correctie_extra_kwh",
+        "live_correctie_verhouding",
         "ongekapt_kwh",
         "bodem_bindend",
         "boven_capaciteit",
@@ -23610,9 +23619,13 @@ class EnergyManagementSystemCoordinator:
             # Het onderdeel met de grootste verandering (kWh-velden; de
             # regelverschuiving omgerekend over de uren tot het blok).
             bijdragen: dict = {}
+            # v5.120.0 (H-EMS-14): ook de live verbruikscorrectie. Leerronde
+            # 23-10: 17 sprongen "basisbehoefte" van ~1,5 kWh (20:11-23:00) =
+            # precies de begrenzing van de live correctie die aan en uit ging.
             for k in (
                 "lange_horizon_extra_kwh", "airco_ochtend_extra_kwh",
                 "airco_gebruik_extra_kwh", "temperatuur_extra_kwh",
+                "live_correctie_extra_kwh",
             ):
                 a, b = _f(oud, k), _f(nieuw, k)
                 if a is not None and b is not None:
@@ -23837,7 +23850,13 @@ class EnergyManagementSystemCoordinator:
         if hours_until_cheap <= 0:
             return None
 
+        # v5.120.0 (H-EMS-14): de live correctie van DEZE wandeling (zie
+        # `_segmenten_verbruik_zon`); leeg als de wandeling niet liep.
+        self._laatste_live_correctie = None
         needed_kwh = self._estimate_worst_case_deficit_kwh(now, cheap_block_start)
+        live_correctie = (
+            getattr(self, "_laatste_live_correctie", None) if needed_kwh is not None else None
+        ) or {}
         # v3.99.18: de lange horizon stuurt. De proefstandkandidaat van
         # v3.11.0 mat twee weken lang wat de reserve zou zijn tot het
         # EIND van de bekende prijzen in plaats van tot het eerstvolgende
@@ -24022,6 +24041,11 @@ class EnergyManagementSystemCoordinator:
             "airco_gebruik_uren": airco_gebruik.get("uren", []),
             "temperatuur_extra_kwh": temperatuur["extra_kwh"],
             "temperatuur_model_kw": temperatuur["model_kw"],
+            # v5.120.0 (H-EMS-14): de live verbruikscorrectie die in de
+            # behoefte zit (begrensd op CONSUMPTION_CORRECTION_MAX_EXTRA_KWH)
+            # en de verhouding live/profiel die hem gaf. Alleen meten.
+            "live_correctie_extra_kwh": live_correctie.get("extra_kwh"),
+            "live_correctie_verhouding": live_correctie.get("verhouding"),
             "reserve_kwh_after_margin": round(reserve_kwh, 3),
             # v3.74.0: en of die bodem het is die bindt.
             "bodem_kwh": round(bodem_kwh, 3),
