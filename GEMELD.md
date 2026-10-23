@@ -92,3 +92,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 12:51 | gold scalper negatieve kosten bruto eigen koers vs netto broker
 23-10 13:51 | gold scalper xauusd oordeel failed bij te weinig clusters i.p.v. insufficient_data
 23-10 16:51 | luchtreiniger binnen 15 min na herstart stand laten (controle niet naar mid)
+23-10 17:51 | gold scalper noodstop per markt i.p.v. per hele mand
