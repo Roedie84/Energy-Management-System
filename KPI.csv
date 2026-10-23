@@ -606,3 +606,8 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-23 15:40,TUSSEN,ems_blok_verschuiving_uur,11.25,1,"13:31 blok 23-10 23:15 -> 24-10 10:30 (prijzen morgen); reserve 7.84 -> 10.37 (afgekapt); verwacht tekort tot blok 2.95 kWh economisch"
 2026-10-23 15:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,100,1,"15:42; blok 24-10 10:30; mediaan diepste tekort 7.35 kWh; laadbesluit 'loont niet'"
 2026-10-23 15:40,TUSSEN,ems_herstarts,3,3,"11:51, 14:54, 15:17 (installaties v5.123.0/124.0/124.1 elders); 0 EMS-fouten"
+2026-10-23 19:40,TUSSEN,ems_harde_regel_onder_reserve,0,1,"verkoopkwartieren leeg; regeloverschot 23-10 0.136 kWh"
+2026-10-23 19:40,TUSSEN,ems_pv_dag_kwh,4.300,1,"pv_opbrengst_vandaag eindstand (18-19 u 0); gecorrigeerde day-ahead 3.63 (+18.5 %), ruw 3.94 (+9.1 %); eerste dag in 17 boven verwachting; L-EMS-025 dag 2 verkeerde kant"
+2026-10-23 19:40,TUSSEN,ems_net_import_kwh,0.127,4,"15-19 u p1 (0.060/0.031/0.020/0.016); export 0.058; avondpiek uit de accu, SoC 49 -> 43 %"
+2026-10-23 19:40,TUSSEN,ems_reserve_sprong_live_correctie_kwh,0,1,"15:45-19:40 reserve vast 10.37 (afgekapt, boven capaciteit); 1 sprong 15:17 na herstart (lange horizon)"
+2026-10-23 19:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,88,1,"19:41; blok 24-10 10:45 (was 10:30); beschikbaar 3.80 kWh"

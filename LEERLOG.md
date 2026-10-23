@@ -501,3 +501,13 @@ laatste ronde: 23-10 11:40, gemeten t/m 23-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog; correctie gebouwd), H-EMS-11 (nacht/avond vs ochtendpiek), H-EMS-14 (reservesprong live correctie). Geen release (tussenronde; vandaag al 6 EMS-releases door andere sessies). L-EMS-032/033 gepland voor de dagafsluiting.
 
 laatste ronde: 23-10 15:40, gemeten t/m 23-10 15:45
+
+## 23-10 19:40 · tussenronde
+- Actief **v5.124.1** (geen herstart sinds 15:17, geen nieuwe release). 0 EMS-fouten; WARNINGs extern (Solcast API-limiet 10/10 om 17:22, Zonneplan 500 om 17:42; bronbuffer vangt op).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 23-10 0,136 kWh).
+- **PV dag 23-10: 4,30 kWh** (18-19 u 0) tegen gecorrigeerde day-ahead 3,63 (**+18,5 %**) en ruw 3,94 (+9,1 %) → eerste dag in 17 boven de verwachting; L-EMS-025 dag 2 werkte de verkeerde kant op (dag 1 raak). n=2, eenzijdige correctie blijft; definitieve afrekening 03:40 (met Solcast-dagwaarde).
+- **Avondpiek 15-19 u:** import 0,127 kWh, export 0,058; de accu dekte het huis (SoC 49 → 43 %, beschikbaar 4,49 → 3,80). Reserve vast 10,37 (afgekapt, boven capaciteit) → geen reservesprongen sinds 15:17 (H-EMS-14 nu niet toetsbaar).
+- MC 88 % tot het blok (24-10 10:45, schoof 19:15 van 10:30); afrekening "andere horizon" morgen.
+- Hypotheses: H-EMS-2 (PV-bias; correctie vandaag te scherp), H-EMS-11 (nacht/avond vs ochtendpiek; ochtend 24-10 toetsen), H-EMS-14 (reservesprong live correctie; alleen zichtbaar onder de kap). Geen release (tussenronde). L-EMS-032/033 voor de dagafsluiting.
+
+laatste ronde: 23-10 19:40, gemeten t/m 23-10 19:45
