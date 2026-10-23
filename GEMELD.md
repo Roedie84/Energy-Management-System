@@ -81,3 +81,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 04:51 | updates installeren ems 5.120.0, stormchase 0.58.4 (hacs)
 23-10 05:51 | gold scalper markt noemen bij 'openen geweigerd (papermarge)'
 23-10 08:52 | updates installeren gold scalper 2.21.1 (hacs)
+23-10 09:52 | ems oordeel zonvoorspelling structureel alleen op gemiddelde, niet op vaste richting
+23-10 09:52 | ems reserve-sprongenlijst bewaren over herstart
