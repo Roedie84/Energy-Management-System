@@ -511,3 +511,13 @@ laatste ronde: 23-10 15:40, gemeten t/m 23-10 15:45
 - Hypotheses: H-EMS-2 (PV-bias; correctie vandaag te scherp), H-EMS-11 (nacht/avond vs ochtendpiek; ochtend 24-10 toetsen), H-EMS-14 (reservesprong live correctie; alleen zichtbaar onder de kap). Geen release (tussenronde). L-EMS-032/033 voor de dagafsluiting.
 
 laatste ronde: 23-10 19:40, gemeten t/m 23-10 19:45
+
+## 23-10 23:40 · tussenronde
+- Actief **v5.124.1** (geen herstart sinds 15:17). 0 EMS-fouten; WARNINGs extern (Zonneplan 500 om 21:02, Solcast dag 6/7 onbeschikbaar).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 23-10 0,187 kWh). Avond 19-23 u: import 0,064 kWh, export 0,057; accu dekte het huis (SoC 44 → 30 % om 22:50).
+- **Nieuw (beslissing):** om 23:00:29 sprong het blok van 24-10 10:45 terug naar **23-10 23:00** zonder herstart → `_lopend_blok` valt terug op het blok van vandaag over de hele dag (23:00-24:00). Daarin balanceerlading (8 dagen niet vol): 23:00-23:40 **1,73 kWh** uit het net tegen 21,9-23,1 ct; nacht 14,7-16,6 ct, morgen 13:00 13,4 ct; plan laadt morgen tot 83 % (niet vol). Meerkosten ~0,19 €. → **L-EMS-034** (open, Ruud beslist).
+- **H-EMS-14:** 16 reservesprongen `alleen_behoefte` 20:43-22:15 door de live correctie (verhouding 1,13-1,98; 21:17 eenmalig 4,975); reserve afgekapt (10,37) → geen sturingseffect, maar MC tot het blok springt mee: 4× ≥ 30 pp per minuut (20:42 11 → 97 %). MC 22:00 = 100 % op een correctiepiek (0,22 → 1,44 kWh) → de 22:00-stand voor `kalibratie_22u` is ruis-gevoelig; telt bovendien als "andere horizon" (blok verschoof om 23:00).
+- **Digital twin** (6 u vooruit): 14-23 u alle te laag, laatste 10 bias −1,71 kWh (avond −1,98..−2,80); totaal 60: bias −0,47, MAE 1,06. Avond = bekende "spaarstand niet gemodelleerd"; laaduren (L-EMS-030) worden pas vanaf 05:00 afgerekend.
+- Hypotheses: H-EMS-2 (PV-bias), H-EMS-11 (nacht/ochtendpiek; ochtend 24-10), H-EMS-14 (live correctie → reservesprong/MC-ruis). Geen release (tussenronde, niets acuut: lading stopt om 24:00). L-EMS-032/033 voor de dagafsluiting.
+
+laatste ronde: 23-10 23:40, gemeten t/m 23-10 23:45
