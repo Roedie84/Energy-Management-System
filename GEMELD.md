@@ -95,3 +95,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 17:51 | gold scalper noodstop per markt i.p.v. per hele mand
 23-10 19:51 | L-SC-018 stormchase radar-vooruitblik referentietijd van getoond beeld
 23-10 19:51 | L-GS-023 gold scalper geen "HA sluit af" bij mandwissel
+23-10 23:50 | L-EMS-034 laadblok vandaag niet laten herleven na herstart
+23-10 23:50 | gold scalper vrijdag-afsluiting voor marktsluiting (weekendpositie)
+23-10 23:50 | ha herstarten om gold scalper 2.21.2 te activeren
