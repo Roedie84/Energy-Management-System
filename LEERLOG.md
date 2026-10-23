@@ -454,3 +454,16 @@ laatste ronde: 22-10 19:40, gemeten t/m 22-10 19:45
 - Hypotheses: H-EMS-2 (PV te hoog; correctie gebouwd), H-EMS-11 (nacht vs ochtendpiek), H-EMS-13 (plan = beslissing). Geen release (tussenronde).
 
 laatste ronde: 22-10 23:40, gemeten t/m 22-10 23:45
+
+## 23-10 03:40 · dagafsluiting 22-10
+- Actief **v5.119.0** (geïnstalleerd). 0 EMS-fouten; WARNINGs extern: Zendure offline 21:42/22:27, Zonneplan-sensoren en prijzen even onbeschikbaar rond 20:10/00:00 (bronbuffer vangt het op).
+- Dag 22-10: PV 4,21 kWh (day-ahead 4,58 → −8,1 %), import 11,62 (laadblok 8,43), export 0,30, accu 9,89 in / 4,88 uit, huis 10,51 (verbruiksverwachting dagarchief 7,98 → 21 % te laag). Planvolging 60,0 % (sturing 9, alle vóór v5.117.0). **Harde regel: 0× onder de reserve** (regeloverschot 0,14 kWh). Geen tekortnacht.
+- **H-EMS-2:** 16 dagen op rij te hoog; 7 d MAE/bias 20,5/−20,5 %, 14 d 19,4/−19,4, 30 d 12,1/−10,7. L-EMS-025 dag 1: correctie −8,1 % was raak (n=1). Vandaag ruw 3,94 → gecorrigeerd ~3,63 kWh.
+- **Nabeschouwing 7 d (16..22-10): € 6,54 van € 7,55 = 86,6 %.** 22-10 leverde € 0,64 tegen € 0,18 "haalbaar": het optimum kent geen netladen, de netarbitrage (€ 0,94) valt erbuiten → realisatie > 100 % op laaddagen is een definitiegrens. **Nieuw zichtbaar:** avondpiek 6 van 7 dagen "te veel ontladen" (2,1-3,6 kWh/dag, samen −€ 1,92); hoort bij H-EMS-11 (ochtendpiek vastgehouden): het optimum schuift energie van de avond naar de ochtend erna.
+- **L-EMS-024 effect:** `zon_verwacht_kwh` 22-10 = 5,28 (niet meer 0), maar 15 % boven day-ahead 4,58 en Solcast 4,47: `_ochtendverwachting` kiest het kwartier tot 09:00 met de MEESTE zon → neigt omhoog (n=1). Accu-opbrengst 0,49 incl. voorraad 0,90 ✓. Eerdere meetlogdagen (20-10 −1,02) niet herrekend (alleen nieuwe dagen). Toets nog 2 dagen vóór een voorstel.
+- **H-EMS-13 (plan = beslissing):** sinds v5.117.0 0 nieuwe "afwijking sturing" in ~48 kwartieren; nacht 22→23 had geen dip-lading gepland → nachttoets niet mogelijk. L-EMS-028 blijft gebouwd, 7-daagse toets loopt.
+- **H-EMS-14 (nieuw) bevestigd in code:** de 17 sprongen "alleen behoefte" (20:11-23:00) wisselen telkens 1,47-1,51 kWh = `CONSUMPTION_CORRECTION_MAX_EXTRA_KWH` (1,5): de live verbruikscorrectie gaat aan/uit (mediaan live > uurprofiel). Na 00:00 (blok 23-10 23:00, niet meer afgekapt) veranderde zo ook de reserve: 10,37→9,85, 9,81→10,21, 9,64→9,26. Nu geen effect (beschikbaar 3,8 ≪ reserve 8,9). **Gebouwd v5.120.0** (meetbaarheid, L-EMS-031): `live_correctie_extra_kwh`/`-verhouding` in uitsplitsing en sprongen. Bekend fenomeen (v5.14.2, compressorbeurten); meten hoe vaak het een niet-afgekapte reserve of verkoopgrens raakt vóór een voorstel (hysterese = sturing → Ruud).
+- MC 22:00 Brier 0,286 (n=7; 2× kans 100 % zonder tekortnacht). Avond 22-10: 100 % tot het blok over 25 u → valt onder L-EMS-029 "andere horizon"; afrekening na 09:00.
+- Hypotheses: H-EMS-2 (PV te hoog; correctie gebouwd), H-EMS-11 (nacht/avond vs ochtendpiek), H-EMS-14 (reservesprong door live correctie). H-EMS-13 → toets via L-EMS-028. **Release v5.120.0** (L-EMS-031).
+
+laatste ronde: 23-10 03:40, gemeten t/m 23-10 03:55

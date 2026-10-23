@@ -67,3 +67,8 @@
 | PV-voorspelling MAE (dag, day-ahead tracker) | 12,1 % (30 d) · 19,3 % (14 d) · 21,3 % (7 d); bias −10,2 / −19,3 / −21,3; 15 dagen op rij negatief | 22-09..21-10 | 22-10 03:40 |
 | Nabeschouwing: accu leverde / had kunnen (realisatie) | € 7,15 / € 8,50 (84 %) 7 d | 15..21-10 | 22-10 03:40 |
 | Digital twin accu-inhoud 6 u vooruit, MAE | 1,00 kWh; laden +1,34, nacht −0,73, avond −1,21 (bias) | 20..22-10, n=60 | 22-10 15:40 |
+| PV-voorspelling MAE (dag, day-ahead tracker) | 12,1 % (30 d) · 19,4 % (14 d) · 20,5 % (7 d); bias −10,7 / −19,4 / −20,5; 16 dagen op rij negatief | 23-09..22-10 | 23-10 03:40 |
+| Nabeschouwing: accu leverde / had kunnen (realisatie) | € 6,54 / € 7,55 (86,6 %) 7 d; avondpiek −€ 1,92/week (6/7 dagen te veel ontladen) | 16..22-10 | 23-10 03:40 |
+| Planvolging volgens plan | 62,3 % (7 d, 52,7-72,6) | 16..22-10 | 23-10 03:40 |
+| MC 22:00 Brier (tot blok) | 0,286 (n=7; 2× 100 % zonder tekortnacht) | 16..22-10 | 23-10 03:40 |
+| Reservesprong door live verbruikscorrectie | ~1,5 kWh per wissel (= begrenzing); 17 op 22-10 avond, 3 op de reserve zelf na 00:00 | 22..23-10 | 23-10 03:40 |
