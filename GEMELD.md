@@ -90,3 +90,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 12:51 | handmatige back-up voor_zigbee_ember_flash verwijderen
 23-10 12:51 | gold scalper bitvavo-mand verliest op kosten, marktkeuze herzien
 23-10 12:51 | gold scalper negatieve kosten bruto eigen koers vs netto broker
+23-10 13:51 | gold scalper xauusd oordeel failed bij te weinig clusters i.p.v. insufficient_data
