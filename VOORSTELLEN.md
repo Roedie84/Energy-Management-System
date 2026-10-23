@@ -218,6 +218,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: `kalibratie_22u` vergelijkt de kans "tot het goedkope blok" met de tekortnacht (22-09 u, > 0,5 kWh met lege accu). Valt het blok ver na 09:00, dan meet de kans de dag erna mee: 22-10 15:43 blok 23-10 21:15 (31 u), kans 95 %, plan 09:00 41 %. Eerder al 2× 100 % zonder tekortnacht (→20, →22: sparen op ~20 %). Brier 0,144 (n=7) loopt daardoor op zonder dat de voorspelling slechter werd.
 - Bouw: bij de 22:00-stand ook het blokmoment (`horizon_tot`) en `uren_tot_blok` bewaren; Brier alleen over avonden met blok ≤ 12:00 de volgende dag, de rest apart tonen (`nachten_andere_horizon`). Test met een avond met blok 21:15 de volgende dag.
 - Effect meten: Brier over vergelijkbare avonden; aantal uitgesloten avonden per week.
+- 23-10 15:40: het dagrecord van nacht →D ontstaat om 00:00 van D+1 (niet 09:00) → nacht 22→23 (avond 22-10, blok 25 u) verschijnt vannacht; 23-10 blok 24-10 10:30 → ook "andere horizon".
 
 ## L-EMS-030 · digital twin: laden met het laadrendement (meetfout)
 - Status: **gebouwd v5.119.0** (andere sessie 22-10 18:08, akkoord Ruud 18:05; geïnstalleerd 18:09). Toets bij het volgende laadblok (23-10 21:30): twin-bias in laaduren |bias| < 0,4 kWh (was +1,34; 22-10 11:45-16:45 nog +1,07..+2,15, vóór de fix). Was: **gepland** (zelf bouwen: adviserende simulatie, stuurt niets; sturing ongewijzigd). Dagafsluiting.
@@ -240,4 +241,5 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 ## L-EMS-033 · reservesprongen bewaren over een herstart (meetbaarheid)
 - Status: **gepland** (zelf bouwen: diagnose-attribuut; sturing ongewijzigd). Dagafsluiting, na nalezen of `na_herstart` dan nog klopt.
 - Onderbouwing: 23-10 — `reserve_sprongen` staat alleen in het geheugen (`__dict__['_reserve_sprongen']`); na de herstarts van 06:09 en 07:39 leeg; attributen staan niet in de recorder. De toets van H-EMS-14 moest via de state-string van Diagnose sturing.
+- 23-10 15:40: opnieuw verloren — sprong 12:33 (+1,47, niet afgekapt) gewist door de herstart van 14:54 (n=2).
 - Meten na bouw: na een herstart blijven de sprongen van vandaag/gisteren zichtbaar, `na_herstart` apart.

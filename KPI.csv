@@ -599,3 +599,10 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-23 11:40,TUSSEN,ems_reserve_sprong_live_correctie_kwh,0,0,"07:42-11:39 geen 1.5-kWh-wissels; stappen +0.25 (08:11), -0.18 (09:12), -0.25 (10:13), +0.08 (10:15 blok 23:00->23:15)"
 2026-10-23 11:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,99.8,1,11:41; blok 23:15
 2026-10-23 11:40,TUSSEN,ems_pv_tot_nu_kwh,0.744,1,pv_opbrengst_vandaag 11:43; Solcast rest 3.77 -> ~4.5 verwacht (incl. gemeten)
+2026-10-23 15:40,TUSSEN,ems_harde_regel_onder_reserve,0,1,"verkoopkwartieren leeg; regeloverschot 23-10 0.108 kWh"
+2026-10-23 15:40,TUSSEN,ems_pv_tot_15u_kwh,3.843,9,"solaredge_i1 uurstatistiek 06-15 u (piek 13-14 u 1.52); zonspreiding verwacht 4.0 (p10 2.7, p90 5.6); dag lijkt boven gecorrigeerde 3.63 te eindigen"
+2026-10-23 15:40,TUSSEN,ems_net_import_kwh,0.100,4,"11-15 u p1; export 0.093; zon naar accu, SoC 34 -> 49 %"
+2026-10-23 15:40,TUSSEN,ems_reserve_sprong_live_correctie_kwh,1.47,1,"12:33 reserve 6.42 -> 7.89 (blok 23:15, niet afgekapt); beschikbaar 3.00 -> geen effect; uitsplitsing weg door herstart 14:54"
+2026-10-23 15:40,TUSSEN,ems_blok_verschuiving_uur,11.25,1,"13:31 blok 23-10 23:15 -> 24-10 10:30 (prijzen morgen); reserve 7.84 -> 10.37 (afgekapt); verwacht tekort tot blok 2.95 kWh economisch"
+2026-10-23 15:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,100,1,"15:42; blok 24-10 10:30; mediaan diepste tekort 7.35 kWh; laadbesluit 'loont niet'"
+2026-10-23 15:40,TUSSEN,ems_herstarts,3,3,"11:51, 14:54, 15:17 (installaties v5.123.0/124.0/124.1 elders); 0 EMS-fouten"

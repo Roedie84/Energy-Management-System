@@ -489,3 +489,15 @@ laatste ronde: 23-10 07:40, gemeten t/m 23-10 07:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (nacht/avond vs ochtendpiek; 1e nacht: sparen onnodig, geen schade), H-EMS-14 (reservesprong live correctie). Geen release (tussenronde; vandaag al 3 EMS-releases door andere sessies). L-EMS-032/033 blijven gepland voor de dagafsluiting.
 
 laatste ronde: 23-10 11:40, gemeten t/m 23-10 11:45
+
+## 23-10 15:40 · tussenronde
+- Actief **v5.124.1** (geïnstalleerd; v5.123.0/124.0/124.1 van andere sessies, herstarts 11:51, 14:54, 15:17). 0 EMS-fouten; WARNINGs bronbuffer Solcast dag 3-7 en Zonneplan-prijzen bij de herstart (extern, opgevangen).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 23-10 0,108 kWh).
+- Middag 11-15 u: import 0,10 / export 0,09 kWh (P1 ≈ 0); zon naar de accu, SoC 34 → 49 %. Sparen 11:15-13:00 en weer vanaf 14:30.
+- **PV:** t/m 15:00 3,84 kWh (piek 13-14 u 1,52); zonspreiding 4,0 (p10 2,7 / p90 5,6). Gecorrigeerde day-ahead was 3,63 (ruw 3,94) → vandaag mogelijk de eerste dag in 17 dat de zon de verwachting haalt; afrekening 03:40 (L-EMS-025 dag 2).
+- **Blok verschoven:** 13:31 23-10 23:15 → **24-10 10:30** (morgenprijzen binnen). Reserve 7,84 → 10,37 (afgekapt), MC 100 % tot het blok, verwacht tekort 2,95 kWh "economisch, bijladen loonde niet". Nacht valt deels op het net; zo bedoeld. Kalibratie: deze avond hoort bij "andere horizon" (blok na 12:00).
+- **L-EMS-029 rechtgezet:** het dagrecord van nacht →D wordt om 00:00 van D+1 geschreven (niet om 09:00) → nacht 22→23 verschijnt vannacht in `kalibratie_22u`; geen fout.
+- **H-EMS-14:** 12:33 reserve 6,42 → 7,89 (+1,47 = live correctie, blok 23:15, niet afgekapt); beschikbaar 3,00 ≪ reserve → geen effect. Uitsplitsing gewist door de herstart van 14:54 → bevestigt L-EMS-033 (n=2 keer verloren).
+- Hypotheses: H-EMS-2 (PV te hoog; correctie gebouwd), H-EMS-11 (nacht/avond vs ochtendpiek), H-EMS-14 (reservesprong live correctie). Geen release (tussenronde; vandaag al 6 EMS-releases door andere sessies). L-EMS-032/033 gepland voor de dagafsluiting.
+
+laatste ronde: 23-10 15:40, gemeten t/m 23-10 15:45
