@@ -595,3 +595,23 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-23 04:20,sturen_bevestigd,245,246,mediaan 0.15 s
 2026-10-23 04:20,filtergebruik_pct,0,1,
 2026-10-23 04:20,automation_traces_fout,0,5,failed_conditions = nachtvenster
+2026-10-23 08:20,pm25_gem,0.22,48,5-min statistiek 04:20-08:20
+2026-10-23 08:20,pm25_mediaan,0.22,48,
+2026-10-23 08:20,pm25_p95,0.35,48,
+2026-10-23 08:20,pm25_max,0.52,48,blokmax 06:25
+2026-10-23 08:20,pm25_uren_gt15,0.00,48,
+2026-10-23 08:20,pm25_uren_gt25,0.00,48,
+2026-10-23 08:20,stand_mid_min,180,1,incl. 1.5 min mid 06:10 na herstart
+2026-10-23 08:20,stand_auto_min,57,1,06:05-06:47 en vanaf 08:01
+2026-10-23 08:20,pm25_gem_mid,0.21,37,5-min blokken
+2026-10-23 08:20,pm25_gem_auto,0.27,11,5-min blokken
+2026-10-23 08:20,pm25_gem_aanwezig,0.25,11,ochtend 06:05-06:33 en vanaf 08:01
+2026-10-23 08:20,pm25_gem_afwezig,0.22,37,
+2026-10-23 08:20,co2_gem,845,48,5-min; 957 -> 751; ramen dicht
+2026-10-23 08:20,co2_uren_gt1200,0.00,48,
+2026-10-23 08:20,schimmel_indicator,77,48,constant 77; binnen 64% / 17.0 C; buiten 99%
+2026-10-23 08:20,ha_herstarts,2,1,06:08 en 07:38
+2026-10-23 08:20,lokaal_mislukt,48,95422,uitval 0; 191 verbindingen; geen nieuwe fout
+2026-10-23 08:20,sturen_bevestigd,250,251,mediaan 0.15 s
+2026-10-23 08:20,filtergebruik_pct,0,1,
+2026-10-23 08:20,automation_traces_fout,0,5,
