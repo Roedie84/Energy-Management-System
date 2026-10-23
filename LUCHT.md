@@ -154,4 +154,11 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ hele ronde > 1.200 (gem 1.555, max 1.731 om 21:35), ramen dicht; dag 22-10 4,1 u > 1.200. Schimmelindicator 75 → 79. Avond ventileren.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5), H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1): geen nieuwe piek, geen toets.
 
-laatste ronde: 23-10 00:25, gemeten t/m 00:20
+## 23-10 04:25 (ronde 20)
+- PM2.5 00:20-04:20: gem 0,19, mediaan 0,19, P95 0,24, max 0,36 (02:15) (n=48); 0 uur > 15. Schoonste nacht sinds 11-10 (eerder 0,34/0,35).
+- Hele periode mid (240 min, 10 s unavailable bij herstart 02:47), niemand aanwezig, tv uit, ramen dicht. Geen piek > 25, geen kookmoment.
+- Werking: nachtvenster houdt mid vast; 5/5 traces zonder fout (failed_conditions = 00-06 geen wissels). 1 HA-herstart (02:47). Lokaal 48 mislukt op 94.064 (+1, herstart), uitval 0, sturen 245/246, filter 0%. Apparaat-PM2.5 vast op 2 (Ultimate 0,2).
+- CO₂ daalt 1.365 → 963 (gem 1.134), 1,25 u > 1.200 (tot ~01:25), ramen dicht: avondlucht trekt traag weg. Schimmelindicator 79 → 77, binnen 62% / 17,3 °C, buiten 99%. Avond ventileren.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5), H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1): geen nieuwe piek, geen toets.
+
+laatste ronde: 23-10 04:25, gemeten t/m 04:20
