@@ -766,3 +766,24 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-24 12:20,filtergebruik_pct,0,1,
 2026-10-24 12:20,automation_traces_fout,0,5,
 2026-10-24 12:20,kookautomation_traces,1,1,starttrace 12:16 finished; geen kookmoment
+2026-10-24 16:20,pm25_gem,1.28,48,5-min statistiek 12:20-16:20
+2026-10-24 16:20,pm25_mediaan,1.15,48,
+2026-10-24 16:20,pm25_p95,2.09,48,
+2026-10-24 16:20,pm25_max,2.37,48,blokmax 13:50 (aanwezigheid/tv)
+2026-10-24 16:20,pm25_uren_gt15,0.00,48,
+2026-10-24 16:20,pm25_uren_gt25,0.00,48,
+2026-10-24 16:20,stand_auto_min,128,1,4 periodes
+2026-10-24 16:20,stand_mid_min,112,1,4 periodes; geen unavailable
+2026-10-24 16:20,pm25_gem_auto,1.57,24,5-min blokken
+2026-10-24 16:20,pm25_gem_mid,0.99,24,5-min blokken
+2026-10-24 16:20,pm25_gem_aanwezig,1.54,19,occupancy of tv
+2026-10-24 16:20,pm25_gem_afwezig,1.11,29,
+2026-10-24 16:20,co2_gem,579,48,5-min; max 789 13:55; ramen dicht
+2026-10-24 16:20,co2_uren_gt1200,0.00,48,
+2026-10-24 16:20,schimmel_indicator,68,48,74 -> 64; binnen 60.9 -> 55.9% / 16.2-17.2 C; buiten 99 -> 91% 12.6 C
+2026-10-24 16:20,ha_herstarts,0,1,
+2026-10-24 16:20,lokaal_mislukt,48,106779,uitval 0; 196 verbindingen; geen nieuwe fout
+2026-10-24 16:20,sturen_bevestigd,280,281,mediaan 0.15 s
+2026-10-24 16:20,filtergebruik_pct,0,1,
+2026-10-24 16:20,automation_traces_fout,0,5,
+2026-10-24 16:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment

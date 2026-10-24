@@ -232,4 +232,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ daalt 724 → 511 (gem 590), 0 u > 1.200. Schimmelindicator 80 → 74, binnen 64,5 → 60,9% / 16,2 °C, buiten 99% / 10 °C: vocht daalt overdag; koude ruimte blijft het punt - verwarmen helpt meer dan luchten.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 24-10 12:25, gemeten t/m 12:20
+## 24-10 16:25 (ronde 29)
+- PM2.5 12:20-16:20: gem 1,28, mediaan 1,15, P95 2,09, max 2,37 (13:50) (n=48); 0 uur > 15. Dag t/m nu ~0,66; 7d (17-23/10) 8,0, mediaan dag 1,3 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht. Middagbult met aanwezigheid/tv (13:30-14:27): 0,8 → 2,2, daarna terug naar ~0,8.
+- Stand: auto 128 min (gem 1,57), mid 112 min (gem 0,99). Aanwezig 1,54 (n=19) vs afwezig 1,11 (n=29): bron (mensen), geen standeffect.
+- Werking: 5 wissels naar mid, alle precies 15 min na laatste aanwezigheid (12:57 → 13:12, 14:27 → 14:42, 14:42 → 14:57, 15:18 → 15:33); 14:42 kort aanwezig → auto pas 14:45 via kwartiercontrole. 5/5 traces zonder fout, 0 HA-herstarts. Lokaal 48 mislukt op 106.779 (geen nieuwe), uitval 0, sturen 280/281 (9/9 nieuw bevestigd), filter 0%. Apparaat-PM2.5 2-4 bij Ultimate 1-2,4: volgt grof.
+- Kookautomation: geen nieuwe traces, geen kookmoment: ongetoetst.
+- CO₂ gem 579, max 789 (13:55), 0 u > 1.200. Schimmelindicator 74 → 64, binnen 60,9 → 55,9% / 16,2-17,2 °C, buiten 99 → 91% / 12,6 °C: droger buiten en iets warmer binnen geeft direct lager vocht - bevestigt: verwarmen/luchten bij droger weer.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 24-10 16:25, gemeten t/m 16:20
