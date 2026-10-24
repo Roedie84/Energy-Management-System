@@ -107,3 +107,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 24-10 11:51 | luchtreiniger start-trigger na herstart niet naar mid (alleen auto bij aanwezigheid)
 24-10 12:51 | hue-spots looppad 1-3 apparaten op ruimte schuur (powercalc zonder ruimte)
 24-10 12:51 | oude tuya-lampen looppad 1-3 uit zigbee2mqtt verwijderen
+24-10 17:51 | hue apparaatnamen spot plafond voor 1/2 (dubbele naam woonkamer)
