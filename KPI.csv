@@ -618,3 +618,25 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-23 23:40,TUSSEN,ems_mc_sprongen_30pp_per_min,4,149,"19:40-23:00: 20:42 11 -> 97 (+86), 21:22 81 -> 45, 21:27 61 -> 23, 22:00 jump op live correctie; MC 22:00 = 100 (live_correctie 0.22 -> 1.44)"
 2026-10-23 23:40,TUSSEN,ems_live_correctie_verhouding_max,4.975,16,"16 sprongen alleen_behoefte 20:43-22:15 (reserve afgekapt 10.37); verhouding 1.13-1.98, 21:17 eenmalig 4.975 (extra afgekapt 1.5 kWh)"
 2026-10-23 23:40,TUSSEN,ems_twin_bias_kwh,-1.711,10,"6 u vooruit, afgerekend 14-23 u 23-10: alle te laag (avond -1.98..-2.80); 60 vergelijkingen bias -0.467, MAE 1.057 (46/60 te laag); laaduren nog niet afgerekend"
+2026-10-23,DAG,ems_pv_kwh,4.300,1,solaredge_i1_ac_energy statistics (dagarchief meetlog 4.30; 96/96 blokken)
+2026-10-23,DAG,ems_pv_afwijking_pct,9.0,1,"day-ahead ruw 3.94 (Solcast); gecorrigeerd 3.63 -> +18.5 % (L-EMS-025 dag 2 de verkeerde kant op); bewolking 100 %; eerste dag in 17 boven de verwachting"
+2026-10-23,DAG,ems_net_import_kwh,3.263,1,"p1 statistics (balanceerlading 23:00-23:40 1.73)"
+2026-10-23,DAG,ems_net_export_kwh,0.365,1,p1 statistics
+2026-10-23,DAG,ems_accu_laden_kwh,5.140,1,solarflow aggr
+2026-10-23,DAG,ems_accu_ontladen_kwh,4.026,1,solarflow aggr
+2026-10-23,DAG,ems_huisverbruik_kwh,6.084,1,"pv+imp-exp+ontl-laad (dagarchief 6.08; verwacht 8.57 -> -29 %)"
+2026-10-23,DAG,ems_planvolging_volgens_plan_pct,55.2,96,"sturing 0 (eerste hele dag na v5.117.0), accu 2, verbruik 34, zon 7"
+2026-10-23,DAG,ems_tekort_nacht_kwh,0,1,"dagarchief tekortnacht_kwh (nacht 22->23)"
+2026-10-23,DAG,ems_nabeschouwing_leverde_eur,0.60,1,"van 1.07 haalbaar; ochtendpiek vastgehouden 3.20 kWh (+1.15), avondpiek te veel ontladen 2.40 (-0.14), nacht 1.23 (-0.38)"
+2026-10-23,DAG,ems_verkoop_onder_reserve,0,0,"verkoopkwartieren leeg; regeloverschot 0.187 kWh"
+2026-10-23,DAG,ems_pv_mae_7d_pct,21.5,7,"bias -18.9; 6/7 negatief"
+2026-10-23,DAG,ems_pv_mae_14d_pct,16.6,14,"bias -15.4; mediaan -9.1; 13/14 negatief"
+2026-10-23,DAG,ems_pv_mae_30d_pct,12.4,30,"bias -10.5; mediaan -7.7; 25/30 negatief"
+2026-10-23,DAG,ems_nabeschouwing_realisatie_7d_pct,81.9,7,"17..23-10: 5.39 van 6.58 EUR"
+2026-10-23,DAG,ems_nabeschouwing_avondpiek_7d_eur,-1.92,7,"6/7 dagen negatief (te veel ontladen)"
+2026-10-23,DAG,ems_nabeschouwing_ochtendpiek_7d_eur,2.83,7,"vastgehouden op 19-, 21- en 23-10 (2.3-3.2 kWh, +1.08..+1.15 per dag)"
+2026-10-23,DAG,ems_planvolging_7d_pct,61.7,7,"17..23-10 (52.7-72.6)"
+2026-10-23,DAG,ems_mc_kalibratie_brier,0.333,6,"17..22-10 per_nacht; 2x kans 100 % zonder tekortnacht (->20, ->22); nacht ->23 bij andere horizon (blok verschoof)"
+2026-10-23,DAG,ems_reserve_sprongen,0,18,"17 alleen behoefte (20:43-22:15, live correctie; afgekapt 10.37), 1 na herstart"
+2026-10-23,DAG,ems_digital_twin_mae_kwh,1.201,60,"6 u vooruit; laatste 10 alle te laag (-1.4..-3.6); 00:00 voorspeld 0.57 vs 4.03: balanceerlading 23:00-23:40 en spaarstand niet in de twin"
+2026-10-23,DAG,ems_dagarchief_zon_verwacht_kwh,4.15,1,"L-EMS-024: -3.5 % onder werkelijk 4.30 (22-10 +25 %)"
