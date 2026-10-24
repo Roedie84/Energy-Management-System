@@ -415,3 +415,15 @@ laatste ronde: 24-10 07:40, gemeten t/m 24-10 03:55
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (ochtendsparen; 2/2 nachten onnodig, geen schade), H-EMS-14 (reservesprongen; nu lange horizon). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 24-10 11:40, gemeten t/m 24-10 11:45
+
+## 24-10 15:40 · tussenronde
+- Actief **v5.126.0** (geen herstart sinds 10:16). 0 EMS-fouten; WARNINGs extern (Zonneplan 500, laatst bekende waarden gebruikt).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 24-10 0,128 kWh). Export 12-15 u 0,006 kWh.
+- **Laadblok 10:45-16:30:** 10:45-12:15 `sparen_in_blok` (netladen volgt), vanaf 12:15 netladen tegen 13,5-14,7 ct: netimport 12-15 u **6,04 kWh**, accu +6,54; SoC 31 → 85 % (15:39), plan **100 % om 16:15** = de balanceerlading valt nu in het goedkope dagblok (23-10: om 23:00 tegen 21,9-23,1 ct). Past bij L-EMS-034; echte 23:00-toets vanavond.
+- **Na het blok:** plan houdt SoC 64 % om 24:00 en 52 % om 06:30 bij nachtprijzen 12,7-14,1 ct → ~5 kWh à ~14 ct (+ rendement 84 %) gaat de nacht in. Gevolg van de balanceerlading (vol moet), geen eigen fout; afrekenen in de nabeschouwing van 24-10.
+- **PV:** t/m 15:00 3,40 kWh; Solcast dag 6,30 → 5,70 (rest 1,08). Afrekening 03:40.
+- **Nieuw (weergave):** stand van *PV hourly forecast bias* = factor van het klokuur (0,487, sleutel 15) terwijl de sleutels UTC zijn (nu 13 → 0,823). De verwachting zelf gebruikt `_utc_uur` goed. → **L-EMS-035** (gepland, klaargezet op branch `wip/l-ems-035`, suite 6134 groen). Vannacht DST (25-10 03:00 → 02:00): 03:40-ronde let op de 25-uursdag.
+- H-EMS-14: geen nieuwe reservesprongen na 10:16. MC tekortkans 0 % (horizon tot 25-10 09:00).
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (ochtendsparen 2/2 onnodig), H-EMS-14 (reservesprongen; stil). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 24-10 15:40, gemeten t/m 24-10 15:45

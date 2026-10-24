@@ -250,3 +250,11 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: de terugval op "blok van vandaag" alleen gebruiken direct na een herstart (geen geheugenblok) of als dat blok eerder vandaag al het gekozen blok was en nog loopt; anders het nieuwe (vooruitkijkende) blok houden. Balanceerlading dan in de goedkoopste kwartieren van dat blok.
 - Verwacht effect: geen netlading tegen avondprijzen als een goedkoper blok al gekozen is; ~0,2 € per keer, en een balanceerlading die de accu ook echt vol maakt.
 - Meten na bouw: `cheapest_block_start` springt niet meer terug naar vandaag zonder herstart; laadprijs balanceerlading tegen het minimum van de komende 24 u.
+- 24-10 15:40: de balanceerlading valt vandaag in het dagblok (netladen 12:15-16:15 tegen 13,5-15,3 ct, plan 100 % om 16:15) i.p.v. om 23:00 tegen 21,9-23,1 ct. Echte toets 23:00 blijft.
+
+## L-EMS-035 · stand van "PV hourly forecast bias" leest het klokuur (weergave)
+- Status: **gepland** (zelf bouwen: weergave/meetfout; de verwachting en sturing gebruiken al het UTC-uur). Klaargezet op branch `wip/l-ems-035` (commit 0636e89, suite 6134 groen, 3 tests); dagafsluiting: versie 5.126.1, CHANGELOG/LEESMIJ, bestandslijst opnieuw, release.
+- Onderbouwing (24-10 15:40): `sensor..._pv_hourly_forecast_bias` stand 0,487 = profielsleutel 15, terwijl de sleutels sinds v5.24 UTC-uren zijn (`sleutels: utc`); om 13:41 UTC hoort 0,823 (sleutel 13). `PvHourlyBiasSensor.native_value` gebruikt `dt_util.now().hour`; coordinator (regels ~21052/21302) gebruikt `_utc_uur` goed.
+- Bouw: `learned_pv_hourly_ratio(self._coordinator._utc_uur(dt_util.now()))`.
+- Meten na installatie: stand = profielsleutel van het huidige UTC-uur (ook na de wintertijd).
+
