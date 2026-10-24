@@ -258,3 +258,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: `learned_pv_hourly_ratio(self._coordinator._utc_uur(dt_util.now()))`.
 - Meten na installatie: stand = profielsleutel van het huidige UTC-uur (ook na de wintertijd).
 
+
+## L-EMS-036 · wintertijdnacht: 5 van de 100 prijskwartieren vallen weg (bug)
+- Status: **gepland** (zelf bouwen: bug/foute data). Klaargezet op branch `wip/l-ems-036` (op `wip/l-ems-035`, commit na 0636e89; suite **6140 groen**, 6 nieuwe tests). Dagafsluiting: samen met L-EMS-035 als v5.126.1 (CHANGELOG/LEESMIJ, bestandslijst is al bijgewerkt).
+- Onderbouwing (24-10 19:40): kwartierplanning voor 25-10 heeft **95 rijen** (02:30 → 03:00), Zonneplan geeft er **100** (02:00-02:45 twee keer, offsets +02:00 en +01:00). Python vergelijkt twee tijdstippen in dezelfde zoneinfo-zone op kloktijd en negeert `fold`: 02:00 CEST == 02:00 CET (ook hash) → de dubbelcontrole van v3.90.0 gooit 4 kwartieren weg; 02:45 CEST → 02:00 CET krijgt duur −45 min → `_bouw_kwartierplan` slaat hem over (`duur <= 0`). Gevolg: plan/reserve tot het blok (25-10 03:00) missen ~1,25 u verbruik en `e[0] <= now < e[1]` vindt om 02:45-03:00 (2×) geen lopend kwartier. De toets `test_a_repeated_clock_hour_is_not_a_duplicate` was leeg (`or eerste == tweede`) en de testomgeving rekent `as_local` niet om.
+- Bouw: prijsreeks met een **vaste utc-offset per tijdstip** (`_lokaal_vast`), sorteren en dubbel-/gatcontrole op `timestamp()`. Kloktijd (strftime/.date()/.hour) blijft lokaal. Ook `test_v575::test_de_uitleg_en_waarom` klok vastgezet (faalde op elke dag ≠ 10-10 door `tijd_met_dag`).
+- Waarom niet vanavond: effect vannacht klein (reserve afgekapt 10,37 > beschikbaar, goedkoopste nachturen, modus smart) en alleen nuttig als hij vóór 02:00 geïnstalleerd is; volgende keer okt 2027.
+- Meten: 03:40-ronde: wat deed de sturing 02:00-03:00 CET (prijs/lopend kwartier ontbrak 02:45-03:00 2×)? Na installatie: kwartierplanning van een wintertijdnacht = 100 rijen (toets in de suite).

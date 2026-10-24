@@ -427,3 +427,14 @@ laatste ronde: 24-10 11:40, gemeten t/m 24-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (ochtendsparen 2/2 onnodig), H-EMS-14 (reservesprongen; stil). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 24-10 15:40, gemeten t/m 24-10 15:45
+
+## 24-10 19:40 · tussenronde
+- Actief **v5.126.0** (geen herstart sinds 10:16). 0 EMS-fouten; WARNINGs extern (Solcast API-limiet 10/10, Zonneplan 500).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 0,144 kWh). Avondpiek 17-19 u: import 0,029, export 0,026; accu dekte het huis (SoC 97 → 90 %).
+- **Balanceerlading niet vol:** plan (15:40) beloofde 100 % om 16:15; werkelijk 96 % bij het einde van het blok (16:30), max 97 % (zon). Gemiddeld ~1,4 kW tegen gepland 2 kW → afvlakking bovenin staat niet in het plan (n=1). Morgen opnieuw gepland 12:45-16:45.
+- **Blok van morgen vast om 16:30** (25-10 03:00 CET) → de 23:00-toets van L-EMS-034 is vanavond zuiver.
+- **Nieuw (bug, L-EMS-036):** kwartierplanning 25-10 heeft 95 van de 100 kwartieren; de wintertijd-dubbelen vallen weg (Python negeert `fold` binnen één zoneinfo-zone). Vastgesteld met de echte prijsreeks, gereproduceerd in 6 tests; fix klaargezet op `wip/l-ems-036` (suite 6140 groen; ook een tijdgebonden test gerepareerd). Niet vanavond gereleased: klein effect vannacht, alleen nuttig bij installatie vóór 02:00.
+- PV t/m 18:00 **4,66 kWh** tegen Solcast 5,70 (−18 %) → H-EMS-2 (te hoog) houdt; afrekening 03:40.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (ochtendsparen 2/2 onnodig), H-EMS-14 (reservesprongen; stil sinds 10:16). Geen release (tussenronde). 03:40: DST-nacht (25 u) + L-EMS-034/036 nameten, release v5.126.1 (L-EMS-035 + 036).
+
+laatste ronde: 24-10 19:40, gemeten t/m 24-10 19:50
