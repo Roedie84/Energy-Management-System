@@ -402,3 +402,16 @@ laatste ronde: 23-10 23:40, gemeten t/m 23-10 23:45
 - HA-MCP kon niet verbinden (502 bij opbouw van de verbinding) → geen history, logs of dashboard; niets gemeten, geen release, dashboardkaart niet bijgewerkt. Volgende ronde meet door vanaf 03:55 (recorder bewaart ~10 d, dus geen verlies).
 
 laatste ronde: 24-10 07:40, gemeten t/m 24-10 03:55
+
+## 24-10 11:40 · tussenronde
+- Actief **v5.126.0** (herstarts 07:41 en 10:16; v5.125.0 en v5.126.0 nu beide actief). 0 EMS-fouten; WARNINGs extern (Zonneplan 500 om ~10:46, laatst bekende prijzen gebruikt).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 24-10 0,128 kWh).
+- **Nacht 23→24:** het herleefde blok 23:00-24:00 laadde in totaal **2,59 kWh** uit het net (accu +2,38), niet 1,73: lading liep tot 24:00. Daarna smart; netimport 00-09 u 0,42 kWh, waarvan 0,22 in de spaarkwartieren 01:45-03:00. Geen tekortnacht (SoC min 30 %).
+- **H-EMS-11, ochtendpiek 07-10 u:** import 0,087 kWh; accu dekte het huis (0,81 kWh, SoC 37 → 31 %). 2e nacht met ochtendsparen: weer niet nodig, energie bleef in de accu (2,42 kWh om 11:43, blok 10:45). n=2.
+- **L-EMS-032 geverifieerd:** plantoetsing "structureel te hoog: 26 van 30 dagen minder zon (mediaan −7 %)". **L-EMS-033 geverifieerd:** na de herstart van 10:16 staan de 7 sprongen van 07:43-10:16 er nog.
+- **L-EMS-034 gebouwd v5.126.0** (andere sessie 07:28, geïnstalleerd 07:41). Code nagelezen: `_gekozen_blok_start` wordt elke ronde gezet, dus de fix dekt ook de 23:00-terugval zonder herstart. Na 2 herstarts bleef het blok 10:45. Echte toets: vanavond 23:00, als het blok van morgen al vastligt.
+- **H-EMS-14:** sprongen nu door `lange_horizon_extra_kwh` (10:14 +1,88 / 10:15 −1,81 / 10:16 +2,99), niet door de live correctie; reserve niet afgekapt maar ≫ beschikbaar → geen effect.
+- PV t/m 11:43 0,45 kWh, Solcast dag 6,30 (rest 5,23), bewolking 96 %. Afrekening 03:40.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (ochtendsparen; 2/2 nachten onnodig, geen schade), H-EMS-14 (reservesprongen; nu lange horizon). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 24-10 11:40, gemeten t/m 24-10 11:45
