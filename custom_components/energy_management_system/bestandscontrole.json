@@ -12,7 +12,7 @@
   "cockpit_frontend.py": "6db90436952bb889",
   "config_flow.py": "b633ea7637fa4a16",
   "const.py": "6b989d96e5bd8fc9",
-  "coordinator.py": "078d792303072ad4",
+  "coordinator.py": "ef6348f67ac74b80",
   "dagarchief.py": "6ad9fb2cf059a4e4",
   "dashboard_template.yaml": "dc8d80ad7cb3dec3",
   "diagnostics.py": "4f501e643c88c4cf",
