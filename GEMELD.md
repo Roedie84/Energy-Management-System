@@ -98,3 +98,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 23:50 | L-EMS-034 laadblok vandaag niet laten herleven na herstart
 23-10 23:50 | gold scalper vrijdag-afsluiting voor marktsluiting (weekendpositie)
 23-10 23:50 | ha herstarten om gold scalper 2.21.2 te activeren
+24-10 03:51 | updates installeren postnl, dhl nl, parcel aggregator (hacs)
