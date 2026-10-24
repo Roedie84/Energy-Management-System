@@ -398,4 +398,7 @@ laatste ronde: 23-10 23:40, gemeten t/m 23-10 23:45
 - MC 22:00 Brier 0,333 (n=6; 2× 100 % zonder tekortnacht); nacht →23 telt als "andere horizon". Digital twin MAE 1,20 kWh (n=60): de balanceerlading van 23:00 (L-EMS-034) en de spaarstand staan niet in de twin → L-EMS-030 laadtoets niet zuiver.
 - Hypotheses: H-EMS-2 (PV-bias), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (live correctie). L-EMS-034 blijft open.
 
-laatste ronde: 24-10 03:40, gemeten t/m 24-10 03:55
+## 24-10 07:40 · tussenronde (niet gemeten)
+- HA-MCP kon niet verbinden (502 bij opbouw van de verbinding) → geen history, logs of dashboard; niets gemeten, geen release, dashboardkaart niet bijgewerkt. Volgende ronde meet door vanaf 03:55 (recorder bewaart ~10 d, dus geen verlies).
+
+laatste ronde: 24-10 07:40, gemeten t/m 24-10 03:55
