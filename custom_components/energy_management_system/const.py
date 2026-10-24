@@ -3742,6 +3742,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # `_window_last_sample` bewust NIET: wat er tijdens de herstart is
     # verbruikt, weet niemand.
     "_tracking_window_end": {"type": "datetime"},
+    # v5.126.0 (L-EMS-034): het gekozen blok overleeft een herstart, zodat
+    # een blok van vandaag niet terugkomt als dat van morgen al vastlag.
+    "_gekozen_blok_start": {"type": "datetime"},
     "_window_energy_kwh": {"type": "plain"},
     "_window_duration_hours": {"type": "plain"},
     "_window_temp_samples": {"type": "plain"},

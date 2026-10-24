@@ -33693,3 +33693,12 @@ Leerronde 24-10 03:40. Alleen rapportage en meetbaarheid; sturing, reserve en co
 
 Tests: `test_v5125_structureel_en_sprongen.py` (10).
 
+
+## v5.126.0 — na een herstart komt een laadblok van vandaag niet terug (L-EMS-034)
+
+Leerronde 24-10. Op 23-10 kwam direct na een HA-herstart een laadblok van vandaag terug terwijl het blok van morgen al gekozen was (≈ € 0,19, accu niet vol).
+
+- **Oorzaak.** `last_cheap_block_start/_end` staan alleen in het geheugen. Na een herstart herberekent `_lopend_blok` (v5.28.5) het blok van vandaag over de hele dag; ligt "nu" daarin, dan werd dat het lopende blok — ook als dat dal pas begon nadat de prijzen van morgen binnen waren en het blok van morgen al vastlag. Vóór de herstart liep dat blok dus nooit.
+- **Fix.** Het gekozen blok wordt bewaard (`_gekozen_blok_start`, datetime in `PERSISTED_FIELDS`, gezet bij elke blokkeuze in de ronde). Ligt het bewaarde blok in de toekomst op een latere dag, dan slaat `_lopend_blok` het terugzoeken van een blok van vandaag over. Een onthouden lopend blok, een bewaard blok van vandaag en de situatie zonder opslag werken als voorheen.
+
+Tests: `test_v5126_blok_na_herstart.py` (6).

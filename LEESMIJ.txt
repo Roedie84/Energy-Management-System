@@ -1,3 +1,13 @@
+EMS v5.126.0 - na een herstart komt een laadblok van vandaag niet terug
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Was het goedkope blok van morgen al gekozen, dan kon direct na een
+  herstart een blok van vandaag terugkomen (23-10: ongeveer € 0,19, en de
+  accu werd er niet vol van). Het gekozen blok wordt nu bewaard; lag dat
+  op een latere dag, dan blijft het daarbij. Een blok dat vóór de herstart
+  al liep, blijft gewoon het blok tot het eindigt.
+
 EMS v5.125.0 - zonvoorspelling: ook een vaste richting heet structureel
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -22070,6 +22070,9 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    # v5.126.0 (L-EMS-034): het laatst gekozen goedkope blok (bewaard).
+    _gekozen_blok_start: datetime | None = None
+
     def _lopend_blok(self, now: datetime, nieuw_start, nieuw_eind, entries=None) -> tuple:
         """Het lopende blok houden tot het eindigt (v5.28.5).
 
@@ -22084,6 +22087,19 @@ class EnergyManagementSystemCoordinator:
         if oud_start is not None and oud_eind is not None and oud_start <= now < oud_eind:
             return oud_start, oud_eind
         if nieuw_start is not None and nieuw_start <= now:
+            return nieuw_start, nieuw_eind
+        # v5.126.0 (L-EMS-034): lag vóór de herstart het blok van een LATERE
+        # dag al vast, dan liep er geen blok van vandaag - dan komt dat ook
+        # niet terug. Leerronde 24-10: op 23-10 kwam na een herstart een blok
+        # van vandaag terug terwijl dat van morgen al gekozen was (≈ € 0,19,
+        # en de accu werd er niet vol van).
+        gekozen = getattr(self, "_gekozen_blok_start", None)
+        if (
+            isinstance(gekozen, datetime)
+            and gekozen.tzinfo is not None
+            and gekozen > now
+            and gekozen.date() > now.date()
+        ):
             return nieuw_start, nieuw_eind
         vandaag = [e for e in (entries or []) if e[0].date() == now.date()]
         if vandaag:
@@ -46111,6 +46127,8 @@ class EnergyManagementSystemCoordinator:
         )
         self.last_cheap_block_start = cheap_block_start
         self.last_cheap_block_end = cheap_block_end
+        if cheap_block_start is not None:
+            self._gekozen_blok_start = cheap_block_start
         # v5.43: de lange horizon meten VÓÓR de eerste reserve van de ronde.
         # Stond in het staartstuk, na de brug: de reserve van de ronde (v5.42)
         # rekende dan met het deel na het blok van de VORIGE ronde - en na een
