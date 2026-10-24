@@ -105,3 +105,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 24-10 09:51 | pakketintegraties postnl/dhl/parcel aggregator opnieuw downloaden (niet geladen na mislukte hacs-update)
 24-10 11:51 | L-GS-025 gold scalper mand toelaten op mediane spread 24 u
 24-10 11:51 | luchtreiniger start-trigger na herstart niet naar mid (alleen auto bij aanwezigheid)
+24-10 12:51 | hue-spots looppad 1-3 apparaten op ruimte schuur (powercalc zonder ruimte)
+24-10 12:51 | oude tuya-lampen looppad 1-3 uit zigbee2mqtt verwijderen
