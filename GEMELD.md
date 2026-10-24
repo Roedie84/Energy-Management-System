@@ -99,3 +99,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 23-10 23:50 | gold scalper vrijdag-afsluiting voor marktsluiting (weekendpositie)
 23-10 23:50 | ha herstarten om gold scalper 2.21.2 te activeren
 24-10 03:51 | updates installeren postnl, dhl nl, parcel aggregator (hacs)
+24-10 04:50 | updates installeren ems 5.125.0, gold scalper 2.21.3, stormchase 0.59.2 (hacs)
