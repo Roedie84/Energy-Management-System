@@ -108,3 +108,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 24-10 12:51 | hue-spots looppad 1-3 apparaten op ruimte schuur (powercalc zonder ruimte)
 24-10 12:51 | oude tuya-lampen looppad 1-3 uit zigbee2mqtt verwijderen
 24-10 17:51 | hue apparaatnamen spot plafond voor 1/2 (dubbele naam woonkamer)
+24-10 20:51 | L-EMS-036 ems wintertijd prijskwartieren wegvallen (95 i.p.v. 100)
+24-10 20:51 | L-SC-021 stormchase kaal model na front blijft staan (+17 km/u)
+24-10 20:51 | ha herstarten om gold scalper 2.22.1 te activeren (kostenfilter PUMP)
