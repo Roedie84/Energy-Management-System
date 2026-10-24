@@ -241,4 +241,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ gem 579, max 789 (13:55), 0 u > 1.200. Schimmelindicator 74 → 64, binnen 60,9 → 55,9% / 16,2-17,2 °C, buiten 99 → 91% / 12,6 °C: droger buiten en iets warmer binnen geeft direct lager vocht - bevestigt: verwarmen/luchten bij droger weer.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 24-10 16:25, gemeten t/m 16:20
+## 24-10 20:25 (ronde 30)
+- PM2.5 16:20-20:20: gem 0,67, mediaan 0,54, P95 1,26, max 1,62 (16:30) (n=48); 0 uur > 15. Dag t/m nu ~0,67; 7d (17-23/10) 8,0, mediaan dag 1,3 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit. Bultjes ~1,2-1,4 bij aanwezigheid (16:30, 17:40-18:00), daarna terug naar 0,3-0,5.
+- Stand: auto 112 min (gem 0,79), mid 128 min (gem 0,57). Aanwezig 0,62 (n=17) vs afwezig 0,70 (n=31): geen verschil op dit niveau.
+- Werking: mid precies 15 min na laatste aanwezigheid (16:35:27 → 16:50:27, 17:59:36 → 18:14:36); auto direct bij terugkomst (17:34:48, 19:37:47). 5/5 traces zonder fout, 0 HA-herstarts. Lokaal 48 mislukt op 108.222 (geen nieuwe), uitval 0, sturen 284/285, filter 0%. Apparaat-PM2.5 vast op 2.
+- Kookautomation: geen nieuwe traces, geen kookmoment: ongetoetst.
+- CO₂ gem 589, max 641, 0 u > 1.200. Verwarming aan vanaf ~19:37: binnen 16,4 → 20,5 °C, vocht 58 → 47,8%, schimmelindicator 68 → 64 (buiten 99% / 11 °C). Bevestigt: verwarmen lost het vocht op, niet luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 24-10 20:25, gemeten t/m 20:20
