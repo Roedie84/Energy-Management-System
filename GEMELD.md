@@ -111,3 +111,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 24-10 20:51 | L-EMS-036 ems wintertijd prijskwartieren wegvallen (95 i.p.v. 100)
 24-10 20:51 | L-SC-021 stormchase kaal model na front blijft staan (+17 km/u)
 24-10 20:51 | ha herstarten om gold scalper 2.22.1 te activeren (kostenfilter PUMP)
+24-10 23:51 | L-SC-022 stormchase windstoten tijdens front factor uit metingen van dit front
+24-10 23:51 | stormchase radar-vooruitblik image blijft hangen sinds herstart (08:16 UTC)
