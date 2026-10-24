@@ -1,3 +1,16 @@
+EMS v5.125.0 - zonvoorspelling: ook een vaste richting heet structureel
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+Alleen meten en rapporteren; de sturing verandert niet.
+
+- Plantoetsing: lag de zon dag na dag onder de verwachting maar gemiddeld
+  net binnen de 20 %, dan zei het oordeel "niet structureel". Nu telt ook
+  de richting: valt minstens 80 % van de dagen (vanaf 7) aan dezelfde kant
+  met een mediaan van minstens 5 %, dan staat er "structureel te hoog" of
+  "te laag", met het aantal dagen en de mediaan.
+- De reservesprongen (Diagnose sturing) blijven na een herstart bewaard.
+
 EMS v5.124.1 - P1 regeldoel na een herstart hersteld
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

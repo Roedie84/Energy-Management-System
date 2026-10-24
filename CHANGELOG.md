@@ -33683,3 +33683,13 @@ Live 23-10 14:55, na een herstart terwijl zendure_ha op `sensor.woonkamer_energy
 
 Tests: `test_v5124_verkooptoets_weergave.py` +2.
 
+
+## v5.125.0 — plantoetsing ziet een vaste richting; reservesprongen overleven een herstart (leerronde, alleen meten)
+
+Leerronde 24-10 03:40. Alleen rapportage en meetbaarheid; sturing, reserve en correcties veranderen niet.
+
+- **Plantoetsing "structureel" ook bij een vaste richting (L-EMS-032).** Het oordeel keek alleen of het gemiddelde boven de tolerantie (20 %) lag. Op 23-10 lag 14 van 14 dagen de zon onder de verwachting, gemiddeld −20,0 % (precies op de grens), en het oordeel zei "loopt niet structureel uit de pas". Nieuw `_plan_review_vaste_richting`: vanaf 7 dagen, als ≥ 80 % aan dezelfde kant valt en de mediaan ≥ 5 % is, heet het "structureel te hoog/te laag" met het aantal dagen en de mediaan. Constanten `PLAN_REVIEW_RICHTING_*`.
+- **Reservesprongen bewaard over een herstart (L-EMS-033).** `reserve_sprongen` stond alleen in het geheugen; op 23-10 drie keer leeg na een herstart, en de attributen staan niet in de recorder. Nu in de opslag (`_reserve_sprongen`, plain); een onleesbare opslag geeft een lege lijst. `na_herstart` blijft per sprong gemarkeerd.
+
+Tests: `test_v5125_structureel_en_sprongen.py` (10).
+

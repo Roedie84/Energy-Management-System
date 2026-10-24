@@ -522,6 +522,9 @@ from .const import (
     PLAN_REVIEW_HISTORY_DAYS,
     PLAN_REVIEW_MIN_BASIS,
     PLAN_REVIEW_MIN_DAYS,
+    PLAN_REVIEW_RICHTING_AANDEEL,
+    PLAN_REVIEW_RICHTING_MIN_DAYS,
+    PLAN_REVIEW_RICHTING_MIN_MEDIAAN_PERCENT,
     PLAN_REVIEW_SOC_TOLERANCE_PERCENT,
     PLAN_REVIEW_TOLERANCE_PERCENT,
     PLAN_SNAPSHOT_HOUR,
@@ -23852,12 +23855,22 @@ class EnergyManagementSystemCoordinator:
             "spaarplan_nodig_tot_blok_kwh": plan.get("nodig_tot_blok_kwh"),
         }
 
+    # v5.125.0 (L-EMS-033): de reservesprongen gaan mee in de opslag.
+    # Leerronde 23-10: twee keer per dag na een herstart leeg, en de
+    # attributen staan niet in de recorder - de sprong van 12:33 was alleen
+    # nog uit de state-string te halen. None tot de eerste sprong (de
+    # property maakt per coördinator een eigen lijst).
+    _reserve_sprongen: list | None = None
+
     @property
     def reserve_sprongen(self) -> list:
         """De laatste reservesprongen (v5.87, L-EMS-020)."""
         lijst = self.__dict__.get("_reserve_sprongen")
-        if lijst is None:
+        if not isinstance(lijst, list):
+            # Ook een onleesbare opslag (v5.125.0): opnieuw beginnen.
             lijst = self.__dict__["_reserve_sprongen"] = []
+        elif not all(isinstance(r, dict) for r in lijst):
+            lijst[:] = [r for r in lijst if isinstance(r, dict)]
         return lijst
 
     # v5.42: zie `_get_dynamic_discharge_reserve_kwh`.
@@ -25653,6 +25666,14 @@ class EnergyManagementSystemCoordinator:
             )
         gemiddeld = sum(zonafwijkingen) / len(zonafwijkingen)
         if abs(gemiddeld) <= PLAN_REVIEW_TOLERANCE_PERCENT:
+            # v5.125.0 (L-EMS-032): ook een vaste RICHTING is structureel.
+            # Leerronde 23-10: 14 van 14 dagen minder zon dan voorspeld,
+            # gemiddeld -20,0 % - precies op de tolerantie - en het oordeel
+            # zei "niet structureel". Een reeks die steeds aan dezelfde
+            # kant valt, zegt meer dan de grootte van het gemiddelde.
+            richting_tekst = self._plan_review_vaste_richting(zonafwijkingen)
+            if richting_tekst:
+                return richting_tekst
             return "De zonvoorspelling loopt niet structureel uit de pas."
         richting = "te hoog" if gemiddeld < 0 else "te laag"
         return (
@@ -25660,6 +25681,39 @@ class EnergyManagementSystemCoordinator:
             f"{gemiddeld:+.0f}% over {len(zonafwijkingen)} dagen. Dat werkt "
             "door in de reserve en in het uitstelplan."
         )
+
+    @staticmethod
+    def _plan_review_vaste_richting(zonafwijkingen: list) -> str | None:
+        """Een tekst als de zonafwijking steeds dezelfde kant op valt
+        (v5.125.0, L-EMS-032; alleen rapportage, stuurt niets).
+
+        Structureel = minstens PLAN_REVIEW_RICHTING_MIN_DAYS dagen, waarvan
+        minstens PLAN_REVIEW_RICHTING_AANDEEL dezelfde richting heeft, en
+        een mediaan van minstens PLAN_REVIEW_RICHTING_MIN_MEDIAAN_PERCENT.
+        """
+        waarden = [float(v) for v in zonafwijkingen if isinstance(v, (int, float))]
+        if len(waarden) < PLAN_REVIEW_RICHTING_MIN_DAYS:
+            return None
+        lager = sum(1 for v in waarden if v < 0)
+        hoger = sum(1 for v in waarden if v > 0)
+        mediaan = statistics.median(waarden)
+        if abs(mediaan) < PLAN_REVIEW_RICHTING_MIN_MEDIAAN_PERCENT:
+            return None
+        if mediaan < 0 and lager >= PLAN_REVIEW_RICHTING_AANDEEL * len(waarden):
+            return (
+                f"De zonvoorspelling staat structureel te hoog: op {lager} van "
+                f"{len(waarden)} dagen minder zon dan voorspeld (mediaan "
+                f"{mediaan:+.0f}%). Dat werkt door in de reserve en in het "
+                "uitstelplan."
+            )
+        if mediaan > 0 and hoger >= PLAN_REVIEW_RICHTING_AANDEEL * len(waarden):
+            return (
+                f"De zonvoorspelling staat structureel te laag: op {hoger} van "
+                f"{len(waarden)} dagen meer zon dan voorspeld (mediaan "
+                f"{mediaan:+.0f}%). Dat werkt door in de reserve en in het "
+                "uitstelplan."
+            )
+        return None
 
     _plan_tekort_monsters: list | None = None
 

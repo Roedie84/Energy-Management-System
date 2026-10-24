@@ -3863,6 +3863,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "vloer_bootstrap": {"type": "plain"},
     "_capacity_trend_day_key": {"type": "date"},
     "_proefstand_doorzet_bij_dagstart": {"type": "plain"},
+    # v5.125.0 (L-EMS-033): de reservesprongen overleven een herstart.
+    "_reserve_sprongen": {"type": "plain"},
     "_price_shape_day_key": {"type": "date"},
     "_daily_report_day_key": {"type": "date"},
     "_daily_cost_day_key": {"type": "date"},
@@ -6686,6 +6688,14 @@ PLAN_REVIEW_MIN_BASIS = 0.5
 
 # Een losse dag zegt niets over een structurele afwijking.
 PLAN_REVIEW_MIN_DAYS = 5
+
+# v5.125.0 (L-EMS-032): een vaste richting is ook structureel. Vanaf zoveel
+# dagen, als minstens dit aandeel aan dezelfde kant valt en de mediaan
+# minstens zoveel procent is (leerronde 23-10: 14/14 dagen te hoog,
+# mediaan -7 %, gemiddeld -20,0 % = net binnen de tolerantie).
+PLAN_REVIEW_RICHTING_MIN_DAYS = 7
+PLAN_REVIEW_RICHTING_AANDEEL = 0.8
+PLAN_REVIEW_RICHTING_MIN_MEDIAAN_PERCENT = 5.0
 
 # Wat er als eerste voor een kwartier werd voorspeld, wordt onthouden.
 # Verandert de modus daarna, dan is dat zichtbaar - juist die
