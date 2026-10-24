@@ -101,3 +101,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 24-10 03:51 | updates installeren postnl, dhl nl, parcel aggregator (hacs)
 24-10 04:50 | updates installeren ems 5.125.0, gold scalper 2.21.3, stormchase 0.59.2 (hacs)
 24-10 05:51 | ems digital twin spaarstand en balanceerlading 23:00 modelleren
+24-10 07:51 | gold scalper koersopvraging sporadisch mislukt (gekruist boek/lege bieding)
