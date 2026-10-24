@@ -438,3 +438,14 @@ laatste ronde: 24-10 15:40, gemeten t/m 24-10 15:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (ochtendsparen 2/2 onnodig), H-EMS-14 (reservesprongen; stil sinds 10:16). Geen release (tussenronde). 03:40: DST-nacht (25 u) + L-EMS-034/036 nameten, release v5.126.1 (L-EMS-035 + 036).
 
 laatste ronde: 24-10 19:40, gemeten t/m 24-10 19:50
+
+## 24-10 23:40 · tussenronde
+- Actief **v5.126.0** (HA-herstart ~20:02, EMS mee herstart). 0 EMS-fouten sinds 19:50.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 24-10 0,196 kWh). Reserve 9,7 > beschikbaar 6,9 kWh: accu dekt het huis, verkoopt niet.
+- **L-EMS-034 geverifieerd:** om 23:00 geen terugval op het blok van vandaag; blok bleef 25-10 03:00 CET, modus smart, geen netlading (SoC 71 → 70 %). Eerste 23:00 zonder balanceerlading sinds 22-10.
+- **L-EMS-036 bevestigd in de live planning (23:30):** morgen 02:30 → 03:00, 95 van 100 kwartieren. Effect vannacht klein (smart, prijzen 12,8-12,9 ct). Release v5.126.1 (035 + 036) in de dagafsluiting — kan pas ná de DST-nacht geïnstalleerd worden.
+- PV dag **4,7 kWh** tegen Solcast 5,70 (−18 %) / ochtend 6,30 (−25 %) → H-EMS-2 (te hoog) houdt; afrekening 03:40.
+- Let op voor 03:40: HACS kon om 20:01 de Gold Scalper-zip niet downloaden (GitHub-header te lang; ook bij andere repo's) → na de release controleren of de nieuwe versie echt draait (diagnostics `integration_manifest.version`), niet alleen HACS.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (ochtendsparen 2/2 onnodig), H-EMS-14 (reservesprongen; stil sinds 10:16). Geen release (tussenronde).
+
+laatste ronde: 24-10 23:40, gemeten t/m 24-10 23:45
