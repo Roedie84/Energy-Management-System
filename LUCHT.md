@@ -250,4 +250,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ gem 589, max 641, 0 u > 1.200. Verwarming aan vanaf ~19:37: binnen 16,4 → 20,5 °C, vocht 58 → 47,8%, schimmelindicator 68 → 64 (buiten 99% / 11 °C). Bevestigt: verwarmen lost het vocht op, niet luchten.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 24-10 20:25, gemeten t/m 20:20
+## 25-10 00:25 (ronde 31, eerste na middernacht)
+- Dag 24-10: gem 0,65 µg/m³, max 2,37 (13:50); 0 uur > 15. 7d (18-24/10) gem 3,7, mediaan dag 1,3 (nulmeting okt 2025 9,1, stookseizoen 2025 vóór reiniger 16,0). De dagen met de pieken van 17/18-10 vallen uit het venster.
+- PM2.5 20:20-00:20: gem 0,55, mediaan 0,56, P95 0,75, max 0,98 (21:55) (n=48); geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht.
+- Stand: hele periode auto (240 min). Aanwezig (mmWave) 0,54 (n=21) vs alleen tv aan 0,55 (n=27): geen verschil.
+- Werking: tv staat aan sinds 21:53, mmWave sinds 22:52 off; daardoor bleef auto en zet het nachtvenster (00:00) auto vast - als de tv echt uit is maar 'on' meldt, draait hij de hele nacht auto (n=1, volgende ronde toetsen). 5/5 traces zonder fout (00:00/00:15 failed_conditions = nachtvenster). 0 HA-herstarts. Lokaal 48 mislukt op 109.659 (geen nieuwe), uitval 0, sturen 284/285 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 2-3 bij Ultimate 0,4-1,0.
+- Kookautomation: geen nieuwe traces, geen kookmoment: ongetoetst.
+- CO₂ gem ~680, max 916 (22-23 u), 0 u > 1.200. Verwarming uit ~22:00: binnen 21,4 → 17,6 °C, vocht 46 → 59,8%, schimmelindicator 63 → 77 (buiten 99% / 9,7 °C). Zelfde patroon als vorige avonden: afkoelen geeft het vocht, niet de luchtreiniger.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 25-10 00:25, gemeten t/m 00:20

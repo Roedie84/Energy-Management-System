@@ -808,3 +808,26 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-24 20:20,filtergebruik_pct,0,1,
 2026-10-24 20:20,automation_traces_fout,0,5,
 2026-10-24 20:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment
+2026-10-24,pm25_gem,0.65,288,UltimateSensor dagstatistiek
+2026-10-24,pm25_max,2.37,288,13:50
+2026-10-24,pm25_uren_gt15,0.00,288,
+2026-10-24,pm25_7d_gem,3.71,7,18-24/10 daggemiddelden; mediaan dag 1.27
+2026-10-25 00:20,pm25_gem,0.55,48,5-min statistiek 20:20-00:20
+2026-10-25 00:20,pm25_mediaan,0.56,48,
+2026-10-25 00:20,pm25_p95,0.75,48,
+2026-10-25 00:20,pm25_max,0.98,48,blokmax 21:55
+2026-10-25 00:20,pm25_uren_gt15,0.00,48,
+2026-10-25 00:20,pm25_uren_gt25,0.00,48,
+2026-10-25 00:20,stand_auto_min,240,1,hele periode; tv aan sinds 21:53
+2026-10-25 00:20,stand_mid_min,0,1,
+2026-10-25 00:20,pm25_gem_aanwezig,0.54,21,occupancy aan tot ~22:05
+2026-10-25 00:20,pm25_gem_alleen_tv,0.55,27,occupancy off; tv on
+2026-10-25 00:20,co2_gem,680,4,uurgemiddelden 549/523/821/820; max 916
+2026-10-25 00:20,co2_uren_gt1200,0.00,48,
+2026-10-25 00:20,schimmel_indicator,70,4,63 -> 77; binnen 46 -> 59.8% / 21.4 -> 17.6 C; buiten 99% 9.7 C
+2026-10-25 00:20,ha_herstarts,0,1,
+2026-10-25 00:20,lokaal_mislukt,48,109659,uitval 0; 196 verbindingen; geen nieuwe fout
+2026-10-25 00:20,sturen_bevestigd,284,285,geen nieuwe opdrachten
+2026-10-25 00:20,filtergebruik_pct,0,1,
+2026-10-25 00:20,automation_traces_fout,0,5,00:00/00:15 failed_conditions nachtvenster
+2026-10-25 00:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment
