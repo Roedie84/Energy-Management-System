@@ -103,3 +103,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 24-10 05:51 | ems digital twin spaarstand en balanceerlading 23:00 modelleren
 24-10 07:51 | gold scalper koersopvraging sporadisch mislukt (gekruist boek/lege bieding)
 24-10 09:51 | pakketintegraties postnl/dhl/parcel aggregator opnieuw downloaden (niet geladen na mislukte hacs-update)
+24-10 11:51 | L-GS-025 gold scalper mand toelaten op mediane spread 24 u
+24-10 11:51 | luchtreiniger start-trigger na herstart niet naar mid (alleen auto bij aanwezigheid)
