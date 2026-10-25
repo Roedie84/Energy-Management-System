@@ -435,3 +435,14 @@ laatste ronde: 25-10 11:40, gemeten t/m 25-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag ≈ −26 %), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (reservesprongen; 0 nieuw). Nieuw voorstel L-EMS-037. Geen release (tussenronde, niets acuut).
 
 laatste ronde: 25-10 15:40, gemeten t/m 25-10 15:45
+
+## 25-10 19:40 · tussenronde
+- Andere sessies releasten **v5.127.0-5.127.3** (aanwezigheid, geen netlading vanaf 95 %, besparingstotaal bij herstart); HA herstartte 15:54, 16:09, 17:25 en 18:47 → **v5.127.3 actief**, diagnose fout 0 / storing 0. Na 18:47 prijs- en Solcast-buffer gebruikt (kort onbeschikbaar, afgevangen).
+- **Avondverkoop 17:30-19:45: 9 kwartieren, 3,25 kWh uit de accu tegen 25,5-30,6 ct. Harde regel: 0× onder de reserve** - kleinste marge bij export **3,26 kWh** (18:30, 19:30), `mag_verkopen_bij_export` 9/9, `export_zonder_vrijgave_rondes` 0. Verkoopreserve tot het blok zakte mee 4,99 → 1,88 kWh; beschikbaar 9,79 → 5,41. Regeloverschot 25-10 0,071 kWh.
+- Planvolging 25-10 t/m 19:30 **54,8 %** (73 kw.; accu 26, sturing 2 (+1 sinds 15:40, vermoedelijk de bijtoplading van 16:15 bij 97 % die v5.127.2 oplost), verbruik 4). Verkoopkwartieren 17:45-19:45 allemaal "volgens plan" (gemeten 2,44 tegen gepland 2,38-2,41 kW).
+- **H-EMS-2:** PV dag **5,5 kWh** tegen day-ahead 7,43 → **≈ −26 %** (tweede voorspelling 5,20 → +6 %). 30 d: 26/30 dagen minder zon (mediaan −6,8 %). Afrekening 03:40.
+- Reserve (lange horizon) 10,37 kWh > beschikbaar 5,41 → na het blok 21:30 geen verkoop meer. Reservesprongen 20 (0 nieuw; `na_herstart` 3 → 5, telt niet). MC 0,0 %.
+- L-EMS-037 blijft open; v5.127.2 raakt het laadblok niet (alleen nieuwe netlading ≥ 95 %). Effect v5.127.2 toetsen bij het volgende blok: 0 netlading-starts boven 95 %.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag ≈ −26 %), H-EMS-11 (avond/ochtendpiek; vanavond 3,25 kWh verkocht bij 26-31 ct), H-EMS-14 (reservesprongen; 0 nieuw). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 25-10 19:40, gemeten t/m 25-10 19:45
