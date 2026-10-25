@@ -33702,3 +33702,15 @@ Leerronde 24-10. Op 23-10 kwam direct na een HA-herstart een laadblok van vandaa
 - **Fix.** Het gekozen blok wordt bewaard (`_gekozen_blok_start`, datetime in `PERSISTED_FIELDS`, gezet bij elke blokkeuze in de ronde). Ligt het bewaarde blok in de toekomst op een latere dag, dan slaat `_lopend_blok` het terugzoeken van een blok van vandaag over. Een onthouden lopend blok, een bewaard blok van vandaag en de situatie zonder opslag werken als voorheen.
 
 Tests: `test_v5126_blok_na_herstart.py` (6).
+
+
+## v5.126.1 — wintertijdnacht houdt alle 100 prijskwartieren (L-EMS-036); stand van "PV hourly forecast bias" op het UTC-uur (L-EMS-035)
+
+Leerronde 24/25-10. Twee correcties; sturing, reserve en drempels ongewijzigd.
+
+- **Wintertijdnacht (L-EMS-036, bug).** Zonneplan gaf voor 25-10 honderd kwartieren (02:00-02:45 twee keer, +02:00 en +01:00); de kwartierplanning had er 95. Python vergelijkt twee tijdstippen in dezelfde zoneinfo-zone op kloktijd en negeert `fold`: 02:00 zomertijd == 02:00 wintertijd (ook als hash). De dubbelcontrole (v3.90.0) gooide er vier weg en 02:45 zomertijd → 02:00 wintertijd kreeg een negatieve duur. Gemeten in de nacht: *Current price used by integration* stond 02:45-03:00 zomertijd én 02:45-03:00 wintertijd op unknown (geen lopend kwartier), en 02:00-02:45 wintertijd kreeg de prijzen van het zomertijduur. Nu krijgt elk tijdstip in de prijsreeks een vaste utc-offset (`_lokaal_vast`); sorteren en de dubbel- en gatcontrole gaan op het absolute moment (`timestamp()`). De kloktijd (strftime, `.date()`, `.hour`) blijft lokaal. Volgende keer van belang: oktober 2027.
+- **Stand van *PV hourly forecast bias* (L-EMS-035, weergave).** De profielsleutels zijn sinds v5.24 UTC-uren; de stand las het klokuur en toonde zo de factor van twee (zomertijd) of één (wintertijd) uur later (24-10 15:41: 0,487 = sleutel 15, terwijl 0,823 gold). De verwachting zelf gebruikte al het UTC-uur.
+- Test `test_v575::test_de_uitleg_en_waarom` zet de klok vast (faalde op elke dag behalve 10-10).
+
+Tests: `test_v5_126_1_wintertijd_prijsreeks.py` (6), `test_v5_126_1_pv_uurbias_stand.py` (3).
+

@@ -4333,8 +4333,13 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
     def native_value(self) -> float | None:
         # v1.48.0: zie hierboven - de tijdzone van Home Assistant, niet
         # die van het proces.
-        current_hour = dt_util.now().hour
-        value = self._coordinator.learned_pv_hourly_ratio(current_hour)
+        # v5.126.1 (L-EMS-035): de profielsleutels zijn sinds v5.24 UTC-uren.
+        # Hier stond het klokuur, dus de stand toonde de factor van twee uur
+        # later (leerronde 24-10 15:40: 0,487 = sleutel 15, terwijl 13:00 UTC
+        # 0,823 gold). Alleen de weergave; de verwachting rekende al goed.
+        value = self._coordinator.learned_pv_hourly_ratio(
+            self._coordinator._utc_uur(dt_util.now())
+        )
         return round(value, 3) if value is not None else None
 
     @property

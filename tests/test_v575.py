@@ -162,7 +162,13 @@ def test_het_kwartierplan_toont_sparen_tot_het_laadmoment(make_coordinator, hass
     assert LADEN[0] not in netregels["gespaard"]
 
 
-def test_de_uitleg_en_waarom(make_coordinator, hass):
+def test_de_uitleg_en_waarom(make_coordinator, hass, monkeypatch):
+    # v5.126.1: de tekst noemt de dag ("10-10 13:30") zodra de echte klok
+    # niet op 10-10 staat (tijd_met_dag sinds v5.118.0); de klok vastzetten.
+    import custom_components.energy_management_system.coordinator as coord
+    import custom_components.energy_management_system.tijdtekst as tijdtekst
+    monkeypatch.setattr(coord.dt_util, "now", lambda: NU)
+    monkeypatch.setattr(tijdtekst.dt_util, "now", lambda: NU)
     c = _stel_in(make_coordinator({}))
     c.last_sparen_in_blok = c.sparen_in_blok(NU, _reeks(), BLOK)
     c.last_reason = "sparen_in_blok"

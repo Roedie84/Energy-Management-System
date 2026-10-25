@@ -885,6 +885,26 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _lokaal_vast(moment: datetime) -> datetime:
+    """Lokale kloktijd met een VASTE utc-offset (v5.126.1, L-EMS-036).
+
+    In de nacht dat de wintertijd ingaat bestaat 02:00-03:00 twee keer.
+    Twee tijdstippen in dezelfde zoneinfo-tijdzone vergelijkt Python op de
+    kloktijd en negeert `fold`: 02:00 zomertijd == 02:00 wintertijd, en
+    02:00 wintertijd - 02:45 zomertijd = -45 minuten. Daardoor vielen op
+    25-10-2026 vijf van de honderd kwartieren uit de prijsreeks (de
+    dubbelcontrole gooide er vier weg, het plan sloeg er een over met een
+    negatieve duur). Met een vaste offset per tijdstip vergelijkt en
+    trekt Python af op het absolute moment; de kloktijd (strftime, .date(),
+    .hour) blijft de lokale.
+    """
+    lokaal = dt_util.as_local(moment)
+    offset = lokaal.utcoffset()
+    if offset is None:
+        return lokaal
+    return lokaal.replace(tzinfo=timezone(offset), fold=0)
+
 # (interval start, interval end, price)
 PriceEntry = tuple[datetime, datetime, float]
 
@@ -3194,9 +3214,10 @@ class EnergyManagementSystemCoordinator:
             except (TypeError, ValueError):
                 continue
 
-            entries.append((dt_util.as_local(start), dt_util.as_local(end), price))
+            entries.append((_lokaal_vast(start), _lokaal_vast(end), price))
 
-        entries.sort(key=lambda entry: entry[0])
+        # v5.126.1 (L-EMS-036): sorteren op het ABSOLUTE moment.
+        entries.sort(key=lambda entry: entry[0].timestamp())
         # v3.90.0: dubbelen eruit, en gaten onthouden.
         #
         # Gevraagd bij de doorlichting: "Wordt gecontroleerd op dubbele
@@ -3217,9 +3238,10 @@ class EnergyManagementSystemCoordinator:
             gezien = set()
             ontdubbeld = []
             for regel in entries:
-                if regel[0] in gezien:
+                moment = regel[0].timestamp()
+                if moment in gezien:
                     continue
-                gezien.add(regel[0])
+                gezien.add(moment)
                 ontdubbeld.append(regel)
             entries = ontdubbeld
         return entries
@@ -3424,15 +3446,19 @@ class EnergyManagementSystemCoordinator:
         dubbele = []
         gezien = set()
         for start, _einde, _prijs in entries:
-            if start in gezien:
+            # v5.126.1 (L-EMS-036): op het absolute moment. Binnen één
+            # zoneinfo-tijdzone negeert Python `fold` bij == en hash, dus
+            # 02:00 zomertijd en 02:00 wintertijd telden als dubbele.
+            moment = start.timestamp()
+            if moment in gezien:
                 dubbele.append(start.isoformat())
-            gezien.add(start)
+            gezien.add(moment)
 
         # De verwachte stap is de kleinste die voorkomt; dat is
         # betrouwbaarder dan de eerste twee records, want juist daar kan
         # een fout zitten.
         stappen = [
-            (entries[i + 1][0] - entries[i][0]).total_seconds() / 60
+            (entries[i + 1][0].timestamp() - entries[i][0].timestamp()) / 60
             for i in range(len(entries) - 1)
         ]
         stappen = [s for s in stappen if s > 0]

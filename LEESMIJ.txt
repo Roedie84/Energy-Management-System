@@ -1,3 +1,14 @@
+EMS v5.126.1 - wintertijdnacht: alle prijskwartieren blijven
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- In de nacht dat de wintertijd ingaat bestaat 02:00-03:00 twee keer.
+  Daarvan vielen vijf kwartieren uit de planning (25-10: 95 van 100), en
+  02:45-03:00 had twee keer geen prijs. Nu blijven alle kwartieren staan.
+- De stand van "PV hourly forecast bias" toont de factor van het huidige
+  uur (stond een of twee uur voor). Alleen de weergave; de verwachting
+  rekende al goed.
+
 EMS v5.126.0 - na een herstart komt een laadblok van vandaag niet terug
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
