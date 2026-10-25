@@ -117,3 +117,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 25-10 04:51 | updates installeren ems 5.126.1 (hacs)
 25-10 04:51 | gold scalper resultaat markt verdwijnt bij uit mand vallen (PUMP-EUR)
 25-10 04:51 | luchtreiniger nachtvenster naar mid als niemand en tv uit
+25-10 07:51 | ems maandteller accubesparing zakt bij herstarts (utility meter -> verschil sinds 1e)
