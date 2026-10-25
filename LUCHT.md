@@ -268,4 +268,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ daalt 745 → 438 (gem 574), 0 u > 1.200. Schimmelindicator 77 → 75, binnen 60 → 64,4% bij 17,4 → 16,6 °C, buiten 99% / 11,9 °C: afkoelen geeft het vocht.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 25-10 04:25, gemeten t/m 04:20
+## 25-10 08:25 (ronde 33)
+- PM2.5 04:20-08:20: gem 0,50, mediaan 0,53, P95 0,93, max 1,32 (08:15) (n=48); 0 uur > 15. Nachtminimum 0,03 (05:00); vanaf 05:30 stijging naar ~0,5 zonder aanwezigheid of open raam (buitenlucht/ochtend), daarna ochtendactiviteit tot ~1,0.
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht.
+- Stand: auto 144 min (nacht 04:20-06:00 gem 0,27), mid 95 min, 1,3 min unavailable. Aanwezig 0,66 (n=6) vs afwezig 0,48 (n=42): bron (mensen), geen standeffect.
+- Werking: HA-herstart 05:59:40; stand na herstart 06:00:55 auto terwijl niemand aanwezig, 06:02 mid - tweede keer een onnodige wissel na herstart (n=2). Daarna mid precies 15 min na laatste aanwezigheid (06:36:36 → 06:51:36, 08:06:17 → 08:21:17), auto direct bij terugkomst (06:29, 07:58). 5/5 traces zonder fout. Lokaal 48 mislukt op 112.874 (geen nieuwe), uitval 0, sturen 289/290 (5/5 nieuw bevestigd), filter 0%. Apparaat-PM2.5 2-5 bij Ultimate 0,5-1,3: volgt grof.
+- Kookautomation: starttrace 06:01 (finished), geen kookmoment: ongetoetst.
+- CO₂ gem 477, max 526, 0 u > 1.200. Schimmelindicator 75 → 78 → 76, binnen 64,6 → 62,6% bij 16,5 °C, buiten 99% / 10 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 25-10 08:25, gemeten t/m 08:20
