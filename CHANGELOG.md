@@ -33723,3 +33723,15 @@ Gemeld 25-10: "Energy Cockpit geeft nu vaak configuratie fout?". Sinds 23-10 is 
 
 Tests: `test_v51262_cockpit_vroeg.py` (2).
 
+
+## v5.127.0 — telefoons tellen mee als extra "thuis"; cockpit zegt "Iemand thuis"
+
+Gemeld 25-10 met screenshot "Thuis sinds 08:52": "Ik ben al behoorlijk veel weggeweest". Gemeten: `person.ruud_maarse` was weg 11:06-11:24, 12:20-14:34, 14:43-14:52 en vanaf 15:01, maar in die tijd gingen de achterdeur (14:55) en de zolderdeur (15:38) open en was er beweging op vier plekken. Het huis was dus bezet; het label suggereerde "jij". Gekozen: de telefoon "alleen als extra 'thuis'".
+
+- **Nieuwe optie `presence_person_entities`** (person/device_tracker, meerdere). Alleen de staat `home` telt. Valt het huis na stilte anders op "weg", dan blijft het "thuis" zolang een telefoon thuis is; de slaapregels gaan voor (telefoon op het nachtkastje). Zonder beweging na een herstart: "thuis" i.p.v. "onbekend".
+- **Thuiskomst:** staat het huis op "weg", dan bevestigt een telefoon die thuis is de thuiskomst (reden "telefoon thuis (…)"). Een telefoon die weg of in een andere zone is, verandert niets.
+- **Aanleiding** in de tijdlijn: "telefoon thuis (naam)" als de telefoon de reden is.
+- **Overzicht** `aanwezigheid.telefoons`: per telefoon naam, thuis, staat en sinds (HH:MM).
+- **Cockpit:** "Thuis" heet nu "Iemand thuis"; achter de chip per telefoon "Ruud thuis/weg/bij <zone> sinds HH:MM".
+
+Tests: `test_v5127_telefoon.py` (7).

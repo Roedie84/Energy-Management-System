@@ -1,3 +1,15 @@
+EMS v5.127.0 - je telefoon telt mee als 'thuis'; cockpit zegt 'Iemand thuis'
+
+Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna bij
+Instellingen > Apparaten en diensten > Energy Management System >
+Configureren je telefoon kiezen bij 'Telefoons'.
+
+- Een telefoon die thuis is, houdt het huis op 'thuis' (ook als je stil
+  zit) en telt als thuiskomst. Een telefoon die weg is, zegt niets: er kan
+  iemand anders thuis zijn. 's Nachts gaan de slaapregels voor.
+- De cockpit zegt 'Iemand thuis sinds ...' in plaats van 'Thuis sinds',
+  met daarachter per telefoon waar die is (bv. 'Ruud bij Yvonne sinds 15:03').
+
 EMS v5.126.2 - Energiecockpit: geen 'Configuratiefout' meer na een herstart
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

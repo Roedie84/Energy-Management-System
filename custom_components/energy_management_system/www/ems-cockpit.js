@@ -1258,7 +1258,8 @@ class EmsCockpitCard extends HTMLElement {
     const a = attr(this._s("aanwezig"), "aanwezigheid");
     if (!a || !a.beschikbaar || !a.nu) return "";
     const STAAT = {
-      thuis: ["Thuis", "var(--groen)", "persoon", "ok"],
+      /* v5.127.0: "Iemand thuis" - het huis is bezet, niet per se jij. */
+      thuis: ["Iemand thuis", "var(--groen)", "persoon", "ok"],
       weg: ["Niemand thuis", "var(--amber)", "huis", "let"],
       slaapt: ["Slaapt", "var(--violet)", "maan", ""],
     };
@@ -1278,7 +1279,16 @@ class EmsCockpitCard extends HTMLElement {
     if (genRecent) {
       beweging = `${PUNT}beweging ${genT.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })} genegeerd (geen deur)`;
     }
+    /* v5.127.0: per telefoon, gevraagd 25-10 ("ik ben al behoorlijk veel
+       weggeweest, toch thuis sinds 08:52"). */
+    const tel = Array.isArray(a.telefoons) ? a.telefoons : [];
+    const telTekst = tel.map((t) => {
+      const voornaam = String(t.naam || "").split(" ")[0];
+      const waar = t.thuis ? "thuis" : (t.staat && !["not_home", "unknown", "unavailable"].includes(t.staat) ? `bij ${String(t.staat).replace(/^thuis\s+/i, "")}` : "weg");
+      return `${voornaam} ${waar}${t.sinds ? ` sinds ${t.sinds}` : ""}`;
+    }).join(PUNT);
     const titel = [
+      telTekst ? `Telefoons: ${telTekst} (een telefoon thuis telt als thuis; weg zegt niets)` : "",
       genRecent ? `Genegeerd: ${gen.naam} - ${gen.reden}. Thuis pas bij een deur, tv, kraan, lamp met de hand of 5 min beweging op 2 plekken.` : "",
       tl && tl.aanleiding ? `Waarom: ${tl.aanleiding}` : "",
       laatst ? `Laatst gezien: ${laatst.naam}` : "",
@@ -1287,7 +1297,7 @@ class EmsCockpitCard extends HTMLElement {
     ].filter(Boolean).join(" \n");
     return `<span class="chip groot aanwezig ${klasse}" title="${esc(titel)}">` +
       `<span class="stip" style="--kleur:${kleur}"></span>${icoon(ic)}${esc(label + sinds)}` +
-      `<span class="leeg">${esc(beweging)}</span></span>`;
+      `<span class="leeg">${esc((telTekst ? PUNT + telTekst : "") + beweging)}</span></span>`;
   }
 
   /* ---- meldingen ---- */

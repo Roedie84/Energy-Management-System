@@ -571,6 +571,7 @@ from .const import (
     CONF_PRESENCE_LIGHT_ENTITIES,
     CONF_PRESENCE_ABSENCE_MINUTES,
     CONF_PRESENCE_TV_ENTITY,
+    CONF_PRESENCE_PERSON_ENTITIES,
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
     CONF_BATTERY_CHARGE_ENERGY_SENSOR,
     ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN,
@@ -8283,7 +8284,10 @@ class EnergyManagementSystemCoordinator:
                 self.last_motion_at = hersteld
 
         if self.last_motion_at is None:
-            self.presence_state = "onbekend"
+            # v5.127.0: zonder beweging weet een telefoon het wel.
+            self.presence_state = (
+                "thuis" if self._telefoon_thuis() is not None else "onbekend"
+            )
         else:
             stil_minuten = (now - self.last_motion_at).total_seconds() / 60
             # v1.20.1: de tv telt als aanwezig. Wie stil op de bank zit,
@@ -8373,6 +8377,12 @@ class EnergyManagementSystemCoordinator:
                 # ochtendroutine uit te sluiten. En "slaapt" is de
                 # veilige aanname: dan blijft de nachtreserve staan.
                 self.presence_state = "slaapt"
+            elif self._telefoon_thuis() is not None:
+                # v5.127.0: een telefoon die thuis is, houdt het huis op
+                # "thuis" - pas na de slaapregels, zodat een telefoon op
+                # het nachtkastje van een nacht geen "thuis" maakt.
+                self._nachtrust_onderbroken_sinds = None
+                self.presence_state = "thuis"
             else:
                 self._nachtrust_onderbroken_sinds = None
                 self.presence_state = "weg"
@@ -8502,6 +8512,9 @@ class EnergyManagementSystemCoordinator:
             licht = self._brandend_licht()
             if licht is not None and laat:
                 return f"licht aan ({licht})"
+            telefoon = self._telefoon_thuis()
+            if telefoon is not None and laat:
+                return f"telefoon thuis ({telefoon})"
             reden = getattr(self._thuiskomst, "laatste_reden", None)
             if vorige == "weg" and reden:
                 return f"thuiskomst: {reden}{f' ({naam})' if naam else ''}"
@@ -8603,6 +8616,12 @@ class EnergyManagementSystemCoordinator:
                 poort.aan(entity_id, self._apparaat_van(entity_id), now)
         if self.presence_state != "weg":
             poort.laatste_reden = None
+            return True
+        telefoon = self._telefoon_thuis()
+        if telefoon is not None:
+            # v5.127.0: een telefoon die thuis is, bevestigt de thuiskomst.
+            poort.laatste_reden = f"telefoon thuis ({telefoon})"
+            poort.wis()
             return True
         reden = poort.bevestigd(now)
         if reden:
@@ -9078,6 +9097,48 @@ class EnergyManagementSystemCoordinator:
             return False
         return str(staat.state).lower() in ("on", "playing", "paused", "true")
 
+    def _telefoon_entiteiten(self) -> list[str]:
+        """v5.127.0: de gekozen telefoons (person/device_tracker)."""
+        lijst = self.config.get(CONF_PRESENCE_PERSON_ENTITIES) or []
+        if isinstance(lijst, str):
+            lijst = [lijst]
+        return [e for e in lijst if e]
+
+    def _telefoon_thuis(self) -> str | None:
+        """v5.127.0: de naam van een telefoon die nu thuis is, anders None.
+
+        Gevraagd 25-10: "Mijn telefoon (Ruud) mee laten tellen" - alleen
+        als extra "thuis". Alleen de staat "home" telt; een andere zone
+        ("Thuis Yvonne") of not_home zegt niets over het huis.
+        """
+        for entity_id in self._telefoon_entiteiten():
+            staat = self.hass.states.get(entity_id)
+            if staat is not None and str(staat.state).lower() == "home":
+                return self._entiteitsnaam(entity_id)
+        return None
+
+    def _telefoons_overzicht(self) -> list[dict]:
+        """v5.127.0: per telefoon de staat en sinds wanneer (cockpit)."""
+        uit: list[dict] = []
+        for entity_id in self._telefoon_entiteiten():
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                continue
+            ruw = str(staat.state)
+            gewijzigd = getattr(staat, "last_changed", None)
+            sinds = None
+            if isinstance(gewijzigd, datetime):
+                sinds = dt_util.as_local(gewijzigd).strftime("%H:%M")
+            uit.append(
+                {
+                    "naam": self._entiteitsnaam(entity_id),
+                    "thuis": ruw.lower() == "home",
+                    "staat": ruw,
+                    "sinds": sinds,
+                }
+            )
+        return uit
+
     def _stromend_water(self) -> bool:
         """Loopt er op dit moment water? (v3.29.0)
 
@@ -9305,6 +9366,8 @@ class EnergyManagementSystemCoordinator:
             # het systeem "thuis" meldde terwijl er 25 minuten niemand
             # was.
             "tv_telt_mee": bool(self.config.get(CONF_PRESENCE_TV_ENTITY)),
+            # v5.127.0: telefoons als extra "thuis".
+            "telefoons": self._telefoons_overzicht(),
             # v1.36.0: lampen als extra signaal.
             "lichten_ingesteld": len(
                 self.config.get(CONF_PRESENCE_LIGHT_ENTITIES) or []

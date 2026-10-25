@@ -28,7 +28,7 @@ def test_de_kop_toont_de_aanwezigheid():
 
 def test_de_chip_zegt_staat_sinds_en_waarom():
     chip = JS.split("  _aanwezigChip() {")[1].split("\n  }\n")[0]
-    for woord in ('"Thuis"', '"Niemand thuis"', '"Slaapt"', "sinds", "aanleiding", "laatst_gezien"):
+    for woord in ('"Iemand thuis"', '"Niemand thuis"', '"Slaapt"', "sinds", "aanleiding", "laatst_gezien"):
         assert woord in chip
     assert 'if (!a || !a.beschikbaar || !a.nu) return "";' in chip
 

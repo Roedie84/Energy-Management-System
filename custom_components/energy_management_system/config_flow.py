@@ -71,6 +71,7 @@ from .const import (
     CONF_PRESENCE_MOTION_SENSORS,
     CONF_PRESENCE_LIGHT_ENTITIES,
     CONF_PRESENCE_TV_ENTITY,
+    CONF_PRESENCE_PERSON_ENTITIES,
     CONF_WATER_SOFTENER_END_HOUR,
     CONF_WATER_SOFTENER_START_HOUR,
     CONF_PV_ENERGY_SENSOR,
@@ -694,6 +695,15 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["light", "switch"], multiple=True
+                )
+            ),
+            # v5.127.0: telefoons als extra "thuis" (nooit als "weg").
+            vol.Optional(
+                CONF_PRESENCE_PERSON_ENTITIES,
+                default=defaults.get(CONF_PRESENCE_PERSON_ENTITIES, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["person", "device_tracker"], multiple=True
                 )
             ),
             _optioneel(CONF_PRESENCE_BEDTIME_SENSOR, defaults): selector.EntitySelector(

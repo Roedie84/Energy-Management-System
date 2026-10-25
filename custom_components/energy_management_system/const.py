@@ -6071,6 +6071,16 @@ PRESENCE_LAST_SEEN_LENGTH = 12
 # sensor liep.
 CONF_PRESENCE_TV_ENTITY = "presence_tv_entity"
 
+# --- Telefoons als extra "thuis" (v5.127.0) -------------------------
+# Gevraagd 25-10: "Mijn telefoon (Ruud) mee laten tellen" - alleen als
+# extra "thuis". Een telefoon (person/device_tracker) op "home" houdt het
+# huis op thuis waar het anders na stilte op "weg" zou vallen, en telt
+# als bevestigde thuiskomst. Een telefoon die weg is zegt NIETS: er kan
+# iemand anders thuis zijn (25-10: zolderdeur en achterdeur gingen open
+# terwijl Ruud weg was). De slaapregels gaan voor: een telefoon op het
+# nachtkastje maakt van een nacht geen "thuis".
+CONF_PRESENCE_PERSON_ENTITIES = "presence_person_entities"
+
 # --- Lampen als aanwezigheidssignaal (v1.36.0) -----------------------
 # Gevraagd: "Voor aanwezigheids detectie, kan ook nog gekeken naar
 # lampen of heb ik dat niet goed?"
