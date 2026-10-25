@@ -703,3 +703,10 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-25 07:40,TUSSEN,ems_planvolging_pct,92.0,25,"25-10 t/m 07:30: 23 volgens plan, 2 afwijking accu (o.a. 06:00 gepland 214 W na herstart)"
 2026-10-25 07:40,TUSSEN,ems_pvbias_stand_utc,1,1,"L-EMS-035: stand 0.529 = profielsleutel 6 = UTC-uur 6 (07:41 CET) -> geverifieerd"
 2026-10-25 07:40,TUSSEN,ems_pv_vandaag_solcast_kwh,7.2,1,"Solcast 7.2 tegen tweede voorspelling 4.67 (oneens 42.7 %); plan rekent op ~4 kWh zon tot 12:30 (SoC 60 -> 87 %); afrekening 03:40"
+2026-10-25 11:40,TUSSEN,ems_onder_reserve_kwartieren,0,1,verkoopkwartieren leeg; regeloverschot 25-10 0.057
+2026-10-25 11:40,TUSSEN,ems_ha_herstarts,4,4,09:29 09:55 10:08 10:53 (installaties andere sessies); v5.126.2 actief
+2026-10-25 11:40,TUSSEN,ems_planvolging_pct,72.5,40,"t/m 11:15: 29 volgens plan, 8 accu, 1 sturing (11:00 na herstart), 1 verbruik, 1 zon"
+2026-10-25 11:40,TUSSEN,ems_reserve_sprongen_nieuw,0,20,geen nieuwe sinds 02:00 CEST; na_herstart blijft 3
+2026-10-25 11:40,TUSSEN,ems_pv_gemeten_tot_1142_kwh,2.75,5,07-11 CET 2.06 + uur 11 0.70; Solcast zelfde uren 1.94 (+6 %)
+2026-10-25 11:40,TUSSEN,ems_pv_projectie_vs_dayahead_pct,-16,1,projectie ~6.2 kWh (Solcast-rest) tegen day-ahead 7.43; tweede 5.20; uitslag 03:40
+2026-10-25 11:40,TUSSEN,ems_mc_kans_pct,0.0,1,monte carlo tekortkans 11:45

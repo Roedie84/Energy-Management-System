@@ -413,3 +413,14 @@ laatste ronde: 25-10 03:40, gemeten t/m 25-10 03:50
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (reservesprongen; geen nieuwe na 02:00 CEST). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 25-10 07:40, gemeten t/m 25-10 07:45
+
+## 25-10 11:40 · tussenronde
+- **Vier HA-herstarts** (09:29, 09:55, 10:08, 10:53; installatie v5.126.2 en Gold Scalper 2.22.2/2.23.0 door andere sessies). **v5.126.2 actief**, diagnose fout 0 / storing 0. Na elke herstart prijsbuffer gebruikt (Zonneplan kort onbeschikbaar) - afgevangen.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 25-10 0,057). Geen nieuwe reservesprongen sinds 02:00 CEST (nog 20; `na_herstart` 3 → de 4 herstarts gaven geen sprong, L-EMS-033 houdt).
+- Blok na elke herstart op het lopende kwartier (09:30/09:45/10:00/10:45): **geen fout** - prijzen 12,5-13,3 ct van 00 tot 15 UTC, de vallei loopt terug tot nu (`_cheapest_block_range`, upcoming vanaf nu). Ochtend `sparen_in_blok`: huis op het net (12,7 ct), accu 60 → 64 % op zon. Plan nu: laden 12:15-13:45 tot 100 % (12,5-12,7 ct), avondpiek 17-19 u 26-29 ct.
+- **Planvolging 25-10 t/m 11:15: 72,5 %** (40 kw.; 8× accu, vooral 09:45-10:15 en 10:45 rond de herstarts). **1× "afwijking sturing" (11:00)**: gepland 2,4 kW laden, gemeten 1,0 kW; 11:00-11:07 `grid_charging_profitable`, daarna `sparen_in_blok` (goedkopere kwartieren 12:15+). Eerste "sturing" sinds L-EMS-029/v5.117; direct na herstart, n=1 → volgen in de 7-daagse toets (t/m 29-10).
+- **H-EMS-2 (PV te hoog) vandaag:** gemeten 07-11 CET 2,06 kWh (+0,70 in het uur 11 t/m 11:42 = 2,75). Solcast-dag zakte 7,49 (06:01) → 5,84 (11:16); tracker day-ahead 7,43, tweede voorspelling 5,20. Projectie met Solcast-rest ≈ 6,2 kWh → **≈ −16 % tegen day-ahead** (uitslag 03:40). Uren zelf: gemeten 2,06 tegen Solcast-schatting voor dezelfde uren 1,94 (+6 %) → de fout zit in de middag-/dagverwachting, niet in de ochtenduren.
+- MC-tekortkans 0,0 %; geen blok-tekort in zicht.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag ≈ −16 % in de maak), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (reservesprongen; 0 nieuwe). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 25-10 11:40, gemeten t/m 25-10 11:45
