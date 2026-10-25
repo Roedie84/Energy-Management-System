@@ -722,3 +722,8 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-25 19:40,TUSSEN,ems_planvolging_pct,54.8,73,"25-10 t/m 19:30; accu 26, sturing 2, verbruik 4, zon 1"
 2026-10-25 19:40,TUSSEN,ems_pv_dag_kwh,5.5,1,"cockpit vandaag 5.5 kWh; day-ahead 7.43 (-26 %), tweede voorspelling 5.20 (+6 %)"
 2026-10-25 19:40,TUSSEN,ems_mc_kans_pct,0.0,1,"monte carlo 19:41; reserve 10.37 > beschikbaar 5.41"
+2026-10-25 23:40,TUSSEN,ems_verkoop_onder_reserve_kwartieren,0,13,"verkoopkwartieren 17:30-21:00; kleinste marge_bij_export 0.574 kWh (21:00); mag_verkopen_bij_export 13/13"
+2026-10-25 23:40,TUSSEN,ems_avondverkoop_kwh,5.03,13,"export_uit_accu 17:30-21:15 bij 23.7-30.6 ct; SoC 56 -> 25 % om 21:45"
+2026-10-25 23:40,TUSSEN,ems_planvolging_pct,55.7,88,"25-10 t/m 23:30; accu 27, sturing 6, verbruik 5, zon 1"
+2026-10-25 23:40,TUSSEN,ems_plan_verkoop_in_blok_kwartieren,2,2,"23:30 (19.1 ct) en 23:45 (15.9 ct) gepland verkopen, sturing niet (reserve); terugladen 00:30+ 14.7-17.1 ct (L-EMS-038)"
+2026-10-25 23:40,TUSSEN,ems_mc_kans_pct,0.0,1,"monte carlo 23:40; beschikbaar 2.30 kWh, laden 00:30-04:45 gepland"

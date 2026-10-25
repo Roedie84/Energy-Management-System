@@ -446,3 +446,13 @@ laatste ronde: 25-10 15:40, gemeten t/m 25-10 15:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag ≈ −26 %), H-EMS-11 (avond/ochtendpiek; vanavond 3,25 kWh verkocht bij 26-31 ct), H-EMS-14 (reservesprongen; 0 nieuw). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 25-10 19:40, gemeten t/m 25-10 19:45
+
+## 25-10 23:40 · tussenronde
+- v5.127.3 actief; geen herstart sinds 18:47. Diagnose fout 0 / storing 0. MC 0,0 %, tekortdagen 0.
+- **Avondverkoop afgerond: 13 kwartieren 17:30-21:15, 5,03 kWh uit de accu tegen 23,7-30,6 ct. Harde regel: 0× onder de reserve** (`mag_verkopen_bij_export` 13/13, `export_zonder_vrijgave_rondes` 0; kleinste marge bij export **0,57 kWh** om 21:00, daarvoor ≥ 1,61). SoC 56 → 25 % om 21:45. Regeloverschot 25-10 0,118 kWh.
+- Blok 21:30-06:00: 21:30-23:15 `sparen_in_blok` (SoC 25 → 27 %), 23:15 één kwartier netladen (16,5 ct), 23:30 `expensive_quarter_soc_protected` (19,1 ct; "2,30 kWh nodig voor de rest van de nacht"). Plan 23:31: laden 00:30-04:45 tot 100 % (14,7-17,1 ct), ochtendverkoop 07:15-08:15 (45-52 ct). v5.127.2-toets (0 netlading-starts ≥ 95 %) in de ronde van 07:40.
+- **Plan ≠ sturing in het laadblok:** kwartierplan zet 23:30 (19,1 ct) en 23:45 (**15,9 ct**) op "verkopen" (2,3 kW, SoC 29 → 24 %) en laadt daarna terug tegen 15,7-16,6 ct (rendement 83,5 % → terugkoop ≈ 19-20 ct): verlies als het zou gebeuren. De sturing verkoopt niet (reserve). Ook 21:30, 21:45, 22:30, 22:45 gepland 914 W uit de accu, gemeten 0 (`sparen_in_blok`). → **6 "afwijking sturing"-kwartieren vandaag** (19:40: 2). Vermoeden: `_planning_verkoopreserve_kwh` trekt binnen het blok de herlading van het lopende blok af (reserve ≈ 0), de verkooptoets niet. → **L-EMS-038** (gepland: replay in de dagafsluiting; planfout → zelf bouwen, sturing ongewijzigd).
+- Planvolging 25-10 t/m 23:30 **55,7 %** (88 kw.; accu 27, sturing 6, verbruik 5, zon 1).
+- Hypotheses: H-EMS-2 (PV te hoog; 25-10 ≈ −26 %, afrekening 03:40), H-EMS-11 (avond/ochtendpiek; 5,03 kWh verkocht), H-EMS-14 (reservesprongen; 0 echte nieuw, alleen `alleen_behoefte`). Geen release (tussenronde, niets acuut; geen fout gedrag, alleen planweergave).
+
+laatste ronde: 25-10 23:40, gemeten t/m 25-10 23:45
