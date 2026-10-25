@@ -114,3 +114,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 24-10 23:51 | L-SC-022 stormchase windstoten tijdens front factor uit metingen van dit front
 24-10 23:51 | stormchase radar-vooruitblik image blijft hangen sinds herstart (08:16 UTC)
 25-10 03:51 | updates installeren stormchase 0.59.3 (hacs)
+25-10 04:51 | updates installeren ems 5.126.1 (hacs)
+25-10 04:51 | gold scalper resultaat markt verdwijnt bij uit mand vallen (PUMP-EUR)
+25-10 04:51 | luchtreiniger nachtvenster naar mid als niemand en tv uit
