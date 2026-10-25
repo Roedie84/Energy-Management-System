@@ -1,5 +1,5 @@
 {
-  "__init__.py": "6cbdc8eb98279a22",
+  "__init__.py": "756d9d662ebea917",
   "accukosten.py": "0b5c8429510cfde1",
   "accuteller.py": "31b413f26d4639d1",
   "airco_ritme.py": "65a63e765c19a798",
@@ -24,7 +24,7 @@
   "klimaat_zon.py": "0bb96b0caec895ec",
   "kwartierenergie.py": "f1394966051ad8d5",
   "luchtreiniger_lokaal.py": "26752fea69813a33",
-  "manifest.json": "e60cef3d948c2fbd",
+  "manifest.json": "30e379d8956a61b0",
   "meetlaag.py": "ac1d9684f80d9519",
   "meetlog.py": "59b3129b541a19ac",
   "nabeschouwing.py": "37f659720466b8b5",

@@ -165,6 +165,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Management System from a config entry."""
     config = {**entry.data, **entry.options}
 
+    # v5.71: de cockpit (kaart en strategie) aan de frontend geven.
+    # v5.126.2: als ALLEREERSTE. Stond aan het eind van de setup (na het laden
+    # van de opslag, de platforms en de meelezers); een dashboard dat in die
+    # tijd opende kreeg een 404 op het script en toonde "Configuratiefout" tot
+    # de pagina werd herladen (gemeld 25-10).
+    try:
+        from homeassistant.loader import async_get_integration
+
+        from .cockpit_frontend import async_registreer_cockpit
+
+        integratie = await async_get_integration(hass, DOMAIN)
+        await async_registreer_cockpit(hass, str(integratie.version or "0"))
+    except Exception as err:  # noqa: BLE001 - het dashboard mag het EMS nooit tegenhouden
+        _LOGGER.warning("Cockpitdashboard niet geregistreerd: %s", err)
+
     coordinator = EnergyManagementSystemCoordinator(hass, config)
     coordinator._wacht_op_eerste_ronde = True  # v5.99.8: zware sensoren wachten
     solar_tracker = SolarForecastAccuracyTracker(hass, config)
@@ -225,16 +240,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.warning("Luchtreiniger-meelezen niet gestart: %s", err)
     await hass.async_add_executor_job(_copy_dashboard_template, hass)
     await hass.async_add_executor_job(_copy_overview_background, hass)
-    # v5.71: de cockpit (kaart en strategie) aan de frontend geven.
-    try:
-        from homeassistant.loader import async_get_integration
-
-        from .cockpit_frontend import async_registreer_cockpit
-
-        integratie = await async_get_integration(hass, DOMAIN)
-        await async_registreer_cockpit(hass, str(integratie.version or "0"))
-    except Exception as err:  # noqa: BLE001 - het dashboard mag het EMS nooit tegenhouden
-        _LOGGER.warning("Cockpitdashboard niet geregistreerd: %s", err)
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))
     _async_register_nilm_services(hass)

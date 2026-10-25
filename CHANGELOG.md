@@ -33714,3 +33714,12 @@ Leerronde 24/25-10. Twee correcties; sturing, reserve en drempels ongewijzigd.
 
 Tests: `test_v5_126_1_wintertijd_prijsreeks.py` (6), `test_v5_126_1_pv_uurbias_stand.py` (3).
 
+
+## v5.126.2 — cockpitscript als eerste geregistreerd
+
+Gemeld 25-10: "Energy Cockpit geeft nu vaak configuratie fout?". Sinds 23-10 is de Energiecockpit een gewoon dashboard met `custom:ems-cockpit-card` (geen strategie meer). `async_registreer_cockpit` stond aan het eind van `async_setup_entry`, na het laden van de opslag, de platforms, `coordinator.async_setup` en de meelezers. Een dashboard dat in die tijd laadde kreeg een 404 op `/energy_management_system/ems-cockpit.js`; een mislukte module-import blijft voor die pagina mislukt, dus de kaart bleef op 'Configuratiefout' tot herladen.
+
+- De registratie is nu de eerste stap van `async_setup_entry`.
+
+Tests: `test_v51262_cockpit_vroeg.py` (2).
+

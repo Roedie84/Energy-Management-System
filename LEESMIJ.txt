@@ -1,3 +1,13 @@
+EMS v5.126.2 - Energiecockpit: geen 'Configuratiefout' meer na een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het script van de cockpitkaart werd pas aan het eind van het opstarten
+  van het EMS beschikbaar gemaakt. Opende een dashboard (tablet, telefoon)
+  in die tijd, dan kreeg het een 404 en bleef de kaart op
+  'Configuratiefout' tot de pagina werd herladen. Nu is het script het
+  eerste wat het EMS bij het opstarten klaarzet.
+
 EMS v5.126.1 - wintertijdnacht: alle prijskwartieren blijven
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
