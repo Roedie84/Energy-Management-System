@@ -33757,3 +33757,13 @@ Gemeld 25-10 16:24 (cockpit: "Accu laadt 2,2 kW, gepland ontladen 0,5 kW – de 
 - Onder 95 % ongewijzigd; dipladen en balanceerlading ongewijzigd.
 
 Tests: `test_v5127_2_volle_accu_niet_netladen.py` (12).
+
+
+## v5.127.3 — besparingstotaal onbeschikbaar tot de eerste ronde (maandmeter verloor/won geld bij elke herstart)
+
+Gemeten (Plan tegen werkelijkheid, controleronde 25-10): `sensor.woonkamer_energy_management_system_besparing_totaal_t_o_v_zonder_accu_sturing` schreef bij het opstarten één afwijkende waarde en 30 s later de goede: 24-10 07:41 42,18 → 42,48 → 42,15, 25-10 06:00 42,31 → 42,50 → 42,31, 25-10 17:25:18 42,33 → 41,87 → 42,33. De meter `sensor.ems_accubesparing_deze_maand` nam die opstartwaarde als beginstand en boekte het verschil (−0,32, −0,20 en +0,45). De opstartwaarde komt vóór de eerste ronde, als nog niet alles voor de voorraadcorrectie geladen is.
+
+- `CounterfactualSavingsTotalSensor.available` is onwaar zolang `_voor_eerste_ronde` (v5.99.8) geldt. De meter slaat een onbeschikbare stand over en rekent daarna verder vanaf zijn bewaarde laatste geldige stand.
+- De rekenwijze en de waarde na de eerste ronde zijn ongewijzigd. Wat de meter deze maand al te veel of te weinig telde, herstelt dit niet.
+
+Tests: `test_v5127_3_besparing_totaal_opstart.py` (3).

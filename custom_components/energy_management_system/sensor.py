@@ -2946,6 +2946,18 @@ class CounterfactualSavingsTotalSensor(SensorEntity):
         }
 
     @property
+    def available(self) -> bool:
+        # v5.127.3: vóór de eerste ronde onbeschikbaar. Gemeten 24-10 07:41
+        # (42,18 -> 42,48 -> 42,15), 25-10 06:00 (42,31 -> 42,50 -> 42,31) en
+        # 25-10 17:25 (42,33 -> 41,87 -> 42,33): bij het opstarten schreef
+        # deze sensor één afwijkende waarde, 30 s later de goede. De meter
+        # "EMS Accubesparing - deze maand" nam die als beginstand en boekte
+        # het verschil (-0,32, -0,20, +0,45). Een onbeschikbare eerste stand
+        # slaat de meter over; hij rekent dan verder vanaf zijn bewaarde
+        # laatste geldige stand.
+        return not _voor_eerste_ronde(self._coordinator)
+
+    @property
     def native_value(self) -> float:
         # v5.116.0: met de accu-inhoud gecorrigeerd. Gemeld 22-10 (Plan tegen
         # werkelijkheid): de meter "EMS Accubesparing - vandaag" gaf voor

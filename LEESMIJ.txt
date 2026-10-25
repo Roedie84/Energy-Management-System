@@ -1,3 +1,14 @@
+EMS v5.127.3 - de maandteller van de accubesparing verspringt niet meer bij een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Na een herstart gaf de sensor "Besparing totaal t.o.v. zonder
+  accu-sturing" een halve minuut een verkeerde waarde (25-10 17:25: 41,87 in
+  plaats van 42,33). De meter "EMS Accubesparing - deze maand" telde dat
+  verschil mee. De sensor is nu onbeschikbaar tot de eerste ronde klaar is;
+  de meter slaat dat over. Wat de meter deze maand al verkeerd telde, blijft
+  staan.
+
 EMS v5.127.2 - een volle accu wordt niet meer uit het net bijgetopt
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
