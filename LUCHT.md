@@ -277,4 +277,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ gem 477, max 526, 0 u > 1.200. Schimmelindicator 75 → 78 → 76, binnen 64,6 → 62,6% bij 16,5 °C, buiten 99% / 10 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=8), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); volgende kookpiek = eerste toets van mid bij koken. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 25-10 08:25, gemeten t/m 08:20
+## 25-10 12:25 (ronde 34)
+- PM2.5 08:20-12:20: gem 1,89, mediaan 2,05, P95 2,52, max 3,08 (11:15) (n=48); 0 uur > 15. Dag t/m nu ~0,8; 7d (18-24/10) 3,7, mediaan dag 1,3 (nulmeting okt 2025 9,1).
+- Geen piek > 25, ramen dicht. Stijging 1,0 → 2,5 vanaf aanwezigheid (08:52) en verwarming aan (~09:00, 16,4 → 20,6 °C).
+- KOOKMOMENT, eerste toets kookautomation: kookplaat 11:27-11:40, ramen dicht, aanwezig. Automation zette voorrang aan en stand mid (11:27:17), terug naar auto 11:41:43. PM2.5 tijdens koken max 2,6 (vooraf 2,35): geen piek, dus halveringstijd in mid nog niet te meten.
+- Stand: auto 189 min (gem 1,98), mid 46 min (gem 1,49; afwezig 08:21-08:52 en koken). Aanwezig 2,02 (n=41) vs afwezig 1,09 (n=7): bron (mensen/verwarming), geen standeffect.
+- Werking: auto direct bij aanwezigheid (08:52). 4 HA-herstarts (09:29, 09:55, 10:08, 10:53), stand na elke herstart correct auto, geen onnodige wissel. Traces 5/5 + kook 4/4 zonder fout. Lokaal 48 mislukt op 114.168 (geen nieuwe), uitval 0, sturen 292/293 (3/3 nieuw), filter 0%. Apparaat-PM2.5 3-7 bij Ultimate 1-3: ~2x te hoog, volgt grof.
+- CO₂ gem 682, max 802, 0 u > 1.200. Verwarming: vocht 62,5 → 50,8% (nu 54), schimmelindicator 76 → 66 (nu 67), buiten 99%: bevestigt weer, verwarmen lost het vocht op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9: dicht 190/135/30/454/2,1/1,6/2,6; open 3,4) - weer gesteund. H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1), geen toets.
+
+laatste ronde: 25-10 12:25, gemeten t/m 12:20
