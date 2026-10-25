@@ -401,3 +401,15 @@ laatste ronde: 24-10 23:40, gemeten t/m 24-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog; kleiner), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (reservesprongen + middernacht). Release v5.126.1.
 
 laatste ronde: 25-10 03:40, gemeten t/m 25-10 03:50
+
+## 25-10 07:40 · tussenronde
+- **HA herstart 06:00 CET: v5.126.1 actief** (diagnose: fout 0, storing 0). Opstartwaarschuwingen alleen Zonneplan kort onbeschikbaar (laatste prijzen van 05:16 gebruikt) - extern, hersteld.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 25-10 0,057 kWh). Geen tekortnacht.
+- Nacht 24→25: accu dekte 22:00 CEST-03:00 CET **1,29 kWh** (net ~0); vanaf het blok 03:00 CET sparen: net ~0,19 kWh/u tegen 12,7-13,1 ct, SoC vast op 60-61 % voor de avondpiek (17:30-19:15 26-31 ct). Na de herstart koos het EMS het blok 06:00 CET (oud blok voorbij) - logisch, prijzen vlak.
+- **L-EMS-035 geverifieerd:** stand 0,529 = sleutel 6 = UTC-uur om 07:41 CET. `in_progress.hour` 7 is het klokuur - bewust (meten per klokuur, opslaan onder UTC, `_finalize_pv_hourly_bucket`), geen fout.
+- L-EMS-036 geïnstalleerd; echte toets okt 2027.
+- Planvolging 25-10 t/m 07:30: 92,0 % (25 kw.; 06:00 na herstart 1× afwijking accu).
+- Plan vandaag: zon tot 12:30 (SoC 60 → 87 %), 4 laadkwartieren 12:45-16:45 (12,5-15,6 ct), verkopen 18:00-21:15 tot 39 %. Solcast 7,2 kWh tegen tweede voorspelling 4,7 (oneens 43 %) → H-EMS-2-toets vandaag: bij minder zon komt de accu lager aan de avondpiek.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (reservesprongen; geen nieuwe na 02:00 CEST). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 25-10 07:40, gemeten t/m 25-10 07:45
