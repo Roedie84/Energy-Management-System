@@ -124,3 +124,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 25-10 15:51 | L-EMS-037 kwartierplan laden met gemeten laadvermogen, rendement en afbouw >90%
 25-10 19:51 | L-SC-024 stormchase geel door nadert alleen binnen meldafstand of aankomst <=120 min
 25-10 20:51 | luchtreiniger aanwezigheidstrigger te laat (auto pas via kwartiercontrole)
+25-10 20:51 | L-GS-027 gold scalper trades/netto 0 en noodstop flapt eerste ~25 s na herstart
