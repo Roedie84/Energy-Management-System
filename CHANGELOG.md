@@ -33735,3 +33735,14 @@ Gemeld 25-10 met screenshot "Thuis sinds 08:52": "Ik ben al behoorlijk veel wegg
 - **Cockpit:** "Thuis" heet nu "Iemand thuis"; achter de chip per telefoon "Ruud thuis/weg/bij <zone> sinds HH:MM".
 
 Tests: `test_v5127_telefoon.py` (7).
+
+
+## v5.127.1 — open deur en een radar alleen houden het huis niet op "thuis"
+
+Gemeld 25-10 16:00: "Maar er is nu echt niemand thuis". Gemeten: `person.ruud_maarse` weg sinds 15:01; gang, overloop en schuur stil sinds 15:01. De woonkamerradar (`ultimatesensor`, één apparaat) stond 12:07-14:38 aan terwijl niemand thuis was, en na 15:01 in stukken (14:53-15:22, 15:36, 15:44, 15:52-…). De zolderdeur stond sinds 14:47 open; het vangnet in `_update_presence` registreerde elke tick elke sensor die "on" stond, dus ook die open deur ("Deur Sensor Zolder 15:38" was geen opening).
+
+- **Open deur:** het vangnet slaat deursensoren over (`thuiskomst.is_deur`); het opengaan telt live via `_handle_motion_event`.
+- **Een plek alleen (`_alleen_een_plek`):** zijn er telefoons ingesteld en allemaal weg, en was er in de laatste `PRESENCE_EEN_PLEK_MINUTEN` (45) alleen beweging bij één apparaat (zones van één radar = één apparaat, geen deur), dan houdt die beweging het huis niet op "thuis". Tv, water, licht en de slaapregels gaan zoals voorheen. Aanleiding in de tijdlijn: "alleen beweging bij … en telefoon weg". Zonder telefoons ongewijzigd.
+- Bekende keerzijde: iemand zonder ingestelde telefoon die 45 min stil in één kamer zit zonder tv, lamp of water, valt op "weg"; terug naar "thuis" via deur, tweede plek, tv, lamp of kraan.
+
+Tests: `test_v5127_telefoon.py` (+5).

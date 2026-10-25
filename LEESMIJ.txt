@@ -1,3 +1,13 @@
+EMS v5.127.1 - aanwezigheid: open deur en hond voor de radar houden het huis niet meer op 'thuis'
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Een deur die openstaat telde elke minuut opnieuw als beweging (de
+  zolderdeur stond 25-10 vanaf 14:47 open). Nu telt alleen het opengaan.
+- Is er 45 minuten alleen beweging bij een apparaat geweest (bijvoorbeeld
+  de woonkamerradar: de hond of een vast doel) en is je telefoon weg, dan
+  gaat het huis op 'weg'. Zonder ingestelde telefoon verandert er niets.
+
 EMS v5.127.0 - je telefoon telt mee als 'thuis'; cockpit zegt 'Iemand thuis'
 
 Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna bij

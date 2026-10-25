@@ -6081,6 +6081,16 @@ CONF_PRESENCE_TV_ENTITY = "presence_tv_entity"
 # nachtkastje maakt van een nacht geen "thuis".
 CONF_PRESENCE_PERSON_ENTITIES = "presence_person_entities"
 
+# v5.127.1: gemeld 25-10 16:00 "Maar er is nu echt niemand thuis". De
+# woonkamerradar stond 12:07-14:38 aan en daarna in korte stukken (hond of
+# vast doel), en de zolderdeur stond sinds 14:47 open; elke tick telde die
+# open deur opnieuw als beweging. Een openstaande deur telt nu alleen bij
+# het opengaan. En is in dit venster alleen EEN apparaat actief geweest
+# (geen deur, geen tweede plek) terwijl alle telefoons weg zijn, dan houdt
+# dat apparaat het huis niet op "thuis" - hetzelfde als bij de thuiskomst:
+# een apparaat telt nooit, hoe lang ook.
+PRESENCE_EEN_PLEK_MINUTEN = 45
+
 # --- Lampen als aanwezigheidssignaal (v1.36.0) -----------------------
 # Gevraagd: "Voor aanwezigheids detectie, kan ook nog gekeken naar
 # lampen of heb ik dat niet goed?"

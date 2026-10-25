@@ -572,6 +572,7 @@ from .const import (
     CONF_PRESENCE_ABSENCE_MINUTES,
     CONF_PRESENCE_TV_ENTITY,
     CONF_PRESENCE_PERSON_ENTITIES,
+    PRESENCE_EEN_PLEK_MINUTEN,
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
     CONF_BATTERY_CHARGE_ENERGY_SENSOR,
     ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN,
@@ -8258,6 +8259,11 @@ class EnergyManagementSystemCoordinator:
             for entity_id in sensoren
             if (staat := self.hass.states.get(entity_id)) is not None
             and str(staat.state).lower() in ("on", "true")
+            # v5.127.1: een deur die openSTAAT is geen beweging; alleen
+            # het opengaan telt (live, via `_handle_motion_event`).
+            and not thuiskomst_mod.is_deur(
+                entity_id, (staat.attributes or {}).get("device_class")
+            )
         ]
         if bewegende_sensoren and self._beweging_telt(now, bewegende_sensoren):
             self._registreer_beweging(now, bewegende_sensoren)
@@ -8318,7 +8324,10 @@ class EnergyManagementSystemCoordinator:
                 # v1.36.0: een brandende lamp binnenshuis telt als
                 # aanwezig, net als de tv. Niet tijdens de vakantiestand.
                 self.presence_state = "thuis"
-            elif stil_minuten < self._afwezigheidsdrempel_minuten():
+            elif (
+                stil_minuten < self._afwezigheidsdrempel_minuten()
+                and self._alleen_een_plek(now) is None
+            ):
                 # v3.96.0: tenzij dit een nachtelijke onderbreking is.
                 #
                 # Gemeld: "er gaat wel eens iemand snachts naar de wc,
@@ -8525,6 +8534,12 @@ class EnergyManagementSystemCoordinator:
                 f"{f', {stil:.0f} min stil' if stil is not None else ''}"
             )
         if self.presence_state == "weg":
+            een = self._alleen_een_plek(now)
+            if een is not None:
+                return (
+                    f"alleen beweging bij {een} en telefoon weg"
+                    f" ({PRESENCE_EEN_PLEK_MINUTEN} min geen andere plek)"
+                )
             drempel = self._afwezigheidsdrempel_minuten()
             return (
                 f"{drempel:.0f} min zonder beweging"
@@ -9096,6 +9111,36 @@ class EnergyManagementSystemCoordinator:
         if staat is None:
             return False
         return str(staat.state).lower() in ("on", "playing", "paused", "true")
+
+    def _alleen_een_plek(self, now: datetime) -> str | None:
+        """v5.127.1: was er de laatste PRESENCE_EEN_PLEK_MINUTEN alleen
+        beweging bij EEN apparaat (geen deur, geen tweede plek), terwijl
+        er telefoons zijn ingesteld en die allemaal weg zijn? Dan de naam
+        van dat apparaat, anders None.
+
+        Gemeld 25-10: "Maar er is nu echt niemand thuis". De woonkamer-
+        radar bleef aan (hond of vast doel) en hield het huis op "thuis".
+        Zonder telefoons blijft alles zoals het was: dan is er niets dat
+        zegt dat de bewoner weg is.
+        """
+        if not self._telefoon_entiteiten() or self._telefoon_thuis() is not None:
+            return None
+        grens = now - timedelta(minutes=PRESENCE_EEN_PLEK_MINUTEN)
+        plekken: set[str] = set()
+        laatste = None
+        for entity_id, tijd in self.presence_last_seen.items():
+            moment = dt_util.parse_datetime(tijd) if isinstance(tijd, str) else None
+            if moment is None or moment < grens:
+                continue
+            staat = self.hass.states.get(entity_id)
+            klasse = (staat.attributes or {}).get("device_class") if staat is not None else None
+            if thuiskomst_mod.is_deur(entity_id, klasse):
+                return None
+            plekken.add(self._apparaat_van(entity_id) or entity_id)
+            laatste = entity_id
+        if len(plekken) != 1:
+            return None
+        return self._entiteitsnaam(laatste)
 
     def _telefoon_entiteiten(self) -> list[str]:
         """v5.127.0: de gekozen telefoons (person/device_tracker)."""

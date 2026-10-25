@@ -89,3 +89,63 @@ def test_overzicht_toont_de_telefoons(make_coordinator, hass):
     c = _huis(make_coordinator, hass, "Thuis Yvonne")
     tel = c.get_presence_overview()["telefoons"]
     assert tel and tel[0]["staat"] == "Thuis Yvonne" and tel[0]["thuis"] is False
+
+
+# --- v5.127.1: open deur en een radar alleen ---------------------------------
+
+ZOLDER = "binary_sensor.deur_sensor_zolder_contact"
+GANG = "binary_sensor.gang_beweging"
+
+
+def _huis2(make_coordinator, hass, telefoon_staat):
+    c = make_coordinator({CONF_PRESENCE_MOTION_SENSORS: [RADAR, GANG, ZOLDER],
+                          CONF_PRESENCE_PERSON_ENTITIES: [RUUD]})
+    hass.states.set(RADAR, "on", {"device_class": "occupancy"})
+    hass.states.set(GANG, "off", {"device_class": "motion"})
+    hass.states.set(ZOLDER, "on", {"device_class": "door"})
+    hass.states.set(RUUD, telefoon_staat, {"friendly_name": "Ruud Maarse"})
+    c.presence_state = "thuis"
+    return c
+
+
+def test_een_openstaande_deur_is_geen_beweging(make_coordinator, hass):
+    c = _huis2(make_coordinator, hass, "not_home")
+    hass.states.set(RADAR, "off", {"device_class": "occupancy"})
+    c.last_motion_at = MIDDAG - timedelta(minutes=60)
+    c._update_presence(MIDDAG)
+    assert ZOLDER not in c.presence_last_seen
+    assert c.presence_state == "weg"
+
+
+def test_alleen_de_radar_en_telefoon_weg_is_weg(make_coordinator, hass):
+    c = _huis2(make_coordinator, hass, "Thuis Yvonne")
+    c.presence_last_seen = {GANG: (MIDDAG - timedelta(minutes=50)).isoformat()}
+    c.last_motion_at = MIDDAG - timedelta(minutes=50)
+    c._update_presence(MIDDAG)          # radar staat aan: telt als beweging
+    assert c.presence_state == "weg"
+    assert "alleen beweging bij" in c._aanleiding_aanwezigheid(MIDDAG, "thuis")
+
+
+def test_radar_plus_gang_blijft_thuis(make_coordinator, hass):
+    c = _huis2(make_coordinator, hass, "not_home")
+    c.presence_last_seen = {GANG: (MIDDAG - timedelta(minutes=10)).isoformat()}
+    c.last_motion_at = MIDDAG - timedelta(minutes=10)
+    c._update_presence(MIDDAG)
+    assert c.presence_state == "thuis"
+
+
+def test_radar_alleen_maar_telefoon_thuis_blijft_thuis(make_coordinator, hass):
+    c = _huis2(make_coordinator, hass, "home")
+    c.presence_last_seen = {}
+    c.last_motion_at = MIDDAG - timedelta(minutes=50)
+    c._update_presence(MIDDAG)
+    assert c.presence_state == "thuis"
+
+
+def test_zonder_telefoons_verandert_er_niets(make_coordinator, hass):
+    c = make_coordinator({CONF_PRESENCE_MOTION_SENSORS: [RADAR]})
+    hass.states.set(RADAR, "on", {"device_class": "occupancy"})
+    c.presence_state = "thuis"
+    c.last_motion_at = MIDDAG - timedelta(minutes=50)
+    c._update_presence(MIDDAG)
+    assert c.presence_state == "thuis"
