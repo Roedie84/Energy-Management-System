@@ -831,3 +831,22 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-25 00:20,filtergebruik_pct,0,1,
 2026-10-25 00:20,automation_traces_fout,0,5,00:00/00:15 failed_conditions nachtvenster
 2026-10-25 00:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment
+2026-10-25 04:20,pm25_gem,0.18,60,5-min statistiek 00:20 CEST-04:20 CET (5 u door wintertijd)
+2026-10-25 04:20,pm25_mediaan,0.15,60,
+2026-10-25 04:20,pm25_p95,0.38,60,
+2026-10-25 04:20,pm25_max,0.58,60,blokmax 00:55 CEST
+2026-10-25 04:20,pm25_uren_gt15,0.00,60,
+2026-10-25 04:20,pm25_uren_gt25,0.00,60,
+2026-10-25 04:20,stand_auto_min,300,1,hele periode; tv uit 01:39 maar nachtvenster houdt auto vast
+2026-10-25 04:20,stand_mid_min,0,1,
+2026-10-25 04:20,pm25_gem_tv_aan,0.33,16,00:20-01:40
+2026-10-25 04:20,pm25_gem_afwezig,0.13,44,01:40-04:20; stand auto
+2026-10-25 04:20,co2_gem,574,60,5-min; max 745 begin; daalt naar 438; ramen dicht
+2026-10-25 04:20,co2_uren_gt1200,0.00,60,
+2026-10-25 04:20,schimmel_indicator,75,60,77 -> 75; binnen 60.1 -> 64.4% / 17.4 -> 16.6 C; buiten 99% 11.9 C
+2026-10-25 04:20,ha_herstarts,0,1,
+2026-10-25 04:20,lokaal_mislukt,48,111455,uitval 0; 196 verbindingen; geen nieuwe fout
+2026-10-25 04:20,sturen_bevestigd,284,285,geen nieuwe opdrachten
+2026-10-25 04:20,filtergebruik_pct,0,1,
+2026-10-25 04:20,automation_traces_fout,0,5,failed_conditions nachtvenster
+2026-10-25 04:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment
