@@ -225,6 +225,7 @@ from .const import (
     EXPORT_MEETDREMPEL_W,
     EXPORT_VERKOOP_MIN_KWH,
     LAADBLOK_HERLAAD_DREMPEL,
+    LAADBLOK_HERLAAD_SOC_PROCENT,
     ZON_REALISATIE_MIN_KWH,
     DIP_MARGE,
     MC_KALIBRATIE_BLOK_UITERLIJK_UUR,
@@ -22036,6 +22037,15 @@ class EnergyManagementSystemCoordinator:
             )
             uit["hysterese"] = True
             return uit
+        # v5.127.2: en op de accustand zelf - zie LAADBLOK_HERLAAD_SOC_PROCENT.
+        soc_nu = self.accustand_procent()
+        if self._accu_te_vol_voor_netladen(soc_nu, self._laadt_uit_het_net()):
+            uit["reden"] = (
+                f"accu al {soc_nu:.0f}% (vanaf {LAADBLOK_HERLAAD_SOC_PROCENT:.0f}%); "
+                "niet opnieuw bijladen uit het net"
+            )
+            uit["hysterese"] = True
+            return uit
         horizon_eind = now + timedelta(hours=24)
         later = sorted(
             (
@@ -22102,6 +22112,29 @@ class EnergyManagementSystemCoordinator:
         if laadt_al or bruikbaar <= 0:
             return False
         return beschikbaar >= LAADBLOK_HERLAAD_DREMPEL * bruikbaar - 1e-9
+
+    @staticmethod
+    def _accu_te_vol_voor_netladen(soc_procent: float | None, laadt_al: bool) -> bool:
+        """Geen NIEUWE netlading vanaf LAADBLOK_HERLAAD_SOC_PROCENT (v5.127.2).
+
+        Gemeld 25-10 16:24: de accu zakte van 98 naar 97 %, en binnen een
+        halve minuut stond hij op manual -2400 - 2,2 kW laden, terwijl het
+        plan "slim, 0,5 kW ontladen" zei. De hysterese van v5.95 rekent met
+        het bruikbare deel (boven de ondergrens); 97 % op de sensor is daar
+        96,7 % en viel er net onder. Een volle accu bijtoppen levert hooguit
+        een paar cent op en maakt de sturing onrustig. Een lading die al
+        loopt, laadt wel door tot vol; onbekende stand = geen grens.
+        """
+        if laadt_al or soc_procent is None:
+            return False
+        return soc_procent >= LAADBLOK_HERLAAD_SOC_PROCENT - 1e-9
+
+    def _plan_soc_procent(self, soc_kwh: float, bruikbaar_kwh: float) -> float | None:
+        """De accustand in procenten bij een gesimuleerde lading (v5.127.2)."""
+        if bruikbaar_kwh <= 0:
+            return None
+        min_soc = self.effective_min_soc_percent()
+        return min_soc + (100 - min_soc) * max(0.0, soc_kwh) / bruikbaar_kwh
 
     #: v5.117.0: wanneer de accu het laatst vol was (ISO, bewaard) en de
     #: grootste celspreiding in het vlakke midden sinds die keer (bewaard).
@@ -24769,6 +24802,11 @@ class EnergyManagementSystemCoordinator:
                 return max(0.0, min(laad_kwh, bruikbaar - soc))
         # v5.95: niet opnieuw beginnen vanaf 97% - zie `_laadblok_hysterese`.
         if self._laadblok_hysterese(soc, bruikbaar, bool(netregels.get("laadde_vorig"))):
+            return 0.0
+        # v5.127.2: en vanaf 95 % accustand - dezelfde toets als de beslissing.
+        if self._accu_te_vol_voor_netladen(
+            self._plan_soc_procent(soc, bruikbaar), bool(netregels.get("laadde_vorig"))
+        ):
             return 0.0
         # v5.93.2: binnen het bekende goedkope blok tellen, net als in
         # `laadbesluit_uit_het_net`, alleen de kwartieren NA het blok als

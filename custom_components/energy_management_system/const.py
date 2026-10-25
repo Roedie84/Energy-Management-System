@@ -293,6 +293,13 @@ EXPORT_VERKOOP_MIN_KWH = 0.025
 # uit het net laden - een kwartier bijtoppen van 99 naar 100% levert
 # niets op (gemeld 13-10: 02:15-02:45 "laden van net" midden in "slim").
 LAADBLOK_HERLAAD_DREMPEL = 0.97
+# v5.127.2: dezelfde hysterese, maar op de ACCUSTAND zelf. De 97 % hierboven
+# geldt voor het bruikbare deel (boven de ondergrens van 10 %); bij 97 % op de
+# sensor is dat maar 96,7 % - en dan startte er wél een nieuwe netlading.
+# Gemeld 25-10 16:24: accu 98 -> 97 %, het EMS zette manual -2400 (2,2 kW
+# laden) midden in "slim". Vanaf deze stand start er geen NIEUWE netlading
+# meer (een lopende lading en de balanceerlading laden wel door tot vol).
+LAADBLOK_HERLAAD_SOC_PROCENT = 95.0
 # v5.96 (gemeld 14-10 06:03: "accu nog maar 18% met zo meteen hele dure
 # kwartieren"): de zon van vandaag wordt naar beneden bijgesteld als hij
 # achterloopt op de verwachting tot nu. Pas vanaf zoveel verwachte kWh tot nu

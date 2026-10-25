@@ -1,3 +1,15 @@
+EMS v5.127.2 - een volle accu wordt niet meer uit het net bijgetopt
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Gemeld 25-10 16:24: "Accu laadt 2,2 kW, gepland ontladen 0,5 kW". De
+  accu zakte van 98 naar 97% midden in het goedkope blok, en het EMS begon
+  met 2,4 kW uit het net te laden. Vanaf 95% start er nu geen nieuwe
+  netlading meer; een lading die al loopt en de balanceerlading laden wel
+  door tot vol. Het kwartierplan rekent met dezelfde grens, dus plant ook
+  geen bijtop-kwartieren meer (dat gaf het heen-en-weer tussen slim en
+  sparen elk kwartier).
+
 EMS v5.127.1 - aanwezigheid: open deur en hond voor de radar houden het huis niet meer op 'thuis'
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

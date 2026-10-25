@@ -33746,3 +33746,14 @@ Gemeld 25-10 16:00: "Maar er is nu echt niemand thuis". Gemeten: `person.ruud_ma
 - Bekende keerzijde: iemand zonder ingestelde telefoon die 45 min stil in één kamer zit zonder tv, lamp of water, valt op "weg"; terug naar "thuis" via deur, tweede plek, tv, lamp of kraan.
 
 Tests: `test_v5127_telefoon.py` (+5).
+
+
+## v5.127.2 — geen nieuwe netlading vanaf 95 % accustand
+
+Gemeld 25-10 16:24 (cockpit: "Accu laadt 2,2 kW, gepland ontladen 0,5 kW – de sturing koos handmatig in plaats van slim"). Gemeten: `sensor.solarflow_2400_ac_electric_level` 98 → 97 % om 16:24:12; ronde 16:24:43 `last_decision_reason` = `grid_charging_profitable`, `manual` −2400 W; `laadplan_gewijzigd` om 16:24:43 voegde 16:15-16:30 toe (stond niet in het plan). Het lopende blok was 16:00-17:15 (16:15 = 14,2 ct, goedkoopste kwartier van de horizon; avond 25-30 ct). De hysterese van v5.95 (`LAADBLOK_HERLAAD_DREMPEL` = 97 % van het bruikbare deel boven 10 %) zag 97 % op de sensor als 96,7 % en liet een nieuwe lading toe. Om 16:30 (15,6 ct) weer smart. De herstarts (15:54, 16:09) en het bewaarde blok (L-EMS-034) waren niet de oorzaak: het blok na de herstart had hetzelfde einde (17:15); 16:24:43 = de eerste ronde na de daling naar 97 %.
+
+- **`LAADBLOK_HERLAAD_SOC_PROCENT` = 95** en `_accu_te_vol_voor_netladen(soc, laadt_al)`: in `laadbesluit_uit_het_net` (na de balanceerlading en de 97 %-hysterese) start er vanaf 95 % accustand geen nieuwe netlading; een lopende lading laadt door, onbekende stand = geen grens.
+- **Kwartierplan** (`_plan_laadt`): dezelfde toets met de gesimuleerde stand (`_plan_soc_procent`). Daarmee verdwijnt naar verwachting ook de terugkoppeling plan ↔ `sparen_in_blok` (15:00-16:09 elk kwartier smart/smart_charging): in een smart-kwartier plande het plan een bijtop-kwartier later in het blok, waarop het volgende kwartier "netladen volgt in dit blok" spaarde.
+- Onder 95 % ongewijzigd; dipladen en balanceerlading ongewijzigd.
+
+Tests: `test_v5127_2_volle_accu_niet_netladen.py` (12).
