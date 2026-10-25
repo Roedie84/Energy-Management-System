@@ -294,4 +294,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ daalt 767 → ~510 (gem 547), 0 u > 1.200. Schimmelindicator 65-69, vocht 49,8-53% bij ~20,5 °C: in orde zolang de verwarming aan is.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 25-10 16:25, gemeten t/m 16:20
+## 25-10 20:25 (ronde 36)
+- PM2.5 16:20-20:20: gem 1,40, mediaan 1,40, P95 1,74, max 2,07 (18:15) (n=48); 0 uur > 15. Dag t/m nu 1,22; 7d (18-24/10) 3,7, mediaan dag 1,3 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht. Vlak 1,1-1,8.
+- Stand: auto 196 min (gem 1,42), mid 42 min (gem 1,30), 2,3 min unavailable. Aanwezig 1,43 (n=33) vs afwezig 1,34 (n=15): geen verschil.
+- Werking: mid 15 min na laatste aanwezigheid (16:11 → 16:26, 16:52 → 17:07); auto direct bij terugkomst 16:36 en 17:50, maar 17:08:32 aanwezig → auto pas 17:15 via kwartiercontrole (2e keer, n=2, eerder 14:42). Na herstart 17:24 mid al na 5 min afwezigheid. 5/5 traces zonder fout. Lokaal 48 mislukt op 116.913 (geen nieuwe), uitval 0, sturen 298/299 (6/6 nieuw), filter 0%. Apparaat-PM2.5 2-5 bij Ultimate 1-2: ~2x te hoog.
+- CO₂ stijgt 500 → 1.239 (19:40) vanaf aanwezigheid 17:50 met ramen dicht, gem 772, 5 min > 1.200: ventileren (raam op kier/rooster), niet de luchtreiniger. Schimmelindicator 64-69, vocht 47-54% bij ~21 °C: in orde.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 25-10 20:25, gemeten t/m 20:20
