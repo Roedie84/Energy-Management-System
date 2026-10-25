@@ -424,3 +424,14 @@ laatste ronde: 25-10 07:40, gemeten t/m 25-10 07:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag ≈ −16 % in de maak), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (reservesprongen; 0 nieuwe). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 25-10 11:40, gemeten t/m 25-10 11:45
+
+## 25-10 15:40 · tussenronde
+- v5.126.2 actief, diagnose fout 0 / storing 0; geen herstart sinds 10:53. Extern: DNS-storing ~13:05-15:40 (Spotify, Zwaailicht, Bitvavo/IG), Solcast-API-limiet 10/10 om 15:18 (rest-sensor bleef bruikbaar).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg, regeloverschot 0,06). Reservesprongen 20 (0 nieuw). MC 0,0 %.
+- **Laadblok 12:15-14:53** (SoC 66 → 100 %, input_limit 2400): AC-in per kwartier **2,12-2,25 kW** (eerdere dagen 2,40 in volle uren), vanaf 14:00 afbouw 1,81 kW. Inhoud steeg **1,73 kW** (available_kwh 6,45 → 9,22 in 1,71 u). Plan van 11:40: 6 kwartieren (12:15-13:45) tot 100 %; werkelijk 10,5. SoC hing 14:02-14:25 op 90 % en sprong daarna 91 → 99 in 18 min (BMS-ijking).
+- **Oorzaak in de code:** kwartierplan `soc += geladen` met `laad_kwh = laad_w × duur` (0,6 kWh/kw.) zonder laadrendement en zonder afbouw (L-EMS-030 deed dit alleen voor de twin). Planvolging telt zo elk laadkwartier als "afwijking accu" (13:30-14:45: gepland −2,4 kW, gemeten −2,1 → −0,85): **planvolging 72,5 → 55,4 %** (14 nieuwe accu-afwijkingen). Vandaag geen kosten (vlakke prijzen 12,5-13 ct); bij een kort goedkoop blok kiest het plan te weinig laadkwartieren → **L-EMS-037** (open: plan stuurt mee via `nodig`-kwartieren en sparen in het blok).
+- 15:30 plan "sparen", accu levert 0,2-0,3 kW aan het huis (13,3 ct) bij 99 %; verkoop 18:00-21:15 gepland. Klein (≈ 0,5 kWh vóór de piek), valt onder H-EMS-11.
+- **H-EMS-2:** PV t/m 15:44 **5,38 kWh**, Solcast-rest 0,23 → dag ≈ 5,5 tegen day-ahead 7,43 (**≈ −26 %**), tweede voorspelling 5,20 (+4 %). Plantoetsing 30 d: 26/30 dagen minder zon, mediaan −6,8 %.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag ≈ −26 %), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (reservesprongen; 0 nieuw). Nieuw voorstel L-EMS-037. Geen release (tussenronde, niets acuut).
+
+laatste ronde: 25-10 15:40, gemeten t/m 25-10 15:45

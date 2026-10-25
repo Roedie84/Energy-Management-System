@@ -710,3 +710,10 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-25 11:40,TUSSEN,ems_pv_gemeten_tot_1142_kwh,2.75,5,07-11 CET 2.06 + uur 11 0.70; Solcast zelfde uren 1.94 (+6 %)
 2026-10-25 11:40,TUSSEN,ems_pv_projectie_vs_dayahead_pct,-16,1,projectie ~6.2 kWh (Solcast-rest) tegen day-ahead 7.43; tweede 5.20; uitslag 03:40
 2026-10-25 11:40,TUSSEN,ems_mc_kans_pct,0.0,1,monte carlo tekortkans 11:45
+2026-10-25 15:40,TUSSEN,ems_onder_reserve_kwartieren,0,1,verkoopkwartieren leeg; regeloverschot 25-10 0.06
+2026-10-25 15:40,TUSSEN,ems_planvolging_pct,55.4,56,"t/m 15:30: 31 volgens plan, 22 accu (14 nieuw, vooral laadblok 13:30-14:45), 1 sturing, 1 zon, 1 verbruik"
+2026-10-25 15:40,TUSSEN,ems_laadblok_ac_kw,2.17,10,"12:15-14:45 output_pack/grid_input kwartiergemiddelden 2.12-2.25 kW bij input_limit 2400 (eerdere dagen 2.40); afbouw 1.81 kW vanaf 14:00 (SoC 90 %)"
+2026-10-25 15:40,TUSSEN,ems_laadblok_inhoud_kw,1.73,1,"available_kwh 6.45 (12:19) -> 9.22 (14:02) = 2.77 kWh in 1.71 u; 1 % = 0.1152 kWh"
+2026-10-25 15:40,TUSSEN,ems_laadblok_duur_kwartieren,10.5,1,"plan 11:40: 6 kw. (12:15-13:45) tot 100 %; werkelijk 12:15-14:53 (SoC 66 -> 100 %); SoC hing 14:02-14:25 op 90 % en sprong 91 -> 99 in 18 min"
+2026-10-25 15:40,TUSSEN,ems_pv_dag_tot_1544_kwh,5.38,1,"pv_opbrengst_vandaag; Solcast-rest 0.23 -> dag ~5.4-5.6 tegen day-ahead 7.43 (~-26 %), tweede voorspelling 5.20 (+4 %); uitslag 03:40"
+2026-10-25 15:40,TUSSEN,ems_mc_kans_pct,0.0,1,monte carlo tekortkans 15:44; SoC 99 %
