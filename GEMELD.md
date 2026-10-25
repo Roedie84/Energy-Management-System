@@ -121,3 +121,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 25-10 10:51 | gold scalper verlopen mand-noodstop (dagverlies eerdere dag) na herstart opnieuw geladen
 25-10 12:51 | gold scalper xauusd-apparaat op ruimte woonkamer
 25-10 12:51 | browser mod-browser ceb3e0f4 (niet meer actief) unregister
+25-10 15:51 | L-EMS-037 kwartierplan laden met gemeten laadvermogen, rendement en afbouw >90%
