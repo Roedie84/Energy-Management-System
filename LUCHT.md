@@ -2,31 +2,11 @@
 
 Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 
-## 11-10 12:23 (ronde 1, nulpunt nieuwe sturing)
-- PM2.5 dagen 08-10 t/m 11-10: gem 2,8 / 2,3 / 0,9 / 0,7 (WHO-jaar 5). Okt 2026 t/m nu ~2,8 vs nulmeting okt 2025 9,1.
-- Pieken > 25: 08-10 17:00 kookpiek 190 (kookplaat aan), halveringstijd ~5 min na kookplaat uit, < 10 na 25 min. 09-10 21:40 piek 30 zonder koken, halveert trager (~23 min), < 10 na 65 min; oorzaak onbekend (raamsensoren toen unavailable).
-- 10-10 kookplaat 41 min aan met keukenraam open: max 3,4 - geen piek.
-- Stand per piek onbekend: select-entiteit en fan-history pas sinds 11-10 11:15. Automation sinds 12:12: 5 runs, 0 fouten, stand nu auto (aanwezig). Lokaal: 198/198 rondes, 0 uitval, sturen 4/4 bevestigd. Filtergebruik 0%.
-- Eigen PM2.5 apparaat staat vrijwel altijd op 2; bij de kookpiek 390 tegen 190 (UltimateSensor): grof, overschat pieken.
-- CO₂ 09-10 6 uur > 1.200 ppm (max 1.549, avond) - ventileren, geen luchtreinigerzaak.
-- Hypotheses: H1 koken met raam/afzuiging open geeft nauwelijks piek (n=3 kookmomenten). H2 auto halveert een kookpiek in ~5 min; toets per stand bij volgende pieken (n=1). H3 niet-kookpieken 's avonds dalen 4x trager - lagere stand (sleep?) of aanhoudende bron (n=1).
-
-## 11-10 16:25 (ronde 2)
-- PM2.5 12:15-16:20: gem 2,4, mediaan 1,2, P95 9,8, max 13 (n=49 blokken); 0 uur > 15. Auto 183 min (gem 2,7), mid 23 min (gem 1,0), stand onbekend 39 min.
-- Geen piek > 25. Bult 13:25 tot 13 µg/m³ zonder koken, ramen dicht, stand auto; CO₂ en vocht stegen mee (activiteit). Halveringstijd ~10 min, < 2 na 50 min.
-- Aanwezig 3,7 vs afwezig 0,9 µg/m³: verschil komt van de bron (mensen), niet van de stand.
-- Werking: stand volgt aanwezigheid (mid ~5 min na vertrek, auto bij terugkomst). Lokaal 741/741 rondes, sturen 7/7 bevestigd, filter 0%. Apparaat-PM2.5 bij de bult max 9 (Ultimate 13): volgt nu redelijk.
-- Opvallend: HA herstart ~elke 10 min sinds 12:10 (n=20, ~70 s per keer, uptime bevestigt). Stand dan unavailable; apparaat draait door. Traces gaan bij elke herstart verloren.
-- CO₂ gem 777, max 1.007: in orde.
-- Hypotheses: H1 koken met raam open → nauwelijks piek (n=3, geen nieuwe toets). H2 auto halveert kookpiek ~5 min (n=1, geen nieuwe kookpiek). H3 niet-kookbronnen dalen trager: 13:25 in auto ~10 min vs 5 bij koken (n=2, zwak - bron mogelijk nog actief).
-
-## 11-10 20:25 (ronde 3)
-- PM2.5 16:20-20:20: gem 1,0, mediaan 0,9, P95 1,8, max 2,6 (n=48); 0 uur > 15. Dag t/m nu 1,1; 7d 2,6 (nulmeting okt 2025 9,1).
-- Geen piek > 25. Auto 174 min (gem 1,2), mid 57 min (gem 0,5): mid viel in de rustige middag, auto in de avond met activiteit - geen standvergelijking mogelijk.
-- 18:20-20:20 avondactiviteit, ramen dicht, auto: CO₂ 510→1.741, VOC-index 50→490, temp +1,4 °C, schimmelindicator 67→80; PM2.5 bleef < 2,6. Kookplaat/oven-status unavailable sinds 17:19, dus koken niet te bevestigen.
-- Werking: stand volgt aanwezigheid (mid ~5 min na vertrek). 7 HA-herstarts t/m 18:09, daarna stabiel (>2 u). Lokaal 1878/1878 rondes, sturen 18/18, filter 0%. Apparaat-PM2.5 staat vast op 2: onbruikbaar onder ~5 µg/m³.
-- CO₂ 1,4 u > 1.200 en schimmelindicator 80: ventileren 's avonds; geen luchtreinigerzaak.
-- Hypotheses: H1 koken met raam/afzuiging → nauwelijks piek (n=3; avond 18:20 mogelijk kookmoment zonder PM-piek, onbevestigd). H2 auto halveert kookpiek ~5 min (n=1, geen nieuwe piek). H3 niet-kookbronnen dalen trager (n=2, geen nieuwe toets).
+## 11-10 (dag, samengevat; rondes 1-3)
+- PM2.5 dag gem 1,08, max 13 (13:25, activiteit, auto), 0 uur > 15; geen piek > 25. Nulpunt nieuwe sturing 12:12.
+- Terugblik: kookpiek 08-10 190 halveerde ~5 min (auto), 09-10 piek 30 zonder koken ~23 min; 10-10 koken met keukenraam open max 3,4.
+- Stand volgt aanwezigheid; HA herstartte ~elke 10 min 12:10-18:09 (stand dan unavailable, apparaat draait door). Lokaal en sturen zonder fouten, filter 0%. Apparaat-PM2.5 vast op 2 onder ~5 µg/m³.
+- CO₂ 4,2 u > 1.200 (max 1.741, avond, ramen dicht): ventileren.
 
 ## 12-10 00:25 (ronde 4, eerste na middernacht)
 - Dag 11-10: gem 1,08 µg/m³, max 13, 0 uur > 15. 7d 2,6 (nulmeting okt 2025 9,1; stookseizoen 2025 vóór reiniger 16,0).
@@ -302,4 +282,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ stijgt 500 → 1.239 (19:40) vanaf aanwezigheid 17:50 met ramen dicht, gem 772, 5 min > 1.200: ventileren (raam op kier/rooster), niet de luchtreiniger. Schimmelindicator 64-69, vocht 47-54% bij ~21 °C: in orde.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 25-10 20:25, gemeten t/m 20:20
+## 26-10 00:25 (ronde 37, eerste na middernacht)
+- Dag 25-10: gem 1,21, max 3,5 (13:25), 0 uur > 15, geen piek > 25, geen kookpiek (kookmoment 11:27 zonder piek). 7d (19-25/10) 1,76, mediaan dag 1,2 (nulmeting okt 2025 9,1; stookseizoen vóór reiniger 16,0).
+- PM2.5 20:20-00:20: gem 1,05, mediaan 1,11, P95 1,57, max 2,2 (20:35) (n=48); 0 uur > 15. Geen kookmoment, ramen dicht.
+- Stand: auto 167 min (gem 1,23), mid 73 min (gem 0,61, nacht). Aanwezig 1,24 (n=31) vs afwezig 0,71 (n=17): bron (avond/mensen), geen standeffect.
+- Werking: tv uit 22:50, laatste aanwezigheid 22:52 → mid 23:07 (15 min), correct. Kwartiercontroles 5/5 zonder fout; geen HA-herstart. Lokaal 48 mislukt op 118.355 (geen nieuwe), uitval 0, sturen 299/300 (1/1 nieuw), filter 0%. Apparaat-PM2.5 2-4 bij Ultimate 0,3-2: vast op 2, onbruikbaar.
+- CO₂ 20:20-22:15 vlak 1.150-1.200 (max 1.215, 4 blokken even > 1.200) bij aanwezigheid en ramen dicht, daarna dalend naar 720; gem 1.046. Dag 25-10 gem 679, max 1.239. Avond ventileren. Vocht 48-52%, schimmelindicator 66-68: in orde.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 26-10 00:25, gemeten t/m 00:20
