@@ -113,3 +113,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 24-10 20:51 | ha herstarten om gold scalper 2.22.1 te activeren (kostenfilter PUMP)
 24-10 23:51 | L-SC-022 stormchase windstoten tijdens front factor uit metingen van dit front
 24-10 23:51 | stormchase radar-vooruitblik image blijft hangen sinds herstart (08:16 UTC)
+25-10 03:51 | updates installeren stormchase 0.59.3 (hacs)
