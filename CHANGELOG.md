@@ -33876,3 +33876,13 @@ Gemeten 26-10 aan de Anker in de keuken (`switch.opladers_batterijen`):
 - **Test zonder eindtijd.** Stond de schakelaar al aan zonder lopende test (na een herstart of een overrule), dan bleef de status eindeloos op `test_aan`: 15:14-17:19 stond de lader zo 2 uur aan zonder last. Zo'n test krijgt nu ook één ronde (`UPDATE_INTERVAL_MINUTES`) en gaat daarna uit. Dit geldt voor alle geplande laadapparaten.
 
 Tests: `test_v5131_2_batterijlader_afronden.py` (4); `test_v5129_batterijlader.py` aangepast aan 10 minuten.
+
+## v5.131.3 — vermogen bij de apparaten in de cockpit
+
+Gevraagd 26-10: "Laat hierbij ook de vermogens zien in de tekst als actief of als er geladen wordt indien mogelijk".
+
+- In *Huis en apparaten* staat bij Fietsladers, Steelstofzuiger, Batterijlader keuken, Vaatwasser en Wasmachine het actuele vermogen achter de status zodra het apparaat laadt of bezig is, bijvoorbeeld "Laadt · 5,1 W". In andere standen (wacht, test, klaar) niet.
+- De vijf statussensoren krijgen het attribuut `vermogen_sensor` (de ingestelde vermogenssensor); de cockpit leest die live en ververst het paneel bij elke nieuwe meting zolang het apparaat actief is.
+- "Actief" van vaatwasser en wasmachine is nu ook groen, net als "laadt".
+
+Tests: `test_v5131_3_cockpit_vermogen.py` (5).

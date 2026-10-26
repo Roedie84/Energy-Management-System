@@ -324,7 +324,7 @@ const APPARAAT_STATUS = {
    laden, amber = wacht op het goedkope blok, cyaan = test, blauw = klaar,
    violet = handmatig, grijs = niets aangesloten of uit. */
 const APPARAAT_KLEUR = [
-  [/^(laadt|aan_het_laden|bezig|draait|running|run)$/, "var(--groen)"],
+  [/^(laadt|aan_het_laden|bezig|draait|running|run|actief)$/, "var(--groen)"],
   [/^test_aan$/, "var(--cyaan)"],
   [/^wacht_op_apparaat$/, "var(--tekst3)"],
   [/wacht|gepland|delayed/, "var(--amber)"],
@@ -341,6 +341,20 @@ const apparaatKleur = (s) => {
 const apparaatTekst = (s) => {
   if (!bruikbaar(s)) return STREEP;
   return hoofd(APPARAAT_STATUS[s.state] || String(s.state).replace(/_/g, " "));
+};
+/* v5.131.3: bezig of aan het laden - dan het vermogen erbij (gevraagd 26-10:
+   "Laat hierbij ook de vermogens zien als actief of als er geladen wordt"). */
+const APPARAAT_ACTIEF = /^(laadt|aan_het_laden|bezig|draait|running|run|actief)$/;
+const apparaatVermogen = (s, states) => {
+  if (!bruikbaar(s) || !APPARAAT_ACTIEF.test(String(s.state).toLowerCase())) return null;
+  const id = attr(s, "vermogen_sensor");
+  const p = id && states ? getal(states[id]) : null;
+  return p == null ? null : p;
+};
+const APPARAAT_SLEUTELS = ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine"];
+const vermogenTekst = (w) => {
+  if (Math.abs(w) >= 1000) return `${fmt(w / 1000, 2)} kW`;
+  return `${fmt(w, Math.abs(w) < 10 ? 1 : 0)} W`;
 };
 
 /* ------------------------------------------------------------------ */
@@ -991,6 +1005,18 @@ class EmsCockpitCard extends HTMLElement {
     if (gewijzigd.size) {
       for (const [paneel, sleutels] of Object.entries(AFHANKELIJK)) {
         if (sleutels.some((k) => gewijzigd.has(this._ids[k]))) this._vuil.add(paneel);
+      }
+    }
+    // v5.131.3: het vermogen van een apparaat dat bezig is of laadt, live
+    for (const k of APPARAAT_SLEUTELS) {
+      const st = hass.states[this._ids[k]];
+      if (!bruikbaar(st) || !APPARAAT_ACTIEF.test(String(st.state).toLowerCase())) continue;
+      const vid = attr(st, "vermogen_sensor");
+      if (!vid) continue;
+      const s = hass.states[vid];
+      if (s !== this._vorige[`vermogen:${vid}`]) {
+        this._vorige[`vermogen:${vid}`] = s;
+        this._vuil.add("huis");
       }
     }
     if (this._vuil.size) this._plan();
@@ -1888,7 +1914,10 @@ class EmsCockpitCard extends HTMLElement {
     const regel = (ic, naam, sub, waarde, kleur = "") =>
       `<div class="regel"${kleur ? ` style="--rk:${kleur}"` : ""}><div class="ric">${icoon(ic)}</div>` +
       `<div><div class="rn">${esc(naam)}</div>${sub ? `<div class="rs">${sub}</div>` : ""}</div><div class="rw">${waarde}</div></div>`;
-    const status = (s) => [apparaatTekst(s), apparaatKleur(s)];
+    const status = (s) => {
+      const p = apparaatVermogen(s, this._hass.states);
+      return [apparaatTekst(s) + (p != null ? `${PUNT}${vermogenTekst(p)}` : ""), apparaatKleur(s)];
+    };
     const uit = [];
     const fiets = this._s("fietsen");
     if (fiets) {

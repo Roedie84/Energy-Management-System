@@ -20,6 +20,11 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_STEELSTOFZUIGER_POWER_SENSOR,
+    CONF_FIETSLADERS_POWER_SENSOR,
+    CONF_BATTERIJLADER_POWER_SENSOR,
+    CONF_DISHWASHER_POWER_SENSOR,
+    CONF_WASHING_MACHINE_POWER_SENSOR,
     PERSISTED_MONOTONE_FIELDS,
     SLUIPVERBRUIK_METHODE_VERSIE,
     GEEN_ATTRIBUTEN_IN_RECORDER,
@@ -1130,6 +1135,8 @@ class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             "idle_power_history_w": (
                 self._coordinator._steelstofzuiger_idle_power_history
             ),
+            # v5.131.3: de cockpit toont het vermogen live terwijl er geladen wordt
+            "vermogen_sensor": self._coordinator.config.get(CONF_STEELSTOFZUIGER_POWER_SENSOR),
             "learned_completion_threshold_w": (
                 self._coordinator._get_learned_completion_threshold_w(
                     "_steelstofzuiger_idle_power_history",
@@ -1187,6 +1194,8 @@ class FietsladersStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             "idle_power_history_w": (
                 self._coordinator._fietsladers_idle_power_history
             ),
+            # v5.131.3: de cockpit toont het vermogen live terwijl er geladen wordt
+            "vermogen_sensor": self._coordinator.config.get(CONF_FIETSLADERS_POWER_SENSOR),
             "learned_completion_threshold_w": (
                 self._coordinator._get_learned_completion_threshold_w(
                     "_fietsladers_idle_power_history",
@@ -1241,6 +1250,8 @@ class BatterijladerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             "idle_power_history_w": (
                 self._coordinator._batterijlader_idle_power_history
             ),
+            # v5.131.3: de cockpit toont het vermogen live terwijl er geladen wordt
+            "vermogen_sensor": self._coordinator.config.get(CONF_BATTERIJLADER_POWER_SENSOR),
             "learned_completion_threshold_w": (
                 self._coordinator._get_learned_completion_threshold_w(
                     "_batterijlader_idle_power_history",
@@ -1733,6 +1744,7 @@ class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
     _state_attr = ""
     _duration_history_attr = ""
     _learned_duration_property = ""
+    _power_conf = ""
 
     def __init__(self, coordinator, entry_id: str, unique_suffix: str) -> None:
         self._coordinator = coordinator
@@ -1765,6 +1777,8 @@ class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
                 round(learned, 1) if learned is not None else None
             ),
             "geschatte_voortgang_procent": progress_percent,
+            # v5.131.3: de cockpit toont het vermogen live terwijl hij draait
+            "vermogen_sensor": self._coordinator.config.get(self._power_conf),
             "cyclusduur_geschiedenis": history,
             # v5.99.7: wanneer de laatste cyclus klaar was (blijft over een
             # herstart; last_changed niet).
@@ -1812,6 +1826,7 @@ class DishwasherCycleStateSensor(_ApplianceCycleStateSensor):
     _attr_name = "Vaatwasser cyclus-status"
     _attr_icon = "mdi:dishwasher"
     _state_attr = "_dishwasher_state"
+    _power_conf = CONF_DISHWASHER_POWER_SENSOR
     _duration_history_attr = "dishwasher_cycle_duration_history"
     _learned_duration_property = "learned_dishwasher_cycle_duration_minutes"
 
@@ -1826,6 +1841,7 @@ class WashingMachineCycleStateSensor(_ApplianceCycleStateSensor):
     _attr_name = "Wasmachine cyclus-status"
     _attr_icon = "mdi:washing-machine"
     _state_attr = "_washing_machine_state"
+    _power_conf = CONF_WASHING_MACHINE_POWER_SENSOR
     _duration_history_attr = "washing_machine_cycle_duration_history"
     _learned_duration_property = "learned_washing_machine_cycle_duration_minutes"
 
