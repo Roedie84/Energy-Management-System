@@ -1,3 +1,11 @@
+EMS v5.129.2 - dagbesparing zonder sprong bij een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De besparing van vandaag (t.o.v. zonder accu-sturing) is na een herstart
+  heel even onbeschikbaar tot de eerste ronde klaar is, in plaats van 30 s
+  een te laag cijfer te tonen.
+
 EMS v5.129.1 - batterijlader in de keuken mag de hele dag laden
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

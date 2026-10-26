@@ -33814,3 +33814,12 @@ Gevraagd 26-10: "De shelly voor de opladers hoeft niet perse op een goedkoop mom
 
 Tests: `test_v5129_batterijlader.py` (9).
 
+
+## v5.129.2 — dagbesparing onbeschikbaar vóór de eerste ronde (L-EMS-039)
+
+Meetfout, gevonden in de leerronde van 26-10: *Besparing t.o.v. zonder accu-sturing* schreef bij elke herstart 30 s het ongecorrigeerde dagcijfer (07:12 −1,30, 07:47 −0,69, 10:27 −0,41; ervoor en erna −0,01 / 0,42 / 0,71).
+
+- `CounterfactualSavingsSensor.available` is nu `not _voor_eerste_ronde(...)`, dezelfde regel als het totaal sinds v5.127.3. Vóór de eerste ronde is de accustand nog niet gelezen en ontbreekt de voorraadcorrectie; de sensor is dan even onbeschikbaar in plaats van een negatieve tussenwaarde te tonen.
+- Sturing ongewijzigd.
+
+Tests: `test_l_ems_039_besparing_dag_opstart.py` (3).
