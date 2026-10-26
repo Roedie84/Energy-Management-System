@@ -83,3 +83,7 @@
 | Planvolging volgens plan | 59,9 % (7 d); "sturing" 0 op 23- en 24-10 | 18..24-10 | 25-10 03:40 |
 | MC 22:00 Brier (tot blok) | 0,500 (n=6; 3× 100 % zonder tekortnacht) | 18..24-10 | 25-10 03:40 |
 | Digital twin accu-inhoud 6 u vooruit, MAE | 1,51 kWh | 24-10 | 25-10 03:40 |
+| PV-voorspelling MAE (dag, day-ahead tracker) | 12,6 % (30 d) · 17,1 % (14 d) · 14,5 % (7 d); bias −10,7 / −15,8 / −11,9 | 26-09..25-10 | 26-10 03:40 |
+| PV-bias per bewolking (30 d) | ≤ 50 % −13,1 % (n=9) · 50-90 % −13,8 (n=8) · > 90 % −7,1 (n=13) | 26-09..25-10 | 26-10 03:40 |
+| Nabeschouwing: accu leverde / had kunnen (realisatie) | € 5,87 / € 6,64 (88 %) 7 d; avondpiek −1,42, ochtendpiek +2,94, nacht −1,73 | 19..25-10 | 26-10 03:40 |
+| Planvolging "volgens plan" | 59,9 % (7 d, 52,7-68,8); "sturing" 0-9 per dag (25-10: 7, waarvan 6 in het blok) | 19..25-10 | 26-10 03:40 |
