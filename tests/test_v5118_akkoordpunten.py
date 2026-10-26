@@ -103,9 +103,10 @@ def test_eenzijdig_begrensd():
 def test_gemengd_of_te_kort_geen_correctie():
     assert _tracker([-10, 10] * 7).eenzijdige_correctie is None
     assert _tracker([-10] * 9).eenzijdige_correctie is None
-    # 11 van 14 = 79 % aan een kant: niet genoeg
-    assert _tracker([-10] * 11 + [5] * 3).eenzijdige_correctie is None
-    assert _tracker([-10] * 12 + [5] * 2).eenzijdige_correctie is not None
+    # v5.135.0: de grens is 70 % (was 80 %). 9 van 14 = 64 %: niet genoeg
+    assert _tracker([-10] * 9 + [5] * 5).eenzijdige_correctie is None
+    assert _tracker([-10] * 10 + [5] * 4).eenzijdige_correctie is not None  # 71 %
+    assert _tracker([-10] * 11 + [5] * 3).eenzijdige_correctie is not None
 
 
 def test_zonbias_gebruikt_eenzijdige_ondergrens(make_coordinator):

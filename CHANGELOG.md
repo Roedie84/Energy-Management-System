@@ -33916,3 +33916,13 @@ Tests: `test_v5133_nachtrust_laders.py` (10).
 - Stuurt alleen met de knop Airco automaat aan; met de knop uit verandert alleen de tekst van het besluit.
 
 Tests: `test_v5134_airco_aanzettemperatuur.py` (5).
+
+## v5.135.0 — verbruik per dagtype, zonvoorspelling eerder bijgesteld, continu-verbruik verklaard
+
+Akkoord Ruud 26-10 (punten 2, 3 en 4 van de besparingsronde).
+
+- **Zonvoorspelling eerder bijgesteld.** Op 26 van de 30 dagen kwam er minder zon dan voorspeld (plantoetsing, mediaan −7,4 %). De eenzijdige correctie (L-EMS-025, v5.118.0) ging pas aan als ≥ 80 % van de laatste 14 dagen aan één kant lag; nu ≥ 70 % (`SOLAR_EENZIJDIG_AANDEEL`). Teruggerekend over 16-09 t/m 25-10, steeds met de 14 dagen ervoor: gemiddelde fout na correctie 12,2 → 11,0 % en bias −9,1 → −7,9 % (26 dagen); laatste 19 dagen 14,8 → 13,2 % en −11,9 → −10,2 %. Een correctie per bewolkingsvak voegde in dezelfde terugrekening niets toe en blijft zoals hij was.
+- **Verbruik per dagtype.** Het weekend verbruikt 8 % meer (402 W tegen 371 W); de proefstand schatte wat de reserve met één profiel misrekent op € 0,21 per dag. De energiesommen (reserve, wandeling, Monte Carlo) rekenen nu per uur met het profiel van dat dagtype (`verbruik_uur_kw`), zodra dat uur ≥ 4 waarnemingen heeft (`DAGTYPE_MIN_WAARNEMINGEN`); anders het gewone uurprofiel. De proefstandkandidaat "Verbruiksprofiel per dagtype" staat op "stuurt mee".
+- **Continu-verbruik verklaard.** Het huis zakt niet onder ~130-145 W (ruim 1.200 kWh per jaar). `get_sluipverbruik_verklaring`: van het laagste kwartier van de dag (`baseline_load_history`) het deel uit apparaten met een eigen meting (mediaan 02-05 u van de laatste volle nacht, alleen bevestigde apparaten, zonder dubbeltelling), en wat overblijft zonder eigen meting. Op de sensor Sluipverbruik-detectie als `verklaring` en in de cockpit bij Huis en apparaten als "Continu-verbruik".
+
+Tests: `test_v5135_dagtype_zon_sluip.py` (8); `test_v5118_akkoordpunten.py` aangepast aan 70 %.

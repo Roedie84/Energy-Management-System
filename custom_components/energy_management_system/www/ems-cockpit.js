@@ -77,6 +77,8 @@ const EIGEN = {
   fietsen: "fietsladers_status",
   // v5.129.0: de batterijlader in de keuken
   lader: "batterijlader_status",
+  // v5.135.0: continu-verbruik, verklaard en zonder eigen meting
+  sluip: "sluipverbruik",
   cockpit: "cockpit",
   aircoBesluit: "airco_besluit",
   meetlog: "meetlog",
@@ -879,7 +881,7 @@ const AFHANKELIJK = {
   verkoop: ["gacs", "mc", "tekort", "uitleg", "blok"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
   zon: ["gacs", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk", "pvNauw", "bewolking", "pv"],
-  huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis"],
+  huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip"],
   bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "laderOverrule", "meldingenAan", "achterhoeks"],
   geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief"],
@@ -1975,6 +1977,13 @@ class EmsCockpitCard extends HTMLElement {
           `${binnen != null ? fmt(binnen, 1) + GRAAD : STREEP}${buiten != null ? ` <span class="leeg">/ ${fmt(buiten, 1)}${GRAAD}</span>` : ""}`,
           "var(--cyaan)")
       );
+    }
+    // v5.135.0: het continu-verbruik, en hoeveel daarvan een eigen meting heeft
+    const vk = attr(this._s("sluip"), "verklaring") || {};
+    if (vk.beschikbaar) {
+      uit.push(regel("stekker", "Continu-verbruik",
+        `${fmt(vk.verklaard_w)} W gemeten${PUNT}${fmt(vk.onverklaard_w)} W zonder eigen meting (${fmt(vk.onverklaard_kwh_per_jaar)} kWh/jaar)`,
+        watt(vk.huis_vloer_w), "var(--amber)"));
     }
     const water = this._s("water");
     if (water) {

@@ -1542,6 +1542,14 @@ class EnergyBalanceHealthSensor(SensorEntity):
         }
 
 
+def _veilig_verklaring(coordinator) -> dict:
+    """`get_sluipverbruik_verklaring`, maar een fout breekt de sensor niet."""
+    try:
+        return coordinator.get_sluipverbruik_verklaring()
+    except Exception as fout:  # noqa: BLE001 - alleen weergave
+        return {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
+
+
 class SluipverbruikSensor(SensorEntity, RestoreEntity):
     """CUSUM-gebaseerde detectie van een structurele stijging in het
     dagelijkse "vloer"-verbruik (v0.63.29) - de laagste
@@ -1588,6 +1596,8 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
             "methode_versie": self._coordinator.sluipverbruik_methode_versie,
             # v5.76.1: waar de reeks na een herstart uit is aangevuld.
             "bootstrap": getattr(self._coordinator, "vloer_bootstrap", None),
+            # v5.135.0: welk deel van het continu-verbruik is verklaard
+            "verklaring": _veilig_verklaring(self._coordinator),
             "note": (
                 "Vergelijkt het laagste kwartier van de dag (mediaan per "
                 "kwartier, nooit onder 0 W; meestal diep in de nacht) met "

@@ -378,6 +378,7 @@ from .const import (
     KOELING_MIN_BEURTEN,
     KOELING_MIN_DALING_C,
     LEARNING_HISTORY_DAYS,
+    DAGTYPE_MIN_WAARNEMINGEN,
     CUSUM_BASELINE_HISTORY_DAYS,
     COOLING_DEVICE_NAME_HINTS,
     COOLING_DRIFT_PERCENT_PER_DEGREE,
@@ -14859,6 +14860,8 @@ class EnergyManagementSystemCoordinator:
                 "één gemiddeld uurprofiel voor alle dagen."
             ),
             "zou_hebben_opgeleverd": self._opbrengst_dagtype(),
+            # v5.135.0: akkoord Ruud 26-10, ook onder de 10%-drempel.
+            "stuurt_sinds": "v5.135.0 (26-10)",
         }
 
     def _opbrengst_slijtage(self) -> dict:
@@ -21034,6 +21037,22 @@ class EnergyManagementSystemCoordinator:
             return None
         return statistics.mean(values)
 
+    def verbruik_uur_kw(self, hour: int, moment: datetime) -> float | None:
+        """Het geleerde verbruik van dit uur op DIT dagtype (v5.135.0).
+
+        Akkoord Ruud 26-10: het uur van het dagtype (werkdag of weekend) van
+        `moment`, zodra dat uur genoeg waarnemingen heeft
+        (`DAGTYPE_MIN_WAARNEMINGEN`); anders `learned_hourly_avg_kw`.
+        Gemeten 26-10: weekend +8% (402 W tegen 371 W); de proefstand schatte
+        wat de reserve met één profiel misrekent op € 0,21 per dag. Ook hier
+        het gemiddelde (energiesom, v5.74).
+        """
+        soort = "weekend" if moment.weekday() >= 5 else "werkdag"
+        eigen = (getattr(self, "daytype_consumption_profile", None) or {}).get(f"{soort}-{hour}")
+        if eigen and len(eigen) >= DAGTYPE_MIN_WAARNEMINGEN:
+            return statistics.mean(eigen)
+        return self.learned_hourly_avg_kw(hour)
+
     def learned_hourly_median_kw(self, hour: int) -> float | None:
         """De mediaan van het uurprofiel (v5.74) - het "gewone" uur, zonder
         apparaatpieken. Voor vergelijkingen met een ander mediaanprofiel
@@ -21127,7 +21146,7 @@ class EnergyManagementSystemCoordinator:
             segment_end = min(hour_end, end)
             fraction_hours = (segment_end - cursor).total_seconds() / 3600
 
-            avg_kw = self.learned_hourly_avg_kw(cursor.hour)
+            avg_kw = self.verbruik_uur_kw(cursor.hour, cursor)
             if avg_kw is None:
                 return None
 
@@ -21745,7 +21764,7 @@ class EnergyManagementSystemCoordinator:
             segment_end = min(hour_end, end)
             fraction_hours = (segment_end - cursor).total_seconds() / 3600
 
-            avg_kw = self.learned_hourly_avg_kw(cursor.hour)
+            avg_kw = self.verbruik_uur_kw(cursor.hour, cursor)
             if avg_kw is None:
                 return None
 
@@ -37803,6 +37822,59 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def get_sluipverbruik_verklaring(self, now: datetime | None = None) -> dict:
+        """Welk deel van het continu-verbruik is verklaard? (v5.135.0)
+
+        Akkoord Ruud 26-10. Het huis zakt 's nachts niet onder ~130-145 W
+        (`baseline_load_history`: het laagste kwartier van de dag). Hier de
+        apparaten met een eigen vermogensmeting die daarin zitten: de mediaan
+        per sensor van de laatste volle nacht (02-05 u, `nachtlast_per_apparaat`),
+        alleen de bevestigde apparaten (`nilm_confirmed_devices`, zonder
+        dubbeltellingen). Wat overblijft heeft geen eigen meting - router,
+        server, speakers, tv in stand-by - en is het deel om gericht te meten.
+        """
+        now = now or dt_util.now()
+        nachten = sorted(self.nachtlast_per_apparaat or {})
+        if nachten and nachten[-1] == now.date().isoformat() and now.hour < NACHTLAST_VENSTER[1]:
+            nachten = nachten[:-1]
+        vloer = self.baseline_load_history or []
+        if not nachten or not vloer:
+            return {"beschikbaar": False, "reden": "Nog geen volle nacht of nog geen vloerverbruik gemeten."}
+        metingen = self.nachtlast_per_apparaat[nachten[-1]] or {}
+        bevestigd = self.nilm_confirmed_devices or {}
+        apparaten = []
+        for entiteit, watt in metingen.items():
+            if entiteit not in bevestigd or not watt or watt <= 0:
+                continue
+            staat = self.hass.states.get(entiteit)
+            naam = (staat.attributes.get("friendly_name") if staat else None) or entiteit
+            gebied = self.gebied_van(entiteit)
+            apparaten.append({
+                "naam": f"{naam} ({gebied})" if gebied else naam,
+                "entiteit": entiteit, "w": round(watt, 1),
+            })
+        apparaten.sort(key=lambda r: -r["w"])
+        huis_w = round(vloer[-1] * 1000, 0)
+        verklaard_w = round(sum(r["w"] for r in apparaten), 1)
+        rest_w = round(max(0.0, huis_w - verklaard_w), 0)
+        return {
+            "beschikbaar": True,
+            "nacht": nachten[-1],
+            "huis_vloer_w": huis_w,
+            "verklaard_w": verklaard_w,
+            "onverklaard_w": rest_w,
+            "onverklaard_kwh_per_jaar": round(rest_w * 8.76, 0),
+            "vloer_kwh_per_jaar": round(huis_w * 8.76, 0),
+            "apparaten": apparaten[:12],
+            "toelichting": (
+                f"Laagste verbruik van het huis {huis_w:.0f} W; daarvan {verklaard_w:.0f} W "
+                f"uit apparaten met een eigen meting (nacht {nachten[-1]}, 02-05 u). "
+                f"{rest_w:.0f} W ({rest_w * 8.76:.0f} kWh per jaar) heeft geen eigen meting: "
+                "router, server, speakers, tv en andere stand-by. Meet daar om te zien wat weg kan. "
+                "De accu staat hier niet in: zijn sluimerverbruik komt uit de accu zelf."
+            ),
+        }
+
     def _sluipverbruik_verdachten_zin(self) -> str:
         """De regel die bij de sluipverbruikmelding gaat (v4.4)."""
         uit = self.welke_apparaten_stegen()
@@ -40033,8 +40105,8 @@ class EnergyManagementSystemCoordinator:
         centrum = []
         for hour, fraction_hours, segment_end in segments:
             # v5.74: het gemiddelde, net als de wandeling (energiesom).
-            kw = self.learned_hourly_avg_kw(hour) or 0.0
             start = segment_end - timedelta(hours=fraction_hours)
+            kw = self.verbruik_uur_kw(hour, start) or 0.0
             zon = self._estimate_pv_kwh_for_period(start, segment_end, veilig=True)
             centrum.append(
                 (kw * fraction_hours * vakantie_factor, zon * efficiency_factor)
@@ -40104,7 +40176,7 @@ class EnergyManagementSystemCoordinator:
         for (hour, fraction_hours, _eind), (verbruik_kwh, _zon) in zip(
             segments, centrum
         ):
-            avg_kw = self.learned_hourly_avg_kw(hour)
+            avg_kw = self.verbruik_uur_kw(hour, _eind - timedelta(hours=fraction_hours))
             if avg_kw is None:
                 return 0.0
             totaal += max(

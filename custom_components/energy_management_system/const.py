@@ -592,6 +592,9 @@ CONF_LANGE_HORIZON = "lange_horizon_actief"
 
 DEFAULT_LOW_SOLAR_THRESHOLD_KWH = 5.0
 LEARNING_HISTORY_DAYS = 7
+# v5.135.0: vanaf zoveel waarnemingen in een uur van een dagtype (werkdag of
+# weekend) rekent het verbruiksprofiel met dat dagtype.
+DAGTYPE_MIN_WAARNEMINGEN = 4
 
 # Hoe lang de afwijkingsgeschiedenis van de zonvoorspelling bewaard
 # blijft (v4.10). Het LEREN gebeurt over LEARNING_HISTORY_DAYS - dat
@@ -5168,7 +5171,12 @@ SOLAR_BIAS_MIN_DAGEN = 5
 # niet ver mis zijn (de kleinste afwijkingen, nu ~-8 %), begrensd.
 SOLAR_EENZIJDIG_DAGEN = 14
 SOLAR_EENZIJDIG_MIN_DAGEN = 10
-SOLAR_EENZIJDIG_AANDEEL = 0.8
+# v5.135.0 (akkoord Ruud 26-10): 0,7 (was 0,8). Teruggerekend over de 40
+# dagen van 16-09 t/m 25-10, steeds met de 14 dagen ervoor: gemiddelde fout
+# na correctie 12,2 -> 11,0 % en bias -9,1 -> -7,9 % (26 dagen); over de
+# laatste 19 dagen 14,8 -> 13,2 % en -11,9 -> -10,2 %. Met 0,8 bleef de
+# correctie op 14 van 26 dagen uit, terwijl 10-11 van de 14 dagen te hoog waren.
+SOLAR_EENZIJDIG_AANDEEL = 0.7
 SOLAR_EENZIJDIG_MAX_PERCENT = 15.0
 
 # Grenzen tussen de drie soorten dagen, en hoeveel er per soort nodig
