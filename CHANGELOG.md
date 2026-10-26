@@ -33804,3 +33804,13 @@ Gevraagd 26-10: "Kunnen we voor de oplader in de keuken een zelfde automatiserin
 
 Tests: `test_v5129_batterijlader.py` (8); `test_state_persistence.py` uitgebreid.
 
+
+## v5.129.1 — batterijlader mag de hele dag laden
+
+Gevraagd 26-10: "De shelly voor de opladers hoeft niet perse op een goedkoop moment, dit mag de hele dag door."
+
+- De batterijlader krijgt in `_async_update_scheduled_charge_appliance` altijd "mag laden" in plaats van `is_currently_cheapest_block`. De rest is gelijk: testen of er iets aan hangt, uit bij vol (2 min onder de drempel), daarna elk kwartier opnieuw kijken (`kwartiercontrole`). De opgeladen-melding gaat na een lege controle, één keer per dag.
+- Cockpitknop heet nu "Batterijlader handmatig" ("EMS laat de lader met rust").
+
+Tests: `test_v5129_batterijlader.py` (9).
+

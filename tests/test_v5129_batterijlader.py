@@ -4,8 +4,8 @@ Gevraagd 26-10: "Kunnen we voor de oplader in de keuken een zelfde
 automatisering bouwen als voor de fietsen en de steelstofzuiger?" (Shelly
 `switch.opladers_batterijen` + Anker Prime 200 W USB-lader).
 
-Laadt in het goedkope blok, schakelt uit zodra alles vol is (10 W-startdrempel,
-daarna de geleerde drempel), kijkt daarna tot het blok voorbij is elk kwartier
+Laadt de hele dag (v5.129.1; eerst alleen in het goedkope blok), schakelt uit zodra alles vol is (10 W-startdrempel,
+daarna de geleerde drempel), kijkt daarna elk kwartier
 of er weer iets aan hangt, en heeft een eigen overrule.
 """
 import asyncio
@@ -65,13 +65,36 @@ def test_aan_bij_begin_goedkoop_blok(make_coordinator, hass):
     assert c.last_batterijlader_action == "test_aan"
 
 
-def test_blijft_uit_buiten_het_blok(make_coordinator, hass):
+def test_laadt_ook_buiten_het_blok(make_coordinator, hass):
+    """v5.129.1: de batterijlader mag de hele dag, niet alleen in het blok."""
     _klaarzetten(hass, "0")
     c = make_coordinator(_config())
     _nu(DAY0.replace(hour=9, minute=0))
     asyncio.run(c._async_update_locked())
-    assert _schakel(hass) == []
-    assert c.last_batterijlader_action == "wacht_op_goedkoop_blok"
+    assert [x[1] for x in _schakel(hass)] == ["turn_on"]
+    assert c.last_batterijlader_action == "test_aan"
+
+
+def test_buiten_het_blok_uit_als_vol_en_kwartiercontrole(make_coordinator, hass):
+    _klaarzetten(hass, "40")
+    c = make_coordinator(_config())
+
+    async def run():
+        _nu(DAY0.replace(hour=8, minute=0))
+        await c._async_update_locked()
+        hass.states.set("switch.opladers_batterijen", "on")
+        _nu(DAY0.replace(hour=8, minute=5))
+        await c._async_update_locked()
+        hass.states.set("sensor.opladers_batterijen_power", "2")
+        _nu(DAY0.replace(hour=8, minute=6))
+        await c._async_update_locked()
+        _nu(DAY0.replace(hour=8, minute=9))
+        await c._async_update_locked()
+
+    asyncio.run(run())
+    assert _schakel(hass)[-1][1] == "turn_off"
+    assert c.last_batterijlader_action == "voltooid"
+    assert c._batterijlader_next_poll_at == DAY0.replace(hour=8, minute=15)
 
 
 def test_uit_als_alles_vol_is_met_10w_drempel(make_coordinator, hass):

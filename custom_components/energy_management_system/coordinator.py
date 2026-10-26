@@ -46941,13 +46941,14 @@ class EnergyManagementSystemCoordinator:
             override_attr="fietsladers_override",
             kwartiercontrole=True,
         )
-        # v5.129.0: de batterijlader in de keuken, zoals de fietsladers: in
-        # het goedkope blok, uit zodra alles vol is, en tot het blok voorbij
-        # is elk kwartier kijken of er weer iets aan hangt (meerdere poorten).
+        # v5.129.0: de batterijlader in de keuken, zoals de fietsladers: uit
+        # zodra alles vol is, daarna elk kwartier kijken of er weer iets aan
+        # hangt (meerdere poorten). v5.129.1: niet alleen in het goedkope
+        # blok maar de hele dag (gevraagd 26-10: "dit mag de hele dag door").
         try:
             await self._async_update_scheduled_charge_appliance(
                 now,
-                is_currently_cheapest_block,
+                True,
                 switch_entity=self.config.get(CONF_BATTERIJLADER_SWITCH),
                 power_entity=self.config.get(CONF_BATTERIJLADER_POWER_SENSOR),
                 complete_threshold_w=BATTERIJLADER_COMPLETE_THRESHOLD_W,
@@ -46963,8 +46964,7 @@ class EnergyManagementSystemCoordinator:
                 notify_title="🔋 Batterijen opgeladen",
                 notify_message=(
                     "De batterijlader in de keuken is uitgeschakeld omdat alles vol is. "
-                    "Tot het goedkope blok voorbij is, kijkt het EMS elk kwartier "
-                    "of er weer iets aan hangt."
+                    "Het EMS kijkt elk kwartier of er weer iets aan hangt."
                 ),
                 override_attr="batterijlader_override",
                 kwartiercontrole=True,

@@ -1,3 +1,11 @@
+EMS v5.129.1 - batterijlader in de keuken mag de hele dag laden
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De batterijlader wacht niet meer op het goedkope blok: hij laadt de hele
+  dag, gaat uit zodra alles vol is en kijkt daarna elk kwartier of er weer
+  iets aan hangt.
+
 EMS v5.129.0 - batterijlader in de keuken laadt in het goedkope blok
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

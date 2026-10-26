@@ -886,7 +886,7 @@ const KNOPPEN = [
   { k: "aircoAutomaat", n: "Airco automaat", s: "EMS stuurt de airco", ic: "airco", kl: "var(--cyaan)" },
   { k: "fietsenOverrule", n: "Fietsen nu laden", s: "Niet wachten op het blok", ic: "fiets", kl: "var(--groen)" },
   { k: "stofzuigerOverrule", n: "Stofzuiger nu laden", s: "Niet wachten op het blok", ic: "stof", kl: "var(--groen)" },
-  { k: "laderOverrule", n: "Batterijlader nu laden", s: "Niet wachten op het blok", ic: "accu", kl: "var(--groen)" },
+  { k: "laderOverrule", n: "Batterijlader handmatig", s: "EMS laat de lader met rust", ic: "accu", kl: "var(--groen)" },
   { k: "meldingenAan", n: "Meldingen", s: "Alle meldingen aan of uit", ic: "bel", kl: "var(--amber)" },
   { k: "achterhoeks", n: "Achterhoeks", s: "Meldingen in de streektaal", ic: "taal", kl: "var(--violet)" },
 ];
