@@ -976,3 +976,23 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-26 04:20,automation_traces_fout,0,5,failed_conditions = nachtvenster
 2026-10-26 04:20,kookautomation_traces,0,0,geen nieuwe traces; geen kookmoment
 2026-10-26 04:20,apparaat_pm25_bereik,2,1,vast op 2 bij Ultimate 0.2-0.8
+2026-10-26 08:20,pm25_gem,0.97,48,5-min statistiek 04:20-08:20 CET
+2026-10-26 08:20,pm25_mediaan,0.81,48,
+2026-10-26 08:20,pm25_p95,2.20,48,
+2026-10-26 08:20,pm25_max,2.65,48,momentaan max 07:55
+2026-10-26 08:20,pm25_uren_gt15,0.00,48,
+2026-10-26 08:20,pm25_uren_gt25,0.00,48,
+2026-10-26 08:20,stand_auto_min,134,1,gem pm25 1.35 (n=28)
+2026-10-26 08:20,stand_mid_min,104,1,gem pm25 0.45 (n=20); 2.5 min unavailable
+2026-10-26 08:20,pm25_gem_aanwezig,1.32,29,vanaf 05:58
+2026-10-26 08:20,pm25_gem_afwezig,0.45,19,
+2026-10-26 08:20,co2_gem,609,48,5-min; max 802 (07:50); ramen dicht
+2026-10-26 08:20,co2_uren_gt1200,0.00,48,
+2026-10-26 08:20,schimmel_indicator,73,48,69-74; binnen 53.7-56.1% / 17.2 -> 16.9 C; buiten 99% / 8.4 C
+2026-10-26 08:20,ha_herstarts,2,1,07:11 en 07:46
+2026-10-26 08:20,lokaal_mislukt,48,121185,uitval 0; 207 verbindingen; geen nieuwe fout
+2026-10-26 08:20,sturen_bevestigd,305,306,6/6 nieuwe opdrachten bevestigd
+2026-10-26 08:20,filtergebruik_pct,0,1,
+2026-10-26 08:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (06:28:53 -> 06:43:54; 08:05:34 -> 08:20:34)
+2026-10-26 08:20,kookautomation_traces,0,2,alleen herstarttraces; geen kookmoment
+2026-10-26 08:20,apparaat_pm25_bereik,6,1,apparaat 2-6 bij Ultimate 0.3-2.6; ~2x te hoog

@@ -299,4 +299,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ daalt 709 → 563 (gem 613), 0 u > 1.200. Binnen 18,1 → 17,2 °C, vocht 51,8 → 53,6%, schimmelindicator 67 → 70, buiten 99% / 8,9 °C: afkoelen geeft het vocht, zelfde patroon.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 26-10 04:25, gemeten t/m 04:20
+## 26-10 08:25 (ronde 39)
+- PM2.5 04:20-08:20: gem 0,97, mediaan 0,81, P95 2,20, max 2,65 (07:55) (n=48); 0 uur > 15. Dag t/m nu ~0,7; 7d (19-25/10) 1,76, mediaan dag 1,2 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit. Ochtendactiviteit vanaf 05:58: PM2.5 0,4 → 2,4, CO₂ 550 → 802, VOC-index 100 → 167.
+- Stand: auto 134 min (gem 1,35), mid 104 min (gem 0,45), 2,5 min unavailable. Aanwezig 1,32 (n=29) vs afwezig 0,45 (n=19): bron (mensen), geen standeffect.
+- Werking: auto bij eerste aanwezigheid na 06:00 (06:00:01), mid precies 15 min na laatste aanwezigheid (06:28:53 → 06:43:54, 08:05:34 → 08:20:34). Na HA-herstart 07:11 om 07:13:25 mid 24 s na off (geen 15-min-marge na herstart, bekend), 07:15 weer auto. 5/5 traces zonder fout. 2 HA-herstarts (07:11, 07:46). Lokaal 48 mislukt op 121.185 (geen nieuwe), uitval 0, sturen 305/306 (6/6 nieuw), filter 0%. Apparaat-PM2.5 2-6 bij Ultimate 0,3-2,6: ~2x te hoog.
+- Kookautomation: 2 starttraces (herstarts), geen kookmoment: ongetoetst.
+- CO₂ gem 609, max 802, 0 u > 1.200. Schimmelindicator 69 → 74 → 73, binnen 53,7 → 56% bij 17,2 → 16,9 °C, buiten 99% / 8,4 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 26-10 08:25, gemeten t/m 08:20
