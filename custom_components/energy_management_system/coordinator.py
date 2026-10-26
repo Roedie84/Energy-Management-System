@@ -49971,17 +49971,49 @@ class EnergyManagementSystemCoordinator:
         """Het laatste herspeelresultaat en de samenvatting per versie (punt 5)."""
         uit = dict(self.herspeel_resultaat or {"dagen": [], "samenvatting": {"dagen": 0}})
         uit["per_versie"] = self.herspeel_per_versie or {}
+        twee = self._herspeel_laatste_twee()
+        if twee:
+            uit["laatste_twee_versies"] = twee
+        return uit
+
+    def _herspeel_laatste_twee(self) -> dict | None:
+        """De laatste twee versies naast elkaar: verschil per dag (nieuw - oud)."""
         versies = list((self.herspeel_per_versie or {}).items())
-        if len(versies) >= 2:
-            (_vo, oud), (_vn, nieuw) = versies[-2], versies[-1]
-            uit["laatste_twee_versies"] = {
-                "oud": _vo, "nieuw": _vn,
-                "per_dag_verschil_eur": {
-                    k: round(nieuw["samenvatting"][k] - oud["samenvatting"][k], 3)
-                    for k in nieuw["samenvatting"]
-                    if k.endswith("_per_dag_eur") and k in oud["samenvatting"]
-                },
+        if len(versies) < 2:
+            return None
+        (_vo, oud), (_vn, nieuw) = versies[-2], versies[-1]
+        return {
+            "oud": _vo, "nieuw": _vn,
+            # v5.130.0: welke dagen elk telde - een ander venster is een
+            # andere vergelijking
+            "oud_dagen": f"{oud.get('van')} t/m {oud.get('tot')}",
+            "nieuw_dagen": f"{nieuw.get('van')} t/m {nieuw.get('tot')}",
+            "zelfde_dagen": (oud.get("van"), oud.get("tot")) == (nieuw.get("van"), nieuw.get("tot")),
+            "per_dag_verschil_eur": {
+                k: round(nieuw["samenvatting"][k] - oud["samenvatting"][k], 3)
+                for k in nieuw["samenvatting"]
+                if k.endswith("_per_dag_eur") and k in oud["samenvatting"]
+            },
+        }
+
+    def _herspeel_per_versie_kort(self) -> dict:
+        """De herspeeluitslag per EMS-versie, klein genoeg voor een sensor
+        (v5.130.0, gevraagd 26-10: "zichtbaar maken op de zelfanalyse-sensor,
+        zodat je voor en na een versie kunt vergelijken"). Alleen de
+        bedragen per dag; de sommen staan in de diagnostiek."""
+        per = {}
+        for versie, w in (self.herspeel_per_versie or {}).items():
+            s = w.get("samenvatting") or {}
+            per[versie] = {
+                "berekend_om": w.get("berekend_om"),
+                "dagen": f"{w.get('van')} t/m {w.get('tot')}",
+                "aantal_dagen": s.get("dagen"),
+                **{k: v for k, v in s.items() if k.endswith("_per_dag_eur")},
             }
+        uit: dict = {"per_versie": per}
+        twee = self._herspeel_laatste_twee()
+        if twee:
+            uit["laatste_twee_versies"] = twee
         return uit
 
     async def _async_zelfanalyse(self, datum: str, melden: bool = True) -> None:
@@ -50186,9 +50218,11 @@ class EnergyManagementSystemCoordinator:
             "dertig_dagen": dertig,
             "laatste_poging": dagen[-1] if dagen else None,
             # v5.123.0 (punt 5): de echte dagen opnieuw afgespeeld (samenvatting)
+            # v5.130.0: plus de uitslag per EMS-versie, voor voor/na
             "herspeel": {
                 "versie": (self.herspeel_resultaat or {}).get("versie"),
                 "samenvatting": (self.herspeel_resultaat or {}).get("samenvatting"),
+                **self._herspeel_per_versie_kort(),
             },
             "toelichting": (
                 "Elke nacht vergelijkt het EMS elke keuze van de vorige dag met de beste keuze "

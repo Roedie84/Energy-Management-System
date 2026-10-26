@@ -33823,3 +33823,16 @@ Meetfout, gevonden in de leerronde van 26-10: *Besparing t.o.v. zonder accu-stur
 - Sturing ongewijzigd.
 
 Tests: `test_l_ems_039_besparing_dag_opstart.py` (3).
+
+
+## v5.130.0 — herspeeluitslag per versie op de zelfanalyse-sensor
+
+Gevraagd 26-10 (punt B van de terugmeting, akkoord Ruud): "De uitslag van de terugspeling per EMS-versie zichtbaar maken op de zelfanalyse-sensor, zodat je voor en na een versie kunt vergelijken." De uitslag per versie (`herspeel_per_versie`, bewaard sinds v5.123.0) stond alleen in de diagnostiek.
+
+- `get_zelfanalyse()["herspeel"]` (attribuut van `sensor.…_zelfanalyse`) heeft nu `per_versie`: per versie het moment, de dagen (van t/m), het aantal dagen en alle bedragen `*_per_dag_eur`. De sommen blijven in de diagnostiek (`get_herspeel`).
+- `laatste_twee_versies`: oud, nieuw, het verschil per dag (nieuw − oud) en per versie het dagvenster, met `zelfde_dagen`. Schuift het venster van 40 dagen tussen twee versies op, dan vergelijkt het verschil ook andere dagen.
+- `get_herspeel` gebruikt dezelfde vergelijking (`_herspeel_laatste_twee`).
+- Attributen gaan niet naar de recorder (`GEEN_ATTRIBUTEN_IN_RECORDER`).
+
+Tests: `test_v5130_herspeel_per_versie.py` (3).
+

@@ -1,3 +1,12 @@
+EMS v5.130.0 - terugspeling per versie op de zelfanalyse-sensor
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De sensor Zelfanalyse toont nu onder "herspeel" de uitslag van de
+  terugspeling per EMS-versie (euro per dag per strategie, met welke dagen
+  meetelden), plus het verschil tussen de laatste twee versies.
+- Let op "zelfde_dagen": een ander dagvenster is een andere vergelijking.
+
 EMS v5.129.2 - dagbesparing zonder sprong bij een herstart
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
