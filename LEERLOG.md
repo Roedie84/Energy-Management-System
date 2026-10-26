@@ -435,3 +435,15 @@ laatste ronde: 26-10 07:40, gemeten t/m 26-10 07:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag tot nu `zon_verschil` +0,36 kWh = iets méér zon dan gepland), H-EMS-11 (ochtendpiek verkocht, 4 kw.), H-EMS-14 (reservesprongen; vooral herstarts). Geen release (tussenronde).
 
 laatste ronde: 26-10 11:40, gemeten t/m 26-10 11:45
+
+## 26-10 15:40 · tussenronde
+- **v5.131.0 actief** (andere sessie: v5.129.2 13:09, v5.130.0 14:52, v5.131.0 15:11; HA-herstarts 13:32, 15:00, 15:13). Fout 0 / storing 0; Solcast-limiet 10/10 (buffer gebruikt).
+- **L-EMS-037 toets laadblok (n=1):** plan 11:24 netladen 12:30-13:00 tot 97 %; gemeten 12:30 start bij 93 % (zon had 89 → 93 gedaan), 12:59 **97 %** = plan, daarna zon tot 100 % (13:01). Netlading-start < 95 % (v5.127.2 ✓).
+- **L-EMS-039 geverifieerd:** 3 herstarts → *Besparing* onbeschikbaar → eindwaarde (0,53 / 0,59 / 0,57); 0 rauwe tussenwaarden (vóór: −1,30/−0,69/−0,41).
+- **Harde regel: 0× onder de reserve** (geen verkoopkwartieren sinds 08:00). Reserve 10,37 = capaciteit (ongekapt 17-18 kWh; volgend blok morgen 10:45, 20 u) > beschikbaar 9,56 → vanavond geen verkoop gepland (17-18 u 40-44 ct, nacht 31-34 ct). → nabeschouwing 03:40 (H-EMS-11).
+- Planvolging vandaag **39,3 %** (61 kw.; accu 13 → **18**, sturing 2 = gelijk). Nieuwe 'accu' 13:15 (zonopvang op 100 %), 14:15, 15:00 (herstart) - niet in het laadblok.
+- **Nieuw (H-EMS-14, n=1):** herstart 15:00:25 → 14 s reserve **76,1 / 78,8 kWh** (accu 10,37): `regelverschuiving_w` 1462/1497 W × 20 u + lange horizon 24,5 kWh; 15:00:39 weer 10,37. Richting voorzichtig (geen verkoop), maar foute data. Herstarts 13:32 en 15:13 gaven dit niet. Vermoeden: regelsensor (P1 + verschuiving / P1 regeldoel) en verbruikssensor lezen bij het opstarten uit de pas; geen plausibiliteitsgrens op de verschuiving. → dagafsluiting: code nalezen; bewijs = kandidaat-meetfout (zelf bouwen alleen als het puur de opstartwaarde betreft).
+- MC 0,0 %; reservesprongen 3 echt / 32 `alleen_behoefte` / 13 `na_herstart`. Digital twin MAE 2,18 → **2,01 kWh**.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag zon +0,51 kWh boven plan), H-EMS-11 (avondpiek: vandaag niets te verkopen door de lange horizon), H-EMS-14 (reservesprongen; opstartpiek 15:00). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 26-10 15:40, gemeten t/m 26-10 15:45
