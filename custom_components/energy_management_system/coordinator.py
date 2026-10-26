@@ -125,6 +125,10 @@ from .const import (
     CONF_AIRCO_UIT_OM,
     CONF_AIRCO_RAAM_ENTITIES,
     AIRCO_RAAM_UITSTEL_S,
+    AIRCO_ZON_ONDER_C,
+    AIRCO_ZON_DOEL_C,
+    AIRCO_ZON_MIN_OVERSCHOT_W,
+    AIRCO_ZON_MINUTEN,
     DEFAULT_AIRCO_UIT_OM,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
@@ -49101,7 +49105,7 @@ class EnergyManagementSystemCoordinator:
         uit = self._airco_ritme_ronde(now, uit, stand)
         uit = self._airco_kort_weg_ronde(now, uit)
         uit = self._airco_thuiskomst_ronde(now, uit, stand)
-        uit = self._airco_buffer_ronde(now, uit, stand)
+        uit = self._airco_zon_ronde(now, self._airco_buffer_ronde(now, uit, stand), stand)
         # v5.77: als laatste - een raam open en de airco gaat nooit aan.
         uit = airco_sturing.raam_open(
             uit,
@@ -49576,6 +49580,37 @@ class EnergyManagementSystemCoordinator:
         elif uit.get("actie") == "niets" and self._airco_handmatig_bij is None:
             nieuw.update(actie="verwarmen", tekst=vraag["tekst"], doel_c=vraag["doel_c"])
         return nieuw
+
+    _airco_zon_aan: bool = False
+    _airco_zon_sinds: datetime | None = None
+
+    def _airco_zon_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
+        """Verwarmen op zonoverschot (v5.132.0) - zie `airco_sturing.verwarm_op_zonoverschot`."""
+        try:
+            toestand = self._overschot_toestand()
+        except Exception:  # noqa: BLE001 - bij twijfel geen zonverwarmen
+            toestand = {}
+        if toestand.get("accu_vol") and (toestand.get("overschot_w") or 0.0) >= AIRCO_ZON_MIN_OVERSCHOT_W:
+            self._airco_zon_sinds = self._airco_zon_sinds or now
+        else:
+            self._airco_zon_sinds = None
+        # Alleen zolang de airco verwarmt zoals het EMS hem zette.
+        zon_aan = self._airco_zon_aan and stand == "heat" and bool(self.airco_door_ems)
+        uit, self._airco_zon_aan = airco_sturing.verwarm_op_zonoverschot(
+            uit,
+            woonkamer_c=self.living_room_current_temp_c,
+            aanwezigheid=self.presence_state,
+            overschot_minuten=(
+                (now - self._airco_zon_sinds).total_seconds() / 60 if self._airco_zon_sinds else None
+            ),
+            airco_stand=stand,
+            zon_aan=zon_aan,
+            handmatig=self._airco_handmatig_bij is not None,
+            onder_c=AIRCO_ZON_ONDER_C,
+            doel_c=AIRCO_ZON_DOEL_C,
+            minuten_nodig=AIRCO_ZON_MINUTEN,
+        )
+        return uit
 
     def _airco_buffer_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
         """Voorverwarmen op goedkope stroom (v5.66) - zie `airco_sturing.buffer`.

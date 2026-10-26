@@ -349,3 +349,64 @@ def raam_open(
     else:
         nieuw.update(actie="niets", tekst="Niet aanzetten: " + reden + ".")
     return nieuw
+
+
+# --- v5.132.0: verwarmen op zonoverschot ------------------------------------
+
+
+def verwarm_op_zonoverschot(
+    uit: dict,
+    *,
+    woonkamer_c: float | None,
+    aanwezigheid: str | None,
+    overschot_minuten: float | None,
+    airco_stand: str | None,
+    zon_aan: bool,
+    handmatig: bool,
+    onder_c: float,
+    doel_c: float,
+    minuten_nodig: float,
+) -> tuple[dict, bool]:
+    """Het besluit met verwarmen op zonoverschot erbij (v5.132.0, Ruud 26-10).
+
+    `overschot_minuten`: hoe lang de accu al vol is met genoeg overschot (None
+    als dat nu niet zo is). `zon_aan`: het EMS zette de airco om die reden aan
+    en hij verwarmt nog. Geeft het besluit en de nieuwe `zon_aan` terug.
+
+    Aan: woonkamer onder `onder_c`, iemand thuis, overschot lang genoeg, niet
+    zelf bediend en de airco verwarmt nog niet. Dan tot `doel_c`, en aan tot die
+    temperatuur gehaald is - ook als de zon wegvalt (gekozen door Ruud). Daarna
+    uit. Werkt los van de knop Airco automaat (`altijd`).
+    """
+    if handmatig:
+        return uit, False
+    if zon_aan:
+        if woonkamer_c is not None and woonkamer_c >= doel_c:
+            redenen = list(uit.get("redenen") or []) + [f"zonverwarmen klaar: {woonkamer_c:.1f} °C"]
+            return dict(
+                uit, actie="uit", altijd=True, zon=True, redenen=redenen,
+                redenen_tekst=" · ".join(redenen),
+                tekst=f"Uitzetten: {doel_c:.0f} °C gehaald met verwarmen op zonoverschot.",
+            ), False
+        if uit.get("actie") == "uit":
+            uit = dict(uit, actie="niets", tekst=(
+                f"Verwarmt op zonoverschot tot {doel_c:.0f} °C; blijft aan tot die temperatuur."
+            ))
+        return dict(uit, zon=True), True
+    if (
+        woonkamer_c is None or woonkamer_c >= onder_c or aanwezigheid != "thuis"
+        or airco_stand == "heat" or overschot_minuten is None
+        or overschot_minuten < minuten_nodig
+    ):
+        return uit, False
+    redenen = list(uit.get("redenen") or []) + [
+        f"accu vol en zonoverschot sinds {overschot_minuten:.0f} min",
+    ]
+    return dict(
+        uit, actie="verwarmen", altijd=True, zon=True, doel_c=doel_c,
+        basis_doel_c=doel_c, redenen=redenen, redenen_tekst=" · ".join(redenen),
+        tekst=(
+            f"Verwarmen op zonoverschot tot {doel_c:.0f} °C: accu vol, zon over en "
+            f"woonkamer {woonkamer_c:.1f} °C (onder {onder_c:.0f} °C)."
+        ),
+    ), True
