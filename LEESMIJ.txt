@@ -1,3 +1,13 @@
+EMS v5.131.2 - batterijlader laadt kleine apparaten af
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De batterijlader in de keuken gaat niet meer "vol" uit terwijl een telefoon
+  nog met ~5 W afrondt: hij kijkt 2 W boven het rustverbruik en wacht 10
+  minuten voordat hij uitgaat.
+- Staat een lader na een herstart al aan zonder dat er iets aan hangt, dan
+  gaat hij na één ronde uit in plaats van aan te blijven.
+
 EMS v5.131.1 - geen onzinnige reserve meer net na een herstart
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

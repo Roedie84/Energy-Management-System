@@ -1513,6 +1513,14 @@ FIETSLADERS_COMPLETE_THRESHOLD_W = 20.0
 # (rustverbruik + LEARNED_THRESHOLD_MARGIN_W) het over.
 BATTERIJLADER_COMPLETE_THRESHOLD_W = 10.0
 
+# v5.131.2: de Anker laadt een telefoon op het eind met ~5 W, terwijl hij
+# zonder last 1,3-2,9 W trekt (26-10). Met de gedeelde marge van 5 W lag de
+# geleerde drempel op 6,6 W en ging de lader om 17:24 "vol" uit terwijl er nog
+# geladen werd. Voor de batterijlader daarom 2 W boven het rustverbruik, en pas
+# "vol" na 10 minuten onder de drempel (USB-laders schommelen bij het afronden).
+BATTERIJLADER_LEARNED_MARGIN_W = 2.0
+BATTERIJLADER_COMPLETE_SUSTAINED_MINUTES = 10
+
 # hvac_action values that mean the climate entity's compressor/heating
 # element is actually drawing power right now - 'idle' and 'off' don't
 # count (thermostat satisfied / unit switched off).

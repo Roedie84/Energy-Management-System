@@ -88,19 +88,20 @@ def test_buiten_het_blok_uit_als_vol_en_kwartiercontrole(make_coordinator, hass)
         hass.states.set("sensor.opladers_batterijen_power", "2")
         _nu(DAY0.replace(hour=8, minute=6))
         await c._async_update_locked()
-        _nu(DAY0.replace(hour=8, minute=9))
+        # v5.131.2: pas na 10 minuten onder de drempel "vol"
+        _nu(DAY0.replace(hour=8, minute=16))
         await c._async_update_locked()
 
     asyncio.run(run())
     assert _schakel(hass)[-1][1] == "turn_off"
     assert c.last_batterijlader_action == "voltooid"
-    assert c._batterijlader_next_poll_at == DAY0.replace(hour=8, minute=15)
+    assert c._batterijlader_next_poll_at == DAY0.replace(hour=8, minute=30)
 
 
 def test_uit_als_alles_vol_is_met_10w_drempel(make_coordinator, hass):
     """12 W is boven de startdrempel van 10 W: laadt nog (een telefoon die
-    afrondt). 4 W twee minuten lang: vol, uit, met melding-wacht voor de
-    kwartiercontrole."""
+    afrondt). 4 W tien minuten lang (v5.131.2, was twee): vol, uit, met
+    melding-wacht voor de kwartiercontrole."""
     _klaarzetten(hass, "40")
     c = make_coordinator(_config())
 
@@ -123,6 +124,9 @@ def test_uit_als_alles_vol_is_met_10w_drempel(make_coordinator, hass):
         await c._async_update_locked()
         _nu(DAY0.replace(hour=12, minute=18))
         await c._async_update_locked()
+        assert c.last_batterijlader_action == "aan_het_laden"
+        _nu(DAY0.replace(hour=12, minute=25))
+        await c._async_update_locked()
 
     asyncio.run(run())
     assert _schakel(hass)[-1][1] == "turn_off"
@@ -131,7 +135,7 @@ def test_uit_als_alles_vol_is_met_10w_drempel(make_coordinator, hass):
     # opnieuw kijken
     assert c._batterijlader_complete_today is False
     assert c._batterijlader_next_poll_at == DAY0.replace(hour=12, minute=30)
-    assert c.batterijlader_charge_duration_history == [13.0]
+    assert c.batterijlader_charge_duration_history == [20.0]
 
 
 def test_overrule_laat_de_schakelaar_met_rust(make_coordinator, hass):
