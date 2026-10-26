@@ -1058,3 +1058,28 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-26 20:20,automation_traces_fout,0,5,stand auto bij aanwezigheid; voorrang tijdens koken gerespecteerd
 2026-10-26 20:20,kookautomation_traces,0,5,mid bij kookplaat run 16:33; 17:27 vies-trigger geen actie (stand mid); 18:26 klaar; config sinds 26-10 auto bij koken
 2026-10-26 20:20,apparaat_pm25_bereik,999,1,apparaat max 999 (17:26, eigen bereik) bij Ultimate 1147; volgt piek goed, laag ~2x te hoog
+2026-10-27 00:20,pm25_dag,10.86,24,dag 26-10; max 1147 (17:27 kookpiek)
+2026-10-27 00:20,pm25_uren_gt15_dag,1.00,24,dag 26-10; > 25: 0.83 u
+2026-10-27 00:20,pm25_7d,2.32,7,daggemiddelden 20-26/10; mediaan 1.21
+2026-10-27 00:20,co2_dag,846,24,dag 26-10; max 1759; 5.67 u > 1200
+2026-10-27 00:20,pm25_gem,1.22,48,5-min statistiek 20:20-00:20 CET
+2026-10-27 00:20,pm25_mediaan,1.28,48,
+2026-10-27 00:20,pm25_p95,2.00,48,
+2026-10-27 00:20,pm25_max,2.37,48,momentaan max 20:20 (staart kookpiek)
+2026-10-27 00:20,pm25_uren_gt15,0.00,48,
+2026-10-27 00:20,pm25_uren_gt25,0.00,48,
+2026-10-27 00:20,stand_auto_min,168,1,20:20-23:12; gem pm25 1.47 (n=34)
+2026-10-27 00:20,stand_mid_min,68,1,23:12-00:20; gem pm25 0.56 (n=13); 4.2 min unavailable
+2026-10-27 00:20,pm25_gem_aanwezig,1.51,31,mmWave of tv aan (tv uit 22:56)
+2026-10-27 00:20,pm25_gem_afwezig,0.67,16,
+2026-10-27 00:20,co2_gem,1318,48,5-min; 1595 -> 998 max 1601; ramen dicht
+2026-10-27 00:20,co2_uren_gt1200,3.00,48,
+2026-10-27 00:20,vocht_max,62.7,48,55 -> 62.7% bij 21.3 -> 18.1 C
+2026-10-27 00:20,schimmel_indicator,78,48,75-79; buiten 99% / 11.1 C
+2026-10-27 00:20,ha_herstarts,3,1,20:24 21:07 21:51
+2026-10-27 00:20,lokaal_mislukt,48,126662,uitval 0; 216 verbindingen; geen nieuwe fout
+2026-10-27 00:20,sturen_bevestigd,311,312,1/1 nieuwe opdracht bevestigd
+2026-10-27 00:20,filtergebruik_pct,0,1,
+2026-10-27 00:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (22:57:17 -> 23:12:17)
+2026-10-27 00:20,kookautomation_traces,0,5,alleen herstarttraces; geen kookmoment
+2026-10-27 00:20,apparaat_pm25_bereik,4,1,apparaat 2-4 bij Ultimate 0.3-2.4; vast op 2
