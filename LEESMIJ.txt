@@ -1,3 +1,17 @@
+EMS v5.128.0 - kwartierplan zoals de sturing, eerlijke nachtcontrole, maandteller besparing
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het kwartierplan verkoopt niet meer in het goedkope blok (de sturing doet
+  dat ook nooit) en rekent bij laden met het laadrendement en het tragere
+  laden boven 90 %. Het plan voorspelt daardoor meer laadkwartieren.
+- De nachtcontrole telt rondes waarin de accu bewust niet ontlaadt (laden,
+  sparen voor het laadblok) niet meer als "niet zelfvoorzienend".
+- Nieuwe sensor "Besparing deze maand" (verschijnt na de herstart). De oude
+  helper "EMS Accubesparing - deze maand" kan daarna weg.
+- Bij een negatieve of heel lage prijs (kale marktprijs nul of lager) mag de
+  accu toch bijladen tot 100 %.
+
 EMS v5.127.4 - uitleg bij een duur kwartier in het goedkope blok klopt weer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

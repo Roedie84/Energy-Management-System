@@ -226,6 +226,10 @@ from .const import (
     EXPORT_VERKOOP_MIN_KWH,
     LAADBLOK_HERLAAD_DREMPEL,
     LAADBLOK_HERLAAD_SOC_PROCENT,
+    HEEL_LAGE_PRIJS_GRENS_MAX_EUR,
+    LAAD_AFBOUW_VANAF_PROCENT,
+    LAAD_AFBOUW_FACTOR_BIJ_VOL,
+    NACHT_BEWUST_NIET_ONTLADEN_REDENEN,
     ZON_REALISATIE_MIN_KWH,
     DIP_MARGE,
     MC_KALIBRATIE_BLOK_UITERLIJK_UUR,
@@ -6936,6 +6940,73 @@ class EnergyManagementSystemCoordinator:
         if corr.get("correctie_beschikbaar"):
             totaal += corr.get("voorraadwaarde_exact_eur") or 0.0
         return totaal
+
+    #: v5.128.0: de maandteller van de besparing (bewaard): maand, beginstand
+    #: van het totaal, laatste totaal en de waarde. Zie `_werk_besparing_maand_bij`.
+    besparing_maand: dict | None = None
+
+    def _werk_besparing_maand_bij(self, now: datetime) -> None:
+        """"Besparing deze maand": het totaal min de stand op de 1e, 00:00 (v5.128.0).
+
+        Gevraagd 26-10 (punt 4): de meter `sensor.ems_accubesparing_deze_maand`
+        (utility meter, net_consumption) boekte na elke herstart een
+        verkeerde sprong. Deze teller rekent zelf:
+
+            waarde = totaal (gecorrigeerd) - beginstand van de maand
+
+        De beginstand wordt bewaard. Bij de maandwissel is dat het laatste
+        totaal van de vorige maand: zolang Home Assistant uit staat, telt
+        het totaal ook niet op, dus dat is de stand op de 1e om 00:00
+        (lokale tijd). Vóór de eerste ronde of als het totaal niet te
+        berekenen is, verandert er niets - de vorige waarde blijft staan.
+
+        Eerste keer zonder bewaarde beginstand: het rauwe totaal min de
+        rauwe maandteller (beide bewaard sinds v1.x): dat is het totaal aan
+        het begin van de maand, met de voorraadcorrectie (sinds v5.116.0,
+        22-10) volledig in deze maand.
+        """
+        if getattr(self, "_wacht_op_eerste_ronde", False):
+            return
+        try:
+            totaal = float(self.besparing_totaal_gecorrigeerd_eur())
+        except Exception:  # noqa: BLE001 - een rapportagegetal mag niets breken
+            return
+        if not math.isfinite(totaal):
+            return
+        lokaal = dt_util.as_local(now)
+        maand = f"{lokaal:%Y-%m}"
+        oud = self.besparing_maand if isinstance(self.besparing_maand, dict) else {}
+        begin = oud.get("begin_eur")
+        bron = oud.get("bron")
+        if not isinstance(begin, (int, float)):
+            rauw = (self.counterfactual_cost_all_time_eur or 0.0) - (
+                self.actual_cost_all_time_eur or 0.0
+            )
+            rauw_maand = 0.0
+            if self._counterfactual_month_key == lokaal.year * 100 + lokaal.month:
+                rauw_maand = (self.counterfactual_cost_current_month_eur or 0.0) - (
+                    self.actual_cost_current_month_eur or 0.0
+                )
+            begin = rauw - rauw_maand
+            bron = "reconstructie: rauw totaal min rauwe maandteller"
+        elif oud.get("maand") != maand:
+            vorig = oud.get("laatste_totaal_eur")
+            begin = float(vorig) if isinstance(vorig, (int, float)) else totaal
+            bron = f"laatste totaal van {oud.get('maand')}"
+        self.besparing_maand = {
+            "maand": maand,
+            "begin_eur": round(float(begin), 4),
+            "laatste_totaal_eur": round(totaal, 4),
+            "waarde_eur": round(totaal - float(begin), 2),
+            "bron": bron,
+            "bijgewerkt": now.isoformat(),
+        }
+
+    def besparing_deze_maand_eur(self) -> float | None:
+        """De laatst berekende maandbesparing (v5.128.0); None = nog nooit berekend."""
+        info = self.besparing_maand if isinstance(self.besparing_maand, dict) else {}
+        waarde = info.get("waarde_eur")
+        return float(waarde) if isinstance(waarde, (int, float)) else None
 
     def get_energy_cost_overview(self) -> dict:
         """Week-, maand- en jaarcijfers plus trends (v1.8.0).
@@ -22028,8 +22099,14 @@ class EnergyManagementSystemCoordinator:
         # en juist de laatste procenten zijn nodig om te balanceren.
         if (balans := self._balanceer_laadbesluit(now, blok_eind, prijs_nu, ruimte)) is not None:
             return balans
+        # v5.128.0 (punt 15): bij een negatieve of heel lage prijs vervallen
+        # beide grenzen hieronder - dan mag de accu bijladen tot 100 %. De
+        # laadregel (loont het?) beslist daarna gewoon.
+        heel_laag = self._heel_lage_prijs(prijs_nu, self._heel_lage_prijs_grens_eur())
+        if heel_laag:
+            uit["heel_lage_prijs"] = True
         # v5.95: hysterese - zie `_laadblok_hysterese`.
-        if self._laadblok_hysterese(
+        if not heel_laag and self._laadblok_hysterese(
             self.beschikbare_energie_kwh() or 0.0,
             (self.beschikbare_energie_kwh() or 0.0) + ruimte,
             self._laadt_uit_het_net(),
@@ -22041,7 +22118,7 @@ class EnergyManagementSystemCoordinator:
             return uit
         # v5.127.2: en op de accustand zelf - zie LAADBLOK_HERLAAD_SOC_PROCENT.
         soc_nu = self.accustand_procent()
-        if self._accu_te_vol_voor_netladen(soc_nu, self._laadt_uit_het_net()):
+        if not heel_laag and self._accu_te_vol_voor_netladen(soc_nu, self._laadt_uit_het_net()):
             uit["reden"] = (
                 f"accu al {soc_nu:.0f}% (vanaf {LAADBLOK_HERLAAD_SOC_PROCENT:.0f}%); "
                 "niet opnieuw bijladen uit het net"
@@ -22130,6 +22207,50 @@ class EnergyManagementSystemCoordinator:
         if laadt_al or soc_procent is None:
             return False
         return soc_procent >= LAADBLOK_HERLAAD_SOC_PROCENT - 1e-9
+
+    def _heel_lage_prijs_grens_eur(self) -> float:
+        """Tot welke all-in-prijs heet een prijs "heel laag"? (v5.128.0, punt 15)
+
+        Er was geen bestaande drempel voor. Gekozen: de gemeten
+        energiebelasting plus btw per kWh (`_gemeten_belastingdeel_eur_per_kwh`,
+        bij deze aansluiting ~11,1 ct). Een all-in-prijs daaronder betekent
+        een kale marktprijs van nul of lager: je betaalt alleen nog belasting.
+        Zo'n kWh kost na rendement en slijtage ~18 ct uit de accu, en dat is
+        goedkoper dan vrijwel elk ander kwartier. Begrensd op
+        HEEL_LAGE_PRIJS_GRENS_MAX_EUR; zonder kale prijs (geen excl-veld) is
+        de grens 0, dan geldt alleen een negatieve all-in-prijs.
+        """
+        ronde = getattr(self, "_forecast_cache_ronde", None)
+        bewaard = getattr(self, "_heel_laag_grens_cache", None)
+        if ronde is not None and bewaard is not None and bewaard[0] == ronde:
+            return bewaard[1]
+        # Het lezen van de kale reeks zet `prijsreeks_bevindingen` op die
+        # reeks; de bevindingen horen bij de belaste reeks en blijven staan.
+        bevindingen = getattr(self, "prijsreeks_bevindingen", None)
+        try:
+            grens = float(self._gemeten_belastingdeel_eur_per_kwh() or 0.0)
+        except Exception:  # noqa: BLE001 - een grens mag de beslissing nooit breken
+            grens = 0.0
+        finally:
+            if bevindingen is not None:
+                self.prijsreeks_bevindingen = bevindingen
+        grens = min(max(0.0, grens), HEEL_LAGE_PRIJS_GRENS_MAX_EUR)
+        if ronde is not None:
+            self._heel_laag_grens_cache = (ronde, grens)
+        return grens
+
+    @staticmethod
+    def _heel_lage_prijs(prijs_eur: float | None, grens_eur: float) -> bool:
+        """Negatief of heel laag: dan mag de accu bijladen tot 100 % (v5.128.0).
+
+        Sinds v5.127.2 start er vanaf 95 % accustand (en sinds v5.95 vanaf
+        97 % van het bruikbare deel) geen nieuwe netlading. Bij een negatieve
+        all-in-prijs, of een prijs op of onder de grens van
+        `_heel_lage_prijs_grens_eur`, geldt die rem niet.
+        """
+        if prijs_eur is None:
+            return False
+        return prijs_eur <= max(0.0, grens_eur) + 1e-9
 
     def _plan_soc_procent(self, soc_kwh: float, bruikbaar_kwh: float) -> float | None:
         """De accustand in procenten bij een gesimuleerde lading (v5.127.2)."""
@@ -24491,6 +24612,14 @@ class EnergyManagementSystemCoordinator:
         """
         if netregels["zonarm"].get(start.date(), False):
             return None
+        # v5.128.0 (L-EMS-038, akkoord Ruud 26-10): niet verkopen in het
+        # goedkope blok dat de sturing kent. Daar rekent de sturing geen
+        # reserve uit (`_bereken_dynamische_reserve_kwh` geeft None, er wordt
+        # geladen) en "onbekend = niet verkopen" (v5.26.6); het plan zakte
+        # terug op de bodem en verkocht wel. Op 25-10 (blok 21:30-06:00)
+        # gaf dat 6 kwartieren "afwijking sturing".
+        if self._plan_in_bekend_blok(start, netregels):
+            return None
         # v5.70: de verkoopreserve - zonder wat het volgende blok goedkoper
         # teruglaadt, net als de verkooptoets.
         ruimte = soc - self._planning_verkoopreserve_kwh(start, reserve_cache, entries, prijs)
@@ -24505,6 +24634,16 @@ class EnergyManagementSystemCoordinator:
         if self._is_worth_discharging_at_secondary_tier(entries, start, ruimte, ontlaad_w):
             return ruimte
         return None
+
+    @staticmethod
+    def _plan_in_bekend_blok(start: datetime, netregels: dict) -> bool:
+        """Valt dit plankwartier in het goedkope blok van de sturing? (v5.128.0)"""
+        blok_start, blok_eind = netregels.get("blok") or (None, None)
+        return (
+            blok_start is not None
+            and blok_eind is not None
+            and blok_start <= start < blok_eind
+        )
 
     def _planning_verkoopreserve_kwh(
         self, moment: datetime, cache: dict, entries, prijs: float
@@ -24614,6 +24753,10 @@ class EnergyManagementSystemCoordinator:
             # v5.95: laadde het vorige kwartier uit het net? Begint bij de
             # sturing; de plan-lus werkt het per kwartier bij.
             "laadde_vorig": self._laadt_uit_het_net(),
+            # v5.128.0 (punt 15): tot deze prijs mag het plan bijladen tot vol.
+            "heel_laag_grens_eur": self._heel_lage_prijs_grens_eur(),
+            # v5.128.0 (L-EMS-037): het laadrendement (net -> accu).
+            "laadrendement": self._plan_laadrendement(rendement),
             # v5.93.2: het lopende/volgende goedkope blok, zodat het plan in
             # dat blok met dezelfde "latere" kwartieren rekent als de
             # beslissing (vanaf het blokeinde, niet vanaf het kwartiereinde).
@@ -24737,6 +24880,91 @@ class EnergyManagementSystemCoordinator:
             return 0.0
         return max(0.0, min(laad_kwh, gat))
 
+    def _plan_laadrendement(self, rendement_heen_terug: float | None) -> float:
+        """Het laadrendement (net -> accu) voor het kwartierplan (v5.128.0, L-EMS-037).
+
+        Het geleerde laadrendement als dat er is; anders de wortel van het
+        heen-en-terugrendement (dezelfde terugval als `get_accukosten`).
+        """
+        laden = self.learned_charge_efficiency_percent
+        if laden:
+            eta = float(laden) / 100
+        else:
+            eta = math.sqrt(max(0.0, float(rendement_heen_terug or 100.0)) / 100)
+        return min(1.0, max(0.5, eta))
+
+    @staticmethod
+    def _laad_afbouw_factor(soc_procent: float | None) -> float:
+        """Welk deel van het laadvermogen er bij deze accustand nog in gaat (v5.128.0).
+
+        Tot LAAD_AFBOUW_VANAF_PROCENT het volle vermogen; daarboven lineair
+        naar LAAD_AFBOUW_FACTOR_BIJ_VOL bij 100 % - zie de meting in const.py.
+        """
+        if soc_procent is None or soc_procent <= LAAD_AFBOUW_VANAF_PROCENT:
+            return 1.0
+        deel = min(1.0, (soc_procent - LAAD_AFBOUW_VANAF_PROCENT) / (100 - LAAD_AFBOUW_VANAF_PROCENT))
+        return 1.0 - deel * (1.0 - LAAD_AFBOUW_FACTOR_BIJ_VOL)
+
+    def _plan_laadkwartier(
+        self, soc: float, bruikbaar: float, geladen: float, laad_kwh: float,
+        netregels: dict, min_soc: float, verbruik: float, zon: float,
+    ) -> tuple[float, float]:
+        """Een laadkwartier in het plan: (nieuwe stand, netafname) (v5.128.0).
+
+        Wat er werkelijk IN de accu komt (`_plan_lading`) telt bij de stand;
+        wat er daarvoor uit het net gaat, plus het huis min de zon, is de
+        netafname van het kwartier.
+        """
+        erin, afname = self._plan_lading(
+            soc, bruikbaar, geladen, laad_kwh, netregels.get("laadrendement", 1.0), min_soc
+        )
+        return soc + erin, round(afname + verbruik - zon, 3)
+
+    @classmethod
+    def _plan_lading(
+        cls,
+        soc: float,
+        bruikbaar: float,
+        doel: float,
+        laad_kwh: float,
+        laadrendement: float,
+        min_soc: float,
+    ) -> tuple[float, float]:
+        """Laden in één plankwartier: (erin in de accu, uit het net) in kWh (v5.128.0).
+
+        L-EMS-037 (akkoord Ruud 26-10): het plan telde de netlading als
+        energie IN de accu, op vol vermogen tot 100 %. Op 25-10 plande het zo
+        6 laadkwartieren waar er 10,5 nodig waren: er gaat ~10 % verloren
+        bij het laden, en boven 90 % bouwt de accu het laadvermogen af (26-10
+        gemeten: 99 % nog 0,6 kW). Nu in twaalf stapjes per kwartier: per
+        stapje het vermogen bij de stand van dat moment, maal het rendement.
+        `doel` is wat het plan erin wil (het gat), `laad_kwh` wat het net in
+        dit kwartier hooguit levert.
+        """
+        if doel <= 0 or bruikbaar <= 0:
+            return 0.0, 0.0
+        eta = laadrendement if laadrendement and laadrendement > 0 else 1.0
+        doel = min(doel, max(0.0, bruikbaar - soc))
+        if doel <= 0:
+            return 0.0, 0.0
+        if not math.isfinite(laad_kwh):
+            return doel, doel / eta
+        stappen = 12
+        per_stap = laad_kwh / stappen
+        erin = van_net = 0.0
+        for _ in range(stappen):
+            if erin >= doel - 1e-9:
+                break
+            procent = min_soc + (100 - min_soc) * (soc + erin) / bruikbaar
+            net_hier = per_stap * cls._laad_afbouw_factor(procent)
+            accu_hier = net_hier * eta
+            if erin + accu_hier > doel:
+                accu_hier = doel - erin
+                net_hier = accu_hier / eta
+            erin += accu_hier
+            van_net += net_hier
+        return erin, van_net
+
     @staticmethod
     def _plan_in_laadblok(prijs: float, start: datetime, netregels: dict, drempel_voor) -> bool:
         """Hoort dit plankwartier bij het goedkope blok? (v5.106.1)
@@ -24802,11 +25030,15 @@ class EnergyManagementSystemCoordinator:
             ]
             if len(goedkoper) < nodig:
                 return max(0.0, min(laad_kwh, bruikbaar - soc))
+        # v5.128.0 (punt 15): negatief of heel laag - de remmen hieronder vervallen.
+        heel_laag = self._heel_lage_prijs(prijs, netregels.get("heel_laag_grens_eur", 0.0))
         # v5.95: niet opnieuw beginnen vanaf 97% - zie `_laadblok_hysterese`.
-        if self._laadblok_hysterese(soc, bruikbaar, bool(netregels.get("laadde_vorig"))):
+        if not heel_laag and self._laadblok_hysterese(
+            soc, bruikbaar, bool(netregels.get("laadde_vorig"))
+        ):
             return 0.0
         # v5.127.2: en vanaf 95 % accustand - dezelfde toets als de beslissing.
-        if self._accu_te_vol_voor_netladen(
+        if not heel_laag and self._accu_te_vol_voor_netladen(
             self._plan_soc_procent(soc, bruikbaar), bool(netregels.get("laadde_vorig"))
         ):
             return 0.0
@@ -25248,8 +25480,10 @@ class EnergyManagementSystemCoordinator:
                 )
             ) > 0:
                 modus = "manual (laden)"
-                soc += geladen
-                net = round(geladen + verbruik - zon, 3)
+                # v5.128.0 (L-EMS-037): met laadrendement en afbouw boven 90 %.
+                soc, net = self._plan_laadkwartier(
+                    soc, bruikbaar, geladen, laad_kwh, netregels, min_soc, verbruik, zon
+                )
             elif start in netregels["gespaard"]:
                 modus = "smart_charging (sparen)"
                 # v5.73: de zon wordt wel opgevangen.
@@ -45422,9 +45656,18 @@ class EnergyManagementSystemCoordinator:
             if self._nachtrondes_nacht is not None:
                 # Een nieuwe nacht: de vorige telling vervalt.
                 self._nachtrondes = {"totaal": 0, "zelfvoorzienend": 0}
+            self._nachtrondes_bewust = 0
             self._nachtrondes_nacht = nacht
             self._nacht_beoordeling = self._nacht_is_beoordeelbaar()
         if not (self._nacht_beoordeling or {}).get("beoordeelbaar", True):
+            return
+        # v5.128.0: een ronde waarin de sturing BEWUST niet ontlaadt (wachten
+        # op het laadblok, sparen, laden uit het net) zegt niets over de
+        # tekortdetectie. Gemeld 25-10 22:54-23:30: vals "Aandacht gewenst",
+        # "0 van 74 nachtrondes zelfvoorzienend" - de sturing stond de hele
+        # tijd op `sparen_in_blok` en `grid_charging_profitable`.
+        if reason in NACHT_BEWUST_NIET_ONTLADEN_REDENEN:
+            self._nachtrondes_bewust = (self._nachtrondes_bewust or 0) + 1
             return
         if self._nachtrondes is None:
             self._nachtrondes = {"totaal": 0, "zelfvoorzienend": 0}
@@ -45434,6 +45677,8 @@ class EnergyManagementSystemCoordinator:
 
     # v5.72: welke nacht er geteld wordt, en of die te beoordelen is.
     _nachtrondes_nacht: str | None = None
+    # v5.128.0: rondes van deze nacht waarin de sturing bewust niet ontlaadde.
+    _nachtrondes_bewust: int = 0
     _nacht_beoordeling: dict | None = None
 
     def _nacht_is_beoordeelbaar(self) -> dict:
@@ -45480,15 +45725,30 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
         n = self._nachtrondes or {"totaal": 0, "zelfvoorzienend": 0}
+        # v5.128.0: rondes waarin de sturing bewust niet ontlaadde, apart.
+        bewust = int(self._nachtrondes_bewust or 0)
+        extra = {"bewust_niet_ontladen": bewust} if bewust else {}
+        bewust_tekst = (
+            f" ({bewust} rondes waarin de sturing bewust niet ontlaadde - laden "
+            "of sparen voor het laadblok - tellen niet mee.)"
+            if bewust
+            else ""
+        )
         if n["totaal"] < 60:
-            return {"in_orde": True, **n, "uitleg": "Nog geen volledige nacht geteld."}
+            return {
+                "in_orde": True,
+                **n,
+                **extra,
+                "uitleg": "Nog geen volledige nacht geteld." + bewust_tekst,
+            }
         in_orde = n["zelfvoorzienend"] > 0
         return {
             "in_orde": in_orde,
             **n,
+            **extra,
             "uitleg": (
                 f"{n['zelfvoorzienend']} van {n['totaal']} nachtrondes waren zelfvoorzienend; "
-                "de tekortdetectie heeft gedraaid."
+                "de tekortdetectie heeft gedraaid." + bewust_tekst
                 if in_orde
                 else f"Nul van {n['totaal']} nachtrondes waren zelfvoorzienend. Dan draait de "
                 "tekortdetectie niet 's nachts - precies de fout van v3.99.16, toen "
@@ -46576,6 +46836,8 @@ class EnergyManagementSystemCoordinator:
                 "tegenfeitelijke besparing",
                 lambda: self._update_counterfactual_savings(now, entries),
             ),
+            # v5.128.0: de maandteller op het totaal van hierboven.
+            ("besparing deze maand", lambda: self._werk_besparing_maand_bij(now)),
             ("zelfvoorziening", lambda: self._update_self_sufficiency_tracking(now)),
             ("cyclustelling", lambda: self._update_battery_cycle_tracking(now)),
             ("co2", lambda: self._update_co2_tracking(now)),

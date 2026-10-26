@@ -120,6 +120,7 @@ async def async_setup_entry(
         PeakPowerSensor(coordinator, entry.entry_id),
         CounterfactualSavingsSensor(coordinator, entry.entry_id),
         CounterfactualSavingsTotalSensor(coordinator, entry.entry_id),
+        SavingsThisMonthSensor(coordinator, entry.entry_id),
         PrijsverwachtingSensor(coordinator, entry.entry_id),
         ZelfanalyseSensor(coordinator, entry.entry_id),
         Repetitie2027Sensor(coordinator, entry.entry_id),
@@ -2987,6 +2988,77 @@ class CounterfactualSavingsTotalSensor(SensorEntity):
                 "(eind - begin) tegen wat de energie in de accu kostte om erin "
                 "te krijgen. Een meter op deze sensor geeft per dag dezelfde "
                 "waarde als 'Besparing t.o.v. zonder accu-sturing'."
+            ),
+        }
+
+
+class SavingsThisMonthSensor(SensorEntity):
+    """Besparing deze maand, uit het totaal (v5.128.0, punt 4).
+
+    Vervangt de utility meter `sensor.ems_accubesparing_deze_maand`
+    (net_consumption), die na elke herstart een verkeerde sprong meetelde.
+    De waarde is het verschil van "Besparing totaal t.o.v. zonder
+    accu-sturing" sinds de 1e van de maand, 00:00 lokale tijd. De beginstand
+    staat in de bewaarde toestand van de coordinator (`besparing_maand`),
+    dus een herstart of een tijdelijk onbeschikbaar totaal kost niets:
+    zolang het totaal niet te berekenen is, blijft de vorige waarde staan.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Besparing deze maand"
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    _attr_icon = "mdi:calendar-month"
+    _attr_native_unit_of_measurement = "€"
+    _attr_state_class = "total"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_besparing_deze_maand"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    def _info(self) -> dict:
+        info = getattr(self._coordinator, "besparing_maand", None)
+        return info if isinstance(info, dict) else {}
+
+    @property
+    def available(self) -> bool:
+        return self._coordinator.besparing_deze_maand_eur() is not None
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.besparing_deze_maand_eur()
+
+    @property
+    def last_reset(self) -> datetime | None:
+        maand = self._info().get("maand")
+        if not isinstance(maand, str):
+            return None
+        try:
+            jaar, nummer = (int(d) for d in maand.split("-"))
+        except ValueError:
+            return None
+        begin_dag = getattr(dt_util, "start_of_local_day", None)
+        if begin_dag is None:  # buiten Home Assistant (toetsen)
+            return datetime(jaar, nummer, 1)
+        return begin_dag(date(jaar, nummer, 1))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        info = self._info()
+        return {
+            "maand": info.get("maand"),
+            "beginstand_totaal_eur": info.get("begin_eur"),
+            "totaal_nu_eur": info.get("laatste_totaal_eur"),
+            "beginstand_bron": info.get("bron"),
+            "bijgewerkt": info.get("bijgewerkt"),
+            "rekenwijze": (
+                "Besparing totaal t.o.v. zonder accu-sturing nu, min de stand op "
+                "de 1e van de maand om 00:00 (lokale tijd). De beginstand wordt "
+                "bewaard; na een herstart of een onbeschikbaar totaal blijft de "
+                "vorige waarde staan."
             ),
         }
 

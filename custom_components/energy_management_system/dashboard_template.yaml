@@ -2189,6 +2189,14 @@ views:
         tap_action:
           action: more-info
       - type: custom:mushroom-template-card
+        primary: €{{ states('sensor.woonkamer_energy_management_system_besparing_deze_maand') }}
+        secondary: Besparing deze maand
+        icon: mdi:calendar-month
+        icon_color: green
+        entity: sensor.woonkamer_energy_management_system_besparing_deze_maand
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
         primary: '{{ state_attr(''sensor.woonkamer_energy_management_system_zelfanalyse'', ''kaart_primair'') }}'
         secondary: '{{ state_attr(''sensor.woonkamer_energy_management_system_zelfanalyse'', ''kaart_secundair'') }}'
         icon: mdi:magnify-scan

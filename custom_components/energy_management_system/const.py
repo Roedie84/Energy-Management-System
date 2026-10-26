@@ -300,6 +300,20 @@ LAADBLOK_HERLAAD_DREMPEL = 0.97
 # laden) midden in "slim". Vanaf deze stand start er geen NIEUWE netlading
 # meer (een lopende lading en de balanceerlading laden wel door tot vol).
 LAADBLOK_HERLAAD_SOC_PROCENT = 95.0
+# v5.128.0 (punt 15, akkoord Ruud 26-10): uitzondering op de twee grenzen
+# hierboven. Bij een negatieve all-in-prijs, of een all-in-prijs op of onder
+# de gemeten energiebelasting + btw per kWh (kale marktprijs <= 0), mag de
+# accu toch bijladen tot 100 %. Die grens wordt gemeten (~11,1 ct) en hier
+# begrensd, zodat een rare prijsreeks er nooit een gewone prijs van maakt.
+HEEL_LAGE_PRIJS_GRENS_MAX_EUR = 0.15
+# v5.128.0 (L-EMS-037, akkoord Ruud 26-10): het kwartierplan laadt met het
+# laadrendement en met de afbouw van het laadvermogen boven deze accustand.
+# Gemeten 26-10 04:00-05:10 (laden uit het net, 2400 W ingesteld, gemiddelden
+# per 5 min): ~90 % 1,98 kW, ~93 % 1,65 kW, ~96 % 1,0 kW, ~99 % 0,63 kW.
+# Lineair van het volle vermogen bij 90 % naar LAAD_AFBOUW_FACTOR_BIJ_VOL
+# bij 100 % (93 % -> 0,76, 96 % -> 0,52, 99 % -> 0,28 van het vermogen).
+LAAD_AFBOUW_VANAF_PROCENT = 90.0
+LAAD_AFBOUW_FACTOR_BIJ_VOL = 0.2
 # v5.96 (gemeld 14-10 06:03: "accu nog maar 18% met zo meteen hele dure
 # kwartieren"): de zon van vandaag wordt naar beneden bijgesteld als hij
 # achterloopt op de verwachting tot nu. Pas vanaf zoveel verwachte kWh tot nu
@@ -662,6 +676,23 @@ APPARAAT_AAN_DREMPEL_W = 100.0
 # is (v4.18). Vijftig watt is meetruis - de Zendure levert structureel
 # iets meer dan het huis vraagt, dus het net staat dan licht negatief.
 NACHT_ZELFVOORZIENEND_MARGE_W = 50.0
+# v5.128.0 (akkoord Ruud 26-10): rondes waarin de sturing BEWUST niet
+# ontlaadt, tellen niet mee in de nachtcontrole - wachten op het laadblok
+# en sparen (smart_charging), laden uit het net. Gemeld 25-10 22:54-23:30:
+# vals "Aandacht gewenst" met "0 van 74 nachtrondes zelfvoorzienend" terwijl
+# de sturing de hele tijd `sparen_in_blok` of `grid_charging_profitable` was.
+NACHT_BEWUST_NIET_ONTLADEN_REDENEN = frozenset(
+    {
+        "sparen_in_blok",
+        "battery_saved_for_peak",
+        "grid_charging_low_solar",
+        "grid_charging_dip",
+        "grid_charging_profitable",
+        "grid_charging_low_solar_extra_dip",
+        "negative_price",
+        "emergency_low_battery",
+    }
+)
 
 # Vanaf hoeveel redenwissels per dag het geklapper heet (v4.19).
 # Gemeten over zes dagen: 1, 2, 2, 5, 12, 12. Twaalf wissels op 96
@@ -3626,6 +3657,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_savings_day_start_available_kwh": {"type": "plain"},
     # v5.116.0: voorraadcorrecties van afgesloten dagen (oplopende besparing).
     "besparing_voorraadcorrectie_totaal_eur": {"type": "plain"},
+    # v5.128.0: de maandteller "Besparing deze maand" (beginstand van de maand).
+    "besparing_maand": {"type": "plain"},
     "_pv_geometry_day_peak_w": {"type": "plain"},
     "_pv_geometry_day_peak_azimuth": {"type": "plain"},
     "_pv_geometry_day_expected_peak_w": {"type": "plain"},
