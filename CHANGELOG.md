@@ -33886,3 +33886,13 @@ Gevraagd 26-10: "Laat hierbij ook de vermogens zien in de tekst als actief of al
 - "Actief" van vaatwasser en wasmachine is nu ook groen, net als "laadt".
 
 Tests: `test_v5131_3_cockpit_vermogen.py` (5).
+
+## v5.132.0 — airco verwarmt op zonoverschot
+
+Gevraagd 26-10: "vanmiddag heb ik de airco aangezet omdat er nog zonne-energie was en de accu vol, kunnen we daar iets slims voor bedenken wanneer woonkamer onder 17 graden is". Om 13:15 gaf de ESP-sensor (UltimateSensor) 16,7 °C.
+
+- Nieuwe stap in het airco-besluit (`airco_sturing.verwarm_op_zonoverschot`, `_airco_zon_ronde`): is de accu vol en is er tien minuten lang minstens 750 W zon over (`AIRCO_ZON_MIN_OVERSCHOT_W`, het gemeten verwarmvermogen), is de woonkamer (ESP-sensor) onder 17 °C en is er iemand thuis, dan zet het EMS de woonkamer-airco op verwarmen tot 21 °C.
+- Hij blijft aan tot de woonkamer 21 °C is, ook als de zon wegvalt (keuze Ruud), en gaat dan uit. Een "uit" van een andere regel (bijvoorbeeld niemand thuis) wacht daarop; een open raam en de vaste uittijd gaan wel voor.
+- Werkt ook met de knop Airco automaat uit. Bedient iemand de airco zelf, dan laat het EMS los.
+
+Tests: `test_v5132_airco_zonoverschot.py` (12).

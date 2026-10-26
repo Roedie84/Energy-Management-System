@@ -7649,6 +7649,17 @@ CONF_AIRCO_RAAM_ENTITIES = "airco_raam_entities"
 # airco uitzet (gelijk met de HA-automatisering, Ruud 10-10).
 AIRCO_RAAM_UITSTEL_S = 300
 
+# v5.132.0: verwarmen op zonoverschot (Ruud 26-10: "vanmiddag heb ik de airco
+# aangezet omdat er nog zonne-energie was en de accu vol"; 13:15 bij 16,7 °C op
+# de ESP-sensor). Accu vol en minstens AIRCO_ZON_MIN_OVERSCHOT_W over, tien
+# minuten lang; woonkamer (ESP) onder AIRCO_ZON_ONDER_C en iemand thuis. Dan
+# verwarmen tot AIRCO_ZON_DOEL_C, en aan tot die temperatuur bereikt is, ook als
+# de zon wegvalt. Werkt ook met de knop Airco automaat uit.
+AIRCO_ZON_ONDER_C = 17.0
+AIRCO_ZON_DOEL_C = 21.0
+AIRCO_ZON_MIN_OVERSCHOT_W = 750.0  # gemeten verwarmvermogen woonkamer 0,75 kW
+AIRCO_ZON_MINUTEN = 10
+
 # v5.80: de accubesparing rekent aan de wisselstroomkant. Een gemeten halve
 # slag onder dit rendement is geen verlies maar een meetfout (de
 # vermogenssensor en de voorraad lopen niet gelijk); dan de begrenzing.

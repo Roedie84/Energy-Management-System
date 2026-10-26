@@ -1,3 +1,12 @@
+EMS v5.132.0 - airco verwarmt op zonoverschot
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Is de accu vol, is er tien minuten lang zon over, is het in de woonkamer
+  onder 17 graden en is er iemand thuis? Dan zet het EMS de airco op
+  verwarmen tot 21 graden. Hij blijft aan tot het 21 graden is.
+- Werkt ook met de knop Airco automaat uit.
+
 EMS v5.131.3 - vermogen bij de apparaten in de cockpit
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
