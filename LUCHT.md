@@ -317,4 +317,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ daalt 738 → 543 (gem 602), 0 u > 1.200. Binnen 16,7 °C zonder verwarming, vocht 55,5 → 57%, schimmelindicator 72 → 65 (buiten 8,4 → 12,5 °C, 99%): koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 26-10 12:25, gemeten t/m 12:20
+## 26-10 16:25 (ronde 41)
+- PM2.5 12:20-16:20: gem 1,87, mediaan 1,93, P95 3,06, max 5,03 (16:00) (n=48); 0 uur > 15. Dag t/m nu ~1,1; 7d (19-25/10) 1,76, mediaan dag 1,2 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit. Stijging 0,8 → ~2 vanaf aanwezigheid (12:52) en verwarming aan (~13:20, 16,7 → 20,8 °C); bultje 5,0 om 16:00 zonder kookmoment.
+- Stand: auto 201 min (gem 2,03), mid 36 min (gem 0,84), 3,6 min unavailable. Aanwezig 2,02 (n=42) vs afwezig 0,84 (n=6): bron (mensen/verwarming), geen standeffect.
+- Werking: auto direct bij aanwezigheid (12:52:30). 3 HA-herstarts (13:31, 14:59, 15:13). Na herstart 14:59: mid 15:03:30, 2 min na off terwijl net aanwezig, 15:06 weer auto - derde keer (n=3) dat de 15-min-marge na herstart ontbreekt. 5/5 traces zonder fout. Lokaal 48 mislukt op 123.969 (geen nieuwe), uitval 0, sturen 308/309 (3/3 nieuw), filter 0%. Apparaat-PM2.5 3-7 bij Ultimate 1,5-3: ~2x te hoog, volgt grof.
+- Kookautomation: 2 starttraces (herstarts), geen kookmoment: ongetoetst.
+- CO₂ stijgt 540 → 843 (gem 643), 0 u > 1.200. Verwarming aan: vocht 57,6 → 48,2% (nu 50), schimmelindicator 65 → 61 (nu 65), buiten 99% / 12,5 °C: bevestigt weer, verwarmen lost het vocht op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 26-10 16:25, gemeten t/m 16:20
