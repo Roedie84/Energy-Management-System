@@ -33790,3 +33790,17 @@ Vijf punten, elk met akkoord van Ruud (26-10).
 - **Bijladen tot 100 % bij een heel lage prijs (punt 15).** Sinds v5.127.2 (95 % accustand) en v5.95 (97 % van het bruikbare deel) start er geen nieuwe netlading meer bij een (bijna) volle accu. Uitzondering in beslissing én plan: bij een all-in-prijs ≤ 0, of ≤ de gemeten energiebelasting + btw per kWh (`_gemeten_belastingdeel_eur_per_kwh`, ~11,1 ct; begrensd op `HEEL_LAGE_PRIJS_GRENS_MAX_EUR` = 15 ct) vervallen beide grenzen. Er was geen bestaande drempel voor "heel laag"; deze grens betekent een kale marktprijs van nul of lager. De laadregel (loont het?) beslist daarna gewoon. Het lezen van de kale reeks laat `prijsreeks_bevindingen` van de belaste reeks staan.
 
 Tests: `test_v5128_0_plan_en_besparing.py` (29).
+
+
+## v5.129.0 — batterijlader in de keuken als gepland laadapparaat
+
+Gevraagd 26-10: "Kunnen we voor de oplader in de keuken een zelfde automatisering bouwen als voor de fietsen en de steelstofzuiger?" (Shelly `switch.opladers_batterijen` met `sensor.opladers_batterijen_power`; vanaf 26-10 een Anker Prime 200 W USB-lader met 6 poorten).
+
+- Derde apparaat in `_async_update_scheduled_charge_appliance`, met dezelfde logica als de fietsladers: alleen in het goedkope blok, testen of er iets aan hangt (5 min aan / 15 min uit), uit als het vermogen 2 min onder de drempel blijft, en dan `kwartiercontrole=True`: tot het blok voorbij is elk kwartier opnieuw kijken (meerdere poorten: er kan later iets bij komen). De opgeladen-melding ("🔋 Batterijen opgeladen") gaat pas na een lege controle of aan het eind van het blok. Geen zonoverschot (dat is bij de fietsladers op hun eigen verbruik geschat).
+- Drempel: `BATTERIJLADER_COMPLETE_THRESHOLD_W` = 10 W als start (een telefoon die afrondt zakt onder de 15 W van de steelstofzuiger terwijl hij nog laadt); na `LEARNED_THRESHOLD_MIN_SAMPLES` rustmetingen de geleerde drempel (rust + 5 W).
+- Nieuwe instellingen `batterijlader_switch_entity` en `batterijlader_power_sensor_entity` (Apparaten, ook in `APPARAAT_INSTELLINGEN`), sensor "Batterijlader status", schakelaar "Batterijlader overrule", diagnostiek, bewaarde dagvlag, -datum en laadduren, uitgesloten van NILM.
+- Cockpit (Huis + knop "Batterijlader nu laden") en dashboardsjabloon (Instellingen + Apparaten).
+- Ratel `__init__`: de toestand van de drie laders staat nu in `_init_geplande_laders()`.
+
+Tests: `test_v5129_batterijlader.py` (8); `test_state_persistence.py` uitgebreid.
+

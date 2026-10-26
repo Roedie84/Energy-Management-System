@@ -62,6 +62,9 @@ def _vul_alles(c):
     c._steelstofzuiger_complete_date = NOW.date()
     c._fietsladers_complete_today = True
     c._fietsladers_complete_date = NOW.date()
+    c._batterijlader_complete_today = True
+    c._batterijlader_complete_date = NOW.date()
+    c.batterijlader_charge_duration_history = [33.0]
     c.water_softener_last_regeneration = NOW
     c.pv_export_today_kwh = 6.0
     c.gross_consumption_today_kwh = 9.0

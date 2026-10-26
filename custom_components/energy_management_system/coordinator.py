@@ -136,6 +136,8 @@ from .const import (
     CONF_STEELSTOFZUIGER_POWER_SENSOR,
     CONF_FIETSLADERS_SWITCH,
     CONF_FIETSLADERS_POWER_SENSOR,
+    CONF_BATTERIJLADER_SWITCH,
+    CONF_BATTERIJLADER_POWER_SENSOR,
     CONF_WATER_ACTIVE_USAGE_SENSOR,
     CONF_WATER_DAILY_TOTAL_SENSOR,
     CONF_WATER_TOTAL_USAGE_SENSOR,
@@ -185,6 +187,7 @@ from .const import (
     WATER_SOFTENER_MIN_LITERS,
     WATER_SOFTENER_NIGHT_WINDOW_END_HOUR,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
+    BATTERIJLADER_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -1294,22 +1297,9 @@ class EnergyManagementSystemCoordinator:
         # spikes.
         self._recent_consumption_readings_kw: list[float] = []
         self._quooker_active_since: datetime | None = None
-        self._steelstofzuiger_complete_today: bool = False
-        self._steelstofzuiger_complete_date: date | None = None
-        self._steelstofzuiger_charge_started_at: datetime | None = None
-        self._steelstofzuiger_below_threshold_since: datetime | None = None
-        self._steelstofzuiger_ever_active_this_session: bool = False
-        self._steelstofzuiger_next_poll_at: datetime | None = None
-        self._steelstofzuiger_idle_power_history: list[float] = []
-        self.steelstofzuiger_charge_duration_history: list[float] = []
-        self._fietsladers_complete_today: bool = False
-        self._fietsladers_complete_date: date | None = None
-        self._fietsladers_charge_started_at: datetime | None = None
-        self._fietsladers_below_threshold_since: datetime | None = None
-        self._fietsladers_ever_active_this_session: bool = False
-        self._fietsladers_next_poll_at: datetime | None = None
-        self._fietsladers_idle_power_history: list[float] = []
-        self.fietsladers_charge_duration_history: list[float] = []
+        # v5.129.0: de toestand van de geplande laders in een eigen functie
+        # (ratel op __init__).
+        self._init_geplande_laders()
 
         # Water-tabblad (v0.63.85) - puur informatief, stuurt nooit iets
         # aan en beïnvloedt de accu-beslissing op geen enkele manier.
@@ -2056,6 +2046,7 @@ class EnergyManagementSystemCoordinator:
         self.last_motion_at: datetime | None = None
         self.last_bedtime_motion_at: datetime | None = None
         self.last_fietsladers_action: str | None = None
+        self.last_batterijlader_action: str | None = None
         self.last_dishwasher_notification: str | None = None
         self.last_washing_machine_notification: str | None = None
         self.last_reason: str | None = None
@@ -2995,12 +2986,46 @@ class EnergyManagementSystemCoordinator:
         self.force_manual = value
         await self._handmatig_gezet()
 
+    def _init_geplande_laders(self) -> None:
+        """De toestand van steelstofzuiger, fietsladers en batterijlader
+        (v5.129.0: uit `__init__` gehaald, zie de ratel in
+        test_scan_functiegrootte)."""
+        self.batterijlader_override: bool = False
+        self._steelstofzuiger_complete_today: bool = False
+        self._steelstofzuiger_complete_date: date | None = None
+        self._steelstofzuiger_charge_started_at: datetime | None = None
+        self._steelstofzuiger_below_threshold_since: datetime | None = None
+        self._steelstofzuiger_ever_active_this_session: bool = False
+        self._steelstofzuiger_next_poll_at: datetime | None = None
+        self._steelstofzuiger_idle_power_history: list[float] = []
+        self.steelstofzuiger_charge_duration_history: list[float] = []
+        self._fietsladers_complete_today: bool = False
+        self._fietsladers_complete_date: date | None = None
+        self._fietsladers_charge_started_at: datetime | None = None
+        self._fietsladers_below_threshold_since: datetime | None = None
+        self._fietsladers_ever_active_this_session: bool = False
+        self._fietsladers_next_poll_at: datetime | None = None
+        self._fietsladers_idle_power_history: list[float] = []
+        self.fietsladers_charge_duration_history: list[float] = []
+        self._batterijlader_complete_today: bool = False
+        self._batterijlader_complete_date: date | None = None
+        self._batterijlader_charge_started_at: datetime | None = None
+        self._batterijlader_below_threshold_since: datetime | None = None
+        self._batterijlader_ever_active_this_session: bool = False
+        self._batterijlader_next_poll_at: datetime | None = None
+        self._batterijlader_idle_power_history: list[float] = []
+        self.batterijlader_charge_duration_history: list[float] = []
+
     async def async_set_steelstofzuiger_override(self, value: bool) -> None:
         self.steelstofzuiger_override = value
         await self._handmatig_gezet()
 
     async def async_set_fietsladers_override(self, value: bool) -> None:
         self.fietsladers_override = value
+        await self._handmatig_gezet()
+
+    async def async_set_batterijlader_override(self, value: bool) -> None:
+        self.batterijlader_override = value
         await self._handmatig_gezet()
 
     async def async_set_appliance_ready_notifications_enabled(self, value: bool) -> None:
@@ -3107,6 +3132,13 @@ class EnergyManagementSystemCoordinator:
         if not self.fietsladers_charge_duration_history:
             return None
         return statistics.median(self.fietsladers_charge_duration_history)
+
+    @property
+    def learned_batterijlader_duration_minutes(self) -> float | None:
+        """Hetzelfde, voor de batterijlader in de keuken (v5.129.0)."""
+        if not self.batterijlader_charge_duration_history:
+            return None
+        return statistics.median(self.batterijlader_charge_duration_history)
 
     @staticmethod
     def _geleerde_cyclusduur(reeks: list[float]) -> float | None:
@@ -40550,6 +40582,7 @@ class EnergyManagementSystemCoordinator:
             CONF_QUOOKER_POWER_SENSOR,
             CONF_STEELSTOFZUIGER_POWER_SENSOR,
             CONF_FIETSLADERS_POWER_SENSOR,
+            CONF_BATTERIJLADER_POWER_SENSOR,
         )
         return {self.config[k] for k in keys if self.config.get(k)}
 
@@ -46908,6 +46941,36 @@ class EnergyManagementSystemCoordinator:
             override_attr="fietsladers_override",
             kwartiercontrole=True,
         )
+        # v5.129.0: de batterijlader in de keuken, zoals de fietsladers: in
+        # het goedkope blok, uit zodra alles vol is, en tot het blok voorbij
+        # is elk kwartier kijken of er weer iets aan hangt (meerdere poorten).
+        try:
+            await self._async_update_scheduled_charge_appliance(
+                now,
+                is_currently_cheapest_block,
+                switch_entity=self.config.get(CONF_BATTERIJLADER_SWITCH),
+                power_entity=self.config.get(CONF_BATTERIJLADER_POWER_SENSOR),
+                complete_threshold_w=BATTERIJLADER_COMPLETE_THRESHOLD_W,
+                complete_today_attr="_batterijlader_complete_today",
+                complete_date_attr="_batterijlader_complete_date",
+                charge_started_attr="_batterijlader_charge_started_at",
+                below_threshold_since_attr="_batterijlader_below_threshold_since",
+                duration_history_attr="batterijlader_charge_duration_history",
+                last_action_attr="last_batterijlader_action",
+                ever_active_this_session_attr="_batterijlader_ever_active_this_session",
+                next_poll_attr="_batterijlader_next_poll_at",
+                idle_history_attr="_batterijlader_idle_power_history",
+                notify_title="🔋 Batterijen opgeladen",
+                notify_message=(
+                    "De batterijlader in de keuken is uitgeschakeld omdat alles vol is. "
+                    "Tot het goedkope blok voorbij is, kijkt het EMS elk kwartier "
+                    "of er weer iets aan hangt."
+                ),
+                override_attr="batterijlader_override",
+                kwartiercontrole=True,
+            )
+        except Exception:  # noqa: BLE001 - een lader mag de ronde niet meenemen
+            self._noteer_staartfout("batterijlader")
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count

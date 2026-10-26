@@ -75,6 +75,8 @@ const EIGEN = {
   rendement: "learned_battery_efficiency",
   stofzuiger: "steelstofzuiger_status",
   fietsen: "fietsladers_status",
+  // v5.129.0: de batterijlader in de keuken
+  lader: "batterijlader_status",
   cockpit: "cockpit",
   aircoBesluit: "airco_besluit",
   meetlog: "meetlog",
@@ -107,6 +109,7 @@ const EIGEN = {
   aircoAutomaat: "airco_automaat",
   fietsenOverrule: "fietsladers_override",
   stofzuigerOverrule: "steelstofzuiger_override",
+  laderOverrule: "batterijlader_override",
   meldingenAan: "notifications_master",
   achterhoeks: "achterhoeks",
 };
@@ -861,9 +864,9 @@ const AFHANKELIJK = {
   verkoop: ["gacs", "mc", "tekort", "uitleg", "blok"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
   zon: ["gacs", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk", "pvNauw", "bewolking", "pv"],
-  huis: ["fietsen", "stofzuiger", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis"],
+  huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis"],
   bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
-    "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "meldingenAan", "achterhoeks"],
+    "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "laderOverrule", "meldingenAan", "achterhoeks"],
   geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief"],
   prijzen: ["prijsverwachting", "plan", "uitleg"],
   voet: ["meetlog", "gezondheid", "status"],
@@ -883,6 +886,7 @@ const KNOPPEN = [
   { k: "aircoAutomaat", n: "Airco automaat", s: "EMS stuurt de airco", ic: "airco", kl: "var(--cyaan)" },
   { k: "fietsenOverrule", n: "Fietsen nu laden", s: "Niet wachten op het blok", ic: "fiets", kl: "var(--groen)" },
   { k: "stofzuigerOverrule", n: "Stofzuiger nu laden", s: "Niet wachten op het blok", ic: "stof", kl: "var(--groen)" },
+  { k: "laderOverrule", n: "Batterijlader nu laden", s: "Niet wachten op het blok", ic: "accu", kl: "var(--groen)" },
   { k: "meldingenAan", n: "Meldingen", s: "Alle meldingen aan of uit", ic: "bel", kl: "var(--amber)" },
   { k: "achterhoeks", n: "Achterhoeks", s: "Meldingen in de streektaal", ic: "taal", kl: "var(--violet)" },
 ];
@@ -1895,6 +1899,11 @@ class EmsCockpitCard extends HTMLElement {
     if (stof) {
       const [t, k] = status(stof);
       uit.push(regel("stof", "Steelstofzuiger", "", esc(t), k));
+    }
+    const lader = this._s("lader");
+    if (lader) {
+      const [t, k] = status(lader);
+      uit.push(regel("accu", "Batterijlader keuken", "", esc(t), k));
     }
     for (const [sleutel, ic, naam] of [["vaatwasser", "vaat", "Vaatwasser"], ["wasmachine", "was", "Wasmachine"]]) {
       const s = this._s(sleutel);

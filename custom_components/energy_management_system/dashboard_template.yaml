@@ -317,6 +317,13 @@ views:
         columns: 12
         rows: auto
     - type: custom:mushroom-entity-card
+      entity: switch.woonkamer_energy_management_system_batterijlader_overrule
+      name: Batterijlader keuken
+      icon: mdi:hand-back-right-outline
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: custom:mushroom-entity-card
       entity: switch.woonkamer_energy_management_system_vaatwasser_wasmachine_meldingen
       name: Apparaten
       icon: mdi:bell-outline
@@ -1903,6 +1910,13 @@ views:
       secondary: Fietsladers
       icon: mdi:bike
       entity: sensor.woonkamer_energy_management_system_fietsladers_status
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set m = {''wacht_op_goedkoop_blok'': ''wacht op goedkoop blok'', ''voltooid_vandaag'': ''vandaag al geladen'', ''aan_het_laden'': ''aan het laden''} %}{% set v = states(''sensor.woonkamer_energy_management_system_batterijlader_status'') %}{{ m.get(v, v if v not in [''unknown'',''unavailable'',''''] else ''geen status'') }}'
+      secondary: Batterijlader keuken
+      icon: mdi:battery-charging
+      entity: sensor.woonkamer_energy_management_system_batterijlader_status
       tap_action:
         action: more-info
 - title: Planning

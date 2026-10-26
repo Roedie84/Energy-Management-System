@@ -28,6 +28,7 @@ from .const import (
     DOMAIN,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
+    BATTERIJLADER_COMPLETE_THRESHOLD_W,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -748,6 +749,7 @@ async def async_get_config_entry_diagnostics(
             "force_manual": coordinator.force_manual,
             "steelstofzuiger_override": coordinator.steelstofzuiger_override,
             "fietsladers_override": coordinator.fietsladers_override,
+            "batterijlader_override": coordinator.batterijlader_override,
             "appliance_ready_notifications_enabled": (
                 coordinator.appliance_ready_notifications_enabled
             ),
@@ -1246,6 +1248,22 @@ async def async_get_config_entry_diagnostics(
                 coordinator._get_learned_completion_threshold_w(
                     "_fietsladers_idle_power_history",
                     FIETSLADERS_COMPLETE_THRESHOLD_W,
+                )
+            ),
+            "last_batterijlader_action": coordinator.last_batterijlader_action,
+            "batterijlader_charge_duration_history": (
+                coordinator.batterijlader_charge_duration_history
+            ),
+            "learned_batterijlader_duration_minutes": (
+                coordinator.learned_batterijlader_duration_minutes
+            ),
+            "batterijlader_idle_power_history_w": (
+                coordinator._batterijlader_idle_power_history
+            ),
+            "batterijlader_learned_completion_threshold_w": (
+                coordinator._get_learned_completion_threshold_w(
+                    "_batterijlader_idle_power_history",
+                    BATTERIJLADER_COMPLETE_THRESHOLD_W,
                 )
             ),
             "washing_machine_usage_hours_with_data": len(

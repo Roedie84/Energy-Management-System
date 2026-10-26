@@ -208,6 +208,9 @@ CONF_STEELSTOFZUIGER_SWITCH = "steelstofzuiger_switch_entity"
 CONF_STEELSTOFZUIGER_POWER_SENSOR = "steelstofzuiger_power_sensor_entity"
 CONF_FIETSLADERS_SWITCH = "fietsladers_switch_entity"
 CONF_FIETSLADERS_POWER_SENSOR = "fietsladers_power_sensor_entity"
+# v5.129.0: de batterijlader in de keuken (Shelly + Anker 200 W USB-lader).
+CONF_BATTERIJLADER_SWITCH = "batterijlader_switch_entity"
+CONF_BATTERIJLADER_POWER_SENSOR = "batterijlader_power_sensor_entity"
 CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
 
 # Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals bij
@@ -516,6 +519,8 @@ APPARAAT_INSTELLINGEN = (
     "steelstofzuiger_power_sensor_entity",
     "fietsladers_switch_entity",
     "fietsladers_power_sensor_entity",
+    "batterijlader_switch_entity",
+    "batterijlader_power_sensor_entity",
     "oven_state_sensor_entity",
     # v5.15.1: de kookplaat stond hier niet in, terwijl de oven er wel in
     # staat - een vergeten regel. Home Connect meldt niets als het apparaat
@@ -1500,6 +1505,13 @@ WATER_SOFTENER_NIGHT_WINDOW_END_HOUR = 6
 # "done" signal (reported: 20W is the right cutoff for this specific
 # charger), hence its own threshold rather than reusing the shared one.
 FIETSLADERS_COMPLETE_THRESHOLD_W = 20.0
+
+# v5.129.0: de batterijlader (USB-C/A, 200 W) laadt telefoons, powerbanks en
+# losse accu's. Die zakken bij het afronden van een lading ruim onder de 15 W
+# van APPLIANCE_RUNNING_POWER_THRESHOLD_W terwijl ze nog laden; 10 W is de
+# startgok. Zodra er genoeg rustmetingen zijn, neemt de geleerde drempel
+# (rustverbruik + LEARNED_THRESHOLD_MARGIN_W) het over.
+BATTERIJLADER_COMPLETE_THRESHOLD_W = 10.0
 
 # hvac_action values that mean the climate entity's compressor/heating
 # element is actually drawing power right now - 'idle' and 'off' don't
@@ -3695,6 +3707,7 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "digital_twin_accuracy_history": {"type": "plain"},
     "extra_dip_margin_history": {"type": "plain"},
     "fietsladers_charge_duration_history": {"type": "plain"},
+    "batterijlader_charge_duration_history": {"type": "plain"},
     # v5.31: wat er per apparaat over grootverbruik is geleerd (schaduw).
     "grootverbruiker_leer": {"type": "plain"},
     "learned_efficiency_history": {"type": "plain"},
@@ -3792,6 +3805,7 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "eigen_ingrepen": {"type": "plain"},
     "_steelstofzuiger_complete_today": {"type": "plain"},
     "_fietsladers_complete_today": {"type": "plain"},
+    "_batterijlader_complete_today": {"type": "plain"},
     "_laagste_soc_ochtend": {"type": "plain"},
     "_netimport_nacht_kwh": {"type": "plain"},
     # v5.33: de gekoppelde tekortmeting - de lopende nacht en de nacht die
@@ -3857,6 +3871,7 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_summary_month_key": {"type": "int"},
     "_steelstofzuiger_complete_date": {"type": "date"},
     "_fietsladers_complete_date": {"type": "date"},
+    "_batterijlader_complete_date": {"type": "date"},
     "_shortfall_check_date": {"type": "date"},
     "first_seen_date": {"type": "date"},
     "goedkope_koeling_teldag": {"type": "date"},

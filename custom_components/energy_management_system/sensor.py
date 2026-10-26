@@ -40,6 +40,7 @@ from .const import (
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONF_WATER_ACTIVE_USAGE_SENSOR,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
+    BATTERIJLADER_COMPLETE_THRESHOLD_W,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -168,6 +169,7 @@ async def async_setup_entry(
         ),
         SteelstofzuigerStatusSensor(coordinator, entry.entry_id),
         FietsladersStatusSensor(coordinator, entry.entry_id),
+        BatterijladerStatusSensor(coordinator, entry.entry_id),
         # v5.14: de kern van de diagnostiek, leesbaar voor de assistent.
         # v5.19: de cockpit, die meebeweegt met de metingen.
         CockpitSensor(coordinator, entry.entry_id),
@@ -1207,6 +1209,60 @@ class FietsladersStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
         duration_history = last_state.attributes.get("duration_history_minutes")
         if isinstance(duration_history, list):
             self._coordinator.fietsladers_charge_duration_history = [
+                float(v) for v in duration_history
+            ]
+
+
+class BatterijladerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
+    """Mirror of SteelstofzuigerStatusSensor, for de batterijlader in de
+    keuken (v5.129.0)."""
+
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
+    _attr_name = "Batterijlader status"
+    _attr_icon = "mdi:battery-charging"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "batterijlader_status")
+
+    @property
+    def native_value(self) -> str | None:
+        return self._coordinator.last_batterijlader_action
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "duration_history_minutes": (
+                self._coordinator.batterijlader_charge_duration_history
+            ),
+            "learned_duration_minutes": (
+                self._coordinator.learned_batterijlader_duration_minutes
+            ),
+            "idle_power_history_w": (
+                self._coordinator._batterijlader_idle_power_history
+            ),
+            "learned_completion_threshold_w": (
+                self._coordinator._get_learned_completion_threshold_w(
+                    "_batterijlader_idle_power_history",
+                    BATTERIJLADER_COMPLETE_THRESHOLD_W,
+                )
+            ),
+        }
+
+    @_store_wint
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        idle_history = last_state.attributes.get("idle_power_history_w")
+        if isinstance(idle_history, list):
+            self._coordinator._batterijlader_idle_power_history = [
+                float(v) for v in idle_history
+            ]
+        duration_history = last_state.attributes.get("duration_history_minutes")
+        if isinstance(duration_history, list):
+            self._coordinator.batterijlader_charge_duration_history = [
                 float(v) for v in duration_history
             ]
 

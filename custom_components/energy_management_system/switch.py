@@ -59,6 +59,7 @@ async def async_setup_entry(
             AchterhoeksSwitch(coordinator, entry_id=entry.entry_id),
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
+            BatterijladerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             ApplianceReadyNotificationsSwitch(coordinator, entry_id=entry.entry_id),
             # v1.2.0: hoofdschakelaar plus één schakelaar per soort
             # melding. De standen worden bewaard in de gedeelde Store
@@ -604,6 +605,41 @@ class FietsladersOverrideSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._coordinator.async_set_fietsladers_override(False)
+        self.async_write_ha_state()
+
+
+class BatterijladerOverrideSwitch(SwitchEntity, RestoreEntity):
+    """Mirror of SteelstofzuigerOverrideSwitch, for de batterijlader in de
+    keuken (v5.129.0)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Batterijlader overrule"
+    _attr_icon = "mdi:hand-back-right-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_batterijlader_override"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.batterijlader_override
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.batterijlader_override = last_state.state == "on"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._coordinator.async_set_batterijlader_override(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._coordinator.async_set_batterijlader_override(False)
         self.async_write_ha_state()
 
 
