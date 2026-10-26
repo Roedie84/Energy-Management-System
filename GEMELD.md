@@ -133,3 +133,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 26-10 04:51 | updates installeren ems 5.127.4, gold scalper 2.23.1, stormchase 0.59.4 (hacs)
 26-10 10:52 | ems batterijlader switch/sensor opladers_batterijen koppelen in opties (wacht_op_apparaat)
 26-10 11:51 | ems cost-basis-model voorraadverandering tegen gemeten laadprijs meetellen
+26-10 12:54 | L-EMS-039 ems dagbesparing 30 s te laag na herstart
