@@ -1,3 +1,10 @@
+EMS v5.135.1 - continu-verbruik telt Powercalc mee
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De verklaring van het continu-verbruik telt nu ook alle losse
+  Powercalc-sensoren mee (lampen, Eufy HomeBase en camera's).
+
 EMS v5.135.0 - verbruik per dagtype, zonvoorspelling, continu-verbruik
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

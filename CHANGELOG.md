@@ -33926,3 +33926,12 @@ Akkoord Ruud 26-10 (punten 2, 3 en 4 van de besparingsronde).
 - **Continu-verbruik verklaard.** Het huis zakt niet onder ~130-145 W (ruim 1.200 kWh per jaar). `get_sluipverbruik_verklaring`: van het laagste kwartier van de dag (`baseline_load_history`) het deel uit apparaten met een eigen meting (mediaan 02-05 u van de laatste volle nacht, alleen bevestigde apparaten, zonder dubbeltelling), en wat overblijft zonder eigen meting. Op de sensor Sluipverbruik-detectie als `verklaring` en in de cockpit bij Huis en apparaten als "Continu-verbruik".
 
 Tests: `test_v5135_dagtype_zon_sluip.py` (8); `test_v5118_akkoordpunten.py` aangepast aan 70 %.
+
+## v5.135.1 — continu-verbruik telt ook losse Powercalc-sensoren mee
+
+Gevraagd 26-10: "Neem je de powercalc zaken mee?" De verklaring van het continu-verbruik nam alleen apparaten mee die het EMS had bevestigd; Hue-spots en vaste verbruikers via Powercalc vielen erbuiten.
+
+- `_is_losse_powercalc`: een sensor van het platform Powercalc telt nu ook mee, behalve een groep (attribuut `entities`) en "all_standby_power" (optellingen van andere sensoren, anders dubbel).
+- Op 26-10 zijn in Home Assistant drie vaste Powercalc-sensoren aangemaakt (schatting): Eufy HomeBase S380 6 W, camera zolder S350 4 W, camera achtertuin C31 3 W. Die tellen vanaf de eerstvolgende nacht mee.
+
+Tests: `test_v5135_dagtype_zon_sluip.py` (+1).

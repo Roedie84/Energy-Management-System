@@ -81,3 +81,25 @@ def test_sluipverbruik_lopende_nacht_telt_nog_niet(make_coordinator):
 def test_cockpit_toont_continu_verbruik():
     js = (Path(pkg.__file__).parent / "www" / "ems-cockpit.js").read_text(encoding="utf-8")
     assert 'sluip: "sluipverbruik"' in js and '"Continu-verbruik"' in js
+
+
+def test_sluipverbruik_telt_losse_powercalc_mee(make_coordinator, hass):
+    """v5.135.1: Powercalc-sensoren tellen mee, groepen en all_standby niet."""
+    c = make_coordinator({})
+    nu = datetime(2026, 10, 27, 20, 0, tzinfo=TZ)
+    c.baseline_load_history = [0.145]
+    c.nachtlast_per_apparaat = {"2026-10-27": {
+        "sensor.eufy_homebase_s380_power": 6.0,
+        "sensor.all_standby_power": 2.3,
+        "sensor.groep_power": 9.0,
+        "sensor.vreemd": 20.0,
+    }}
+    c.nilm_confirmed_devices = {}
+    hass.states.set("sensor.groep_power", "9", {"entities": ["sensor.a"]})
+    platform = {"sensor.eufy_homebase_s380_power": "powercalc", "sensor.all_standby_power": "powercalc",
+                "sensor.groep_power": "powercalc", "sensor.vreemd": "template"}
+    c._entiteitenregister = lambda: SimpleNamespace(
+        async_get=lambda e: SimpleNamespace(platform=platform.get(e)))
+    v = c.get_sluipverbruik_verklaring(nu)
+    assert [a["entiteit"] for a in v["apparaten"]] == ["sensor.eufy_homebase_s380_power"]
+    assert v["verklaard_w"] == 6.0

@@ -37830,7 +37830,8 @@ class EnergyManagementSystemCoordinator:
         apparaten met een eigen vermogensmeting die daarin zitten: de mediaan
         per sensor van de laatste volle nacht (02-05 u, `nachtlast_per_apparaat`),
         alleen de bevestigde apparaten (`nilm_confirmed_devices`, zonder
-        dubbeltellingen). Wat overblijft heeft geen eigen meting - router,
+        dubbeltellingen), en sinds v5.135.1 ook losse Powercalc-sensoren
+        (`_is_losse_powercalc`). Wat overblijft heeft geen eigen meting - router,
         server, speakers, tv in stand-by - en is het deel om gericht te meten.
         """
         now = now or dt_util.now()
@@ -37844,9 +37845,11 @@ class EnergyManagementSystemCoordinator:
         bevestigd = self.nilm_confirmed_devices or {}
         apparaten = []
         for entiteit, watt in metingen.items():
-            if entiteit not in bevestigd or not watt or watt <= 0:
+            if not watt or watt <= 0:
                 continue
             staat = self.hass.states.get(entiteit)
+            if entiteit not in bevestigd and not self._is_losse_powercalc(entiteit, staat):
+                continue
             naam = (staat.attributes.get("friendly_name") if staat else None) or entiteit
             gebied = self.gebied_van(entiteit)
             apparaten.append({
@@ -37874,6 +37877,26 @@ class EnergyManagementSystemCoordinator:
                 "De accu staat hier niet in: zijn sluimerverbruik komt uit de accu zelf."
             ),
         }
+
+    def _is_losse_powercalc(self, entiteit: str, staat) -> bool:
+        """Een Powercalc-sensor van één apparaat, geen optelling (v5.135.1).
+
+        Ruud 26-10: "Neem je de powercalc zaken mee?" Ook de Powercalc-sensoren
+        die het EMS niet als apparaat bevestigde tellen mee in de verklaring
+        (lampen in stand-by, vaste verbruikers zoals de Eufy HomeBase en
+        camera's). Een groepssensor (attribuut `entities`) of
+        "all_standby_power" telt niet: die tellen andere sensoren op.
+        """
+        if staat is not None and staat.attributes.get("entities"):
+            return False
+        if "all_standby" in entiteit:
+            return False
+        try:
+            register = self._entiteitenregister()
+            regel = register.async_get(entiteit) if register else None
+        except Exception:  # noqa: BLE001 - alleen weergave
+            return False
+        return bool(regel and regel.platform == "powercalc")
 
     def _sluipverbruik_verdachten_zin(self) -> str:
         """De regel die bij de sluipverbruikmelding gaat (v4.4)."""
