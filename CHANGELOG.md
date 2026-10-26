@@ -33767,3 +33767,13 @@ Gemeten (Plan tegen werkelijkheid, controleronde 25-10): `sensor.woonkamer_energ
 - De rekenwijze en de waarde na de eerste ronde zijn ongewijzigd. Wat de meter deze maand al te veel of te weinig telde, herstelt dit niet.
 
 Tests: `test_v5127_3_besparing_totaal_opstart.py` (3).
+
+## v5.127.4 — uitleg bij een duur kwartier in het goedkope blok (geen "rest van de nacht" meer)
+
+Gemeten (leerronde 26-10, L-EMS-038): 25-10 23:30 was een duur kwartier (19,1 ct) binnen het lopende goedkope blok 21:30-06:00. De sturing verkocht terecht niet (`expensive_quarter_soc_protected`): in het lopende blok wordt de reserve niet berekend (`_bereken_dynamische_reserve_kwh` geeft None, er wordt geladen) en sinds v5.26.6 geldt "onbekend = niet verkopen". De uitleg zei toch: "alle beschikbare energie (2,30 kWh) is al nodig om de rest van de nacht te overbruggen". Stond `last_price_priority_held_off` nog van een eerder kwartier, dan noemde hij zelfs de prijs-prioriteit.
+
+- `_get_soc_scaled_discharge_power` legt in de tak "reserve onbekend" vast waarom (`last_verkoopreserve_onbekend`: `in_blok` of `onbekend`) en zet de oude vlaggen (prijs-prioriteit, laadstand-terugval) terug.
+- De uitleg (nu in `_uitleg_soc_protected`, uit `_build_explanation` gehaald) zegt dan: "het valt in het goedkope blok: daar wordt de accu geladen en niet verkocht", of "de reserve voor het huis is nu niet te berekenen".
+- Alleen de uitlegtekst verandert; sturing, reserve en kwartierplan zijn ongewijzigd. Dat het kwartierplan in het lopende blok wél verkoop plant (planvolging "afwijking sturing"), staat als voorstel L-EMS-038 open.
+
+Tests: `test_v5127_4_uitleg_verkoopreserve_onbekend.py` (3).

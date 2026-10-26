@@ -2078,6 +2078,8 @@ class EnergyManagementSystemCoordinator:
         self.last_low_solar_narrowed_threshold: bool = False
         self.last_price_priority_held_off: bool = False
         self.last_used_soc_taper_fallback: bool = False
+        # v5.127.4: "in_blok" / "onbekend" als de verkoopreserve ontbrak.
+        self.last_verkoopreserve_onbekend: str | None = None
         self.last_winter_guard_suppressed_today: bool = False
         self.last_temp_consumption_note: str | None = None
         self.last_energy_balance_error_w: float | None = None
@@ -29531,6 +29533,9 @@ class EnergyManagementSystemCoordinator:
         fall back to smart mode).
         """
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        # v5.127.4: waarom er niet verkocht wordt als de reserve onbekend is
+        # (alleen voor de uitlegtekst; stuurt niets).
+        self.last_verkoopreserve_onbekend = None
         if available_entity and now is not None:
             # v5.72 (L-EMS-014): min de sprong van een bijna lege module.
             available_kwh = self._na_module_leeg(self._read_sensor_float(available_entity))
@@ -29678,6 +29683,18 @@ class EnergyManagementSystemCoordinator:
         # sensor blijft de terugval op de laadstand de manier om te verkopen.
         if available_entity and now is not None:
             self.last_discharge_power_applied = None
+            # v5.127.4 (leerronde 26-10): de uitleg zei hier "alle beschikbare
+            # energie is al nodig om de rest van de nacht te overbruggen",
+            # ook in het lopende goedkope blok - waar de reserve niet wordt
+            # berekend (er wordt geladen) - of met een prijs-prioriteit van
+            # een eerder kwartier. Nu zegt de uitleg wat er echt gebeurde.
+            self.last_price_priority_held_off = False
+            self.last_used_soc_taper_fallback = False
+            self.last_verkoopreserve_onbekend = (
+                "in_blok"
+                if cheap_block_start is not None and now >= cheap_block_start
+                else "onbekend"
+            )
             return None
         return self._soc_taper_vermogen(base_power)
 
@@ -45943,6 +45960,61 @@ class EnergyManagementSystemCoordinator:
         )
         return f"{power:.0f} W" if power is not None else None
 
+    def _uitleg_soc_protected(self) -> str:
+        """De uitleg bij `expensive_quarter_soc_protected` (v5.127.4: uit
+        `_build_explanation` gehaald, die op de ratel staat)."""
+        parts: list[str] = []
+        onbekend = getattr(self, "last_verkoopreserve_onbekend", None)
+        if onbekend == "in_blok":
+            parts.append(
+                "Dit kwartier is duur, maar het valt in het goedkope "
+                "blok: daar wordt de accu geladen en niet verkocht. "
+                "Daarom blijft de Zendure op 'smart' staan."
+            )
+        elif onbekend == "onbekend":
+            parts.append(
+                "Dit zou een duur kwartier zijn om te ontladen, maar de "
+                "reserve voor het huis is nu niet te berekenen. Niet "
+                "weten is niet verkopen: de Zendure blijft op 'smart' "
+                "staan."
+            )
+        elif self.last_price_priority_held_off:
+            parts.append(
+                "Dit kwartier is duur genoeg, maar de beperkte "
+                "beschikbare energie wordt bewust bewaard voor een nog "
+                "duurder kwartier later vandaag (prijs-prioriteit) - "
+                "dus blijft de Zendure voor nu op 'smart' staan in "
+                "plaats van al te verkopen."
+            )
+        elif self.last_used_soc_taper_fallback:
+            soc_txt = (
+                f"{self.accustand_procent():.0f}%"
+                if self.accustand_procent() is not None
+                else "onbekend"
+            )
+            parts.append(
+                f"Dit zou een duur kwartier zijn om te ontladen, maar de "
+                f"accu-SoC ({soc_txt}) is te laag om dat te "
+                f"rechtvaardigen. Daarom blijft de Zendure op 'smart' "
+                f"staan in plaats van geforceerd te ontladen."
+            )
+        else:
+            available_txt = (
+                f"{self.last_available_kwh:.2f} kWh"
+                if self.last_available_kwh is not None
+                else "onbekend"
+            )
+            parts.append(
+                f"Dit zou een duur kwartier zijn om te ontladen, maar de "
+                f"nachtreserve-berekening laat geen ruimte over: alle "
+                f"beschikbare energie ({available_txt}) is al nodig om "
+                f"de rest van de nacht te overbruggen. Daarom blijft de "
+                f"Zendure op 'smart' staan (die regelt zelf verder, "
+                f"zonder onze reserve te verkleinen) in plaats van "
+                f"geforceerd te ontladen."
+            )
+        return " ".join(parts)
+
     def _build_explanation(self) -> str:
         """Build a plain-language (Dutch) explanation of the current
         decision, so you can read in the dashboard what the integration
@@ -46022,41 +46094,7 @@ class EnergyManagementSystemCoordinator:
             )
 
         elif reason == "expensive_quarter_soc_protected":
-            if self.last_price_priority_held_off:
-                parts.append(
-                    "Dit kwartier is duur genoeg, maar de beperkte "
-                    "beschikbare energie wordt bewust bewaard voor een nog "
-                    "duurder kwartier later vandaag (prijs-prioriteit) - "
-                    "dus blijft de Zendure voor nu op 'smart' staan in "
-                    "plaats van al te verkopen."
-                )
-            elif self.last_used_soc_taper_fallback:
-                soc_txt = (
-                    f"{self.accustand_procent():.0f}%"
-                    if self.accustand_procent() is not None
-                    else "onbekend"
-                )
-                parts.append(
-                    f"Dit zou een duur kwartier zijn om te ontladen, maar de "
-                    f"accu-SoC ({soc_txt}) is te laag om dat te "
-                    f"rechtvaardigen. Daarom blijft de Zendure op 'smart' "
-                    f"staan in plaats van geforceerd te ontladen."
-                )
-            else:
-                available_txt = (
-                    f"{self.last_available_kwh:.2f} kWh"
-                    if self.last_available_kwh is not None
-                    else "onbekend"
-                )
-                parts.append(
-                    f"Dit zou een duur kwartier zijn om te ontladen, maar de "
-                    f"nachtreserve-berekening laat geen ruimte over: alle "
-                    f"beschikbare energie ({available_txt}) is al nodig om "
-                    f"de rest van de nacht te overbruggen. Daarom blijft de "
-                    f"Zendure op 'smart' staan (die regelt zelf verder, "
-                    f"zonder onze reserve te verkleinen) in plaats van "
-                    f"geforceerd te ontladen."
-                )
+            parts.append(self._uitleg_soc_protected())
 
         elif reason == "grid_charging_low_solar":
             parts.append(
