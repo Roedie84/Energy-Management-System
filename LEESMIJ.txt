@@ -1,3 +1,11 @@
+EMS v5.133.0 - laders 's nachts met rust
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Tussen 22:00 en 06:00 kijkt het EMS niet meer of er iets aan de
+  batterijlader, steelstofzuiger of fietsladers hangt. Een lading die al
+  loopt, loopt gewoon af.
+
 EMS v5.132.0 - airco verwarmt op zonoverschot
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

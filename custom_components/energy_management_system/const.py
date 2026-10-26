@@ -1257,6 +1257,13 @@ STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES = 2
 # needed for that half of the cycle.
 SCHEDULED_CHARGE_POLL_OFF_MINUTES = 15
 
+# v5.133.0 (Ruud 26-10): "de batterijlader, stofzuiger en fietsen niet
+# controleren tussen 22:00 en 06:00, dan worden ze toch niet aangesloten en dit
+# scheelt schakelingen". Geen nieuwe test in dit venster; een lading die al loopt,
+# loopt gewoon af.
+SCHEDULED_CHARGE_NACHTRUST_VAN_UUR = 22
+SCHEDULED_CHARGE_NACHTRUST_TOT_UUR = 6
+
 # Self-learned completion threshold for scheduled-charge appliances
 # (v0.63.46). Reported: the fixed FIETSLADERS_COMPLETE_THRESHOLD_W
 # guess (20W) doesn't reflect the real standby draw (observed 2W) -
@@ -5798,6 +5805,8 @@ APPLIANCE_STATE_LABELS = {
     "wacht_op_apparaat": "niets aangesloten",
     "voltooid": "opgeladen",
     "overruled": "handmatig (overrule)",
+    # v5.133.0
+    "nachtrust": "nachtrust (22-06 u)",
 }
 
 # --- Ondergrens voor de zelfconsumptie (v1.16.8) ---------------------

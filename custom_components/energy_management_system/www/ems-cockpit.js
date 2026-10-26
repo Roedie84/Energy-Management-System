@@ -319,6 +319,7 @@ const APPARAAT_STATUS = {
   voltooid: "opgeladen",
   voltooid_vandaag: "vandaag al geladen",
   overruled: "handmatig (overrule)",
+  nachtrust: "nachtrust (22-06 u)",
 };
 /* v5.93.0: een kleur per stand (gevraagd 12-10 11:50). Groen = bezig of
    laden, amber = wacht op het goedkope blok, cyaan = test, blauw = klaar,
@@ -326,7 +327,7 @@ const APPARAAT_STATUS = {
 const APPARAAT_KLEUR = [
   [/^(laadt|aan_het_laden|bezig|draait|running|run|actief)$/, "var(--groen)"],
   [/^test_aan$/, "var(--cyaan)"],
-  [/^wacht_op_apparaat$/, "var(--tekst3)"],
+  [/^(wacht_op_apparaat|nachtrust)$/, "var(--tekst3)"],
   [/wacht|gepland|delayed/, "var(--amber)"],
   [/^(klaar|vol|voltooid|voltooid_vandaag|finished|ready)$/, "var(--blauw)"],
   [/^overruled$/, "var(--violet)"],

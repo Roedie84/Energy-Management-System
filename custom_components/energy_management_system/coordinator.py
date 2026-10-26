@@ -148,6 +148,8 @@ from .const import (
     CONF_WATER_TOTAL_USAGE_SENSOR,
     STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
     SCHEDULED_CHARGE_POLL_OFF_MINUTES,
+    SCHEDULED_CHARGE_NACHTRUST_VAN_UUR,
+    SCHEDULED_CHARGE_NACHTRUST_TOT_UUR,
     IDLE_POWER_HISTORY_LENGTH,
     LEARNED_THRESHOLD_MIN_SAMPLES,
     LEARNED_THRESHOLD_MARGIN_W,
@@ -4570,10 +4572,9 @@ class EnergyManagementSystemCoordinator:
         ever_active = getattr(self, ever_active_this_session_attr)
 
         if not is_on:
-            next_poll_at = getattr(self, next_poll_attr)
-            if next_poll_at is not None and now < next_poll_at:
-                # In the cooldown between poll attempts - stay off.
-                setattr(self, last_action_attr, "wacht_op_apparaat")
+            if self._wacht_of_nachtrust(
+                now, getattr(self, next_poll_attr), last_action_attr, notify_title, notify_message
+            ):
                 return
             # First attempt, or a fresh poll attempt after a cooldown -
             # turn on for one tick to test for a load.
@@ -4652,6 +4653,30 @@ class EnergyManagementSystemCoordinator:
             setattr(self, below_threshold_since_attr, None)
 
         setattr(self, last_action_attr, "aan_het_laden")
+
+    def _wacht_of_nachtrust(
+        self,
+        now: datetime,
+        next_poll_at: datetime | None,
+        last_action_attr: str,
+        notify_title: str | None,
+        notify_message: str | None,
+    ) -> bool:
+        """Blijft de schakelaar uit in plaats van een test te doen? (v5.133.0)
+
+        Tussen 22:00 en 06:00 geen tests (Ruud 26-10: dan wordt er toch niets
+        aangesloten, en het scheelt schakelingen). Een opgeladen-melding die
+        op een lege test wachtte, gaat dan meteen. Anders: wachten zolang de
+        afkoeltijd tussen twee tests loopt.
+        """
+        if now.hour >= SCHEDULED_CHARGE_NACHTRUST_VAN_UUR or now.hour < SCHEDULED_CHARGE_NACHTRUST_TOT_UUR:
+            self._kwartiercontrole_klaar(now, last_action_attr, notify_title, notify_message)
+            setattr(self, last_action_attr, "nachtrust")
+            return True
+        if next_poll_at is not None and now < next_poll_at:
+            setattr(self, last_action_attr, "wacht_op_apparaat")
+            return True
+        return False
 
     def _testeindtijd(self, now: datetime, next_poll_attr: str) -> datetime:
         """Wanneer de lopende test om is (v5.131.2).
