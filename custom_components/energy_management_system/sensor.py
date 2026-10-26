@@ -3336,6 +3336,15 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
         }
 
     @property
+    def available(self) -> bool:
+        # L-EMS-039: vóór de eerste ronde onbeschikbaar, net als het totaal
+        # (v5.127.3). Gemeten 26-10 bij de herstarts van 07:12, 07:47 en
+        # 10:27: vóór de eerste ronde is de accustand nog niet gelezen, dus
+        # geen voorraadcorrectie en 30 s lang het rauwe dagcijfer
+        # (-1,30 / -0,69 / -0,41 tegen -0,01 / 0,42 / 0,71 daarna).
+        return not _voor_eerste_ronde(self._coordinator)
+
+    @property
     def native_value(self) -> float:
         # v5.40: gecorrigeerd voor wat er sinds het begin van de dag in de
         # accu bij kwam of eruit ging (`get_savings_correction`). Gemeld:
