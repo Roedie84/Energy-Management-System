@@ -40783,10 +40783,20 @@ class EnergyManagementSystemCoordinator:
         stond. v0.63.103: ruimt nu ook eigen-integratie-sensoren op
         (zie `_is_own_integration_entity`).
         """
+        # v5.136.0: en wat inmiddels elders wordt gevolgd (Quooker,
+        # batterijlader, P1 ...), al bevestigd of al afgewezen is. Die
+        # uitsluitingen golden alleen bij het ONTDEKKEN; een kandidaat van
+        # vóór de instelling bleef staan (26-10: Quooker, batterijlader en
+        # een al bevestigde houten lamp bleven als "onbevestigd" hangen).
+        al_gevolgd = self._nilm_excluded_entity_ids()
         for entity_id in list(self.nilm_unconfirmed_candidates.keys()):
             candidate = self.nilm_unconfirmed_candidates[entity_id]
-            if self._is_own_integration_entity(entity_id) or self._is_nilm_pattern_excluded(
-                entity_id, candidate.get("friendly_name", entity_id)
+            if (
+                self._is_own_integration_entity(entity_id)
+                or self._is_nilm_pattern_excluded(entity_id, candidate.get("friendly_name", entity_id))
+                or entity_id in al_gevolgd
+                or entity_id in self.nilm_confirmed_devices
+                or entity_id in self.nilm_rejected_entities
             ):
                 del self.nilm_unconfirmed_candidates[entity_id]
 

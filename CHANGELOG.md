@@ -33935,3 +33935,13 @@ Gevraagd 26-10: "Neem je de powercalc zaken mee?" De verklaring van het continu-
 - Op 26-10 zijn in Home Assistant drie vaste Powercalc-sensoren aangemaakt (schatting): Eufy HomeBase S380 6 W, camera zolder S350 4 W, camera achtertuin C31 3 W. Die tellen vanaf de eerstvolgende nacht mee.
 
 Tests: `test_v5135_dagtype_zon_sluip.py` (+1).
+
+
+## v5.136.0 — NILM-kandidaten ruimen zichzelf op
+
+Gemeld 26-10 via de cockpit ("15 onbevestigde NILM-kandidaten"), punt 16 akkoord: daaronder `sensor.quooker_active_power` (ingesteld als Quooker), `sensor.opladers_batterijen_power` (sinds v5.129.0 de batterijlader) en `sensor.houten_lamp_zithoek_vermogen`, die al bevestigd was. De uitsluitingen (`_nilm_excluded_entity_ids`, bevestigd, afgewezen) golden alleen bij het ontdekken; een kandidaat van vóór de instelling bleef staan.
+
+- `_prune_nilm_pattern_excluded_entries` haalt nu ook kandidaten weg die in `_nilm_excluded_entity_ids()`, `nilm_confirmed_devices` of `nilm_rejected_entities` staan. Loopt elke ronde vóór de ontdekking. Een bevestigd apparaat blijft bevestigd (niet via `reject_nilm_device`, dat zou het ook uit de bevestigde lijst halen).
+
+Tests: `test_v5136_nilm_kandidaten_opruimen.py` (2).
+

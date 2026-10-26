@@ -1,3 +1,11 @@
+EMS v5.136.0 - NILM-kandidaten ruimen zichzelf op
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Een NILM-kandidaat die het EMS al elders volgt (Quooker, batterijlader,
+  P1 ...), die al bevestigd of al afgewezen is, verdwijnt nu vanzelf uit de
+  lijst "onbevestigde kandidaten" - ook als hij er al stond.
+
 EMS v5.135.1 - continu-verbruik telt Powercalc mee
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
