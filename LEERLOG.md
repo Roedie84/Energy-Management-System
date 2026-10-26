@@ -460,3 +460,13 @@ laatste ronde: 26-10 15:40, gemeten t/m 26-10 15:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag 100 % bewolking), H-EMS-11 (avondpiek: niets te verkopen, accu dekt huis), H-EMS-14 (reservesprongen/stabiliteit: opstartpiek opgelost, MC-schommeling nieuw). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 26-10 19:40, gemeten t/m 26-10 19:45
+
+## 26-10 23:40 · tussenronde
+- **v5.135.1 actief**; v5.136.0 (andere sessie 23:15, NILM-kandidaten) gedownload, wacht op een herstart. HA-herstarts 20:06, 20:25, 21:08, 21:52. Fout 0 / storing 0; Zonneplan-prijssensor 21:52 kort leeg (laatste prijzen gebruikt), Solcast 10/10.
+- **Harde regel: 0× onder de reserve** - geen verkoopkwartieren sinds 08:00; reserve 10,37 = capaciteit > beschikbaar.
+- **Avond/nacht tot 23:41:** accu 5,30 → 3,34 kWh (1,96 kWh naar het huis), netafname 19:45-23:00 **0,12 kWh**, export 0,06 (regelverschuiving ~20 Wh/u). Krappe nacht: marge **0,54 kWh** tot het blok 10:45 (nodig 2,80); MC tot blok 0,3 %. Om 22:00 bewaarde kans **26,7 %** (beschikbaar 3,92) = eerste avond met een kans tussen 0 en 100 → uitslag tekortnacht ja/nee in de dagafsluiting.
+- **Stilstandcontrole (nieuw, alle modules):** 1 echt vastzittend: *Accugezondheid over de tijd* - nooit een gemeten capaciteit, want alleen de handmatige kalibratie (< 30 %, ≥ 70 procentpunt) levert er een; 30 d SoC-reeks heeft ~12 natuurlijke laadrondes die dat ook halen → **L-EMS-040** (open). Airco: aanzetgrens 19,0 °C gevuld (v5.134.0 ✓), dagritme werkdag/weekend geleerd (ochtend nooit aan = geen data, geen fout), knop bewust uit. Overige "wachten" lopen op: sluipverbruik 25/30 d, NILM 39/52, digital twin 2,0 kWh (19 %, label bijna_klaar), weerensemble 78,5 %; *battery protection* unknown = geen begrenzing actief (normaal), *PV hourly bias* unknown 's nachts (geen profieluur).
+- Reservesprongen: 0 echt / 40 `alleen_behoefte` / 8 `na_herstart`. Digital twin MAE 1,95 → **2,02 kWh**. Batterijlader 'nachtrust'.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (avondpiek: accu dekte het huis, niets te verkopen), H-EMS-14 (stabiliteit; MC-kans 22:00 niet meer binair). Geen release (tussenronde, niets acuut; v5.136.0 nog niet geïnstalleerd).
+
+laatste ronde: 26-10 23:40, gemeten t/m 26-10 23:45
