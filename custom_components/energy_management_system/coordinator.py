@@ -68,6 +68,7 @@ from .const import (
     HERSPEEL_DAGEN,
     HERSPEEL_VERSIES,
     P1_VERSCHIL_MONSTERS,
+    REGELVERSCHUIVING_MAX_W,
     WITGOED_HORIZON_UUR,
     WITGOED_KWARTIEREN,
     FIETS_OVERSCHOT_MIN_W,
@@ -21624,7 +21625,23 @@ class EnergyManagementSystemCoordinator:
                 self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
             )
             if regel_w is not None and echt_w is not None:
-                waarde = max(0.0, regel_w - echt_w) / 1000
+                ruw_w = max(0.0, regel_w - echt_w)
+                if ruw_w > REGELVERSCHUIVING_MAX_W:
+                    # v5.131.1 (H-EMS-14): sensoren uit de pas (live 26-10
+                    # 15:00:25 na een herstart: 1462 W, reserve 14 s lang
+                    # 76-79 kWh). Niet als verschuiving over de hele nacht
+                    # rekenen; de laatste aannemelijke waarde houden.
+                    waarde = float(getattr(self, "_regelverschuiving_laatst_kw", 0.0) or 0.0)
+                    vorige = getattr(self, "_regelverschuiving_verworpen", None) or {}
+                    self._regelverschuiving_verworpen = {
+                        "tijd": dt_util.now().isoformat(timespec="seconds"),
+                        "gemeten_w": round(ruw_w),
+                        "gebruikt_w": round(waarde * 1000),
+                        "aantal": int(vorige.get("aantal") or 0) + 1,
+                    }
+                else:
+                    waarde = ruw_w / 1000
+                    self._regelverschuiving_laatst_kw = waarde
         if stempel is not None:
             self._regelverschuiving_ronde = (stempel, waarde)
         return waarde
@@ -52110,6 +52127,8 @@ class EnergyManagementSystemCoordinator:
         rep = regime2027.samenvatting(self.repetitie_2027 or [])
         return {
             "verschuiving_w": round(self.regelverschuiving_kw() * 1000),
+            # v5.131.1 (H-EMS-14): laatste verworpen (onaannemelijke) meting.
+            "verschuiving_verworpen": getattr(self, "_regelverschuiving_verworpen", None),
             "zendure_regelt_op": meter,
             "p1_regeldoel_spiegelt": self.p1_regeldoel_bron_entity(),
             "zendure_volgt_ems_regeldoel": volgt,

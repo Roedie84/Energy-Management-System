@@ -7673,6 +7673,11 @@ FIETS_OVERSCHOT_HOUD_MINUTEN = 20
 # --- v5.121.0: P1-doel 2027 (punt 3) -----------------------------------------
 #: Zoveel meldingen van (regel - echt) voor de mediaan van de templateverschuiving.
 P1_VERSCHIL_MONSTERS = 300
+#: v5.131.1 (H-EMS-14): een regelverschuiving boven deze waarde is geen bewuste
+#: verschuiving (+10..50 W) maar twee sensoren die uit de pas lopen (live 26-10
+#: 15:00:25, herstart: 1462/1497 W x 20 u = reserve 76-79 kWh in een accu van
+#: 10,4). Dan geldt de laatste aannemelijke verschuiving (zonder die: 0).
+REGELVERSCHUIVING_MAX_W = 200.0
 
 # --- v5.122.0: sluimerverbruik en rendement per band (punten 4 en 7) ---------
 #: Zoveel dagen dagverloop en meetlaag voor de accu-meetreeks.

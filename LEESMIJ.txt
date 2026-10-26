@@ -1,3 +1,13 @@
+EMS v5.131.1 - geen onzinnige reserve meer net na een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Na een herstart kon de reserve een paar seconden ver boven de accu-inhoud
+  springen (26-10 15:00: 79 kWh), omdat twee P1-sensoren even uit de pas
+  liepen. Zo'n onwaarschijnlijke meting (meer dan 200 W verschuiving) telt
+  nu niet meer mee.
+- Normaal verandert er aan de sturing niets.
+
 EMS v5.131.0 - terugspeling en keuzeoordeel rekenen eerlijk
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

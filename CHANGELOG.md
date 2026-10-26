@@ -33857,3 +33857,13 @@ Alle drie gelijk: scenarioplan −1,41, best mogelijk −1,39.
 
 Tests: `test_v5131_herspeel_eerlijk.py` (5, met de echte dag 22-09 als fixture).
 
+
+## v5.131.1 — onaannemelijke regelverschuiving telt niet mee in de reserve (H-EMS-14)
+
+Gezien in de leerronde van 26-10 15:40: direct na de herstart van 15:00:25 liepen de regelsensor (P1 + verschuiving) en de verbruikssensor 14 s uit de pas. `regelverschuiving_w` was 1462/1497 W in plaats van ~10 W; over 20 uur tot het volgende blok werd de reserve 76,1/78,8 kWh in een accu van 10,37 kWh (15:00:39 weer 10,37). Richting voorzichtig, maar foute data in de reserve, de reservesprongen en de Monte Carlo.
+
+- `regelverschuiving_kw`: een gemeten verschuiving boven `REGELVERSCHUIVING_MAX_W` (200 W; de bewuste verschuiving is +10..50 W) telt niet. Dan geldt de laatste aannemelijke verschuiving van deze sessie; zonder die (net na een herstart) 0 W. Eén meting per ronde (v5.20.1) blijft.
+- Zichtbaar: `p1_doel.verschuiving_verworpen` (tijd, gemeten_w, gebruikt_w, aantal) op de diagnose.
+- Raakt de sturing alleen bij een onaannemelijke meting; een normale verschuiving rekent zoals voorheen.
+
+Tests: `test_v5131_1_regelverschuiving_plausibel.py` (5).
