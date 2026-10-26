@@ -421,6 +421,7 @@ laatste ronde: 26-10 03:40, gemeten t/m 26-10 03:55
 - Laadblok: 00:00-02:00 wisselend `sparen_in_blok`/netladen (7 wissels), plan 23:31 zei laden 00:30-04:45 → planvolging vandaag t/m 07:15 **53,3 %** (30 kw.; **accu 13**, sturing 0, verbruik 1). De 13 accu-afwijkingen liggen in het blok (laden later/anders dan gepland); **0 "afwijking sturing"** (L-EMS-038 speelde vannacht niet: geen verkoopkwartieren in het blok gepland).
 - **Ochtendverkoop gestart 07:15** (plan 07:15-08:15, 45,8-49,4 ct): 07:15 0,49 + 07:30 0,39 kWh uit de accu. **Harde regel: 0× onder de reserve** (`mag_verkopen_bij_export` 2/2, kleinste marge **7,26 kWh**; verkoopreserve 1,73 tot het blok van 11:00). SoC 98 → 88 % om 07:40.
 - Reserve nu 7,08 kWh (blok 11:00), beschikbaar 8,99; MC 0,0 %; reservesprongen 26-10: 2 (07:15 na herstart, 07:30 ±0,27 kWh lange horizon). Digital twin MAE 2,32 kWh.
+- Andere sessie releasete om 07:43 **v5.128.0** (akkoord Ruud 26-10): L-EMS-037 en L-EMS-038 gebouwd, nachtcontrole telt bewust-niet-ontladen niet mee, sensor 'Besparing deze maand', en bijladen tot 100 % bij een heel lage prijs (≤ belasting+btw, max 15 ct) - die uitzondering op v5.127.2 telt in de toets 'starts ≥ 95 %' apart mee. Nog niet actief.
 - Hypotheses: H-EMS-2 (PV te hoog, vooral heldere dagen; vandaag bewolking 94 %), H-EMS-11 (ochtend/avondpiek; ochtendverkoop loopt), H-EMS-14 (reservesprongen; 0 echte nieuw). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 26-10 07:40, gemeten t/m 26-10 07:45
