@@ -138,3 +138,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 26-10 15:52 | gold scalper sensor open posities toont alleen btc-eur i.p.v. hele mand
 26-10 16:52 | gold scalper vermogensvloer mand bewaakt btc-eur-saldo i.p.v. totale mand-equity (handelt onder vloer door)
 26-10 19:51 | ha herstarten om gold scalper 2.24.1 te activeren (open posities hele mand)
+26-10 22:53 | gold scalper dagelijkse pauze xauusd in America/New_York (rooster_wijkt_af door zomertijdverschil VS/EU)
+26-10 22:53 | ems nilm-kandidaten afwijzen hw_p1_regel_zonder_quooker_piek en quooker_vermogen_snel
