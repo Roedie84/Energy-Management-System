@@ -128,3 +128,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 25-10 23:52 | gold scalper btc-eur mand-sensor attributen > 16 KB recorder (L-GS-028)
 25-10 23:52 | ems nachtcontrole vals alarm bij bewust stilstaande accu (alleen ontlaadrondes tellen)
 25-10 23:52 | L-EMS-038 ems kwartierplan verkoopt in goedkoop nachtblok voor laadblok
+26-10 01:51 | gold scalper slippage-melding papierbroker 0.000 bij goedkope munten (significante cijfers/bp)
+26-10 01:51 | updates installeren parcel aggregator 2.9.0 (hacs)
