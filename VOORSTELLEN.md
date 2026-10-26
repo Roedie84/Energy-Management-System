@@ -285,7 +285,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - v5.127.4 (gebouwd 26-10 03:55, rapportage): de uitleg bij `expensive_quarter_soc_protected` zegt in het lopende blok "daar wordt geladen en niet verkocht" en bij een onbekende reserve "niet te berekenen", in plaats van "alle beschikbare energie is nodig voor de rest van de nacht"; oude prijs-prioriteit-vlag wordt gewist. Toets: bij het volgende dure kwartier in een blok de uitlegtekst.
 
 ## L-EMS-039 · dagbesparing onbeschikbaar vóór de eerste ronde (meetfout)
-- Status: **gepland** (zelf bouwen: rapportage/meetfout, zelfde regel als het totaal in v5.127.3; sturing ongewijzigd). Klaargezet op branch `wip/l-ems-039` (commit 73c0774; `CounterfactualSavingsSensor.available` = `not _voor_eerste_ronde`; bestandslijst bijgewerkt; 3 tests `tests/test_l_ems_039_besparing_dag_opstart.py`; suite **6219 groen**). Dagafsluiting 27-10 03:40: versie, CHANGELOG/LEESMIJ, release.
+- Status: **gebouwd in v5.129.2** (26-10 13:05 op verzoek van Ruud vrijgegeven, eerder dan de dagafsluiting; suite 6219 groen). Meten na installatie: sprongen > 0,5 € binnen 1 min bij herstarts = 0.
 - Onderbouwing (26-10, n=3 herstarts): *Besparing t.o.v. zonder accu-sturing* 07:12 −0,01 → **−1,30** → −0,01; 07:47 0,41 → **−0,69** → 0,42; 10:27 0,70 → **−0,41** → 0,71 (telkens 30 s). Vóór de eerste ronde is de accustand onbekend en `_laatste_voorraadcorrectie` niet bewaard → het rauwe dagcijfer zonder voorraadcorrectie.
 - Verwacht effect: bij een herstart onbeschikbaar → eindwaarde, geen negatieve tussenwaarde.
 - Meten na installatie: sprongen > 0,5 € binnen 1 min in de historie bij herstarts = 0.
