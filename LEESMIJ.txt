@@ -1,3 +1,14 @@
+EMS v5.131.0 - terugspeling en keuzeoordeel rekenen eerlijk
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het scenarioplan leek in de terugspeling beter dan "best mogelijk". Dat kwam
+  door drie verschillen in de berekening, niet door de sturing. Nu gelijk
+  getrokken; het nieuwe getal "best mogelijk met netladen" is de eerlijke maat.
+- Teruglevering telt overal als prijs + 2 ct, en het ontlaadvermogen als
+  AC-grens. "Gemist" komt daardoor wat hoger uit dan voorheen.
+- Aan de sturing verandert niets.
+
 EMS v5.130.0 - terugspeling per versie op de zelfanalyse-sensor
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

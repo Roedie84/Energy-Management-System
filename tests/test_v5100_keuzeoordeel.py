@@ -109,5 +109,7 @@ def test_neutrale_dag_geeft_geen_spijt():
     """Reviewbevinding: een accu die 100 W dekt bij een vlakke prijs mag geen
     gemist bedrag opleveren (afronden per kwartier liet de stand weglopen)."""
     dag = _dag([0.025] * 96, [0.30] * 96, huis=0.025)
-    uit = K.spijt_per_kwartier(dag, begin_kwh=4.0, **PARAM)
+    # v5.131.0: zonder premie - met 2 ct terugleverpremie en slijtage 0 loont
+    # het om de accu leeg te verkopen, en dan is deze dag niet meer neutraal.
+    uit = K.spijt_per_kwartier(dag, begin_kwh=4.0, premie_eur=0.0, **PARAM)
     assert abs(uit["gemist_eur"]) < 0.05

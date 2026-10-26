@@ -124,6 +124,13 @@ def score_dag(kwartieren: list[dict], *, begin_kwh: float, eind_kwh: float, capa
         uit[f"werkelijk_{regime}_eur"] = round(kosten - (eind_kwh - begin) * rest, 3)
 
     # het accumodel per kwartier (één scenario: wat er gebeurde)
+    # v5.131.0: `vooruitplan` rekent het hele heen-en-terugverlies bij het
+    # laden en levert bij ontladen 1 op 1. Zijn eenheid is dus "wat er nog
+    # uit kan" = opgeslagen x √rendement. Begin en capaciteit gingen er als
+    # opgeslagen kWh in (ongeveer 10 % te veel), en de eindvoorraad werd
+    # nog eens met √rendement verminderd. Nu in zijn eigen eenheid.
+    begin_v = begin * eta
+    cap_v = capaciteit_kwh * eta
     model = [{"zon": (k["pv_kwh"],), "verbruik": (k["huis_kwh"],), "reserve_kwh": k.get("reserve_kwh") or 0.0,
               "import_eur": k["prijs_eur"]} for k in kwartieren]
     arg = dict(laad_kwh=laad_kw / 4, ontlaad_kwh=ontlaad_kw / 4, rendement=rendement, slijtage_eur=slijtage_eur)
@@ -131,14 +138,14 @@ def score_dag(kwartieren: list[dict], *, begin_kwh: float, eind_kwh: float, capa
     uit["beslisboom_modi"] = {m: modi_boom.count(m) for m in V.MODI if modi_boom.count(m)}
     for regime in regimes:
         kws = [{**m, "export_eur": _export(k, regime, gem_export)} for m, k in zip(model, kwartieren)]
-        boom = V.waardeer_modi(kws, modi_boom, begin, capaciteit_kwh, gewichten=(1.0,), klaar=True,
-                               eindwaarde_eur=rest, **arg)
+        boom = V.waardeer_modi(kws, modi_boom, begin_v, cap_v, gewichten=(1.0,), klaar=True,
+                               eindwaarde_eur=gem, **arg)
         uit[f"beslisboom_{regime}_eur"] = round(boom["verwacht_eur"] + begin * rest, 3)
-        opt = V.optimaliseer_scenarios(kws, begin, capaciteit_kwh, gewichten=(1.0,), klaar=True,
-                                       eindwaarde_eur=rest, **arg)
+        opt = V.optimaliseer_scenarios(kws, begin_v, cap_v, gewichten=(1.0,), klaar=True,
+                                       eindwaarde_eur=gem, **arg)
         if opt.get("beschikbaar"):
-            plan = V.waardeer_modi(kws, opt["modi"], begin, capaciteit_kwh, gewichten=(1.0,), klaar=True,
-                                   eindwaarde_eur=rest, **arg)
+            plan = V.waardeer_modi(kws, opt["modi"], begin_v, cap_v, gewichten=(1.0,), klaar=True,
+                                   eindwaarde_eur=gem, **arg)
             uit[f"scenarioplan_{regime}_eur"] = round(plan["verwacht_eur"] + begin * rest, 3)
 
     # keuzeoordeel (salderen): best mogelijk en gemist
@@ -151,6 +158,13 @@ def score_dag(kwartieren: list[dict], *, begin_kwh: float, eind_kwh: float, capa
         uit["gemist_salderen_eur"] = round(spijt.get("gemist_eur") or 0.0, 3)
         # zelfde restwaarde-afspraak als hierboven: het begin telt mee
         uit["best_mogelijk_salderen_eur"] = round(spijt["beste_kosten_eur"] + begin * rest, 3)
+    # v5.131.0: ook met laden uit het net - de eerlijke maat voor het
+    # scenarioplan (dat mag het ook)
+    met_net = K.beste_kosten(ko, capaciteit_kwh=capaciteit_kwh, begin_kwh=begin, bodem_kwh=0.0,
+                             laad_kw=laad_kw, ontlaad_kw=ontlaad_kw, rendement=rendement,
+                             slijtage_eur_per_kwh=slijtage_eur, netladen=True)
+    if met_net is not None:
+        uit["best_mogelijk_netladen_salderen_eur"] = round(met_net + begin * rest, 3)
 
     # generale repetitie (2027): regels 2027 en best mogelijk
     if met_2027:
@@ -171,7 +185,7 @@ def score_dag(kwartieren: list[dict], *, begin_kwh: float, eind_kwh: float, capa
 
 SCOREVELDEN = (
     "werkelijk_salderen_eur", "beslisboom_salderen_eur", "scenarioplan_salderen_eur",
-    "best_mogelijk_salderen_eur", "gemist_salderen_eur",
+    "best_mogelijk_salderen_eur", "best_mogelijk_netladen_salderen_eur", "gemist_salderen_eur",
     "werkelijk_2027_eur", "beslisboom_2027_eur", "scenarioplan_2027_eur", "regels_2027_eur",
     "best_mogelijk_2027_eur",
 )

@@ -33836,3 +33836,24 @@ Gevraagd 26-10 (punt B van de terugmeting, akkoord Ruud): "De uitslag van de ter
 
 Tests: `test_v5130_herspeel_per_versie.py` (3).
 
+
+## v5.131.0 — terugspeling en keuzeoordeel rekenen eerlijk (punt A van de terugmeting)
+
+Gevraagd 26-10: "Uitzoeken waarom het plan over 3 scenario's in de terugspeling beter scoort dan 'best mogelijk'." Ruud liet de keuze aan Claude ("alleen het beste voor mijn EMS"). Nagerekend op 22-09, de dag met het grootste verschil (sensor: scenarioplan −2,478, best mogelijk −1,388; exact nagespeeld). Drie ongelijkheden, geen fout in de sturing:
+
+| Oorzaak | Effect 22-09 |
+|---|---|
+| Scenarioplan mag uit het net laden, best mogelijk (keuzeoordeel) alleen uit overschot | ±€0,60–0,74 |
+| Teruglevering: scenarioplan prijs + 2 ct (`PREMIE_EUR`), keuzeoordeel kale prijs | ±€0,19–0,30 |
+| `vooruitplan` rekent het hele verlies bij het laden en levert 1 op 1; begin en capaciteit gingen er als opgeslagen kWh in (~10 % te veel), de eindvoorraad werd nog eens met √rendement verminderd | ±€0,20 |
+
+Alle drie gelijk: scenarioplan −1,41, best mogelijk −1,39.
+
+- **herspeel**: het accumodel krijgt begin en capaciteit × √rendement (zijn eigen eenheid: wat er nog uit kan) en de eindvoorraad tegen de gemiddelde prijs. Dit raakt ook `beslisboom_*` (22-09: −0,121 → −0,055).
+- **herspeel**: nieuw veld `best_mogelijk_netladen_salderen_eur` (en in de samenvatting `…_per_dag_eur`) via `keuzeoordeel.beste_kosten(netladen=True)`. 22-09: −2,298, het scenarioplan −2,241: het optimum is weer de ondergrens.
+- **keuzeoordeel** en **nabeschouwing**: teruglevering tegen prijs + premie (`PREMIE_EUR` = 0,02, gelijk aan `FEEDIN_PREMIUM_EUR_PER_KWH`), ook in de werkelijke kosten. Het ontlaadvermogen is een AC-grens: `ontlaad_max` = ontlaad_kw × 0,25 / √rendement uit de cellen (was zonder /√rendement, ~5 % te weinig).
+- Gevolg: "best mogelijk" wordt goedkoper, dus "gemist" komt hoger uit dan voorheen (22-09: 1,53 → 1,78). Dat is de eerlijke maat, geen verslechtering van de sturing.
+- `test_neutrale_dag_geeft_geen_spijt` rekent zonder premie: met 2 ct premie en slijtage 0 loont leegverkopen, dan is een vlakke dag niet neutraal.
+
+Tests: `test_v5131_herspeel_eerlijk.py` (5, met de echte dag 22-09 als fixture).
+

@@ -43,6 +43,11 @@ MELD_EUR = 0.25
 VOORSPELFOUT_KWH = 0.5
 VOORSPELFOUT_RELATIEF = 0.25
 STAP_KWH = 0.05
+#: v5.131.0: een teruggeleverde kWh levert onder het salderen de prijs plus de
+#: vaste premie op - gelijk aan FEEDIN_PREMIUM_EUR_PER_KWH, zoals de rest van
+#: het EMS (overschotwaarde, kwartierplan, herspeel). Zonder premie kwam
+#: "best mogelijk" 2 ct per teruggeleverde kWh te duur uit tegen het scenarioplan.
+PREMIE_EUR = 0.02
 
 
 @dataclass
@@ -56,20 +61,29 @@ class Kwartier:
     stand: str | None = None
 
 
-def _model(kwartieren, capaciteit_kwh, bodem_kwh, laad_kw, ontlaad_kw, rendement, stap_kwh):
+def _model(kwartieren, capaciteit_kwh, bodem_kwh, laad_kw, ontlaad_kw, rendement, stap_kwh,
+           netladen: bool = False, premie_eur: float = PREMIE_EUR):
     n = int(round((capaciteit_kwh - bodem_kwh) / stap_kwh)) + 1
     eta = rendement ** 0.5
     return {
         "n": n,
         "eta": eta,
+        # v5.131.0: mag de beste weg ook uit het net laden (alleen voor de
+        # vergelijking met het scenarioplan; het keuzeoordeel zelf niet)
+        "netladen": netladen,
+        "premie": premie_eur,
         "laad_max": int(round(laad_kw * 0.25 * eta / stap_kwh)),
-        "ontlaad_max": int(round(ontlaad_kw * 0.25 / stap_kwh)),
+        # v5.131.0: het ontlaadvermogen is een AC-grens; uit de cellen gaat er
+        # 1/√rendement zoveel (net als laad_max: AC in x √rendement opgeslagen).
+        "ontlaad_max": int(round(ontlaad_kw * 0.25 / eta / stap_kwh)),
         "gem": sum(k.prijs_eur for k in kwartieren) / len(kwartieren),
         "stap": stap_kwh,
     }
 
 
 def _laadgrens(k: Kwartier, m: dict) -> int:
+    if m.get("netladen"):
+        return m["laad_max"]
     overschot = max(0.0, k.pv_kwh - k.huis_kwh)
     return min(m["laad_max"], int(round(overschot * m["eta"] / m["stap"])))
 
@@ -84,7 +98,12 @@ def _kost(k: Kwartier, d: int, m: dict, slijtage: float) -> float:
         extra = (-d * m["stap"]) * slijtage
     else:
         accu_net = extra = 0.0
-    return (k.huis_kwh - k.pv_kwh - accu_net) * k.prijs_eur + extra
+    return _netkosten(k.huis_kwh - k.pv_kwh - accu_net, k, m) + extra
+
+
+def _netkosten(net: float, k: Kwartier, m: dict) -> float:
+    """Afname tegen de prijs, teruglevering tegen de prijs plus de premie."""
+    return net * k.prijs_eur if net >= 0 else net * (k.prijs_eur + m.get("premie", 0.0))
 
 
 def waardefunctie(kwartieren: list[Kwartier], m: dict, slijtage: float) -> list[list[float]]:
@@ -137,12 +156,14 @@ def spijt_per_kwartier(
     rendement: float,
     slijtage_eur_per_kwh: float = 0.0,
     stap_kwh: float = STAP_KWH,
+    premie_eur: float = PREMIE_EUR,
 ) -> dict:
     """Per kwartier: wat de keuze van het EMS kostte tegenover de beste keuze
     vanuit de werkelijke laadstand, en wat die beste keuze was."""
     if not kwartieren or capaciteit_kwh - bodem_kwh < 2 * stap_kwh:
         return {"te_becijferen": False, "reden": "geen kwartieren of geen bruikbare capaciteit"}
-    m = _model(kwartieren, capaciteit_kwh, bodem_kwh, laad_kw, ontlaad_kw, rendement, stap_kwh)
+    m = _model(kwartieren, capaciteit_kwh, bodem_kwh, laad_kw, ontlaad_kw, rendement, stap_kwh,
+               premie_eur=premie_eur)
     v = waardefunctie(kwartieren, m, slijtage_eur_per_kwh)
     plafond = (m["n"] - 1) * m["stap"]
     e = min(max(begin_kwh - bodem_kwh, 0.0), plafond)
@@ -156,7 +177,7 @@ def spijt_per_kwartier(
         # wat er werkelijk in de accu veranderde (opgeslagen kant)
         opgeslagen = -k.accu_kwh / m["eta"] if k.accu_kwh > 0 else -k.accu_kwh * m["eta"]
         e2 = min(max(e + opgeslagen, 0.0), plafond)
-        eigen = (k.huis_kwh - k.pv_kwh - k.accu_kwh) * k.prijs_eur \
+        eigen = _netkosten(k.huis_kwh - k.pv_kwh - k.accu_kwh, k, m) \
             + max(0.0, -opgeslagen) * slijtage_eur_per_kwh
         spijt = eigen + _v(v[t + 1], e2, m) - _v(v[t], e, m)
         grens = _laadgrens(k, m)
@@ -182,6 +203,31 @@ def spijt_per_kwartier(
         "gemist_eur": round(sum(r["spijt_eur"] for r in regels), 3),
         "beste_kosten_eur": round(_v(v[0], begin_e, m), 3),
     }
+
+
+def beste_kosten(
+    kwartieren: list[Kwartier],
+    *,
+    capaciteit_kwh: float,
+    begin_kwh: float,
+    bodem_kwh: float,
+    laad_kw: float,
+    ontlaad_kw: float,
+    rendement: float,
+    slijtage_eur_per_kwh: float = 0.0,
+    netladen: bool = False,
+    stap_kwh: float = STAP_KWH,
+) -> float | None:
+    """De laagste kosten van de dag vanuit `begin_kwh` (v5.131.0). Met
+    `netladen` mag de beste weg ook uit het net laden - de eerlijke maat voor
+    het scenarioplan, dat dat ook mag."""
+    if not kwartieren or capaciteit_kwh - bodem_kwh < 2 * stap_kwh:
+        return None
+    m = _model(kwartieren, capaciteit_kwh, bodem_kwh, laad_kw, ontlaad_kw, rendement, stap_kwh,
+               netladen=netladen)
+    v = waardefunctie(kwartieren, m, slijtage_eur_per_kwh)
+    plafond = (m["n"] - 1) * m["stap"]
+    return round(_v(v[0], min(max(begin_kwh - bodem_kwh, 0.0), plafond), m), 3)
 
 
 def _richting(werk: float, beste: float) -> str:

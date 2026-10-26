@@ -30,13 +30,22 @@ class Kwartier:
                               # (de sensor meet aan de AC-kant, rendement inbegrepen)
 
 
+#: v5.131.0: teruglevering levert onder het salderen de prijs plus de vaste
+#: premie op (FEEDIN_PREMIUM_EUR_PER_KWH), zoals in de rest van het EMS.
+PREMIE_EUR = 0.02
+
+
+def _net(net: float, k: "Kwartier") -> float:
+    return net * k.prijs_eur if net >= 0 else net * (k.prijs_eur + PREMIE_EUR)
+
+
 def kosten_zonder_accu(kwartieren: list[Kwartier]) -> float:
-    return sum((k.huis_kwh - k.pv_kwh) * k.prijs_eur for k in kwartieren)
+    return sum(_net(k.huis_kwh - k.pv_kwh, k) for k in kwartieren)
 
 
 def kosten_werkelijk(kwartieren: list[Kwartier]) -> float:
     """Wat er werkelijk aan het net is afgerekend."""
-    return sum((k.huis_kwh - k.pv_kwh - k.accu_kwh) * k.prijs_eur for k in kwartieren)
+    return sum(_net(k.huis_kwh - k.pv_kwh - k.accu_kwh, k) for k in kwartieren)
 
 
 def beste_planning(
@@ -71,7 +80,9 @@ def beste_planning(
         return {"te_becijferen": False, "reden": "te weinig ruimte of geen kwartieren"}
     eta = rendement ** 0.5
     laad_stap_max = int(round(laad_kw * 0.25 * eta / stap_kwh))
-    ontlaad_stap_max = int(round(ontlaad_kw * 0.25 / stap_kwh))
+    # v5.131.0: het ontlaadvermogen is een AC-grens; uit de cellen gaat er
+    # 1/√rendement zoveel (net als het laden: AC erin x √rendement opgeslagen)
+    ontlaad_stap_max = int(round(ontlaad_kw * 0.25 / eta / stap_kwh))
     gemiddelde_prijs = sum(k.prijs_eur for k in kwartieren) / len(kwartieren)
 
     INF = float("inf")
@@ -126,7 +137,7 @@ def beste_planning(
                 else:
                     accu_net = 0.0
                     extra = 0.0
-                kost = c + (netto_huis - accu_net) * k.prijs_eur + extra
+                kost = c + _net(netto_huis - accu_net, k) + extra
                 if kost < nieuw[s2]:
                     nieuw[s2] = kost
                     herkomst[s2] = s
