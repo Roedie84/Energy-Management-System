@@ -425,3 +425,13 @@ laatste ronde: 26-10 03:40, gemeten t/m 26-10 03:55
 - Hypotheses: H-EMS-2 (PV te hoog, vooral heldere dagen; vandaag bewolking 94 %), H-EMS-11 (ochtend/avondpiek; ochtendverkoop loopt), H-EMS-14 (reservesprongen; 0 echte nieuw). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 26-10 07:40, gemeten t/m 26-10 07:45
+
+## 26-10 11:40 · tussenronde
+- HA herstartte 10:27 → **v5.129.1 actief** (andere sessie: batterijlader als gepland laadapparaat, 09:58/10:25). Fout 0 / storing 0.
+- **Ochtendverkoop 07:15-08:15** (4 kw., 45,8-52,3 ct): **harde regel 0× onder de reserve** (`mag_verkopen_bij_export` 4/4, kleinste marge **5,99 kWh**, verkoopreserve 1,73). 07:45 `export_zonder_vrijgave_rondes` 2 = de herstart van 07:47 (marge 6,56, geen schending). Daarna 08:15 `expensive_quarter_soc_protected`, zonopvang; 11:00 blok → `sparen_in_blok` bij SoC 89 %.
+- **L-EMS-037 eerste toets:** planvolging vandaag 46 kw. **47,8 %**; **accu 13 = gelijk aan 07:40 → 0 nieuwe 'afwijking accu' na v5.128.0**; sturing **0 → 2** (tijdstip niet te herleiden: attributen niet in de recorder; vermoedelijk rond de herstarts 07:47/10:27). Laadplan 11:24: netladen 12:30-13:00 (2 kw., 89 → 97 % met afbouw) → toets 15:40.
+- **Nieuw (meetfout):** *Besparing t.o.v. zonder accu-sturing* schrijft bij elke herstart 30 s het ongecorrigeerde dagcijfer: 07:12 −1,30, 07:47 −0,69, 10:27 −0,41 (ervoor/erna −0,01/0,42/0,71). Oorzaak: vóór de eerste ronde geen accustand → geen voorraadcorrectie; het totaal kreeg hiervoor in v5.127.3 al `available` = na de eerste ronde, de dagsensor niet → **L-EMS-039 gepland**, klaargezet op `wip/l-ems-039` (73c0774, suite 6219 groen, 3 tests).
+- MC 0,0-0,2 % in het blok; reservesprongen sinds 07:40: 5 (4 rond de herstart 07:43-07:55 met `na_herstart`, 1 om 09:06 +0,70 lange horizon). Digital twin MAE 2,32 → **2,18 kWh**.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag tot nu `zon_verschil` +0,36 kWh = iets méér zon dan gepland), H-EMS-11 (ochtendpiek verkocht, 4 kw.), H-EMS-14 (reservesprongen; vooral herstarts). Geen release (tussenronde).
+
+laatste ronde: 26-10 11:40, gemeten t/m 26-10 11:45

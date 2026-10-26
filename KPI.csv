@@ -756,3 +756,8 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-26 07:40,TUSSEN,ems_verkoop_onder_reserve,0,2,"ochtendverkoop 07:15-07:30: 0.885 kWh uit de accu bij 45.8-49.4 ct; kleinste marge bij export 7.256 kWh"
 2026-10-26 07:40,TUSSEN,ems_planvolging_vandaag_pct,53.3,30,"t/m 07:15: accu 13, sturing 0, verbruik 1 (L-EMS-038: geen verkoopkwartieren in het blok gepland)"
 2026-10-26 07:40,TUSSEN,ems_digital_twin_mae_kwh,2.322,1,"sensor digital_twin_nauwkeurigheid (03:40 2.356)"
+2026-10-26 11:40,TUSSEN,ems_verkoop_onder_reserve,0,4,"ochtendverkoop 07:15-08:15 (45.8-52.3 ct); kleinste marge bij export 5.988 kWh; 07:45 2 rondes export zonder vrijgave = herstart 07:47"
+2026-10-26 11:40,TUSSEN,ems_planvolging_vandaag_pct,47.8,46,"t/m 11:15: accu 13 (gelijk aan 07:40, L-EMS-037), sturing 2 (was 0), verbruik 6, zon 3"
+2026-10-26 11:40,TUSSEN,ems_besparing_opstartwaarde,3,3,"herstarts 07:12/07:47/10:27: 30 s rauw dagcijfer -1.30/-0.69/-0.41 (L-EMS-039)"
+2026-10-26 11:40,TUSSEN,ems_digital_twin_mae_kwh,2.182,1,"sensor digital_twin_nauwkeurigheid (07:40 2.322)"
+2026-10-26 11:40,TUSSEN,ems_reserve_sprongen,5,5,"07:43-09:06; 4 rond herstart 07:47 (na_herstart), 1 echte 09:06 +0.70 lange horizon"
