@@ -326,4 +326,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ stijgt 540 → 843 (gem 643), 0 u > 1.200. Verwarming aan: vocht 57,6 → 48,2% (nu 50), schimmelindicator 65 → 61 (nu 65), buiten 99% / 12,5 °C: bevestigt weer, verwarmen lost het vocht op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=9), H2 auto halveert kookpiek ~5-24 min, low ~27 (n=5); mid bij koken 1x zonder piek, halvering ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 26-10 16:25, gemeten t/m 16:20
+## 26-10 20:25 (ronde 42)
+- PM2.5 16:20-20:20: gem 59,6, mediaan 3,4, P95 352, max 1.147 (17:27) (n=48); 1,0 uur > 15, 0,8 uur > 25. Dag t/m nu ~12,8 (schatting uit blokken; 24-uursnorm 15).
+- KOOKPIEK (hoogste in log): kookplaat run 16:33-17:32, ramen dicht, aanwezig. Opbouw 2,0 → 1.147 in 14 min (17:13-17:27) terwijl de stand op mid stond (kookautomation 16:33:05). Auto vanaf 17:29:14 (niet uit een trace; vermoedelijk handmatig). Halvering na kookplaat uit 5,5 min (17:33-17:53, n=11), staart 48 → 10 11 min; < 10 om 18:21 = 54 min na max (19-10, 454 op auto: 65 min).
+- Stand: auto 181 min (gem 45,3 incl. afbouw; na < 10 gem 3,9), mid 56 min (gem 108, koken), 2,8 min unavailable. Hele periode aanwezig: geen aanwezig/afwezig-vergelijking.
+- Werking: kookautomation deed wat hij toen moest (mid bij run, 17:27 vies-trigger geen actie want mid, 18:26 klaar → aanwezigheid). Config is 26-10 door Ruud aangepast naar auto bij koken. 2 HA-herstarts (19:14, 20:04), stand daarna direct auto. Traces 5/5 + 5/5 zonder fout. Lokaal 48 mislukt op 125.327 (geen nieuwe), uitval 0, sturen 310/311 (2/2 nieuw), filter 0%. Apparaat-PM2.5 tot 999 (eigen bereik) bij Ultimate 1.147: volgt de piek goed.
+- CO₂ 873 → 1.759 (gem 1.312), 2,7 u > 1.200, ramen dicht na koken. Vocht bij koken 50 → 65,7%, schimmelindicator 65 → 86 → 77. Ventileren/afzuigkap bij koken; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=10: +1.147 dicht) - gesteund. H2 auto halveert kookpiek ~5-24 min (n=6: +5,5); mid bij koken getoetst (n=1): hoogste piek ooit, opbouw niet afgeremd - ondersteunt Ruuds wissel naar auto; turbo nog niet getest. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1), geen toets.
+
+laatste ronde: 26-10 20:25, gemeten t/m 20:20

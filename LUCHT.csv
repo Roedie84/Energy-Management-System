@@ -1034,3 +1034,27 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-26 16:20,automation_traces_fout,0,5,na herstart 14:59 mid 15:03:30 (2 min na off; n=3 zonder 15-min-marge)
 2026-10-26 16:20,kookautomation_traces,0,2,alleen herstarttraces; geen kookmoment
 2026-10-26 16:20,apparaat_pm25_bereik,7,1,apparaat 3-7 bij Ultimate 1.5-3; ~2x te hoog
+2026-10-26 20:20,pm25_gem,59.64,48,5-min statistiek 16:20-20:20 CET; kookpiek
+2026-10-26 20:20,pm25_mediaan,3.42,48,
+2026-10-26 20:20,pm25_p95,352.40,48,
+2026-10-26 20:20,pm25_max,1147.2,48,momentaan max 17:27; boven meetbereik SPS30 (1000)
+2026-10-26 20:20,pm25_uren_gt15,1.00,48,
+2026-10-26 20:20,pm25_uren_gt25,0.83,48,
+2026-10-26 20:20,piek_max,1147.2,1,start 17:13 (2.0); kookplaat run 16:33-17:32; ramen dicht; stand mid bij max (kookautomation); auto vanaf 17:29:14; aanwezig; < 10 om 18:21 (54 min na max); hoogste piek in log
+2026-10-26 20:20,halvering_min,5.5,11,auto; 17:33-17:53 na kookplaat uit; achtergrond 2.2
+2026-10-26 20:20,halvering_min,11.1,15,auto; 17:53-18:21 (staart 48 -> 10)
+2026-10-26 20:20,piek_opbouw_min,14,1,mid; 2.0 -> 1147 in 14 min tijdens koken
+2026-10-26 20:20,stand_auto_min,181,1,gem pm25 45.3 (n=37) incl. afbouw piek; na < 10 gem 3.9 (n=24)
+2026-10-26 20:20,stand_mid_min,56,1,gem pm25 107.8 (n=11); kookautomation 16:33:05-17:29:14; 2.8 min unavailable
+2026-10-26 20:20,pm25_gem_aanwezig,59.64,48,hele periode aanwezig (alleen korte off < 5 min)
+2026-10-26 20:20,co2_gem,1312,48,5-min; 873 -> 1712 max 1759; ramen dicht
+2026-10-26 20:20,co2_uren_gt1200,2.67,48,
+2026-10-26 20:20,vocht_max,65.7,48,bij koken 50 -> 65.7%; nu 57.4%
+2026-10-26 20:20,schimmel_indicator,77,48,65 -> 86 (koken) -> 77; binnen ~21 C; buiten 99% / 11.3 C
+2026-10-26 20:20,ha_herstarts,2,1,19:14 20:04
+2026-10-26 20:20,lokaal_mislukt,48,125327,uitval 0; 213 verbindingen; geen nieuwe fout
+2026-10-26 20:20,sturen_bevestigd,310,311,2/2 nieuwe opdrachten bevestigd
+2026-10-26 20:20,filtergebruik_pct,0,1,
+2026-10-26 20:20,automation_traces_fout,0,5,stand auto bij aanwezigheid; voorrang tijdens koken gerespecteerd
+2026-10-26 20:20,kookautomation_traces,0,5,mid bij kookplaat run 16:33; 17:27 vies-trigger geen actie (stand mid); 18:26 klaar; config sinds 26-10 auto bij koken
+2026-10-26 20:20,apparaat_pm25_bereik,999,1,apparaat max 999 (17:26, eigen bereik) bij Ultimate 1147; volgt piek goed, laag ~2x te hoog
