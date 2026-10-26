@@ -414,3 +414,13 @@ laatste ronde: 25-10 23:40, gemeten t/m 25-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog, vooral heldere dagen), H-EMS-11 (avond/ochtendpiek), H-EMS-14 (reservesprongen). Release v5.127.4.
 
 laatste ronde: 26-10 03:40, gemeten t/m 26-10 03:55
+
+## 26-10 07:40 · tussenronde
+- HA herstartte 07:12 → **v5.127.4 actief**; diagnose fout 0 / storing 0. Na de herstart Solcast 429 en prijs-/Solcastbuffer gebruikt (afgevangen).
+- **v5.127.2-toets geslaagd:** nachtblok 25→26 6× `grid_charging_profitable` gestart (23:45-02:00) bij SoC 31-47 %, **0 starts ≥ 95 %**; laden 02:00-05:10 tot 100 %, daarna 05:11 `default_smart`, 06:00 `discharging_window`, 06:30 `solar_capture_deferred` - geen bijtoplading meer.
+- Laadblok: 00:00-02:00 wisselend `sparen_in_blok`/netladen (7 wissels), plan 23:31 zei laden 00:30-04:45 → planvolging vandaag t/m 07:15 **53,3 %** (30 kw.; **accu 13**, sturing 0, verbruik 1). De 13 accu-afwijkingen liggen in het blok (laden later/anders dan gepland); **0 "afwijking sturing"** (L-EMS-038 speelde vannacht niet: geen verkoopkwartieren in het blok gepland).
+- **Ochtendverkoop gestart 07:15** (plan 07:15-08:15, 45,8-49,4 ct): 07:15 0,49 + 07:30 0,39 kWh uit de accu. **Harde regel: 0× onder de reserve** (`mag_verkopen_bij_export` 2/2, kleinste marge **7,26 kWh**; verkoopreserve 1,73 tot het blok van 11:00). SoC 98 → 88 % om 07:40.
+- Reserve nu 7,08 kWh (blok 11:00), beschikbaar 8,99; MC 0,0 %; reservesprongen 26-10: 2 (07:15 na herstart, 07:30 ±0,27 kWh lange horizon). Digital twin MAE 2,32 kWh.
+- Hypotheses: H-EMS-2 (PV te hoog, vooral heldere dagen; vandaag bewolking 94 %), H-EMS-11 (ochtend/avondpiek; ochtendverkoop loopt), H-EMS-14 (reservesprongen; 0 echte nieuw). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 26-10 07:40, gemeten t/m 26-10 07:45
