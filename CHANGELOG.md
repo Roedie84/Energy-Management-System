@@ -33896,3 +33896,13 @@ Gevraagd 26-10: "vanmiddag heb ik de airco aangezet omdat er nog zonne-energie w
 - Werkt ook met de knop Airco automaat uit. Bedient iemand de airco zelf, dan laat het EMS los.
 
 Tests: `test_v5132_airco_zonoverschot.py` (12).
+
+## v5.133.0 — laders 's nachts met rust
+
+Gevraagd 26-10: "de batterijlader, stofzuiger en fietsen niet controleren tussen 22:00 en 06:00, dan worden dan toch niet aangesloten en dit scheelt schakelingen".
+
+- Tussen 22:00 en 06:00 (`SCHEDULED_CHARGE_NACHTRUST_VAN_UUR`/`_TOT_UUR`) doet het EMS geen test meer om te kijken of er iets aan de batterijlader, steelstofzuiger of fietsladers hangt; de status is dan "nachtrust (22-06 u)". Een lading die al loopt, loopt gewoon af en gaat uit als hij vol is.
+- Wacht er een opgeladen-melding op een lege test, dan gaat die bij het begin van de nachtrust meteen.
+- Gevolg: valt het goedkope blok 's nachts, dan laden fietsen en steelstofzuiger daarin niet meer (gekozen: 's nachts wordt er niets aangesloten).
+
+Tests: `test_v5133_nachtrust_laders.py` (10).
