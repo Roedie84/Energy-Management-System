@@ -1,3 +1,13 @@
+EMS v5.135.0 - verbruik per dagtype, zonvoorspelling, continu-verbruik
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De reserve rekent in het weekend met het weekendverbruik en doordeweeks
+  met dat van een werkdag.
+- De zonvoorspelling wordt eerder bijgesteld als hij steeds te hoog zit.
+- In de cockpit bij Huis en apparaten: hoeveel het huis continu verbruikt,
+  hoeveel daarvan een eigen meting heeft en hoeveel niet.
+
 EMS v5.134.0 - airco-automaat weet nu wanneer jullie gaan verwarmen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
