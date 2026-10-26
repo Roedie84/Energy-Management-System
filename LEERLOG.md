@@ -447,3 +447,16 @@ laatste ronde: 26-10 11:40, gemeten t/m 26-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag zon +0,51 kWh boven plan), H-EMS-11 (avondpiek: vandaag niets te verkopen door de lange horizon), H-EMS-14 (reservesprongen; opstartpiek 15:00). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 26-10 15:40, gemeten t/m 26-10 15:45
+
+## 26-10 19:40 · tussenronde
+- **v5.131.2 actief** (andere sessie 17:28: batterijlader; HA-herstart 19:15). Fout 0 / storing 0. DNS-storing 19:33 (extern, afgevangen).
+- **Harde regel: 0× onder de reserve** - geen verkoopkwartieren sinds 08:00; reserve 10,37 = capaciteit (ongekapt 13-18 kWh, blok morgen 10:45) > beschikbaar → vanavond terecht niets verkocht.
+- **Avondpiek 15:45-19:40:** accu 9,45 → 5,30 kWh (4,15 kWh naar het huis), netafname **0,41 kWh** (5-min gemiddelden), vooral korte pieken tot 2,1-2,2 kW; grootste 17:50 (gem. 756 W) en 18:00 (483 W). ~€ 0,16 bij 39-44 ct. Herkomst pieken (accu-reactietijd of last > accuvermogen) → dagafsluiting met `regeloverschot_kwh`.
+- **v5.131.1-toets (H-EMS-14) geslaagd, n=1:** herstart 19:15 → 3 min 'opstarten', reserve daarna direct 10,37 (geen opstartpiek; 15:00 was 79 kWh). `regelverschuiving_w` 10 W.
+- **Nieuw (MC):** tekortkans springt per minuut tussen 2 en 94 % (17:05-18:33; o.a. 18:15 14 → 18:16 86 → 18:18 11 → 18:20 89 %). Oorzaak: beschikbaar 5,4 kWh ligt vlak bij het deterministische tekort tot het blok (4,9 kWh) en de spreiding is smal (p10-p90 11,3-12,6 kWh = 1,3 kWh over 16 u); `live_correctie_extra_kwh` wisselt 0 ↔ 1,5 kWh per minuut. Kalibratie 22:00 Brier 0,500 (n=6, kansen alleen 0 of 100). Adviserend (stuurt niets) → onderdeel van H-EMS-14 (stabiliteit), voorstel na meer nachten.
+- **Nachttoets vannacht:** nodig tot het blok 5,03 kWh tegen beschikbaar 5,30 (19:42) → krappe nacht; meten 03:40/07:40: laagste SoC, netafname bij lege accu (tekortnacht ja/nee) tegen MC 7 %.
+- Batterijlader (v5.131.2 pas actief na 19:15): 17:19-19:13 elk kwartier test_aan → laden 3 min → voltooid (5×); na 19:15 doorlopend 'aan_het_laden' → effect dagafsluiting.
+- Besparing vandaag 1,51 → 1,54; herstart 19:15 → 30 s onbeschikbaar, geen rauw tussencijfer (L-EMS-039 ✓). Digital twin MAE 1,95 kWh. Reservesprongen: 0 echt, 46 `alleen_behoefte`, 2 `na_herstart`.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag 100 % bewolking), H-EMS-11 (avondpiek: niets te verkopen, accu dekt huis), H-EMS-14 (reservesprongen/stabiliteit: opstartpiek opgelost, MC-schommeling nieuw). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 26-10 19:40, gemeten t/m 26-10 19:45
