@@ -134,3 +134,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 26-10 10:52 | ems batterijlader switch/sensor opladers_batterijen koppelen in opties (wacht_op_apparaat)
 26-10 11:51 | ems cost-basis-model voorraadverandering tegen gemeten laadprijs meetellen
 26-10 12:54 | L-EMS-039 ems dagbesparing 30 s te laag na herstart
+26-10 15:52 | ems reserve na herstart boven accu-inhoud (79 kWh, 14 s)
+26-10 15:52 | gold scalper sensor open posities toont alleen btc-eur i.p.v. hele mand
