@@ -1,3 +1,11 @@
+EMS v5.134.0 - airco-automaat weet nu wanneer jullie gaan verwarmen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De airco-automaat leidt de aanzettemperatuur nu af uit de keren dat jullie
+  de airco zelf aanzetten (nu 19 graden). Hij stuurt alleen met de knop
+  Airco automaat aan.
+
 EMS v5.133.0 - laders 's nachts met rust
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
