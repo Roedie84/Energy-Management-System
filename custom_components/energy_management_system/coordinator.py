@@ -147,6 +147,8 @@ from .const import (
     IDLE_POWER_HISTORY_LENGTH,
     LEARNED_THRESHOLD_MIN_SAMPLES,
     LEARNED_THRESHOLD_MARGIN_W,
+    BATTERIJLADER_LEARNED_MARGIN_W,
+    BATTERIJLADER_COMPLETE_SUSTAINED_MINUTES,
     NILM_CUSUM_SLACK_FRACTION,
     NILM_CUSUM_ALARM_THRESHOLD,
     NILM_DRIFT_MIN_ABSOLUTE_W,
@@ -4457,6 +4459,7 @@ class EnergyManagementSystemCoordinator:
         notify_message: str | None = None,
         override_attr: str | None = None,
         kwartiercontrole: bool = False,
+        complete_sustained_minutes: float = STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
     ) -> None:
         """Shared logic (v0.63.13, generalised from the steelstofzuiger-
         only v0.63.12) for any appliance that should charge only during
@@ -4602,8 +4605,7 @@ class EnergyManagementSystemCoordinator:
         if not ever_active:
             # Still in the poll-test window - has it elapsed without
             # detecting anything?
-            poll_deadline = getattr(self, next_poll_attr)
-            if poll_deadline is not None and now >= poll_deadline:
+            if now >= self._testeindtijd(now, next_poll_attr):
                 await self._async_set_switch(switch_entity, turn_on=False)
                 # v5.30: fietsladers op het kwartier, elk kwartier.
                 self._plan_volgende_test(
@@ -4622,7 +4624,7 @@ class EnergyManagementSystemCoordinator:
                 since = now
                 setattr(self, below_threshold_since_attr, since)
             elapsed_minutes = (now - since).total_seconds() / 60
-            if elapsed_minutes >= STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES:
+            if elapsed_minutes >= complete_sustained_minutes:
                 await self._async_set_switch(switch_entity, turn_on=False)
                 self._finish_scheduled_charge_session(
                     now,
@@ -4646,6 +4648,20 @@ class EnergyManagementSystemCoordinator:
             setattr(self, below_threshold_since_attr, None)
 
         setattr(self, last_action_attr, "aan_het_laden")
+
+    def _testeindtijd(self, now: datetime, next_poll_attr: str) -> datetime:
+        """Wanneer de lopende test om is (v5.131.2).
+
+        Stond de schakelaar al aan zonder lopende test (na een herstart, of
+        na een overrule), dan was er geen eindtijd en bleef hij eindeloos op
+        "test_aan": 26-10 15:14-17:19 stond de batterijlader zo 2 uur aan
+        zonder dat er iets aan hing. Nu krijgt ook zo'n test één ronde.
+        """
+        eindtijd = getattr(self, next_poll_attr)
+        if eindtijd is None:
+            eindtijd = now + timedelta(minutes=UPDATE_INTERVAL_MINUTES)
+            setattr(self, next_poll_attr, eindtijd)
+        return eindtijd
 
     @staticmethod
     def _volgend_kwartier(now: datetime) -> datetime:
@@ -4863,6 +4879,10 @@ class EnergyManagementSystemCoordinator:
         if len(history) < LEARNED_THRESHOLD_MIN_SAMPLES:
             return fallback_w
         idle_baseline_w = statistics.median(history)
+        # v5.131.2: de batterijlader laadt kleine apparaten met ~5 W af;
+        # daar is 5 W marge te veel (zie BATTERIJLADER_LEARNED_MARGIN_W).
+        if idle_history_attr == "_batterijlader_idle_power_history":
+            return idle_baseline_w + BATTERIJLADER_LEARNED_MARGIN_W
         return idle_baseline_w + LEARNED_THRESHOLD_MARGIN_W
 
     def _record_idle_power_sample(self, idle_history_attr: str, power_w: float) -> None:
@@ -46985,6 +47005,7 @@ class EnergyManagementSystemCoordinator:
                 ),
                 override_attr="batterijlader_override",
                 kwartiercontrole=True,
+                complete_sustained_minutes=BATTERIJLADER_COMPLETE_SUSTAINED_MINUTES,
             )
         except Exception:  # noqa: BLE001 - een lader mag de ronde niet meenemen
             self._noteer_staartfout("batterijlader")

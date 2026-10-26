@@ -33867,3 +33867,12 @@ Gezien in de leerronde van 26-10 15:40: direct na de herstart van 15:00:25 liepe
 - Raakt de sturing alleen bij een onaannemelijke meting; een normale verschuiving rekent zoals voorheen.
 
 Tests: `test_v5131_1_regelverschuiving_plausibel.py` (5).
+
+## v5.131.2 — batterijlader rondt kleine ladingen af en blijft niet hangen
+
+Gemeten 26-10 aan de Anker in de keuken (`switch.opladers_batterijen`):
+
+- **Te vroeg "vol".** Na een korte piek van 15-23 W laadde de lader op ~5 W door. De geleerde drempel was rustverbruik (~1,6 W) + 5 W marge = 6,6 W, dus om 17:24 ging hij "vol" uit terwijl er nog geladen werd. Voor de batterijlader is de marge nu 2 W (`BATTERIJLADER_LEARNED_MARGIN_W`; drempel ~3,6 W, rustverbruik gemeten 1,3-2,9 W) en geldt "vol" pas na 10 minuten onder de drempel (`BATTERIJLADER_COMPLETE_SUSTAINED_MINUTES`, was 2). Fietsladers en steelstofzuiger houden 5 W en 2 minuten.
+- **Test zonder eindtijd.** Stond de schakelaar al aan zonder lopende test (na een herstart of een overrule), dan bleef de status eindeloos op `test_aan`: 15:14-17:19 stond de lader zo 2 uur aan zonder last. Zo'n test krijgt nu ook één ronde (`UPDATE_INTERVAL_MINUTES`) en gaat daarna uit. Dit geldt voor alle geplande laadapparaten.
+
+Tests: `test_v5131_2_batterijlader_afronden.py` (4); `test_v5129_batterijlader.py` aangepast aan 10 minuten.
