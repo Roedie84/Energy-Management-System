@@ -33906,3 +33906,13 @@ Gevraagd 26-10: "de batterijlader, stofzuiger en fietsen niet controleren tussen
 - Gevolg: valt het goedkope blok 's nachts, dan laden fietsen en steelstofzuiger daarin niet meer (gekozen: 's nachts wordt er niets aangesloten).
 
 Tests: `test_v5133_nachtrust_laders.py` (10).
+
+## v5.134.0 — airco-automaat leert de aanzettemperatuur uit jullie eigen bediening
+
+26-10 uitgezocht: het airco-besluit bleef op "Leert nog: nog niet gezien bij welke temperatuur jullie de airco op verwarmen zetten", terwijl het dagritme 10x aan telde. De aanzettemperatuur kwam uit de kans per halve graad dat de airco binnen een uur aangaat, en die moest boven 50% komen. Dat gebeurt nooit: het huis is vaak 17-19 °C terwijl niemand thuis is, iedereen slaapt of de cv loopt. Live stond de kans op 5-15% in elk bakje van 16,5 tot 20,5 °C (20 uur gemeten per bakje).
+
+- `airco_sturing.aanzettemperatuur`: komt geen bakje boven de helft, dan nu de temperatuur waaronder 3 van de 4 keer viel dat jullie hem op verwarmen zetten (`aanzettemperatuur_uit_momenten`; aantal keer = kans x metingen per bakje), vanaf 5 keer. Op de data van 26-10: 12 keer, 16,5-20,5 °C, uitkomst 19,0 °C.
+- Een bakje boven de 50% gaat nog steeds voor.
+- Stuurt alleen met de knop Airco automaat aan; met de knop uit verandert alleen de tekst van het besluit.
+
+Tests: `test_v5134_airco_aanzettemperatuur.py` (5).

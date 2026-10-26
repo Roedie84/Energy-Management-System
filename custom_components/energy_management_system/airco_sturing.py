@@ -26,6 +26,7 @@ sturen.
 """
 from __future__ import annotations
 
+import math
 import statistics
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
@@ -105,7 +106,42 @@ def aanzettemperatuur(bakjes: dict) -> float | None:
             kandidaten.append(float(sleutel))
         except (TypeError, ValueError):
             continue
-    return max(kandidaten) if kandidaten else None
+    if kandidaten:
+        return max(kandidaten)
+    return aanzettemperatuur_uit_momenten(bakjes)
+
+
+# v5.134.0: vanaf zoveel keer zelf aangezet telt de aanzettemperatuur.
+AANZET_MIN_KEER = 5
+# ...en het is de temperatuur waaronder zo'n deel van die keren viel.
+AANZET_DEEL = 0.75
+
+
+def aanzettemperatuur_uit_momenten(bakjes: dict) -> float | None:
+    """De aanzettemperatuur uit de keren dat jullie de airco aanzetten (v5.134.0).
+
+    26-10: de kans per bakje haalde nooit 50%. Het huis is vaak 17-19 °C
+    terwijl niemand thuis is, iedereen slaapt of de cv loopt; per halve graad
+    ging de airco in 5-15% van de uren aan, dus bleef de aanzettemperatuur
+    leeg. Nu, als de kans nergens boven de helft komt: de temperatuur waaronder
+    3 van de 4 keer viel dat jullie hem op verwarmen zetten (de bakjes met
+    richting verwarmen; het aantal keer = kans x metingen). Pas vanaf
+    `AANZET_MIN_KEER` keer. Op 26-10: 12 keer tussen 16,5 en 20,5 °C -> 19,0.
+    """
+    momenten: list[float] = []
+    for sleutel, bakje in (bakjes or {}).items():
+        if bakje.get("richting") != "verwarmen":
+            continue
+        try:
+            temp = float(sleutel)
+            keer = round(float(bakje.get("probability_percent") or 0) * int(bakje.get("sample_count") or 0) / 100)
+        except (TypeError, ValueError):
+            continue
+        momenten.extend([temp] * keer)
+    if len(momenten) < AANZET_MIN_KEER:
+        return None
+    momenten.sort()
+    return momenten[max(0, math.ceil(AANZET_DEEL * len(momenten)) - 1)]
 
 
 def gewenste_temperatuur(setpunten: list, minimaal: int) -> float | None:
