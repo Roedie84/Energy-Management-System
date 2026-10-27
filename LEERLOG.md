@@ -454,3 +454,14 @@ laatste ronde: 27-10 11:40, gemeten t/m 27-10 11:42
 - Hypotheses: H-EMS-2 (PV te hoog; correctie vandaag beter), H-EMS-11 (wacht op L-EMS-042), H-EMS-14 (rustig).
 
 laatste ronde: 27-10 15:58, gemeten t/m 27-10 15:55
+
+## 27-10 19:41 · tussenronde
+- **v5.139.1 actief**, geen herstart sinds 12:32, geen nieuwe release op main. Fout 0 / storing 0. SolarEdge-Modbus 18:26 geen verbinding (omvormer na zonsondergang), HomeWizard-REST time-outs - extern, afgevangen. Geen release (tussenronde, niets acuut).
+- **Harde regel: 0× onder de reserve.** Eerste verkoop sinds 26-10: **18:30 en 18:45, 0,99 kWh** tegen 47,6/48,3 ct, beschikbaar 7,60/7,03 tegen verkoopreserve 6,38/5,92 (deel tot het blok × 1,25; na-blokdeel vrij volgens v5.70) → marge 1,22/1,11 kWh, bij export min. 1,05.
+- **Nieuw (H-EMS-14, n=1):** om 19:41 beschikbaar 6,34 tegen nodig tot blok **5,77** (× 1,25 = 7,21) → 0,57 kWh boven de ruwe behoefte, 0,87 onder de marge. De behoefte tot het blok steeg 4,73 (18:45) → 5,77 doordat de live correctie om 19:01 van ~0,2 naar 1,5 kWh ging. 16:32-19:36 22 wissels `alleen_behoefte` (0 ↔ 1,5 kWh, verhouding tot 4,4); 18:03-19:01 geen wissel → de verkoop viel in die rustige periode, de grens wisselde tijdens de verkoopkwartieren niet (meetcriterium L-EMS-031 dus niet geraakt). Oorzaak in code: met airco als zware last (`SUSTAINED_HEAVY_LOAD_SOURCES`) neemt `_get_smoothed_consumption_correction_ratio` de laatste huismeting zonder mediaan, dus ook kook-/tv-pieken. Uitslag (tekortnacht ja/nee, netafname bij lege accu) in de dagafsluiting; bij een tekort → voorstel.
+- **Nieuw (H-EMS-15):** digital twin MAE 1,71 → **1,888 kWh**; laadblokuren **5,04** (n=12: 26-10 00-05, 27-10 14:15-19:15) tegen 1,10 overig (n=48). 16:15 voorspeld 0,50 tegen 10,14; openstaand 20:15 0,00 / 21:15 0,05 (werkelijk ~6). Twin laadt alleen binnen de blokgrenzen van het voorspelmoment; vandaag liep `grid_charging_profitable` met het schuivende blok door tot 15:45. Dagafsluiting: replay in code (meetfout = zelf bouwen als bevestigd).
+- MC tot blok 1,9 %, blok 28-10 10:15. Besparing vandaag € 0,93. Airco besluit "niets" (20,6 °C, aanzet 19,0), knop uit; L-EMS-043 bouwen 28-10 03:40.
+- Stilstand: ongewijzigd, alleen *Accugezondheid over de tijd* (L-EMS-040). Nog niet bepaald 14 (wachten).
+- Hypotheses: H-EMS-2 (PV te hoog; uitslag 27-10 in dagafsluiting), H-EMS-14 (live correctie + verkoop; nacht toetst), H-EMS-15 (twin in laadblokuren). H-EMS-11 wacht op L-EMS-042 (geparkeerd, max 3 actief).
+
+laatste ronde: 27-10 19:41, gemeten t/m 27-10 19:45
