@@ -421,3 +421,13 @@ laatste ronde: 26-10 23:40, gemeten t/m 26-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog; correctie L-EMS-025 helpt nog niet), H-EMS-11 (avond-/ochtendpiek; wacht op L-EMS-042), H-EMS-14 (reservesprongen; rustig). Geen release.
 
 laatste ronde: 27-10 03:40, gemeten t/m 27-10 03:50
+
+## 27-10 07:40 · tussenronde
+- HA herstartte 06:04 → **v5.136.0 actief** (fout 0 / storing 0). Andere sessie releasete v5.137.0 + **v5.138.0** (batterijlader: aan zolang er iets aan hangt, minder testschakelingen); v5.138.0 om 07:31 gedownload, wacht op een herstart. Na de herstart prijs-/Solcastbuffer gebruikt (afgevangen). Geen purge/repack.
+- **Nacht 26→27:** `default_smart` de hele ronde, geen netladen, **0 verkoopkwartieren → harde regel niet geraakt**. SoC 32 → 24 % (03:40-07:40, ~1 %/25 min), beschikbaar 1,50 kWh, blok 10:45, MC tot blok **0,4 %**. 22:00-kans (26,7 %) wordt na de nacht afgerekend; tekort tot nu toe 0.
+- Digital twin MAE 1,83 → **1,76 kWh**. Plantoetsing 30 d: zon structureel te hoog (26/30 dagen, mediaan −6,8 %) = H-EMS-2.
+- **Nieuw: bug airco-voorverwarmen (L-EMS-043, gepland).** *Airco besluit* toont "nu 38 ct, straks tot **390089400 ct**". `_airco_buffer_ronde` geeft de ruwe prijsreeks (1e-7 €, PRICE_SCALE_FACTOR) aan `airco_sturing.buffer`, terwijl `prijs_nu` in €/kWh is → elk verwarmbesluit krijgt +0,5 °C en "duur kwartier, halve graad lager" komt nooit. Sinds v5.66; de tests geven de reeks al in € (`_met_prijzen`) en zien het daarom niet. Nu geen gevolg (knop Airco automaat uit) → niet acuut; v5.138.0 nog niet geïnstalleerd → bouwen in de dagafsluiting.
+- Stilstand: ongewijzigd (alleen *Accugezondheid over de tijd*, L-EMS-040). Airco besluit rekent (aanzet 19,0 °C geleerd).
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag 100 % bewolking), H-EMS-11 (wacht op L-EMS-042), H-EMS-14 (rustig). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 27-10 07:40, gemeten t/m 27-10 07:40

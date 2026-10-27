@@ -811,3 +811,7 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-27 03:40,DAG,ems_reserve_sprongen,2,2,"echte sprongen (aantal-attribuut); alleen_behoefte 38, na_herstart 8"
 2026-10-27 03:40,DAG,ems_nacht_marge_kwh,2.30,1,"03:45 beschikbaar 2.30 kWh (SoC 30 %), blok 10:45, MC tot blok 2.1 %; 22:00-kans 26.7 % -> uitslag 09:00"
 2026-10-27 03:40,DAG,ems_stilstand_functies,1,14,"Accugezondheid over de tijd (L-EMS-040, open); 13 overige 'wachten' lopen op of zijn < 7 d oud (dagtype, regressiewoud, scenarioplan)"
+2026-10-27 07:40,TUSSEN,ems_nacht_soc_laagste_pct,24,1,"SoC 32 -> 24 % 03:40-07:40 (default_smart, geen netladen/verkoop); beschikbaar 1.50 kWh, blok 10:45, MC tot blok 0.4 %"
+2026-10-27 07:40,TUSSEN,ems_verkoop_onder_reserve,0,0,"0 verkoopkwartieren 03:45-07:40; harde regel niet geraakt"
+2026-10-27 07:40,TUSSEN,ems_digital_twin_mae_kwh,1.756,60,"was 1.825 (03:40)"
+2026-10-27 07:40,TUSSEN,ems_airco_buffer_prijs_eenheid_fout,1,1,"airco_besluit: voorverwarmen nu 38 ct, straks tot 390089400 ct; komende prijzen ruw (1e-7 EUR) tegen prijs_nu in EUR -> altijd +0.5 C (L-EMS-043)"

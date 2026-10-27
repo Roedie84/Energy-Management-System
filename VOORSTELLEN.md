@@ -299,7 +299,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: aantal passieve metingen per week, spreiding, verschil met nominaal; bij (b) reserve-afwijking voor/na.
 
 ## L-EMS-041 · Monte Carlo 22:00-stand ook als het goedkope blok al loopt (meetbaarheid)
-- Status: **gepland** (zelf bouwen: alleen meten/rapportage; Monte Carlo is adviserend, stuurt niets). Dagafsluiting na installatie van v5.136.0 (nu gedownload, wacht op een herstart; niet stapelen), samen met L-EMS-040 deel a.
+- Status: **gepland** (zelf bouwen: alleen meten/rapportage; Monte Carlo is adviserend, stuurt niets). v5.136.0 actief sinds de herstart van 27-10 06:04; v5.137/v5.138 (andere sessie) staan nog klaar → dagafsluiting 28-10 03:40, samen met L-EMS-040 deel a en L-EMS-043.
 - Onderbouwing (27-10 03:40): `kalibratie_22u` telt 5 nachten (20, 21, 22, 24, 25-10) + 1 andere horizon (23-10); de nacht 25→26 ontbreekt. Diagnostiek: dagrecord 26-10 heeft geen `mc_22u`. Code: `_run_monte_carlo_simulation` roept `_leg_mc_22u_vast` alleen aan als `start <= now`; loopt het goedkope blok al (avond 25-10: blok 21:30-06:00), dan begint de simulatie aan het blokeinde (v5.93.0) en wordt de 22:00-stand stil overgeslagen. Zo'n nacht verdwijnt uit de Brier zonder dat het zichtbaar is (7 d: 1 van 7).
 - Bouw: in dat geval de stand toch bewaren met `basis: "in_blok"` (kans vanaf het blokeinde, `horizon_tot`), in `get_mc_kalibratie_22u` apart tellen als `nachten_in_blok` (zoals `nachten_andere_horizon`), niet in de Brier. Test: avond met lopend blok → stand bewaard, niet in `per_nacht`, wel in `nachten_in_blok`.
 - Meten na installatie: `nachten` + `nachten_andere_horizon` + `nachten_in_blok` = aantal dagrecords met een avond ervoor (7 van 7).
@@ -310,3 +310,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: (a) `had_kunnen_opleveren_eur`, `gemist_eur` en `per_dagdeel` rekenen tegen het optimum mét netladen (`met_arbitrage`, wordt al uitgerekend), zolang de integratie uit het net laadt; het huidige getal blijft zichtbaar als `zonder_netladen_*`; (b) toelichting bijwerken ("netarbitrage is uit de integratie gehaald" klopt niet meer).
 - Verwacht effect: realisatie ≤ 100 % op elke dag; H-EMS-11 (avond-/ochtendpiek) opnieuw beoordelen op een eerlijke meetlat.
 - Meten na bouw: dagen met realisatie > 100 % (nu 3/7) → 0; per-dagdeel-verschillen voor/na.
+
+## L-EMS-043 · airco voorverwarmen vergelijkt ruwe prijsreeks met €/kWh (bug)
+- Status: **gepland** (zelf bouwen: bug; de bedoelde regel van v5.66 blijft gelijk). Dagafsluiting 28-10 03:40 (v5.138.0 staat nog klaar, niet stapelen; knop Airco automaat staat uit → nu geen gevolg).
+- Onderbouwing (27-10 07:40): `sensor.…_airco_besluit` redenen "voorverwarmen: nu 38 ct, straks tot **390089400 ct** - een halve graad warmer", `doel_c` 21,5 bij basis 21,0. `coordinator._airco_buffer_ronde` haalt `komende` uit `_get_forecast_entries()` (eenheden van 1e-7 €, zie `PRICE_SCALE_FACTOR` in const.py) en geeft die met `huidige_prijs_eur_per_kwh()` (€) aan `airco_sturing.buffer`. Gevolg: `duurst − prijs_nu ≥ 0,05` en `prijs_nu ≤ 0,8 × duurst` gelden altijd → elk verwarmbesluit +0,5 °C, de tak "duur kwartier: halve graad lager" nooit. Tests `test_v565_airco_ritme.py::_met_prijzen` mocken de reeks in € en vangen het daarom niet. Andere lezers van `_get_forecast_entries` nagelopen: die geven de reeks aan helpers die zelf schalen.
+- Bouw: `komende` delen door `PRICE_SCALE_FACTOR` in `_airco_buffer_ronde`; test met een ruwe reeks (3.900.894 → 0,39 €) waarin nu 0,38 en straks 0,39-0,40 → geen voorverwarmen; en een reeks met een duur blok → wel; tekst in ct klopt.
+- Verwacht effect: voorverwarmen alleen bij echt prijsverschil (≥ 5 ct en ≤ 80 %), 'duur kwartier' werkt weer; geen onzinbedragen in de tekst.
+- Meten na installatie: in `airco_besluit.redenen` geen ct-bedragen > 200; aandeel verwarmbesluiten met +0,5 °C per dag (nu 100 %).
