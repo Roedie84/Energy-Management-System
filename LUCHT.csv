@@ -1189,3 +1189,28 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-27 20:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (18:30:52 -> 18:45:52); auto 18:48:52
 2026-10-27 20:20,kookautomation_traces,0,5,run 16:37:47: voorrang aan, stand al auto (geen wissel); eerste toets auto bij koken
 2026-10-27 20:20,apparaat_pm25_bereik,67,1,apparaat max 67 bij Ultimate 61; daarna vast op 2
+2026-10-28 00:20,pm25_dag,1.47,24,dag 27-10; mediaan 0.56; P95 3.69; max 61.2 (17:05 kookpiek; stand auto)
+2026-10-28 00:20,pm25_uren_gt15_dag,0.42,24,dag 27-10; > 25: 0.33 u
+2026-10-28 00:20,pm25_7d,2.35,7,daggemiddelden 21-27/10; mediaan 1.21
+2026-10-28 00:20,co2_dag,916,24,dag 27-10; max 1795; 6.17 u > 1200
+2026-10-28 00:20,pm25_gem,0.66,48,5-min statistiek 20:20-00:20 CET
+2026-10-28 00:20,pm25_mediaan,0.64,48,
+2026-10-28 00:20,pm25_p95,0.86,48,
+2026-10-28 00:20,pm25_max,1.14,48,momentaan max 22:45
+2026-10-28 00:20,pm25_uren_gt15,0.00,48,
+2026-10-28 00:20,pm25_uren_gt25,0.00,48,
+2026-10-28 00:20,stand_auto_min,217,1,20:20-23:57:55 (excl. 1.2 min unavailable 21:00:54-21:02:07); gem pm25 0.68 (n=44)
+2026-10-28 00:20,stand_mid_min,22,1,23:57:55-00:20; gem pm25 0.46 (n=4)
+2026-10-28 00:20,pm25_gem_aanwezig,0.69,41,mmWave of tv (tv uit 23:41:30)
+2026-10-28 00:20,pm25_gem_afwezig,0.53,7,
+2026-10-28 00:20,co2_gem,1565,48,5-min; 1412 -> 1685 (22:00) -> 1444; max 1795; ramen dicht
+2026-10-28 00:20,co2_uren_gt1200,4.00,48,hele blok > 1200
+2026-10-28 00:20,vocht_max,68.8,48,64 -> 68.8% bij 20.7 -> 18.6 C (verwarming uit)
+2026-10-28 00:20,schimmel_indicator,84,48,74 -> 84 stijgend; buiten 99% / 12-14 C
+2026-10-28 00:20,ha_herstarts,1,1,21:01
+2026-10-28 00:20,lokaal_mislukt,63,135068,uitval 0; 223 verbindingen (+1 herstart); geen nieuwe fout
+2026-10-28 00:20,sturen_bevestigd,329,330,1/1 nieuwe opdracht bevestigd
+2026-10-28 00:20,filtergebruik_pct,0,1,
+2026-10-28 00:20,automation_traces_fout,0,5,laatste aanwezigheid 23:42:55 -> mid 23:57:55 (15 min); 00:00/00:15 failed_conditions = nachtvenster
+2026-10-28 00:20,kookautomation_traces,0,5,1 herstarttrace (21:02); geen kookmoment
+2026-10-28 00:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.4-1.1

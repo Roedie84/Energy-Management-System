@@ -334,4 +334,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Werking: mid precies 15 min na laatste aanwezigheid (18:30:52 → 18:45:52), auto ~1 min na terugkomst (18:48:52). 0 HA-herstarts. Traces 5/5 + 5/5 zonder fout. Lokaal 63 mislukt op 133.683 (geen nieuwe), uitval 0, sturen 328/329 (2/2 nieuw), filter 0%. Apparaat-PM2.5 max 67 bij Ultimate 61: volgt de piek, daarna vast op 2.
 - CO₂ 797 → 1.383 (18:00) → 1.124 → 1.374 (gem 1.196), 2,5 u > 1.200, ramen dicht. Vocht bij koken 66,7 → 75,1%, schimmelindicator 71 → 81, daarna 66-78. Na het koken luchten/afzuigkap; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=11: +61 dicht) - gesteund. H2 auto halveert kookpiek ~5-24 min (n=7: +7,5); auto bij koken 1x getoetst: piek 61 en < 10 in 20 min, mid bij koken gaf 1.147 (n=1 elk, gerecht verschilt). Turbo nog ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1), geen toets.
-laatste ronde: 27-10 20:25, gemeten t/m 20:20
+
+## 28-10 00:25 (ronde 49, eerste na middernacht)
+- Dag 27-10: gem 1,47, mediaan 0,56, P95 3,7, max 61,2 (17:05 kookpiek, auto); 0,42 u > 15, 0,33 u > 25. 7d (21-27/10) 2,35, mediaan dag 1,2 (nulmeting okt 2025 9,1; stookseizoen vóór reiniger 16,0). Onder WHO-jaarnorm 5 ondanks kookpiek.
+- PM2.5 20:20-00:20: gem 0,66, mediaan 0,64, P95 0,86, max 1,14 (22:45) (n=48); 0 uur > 15. Geen piek > 25, geen kookmoment, ramen dicht.
+- Stand: auto 217 min (gem 0,68), mid 22 min (gem 0,46), 1,2 min unavailable. Aanwezig 0,69 (n=41) vs afwezig 0,53 (n=7): bron (avond/tv), geen standeffect.
+- Werking: tv uit 23:41:30, laatste aanwezigheid 23:42:55 → mid 23:57:55 (15 min), correct. 1 HA-herstart (21:01), stand daarna direct auto (aanwezig). Traces 5/5 zonder fout. Lokaal 63 mislukt op 135.068 (geen nieuwe), uitval 0, sturen 329/330 (1/1 nieuw), filter 0%. Apparaat-PM2.5 vast op 2.
+- Kookautomation: 1 herstarttrace, geen kookmoment.
+- CO₂ hele blok > 1.200 (gem 1.565, max 1.795 om 22:00; nu 1.354), dag 27-10 6,2 u > 1.200, ramen dicht na koken. Vocht 64 → 68,8% bij 20,7 → 18,6 °C, schimmelindicator 74 → 84 (hoogste in de log). Avond luchten na koken; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=11). H2 auto halveert kookpiek ~5-24 min (n=7); auto bij koken 1x: 61 en < 10 in 20 min, mid bij koken 1x: 1.147 (gerecht verschilt). Turbo ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+laatste ronde: 28-10 00:25, gemeten t/m 00:20
