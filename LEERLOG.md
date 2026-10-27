@@ -42,73 +42,11 @@ Doorlopende leerronde (elke 4 uur). Alleen gemeten getallen; KPI's in KPI.csv, r
 - 38 HA-herstarts (supervisor), sturing liep door; netladen 11-15 u 7,49 kWh, vol 1 min vóór blokeinde. Avondverkoop 0,34 kWh, 0× onder de reserve (19:45 grens op −0,02 = binnen meetstap).
 - H-EMS-10 nieuw: reserve/behoefte springt ±0,6-1,9 kWh zonder verbruiksstap → meetbaarheid L-EMS-020. v5.86.0 (L-EMS-021) actief 23:31, leermodus eenmalig tot 12-10 05:00.
 
-## 12-10 03:40 · dagafsluiting 11-10
-- Dag 11-10: PV 7,49 kWh (day-ahead tracker 9,07 → **−17,4 %** bij 13 % bewolking: een heldere dag te hoog, niet alleen donkere dagen), import 8,66 (netladen 11-15 u 7,49), export 1,90, accu 7,40 in / 5,36 uit, huis 12,2 kWh. **40 HA-herstarts** (supervisor, 08:40-23:31; 12-10 03:33 nog 1), logboek 0 EMS-fouten. Besparing t.o.v. zonder accu € 1,09 (10-10 € 1,06).
-- PV 30 d MAE 10,7 % (bias −8,2), 14 d 8,8 % (−6,9), 7 d 14,7 % (−11,6) → slechter (09-10 −48, 11-10 −17). H-EMS-2 verbreed: ook heldere dagen te hoog (11-10); n=2 in 7 d, nog geen voorstel.
-- **Harde regel 11-10: 0× onder de reserve** (afgeleid): 19:45-19:53 0,23 kWh (stop 19:56 op −0,02 = binnen de stap van `beschikbaar`), 20:09-20:14 0,11 kWh (terugrekening 4,90 < 5,79). `marge_bij_export_min_kwh` zat alleen in de diagnostiek → nu als attribuut `verkoopkwartieren` (v5.87).
-- Nacht 10→11 geen tekort (MC 22:00 0,1 %) → Brier 0, n=3. Tekortnachten 7 d: 1 (10-10 economisch). Nacht 11→12 03:45: nodig tot blok 1,28 bij 3,28 (marge 2,00), MC 0 %; 23:45-03:55 alleen `default_smart`, export 0,07 (regelruis).
-- H-EMS-10 opnieuw gezien: sturingsreserve 19:40-19:42 6,68 → 7,70 → 7,04 → 6,65 en 20:07-20:19 7,78 → 7,22 → 7,56 zonder verbruiksstap. Toetsen met de nieuwe `reserve_sprongen` na installatie van v5.87.
-- Niet gemeten: dagrapport-dekking (`laatste_dagrapport` leeg na de herstart van 03:33), nabeschouwing 11-10 en 7 d (alleen in de diagnostiek; vanaf v5.87 `nabeschouwing_7d` als attribuut).
-- **Gebouwd v5.87.0** (03:53, workflow groen, HACS ververst; niet geïnstalleerd): L-EMS-017 (spaarplan tot het blok = behoefte van de verkooptoets, verkooptoets ongewijzigd) + L-EMS-020 (reservesprongen met uitsplitsing) + meetattributen op Diagnose sturing. 10 nieuwe tests, suite 5599 groen. L-EMS-019 niet gebouwd: botst met de privacykeuze van v5.28 (geen kwartierverbruik in de export) → open voor Ruud.
-- Hypotheses: H-EMS-2 (PV te hoog, nu ook heldere dag), H-EMS-10 (springende reserve; meetbaar na installatie). Open voor Ruud: L-EMS-019.
-
-laatste ronde: 12-10 03:40, gemeten t/m 12-10 03:55
-
-## 12-10 07:40 · tussenronde
-- 2 HA-herstarts (06:14-06:15, 06:47-06:49); actief **v5.88.0** (andere sessie 06:46; bevat v5.87). 06:15:48 accu kort "offline" (Zendure status 0) direct na de herstart, daarna normaal. Geen EMS-fouten.
-- Beslissingen 03:45-07:42: alleen `default_smart` (2× ~30 s `unknown` bij herstart). Import 0,073 kWh, export 0,106 kWh (regelruis, 5-14 Wh/kwartier). Geen netladen in de nacht (leermodus tot 05:00).
-- **Nacht 11→12 zonder tekort:** 07:30 beschikbaar 2,42 kWh, nodig tot blok (11:30) 0,36 → marge ~2,0 (MC 22:00 0 %, uitkomst nee → Brier 0, n=4).
-- **Harde regel 11-10 nu direct getoetst (v5.87-attribuut `verkoopkwartieren`):** echte verkoopkwartieren 19:45 (230 Wh export) en 20:00 (114 Wh) hadden kleinste marge +0,47 en +0,035 kWh → **0× onder de reserve** (bevestigt de afleiding van 03:40).
-- **Meetfout gevonden:** 8 kwartieren tonen `marge_bij_export_min_kwh` < 0 (11-10 09:00, 09:30, 10:45, 11:00, 11:15, 18:00, 22:30; 12-10 06:15 −1,51) terwijl er per kwartier maar 6-18 Wh werd teruggeleverd (P1-teller). Eén ronde met ≥ 100 W export (regelpiek, herstart) telt al als "verkoop". 8 van 8 negatieve meldingen vals, 2 van 2 echte verkopen goed → **L-EMS-022** (zelf bouwen: export-kWh per kwartier, alleen ≥ 25 Wh telt; dagafsluiting).
-- `nabeschouwing_7d` nu leesbaar: gemist t.o.v. achteraf-optimum 05..11-10 € 0,78 / 0,67 / 0,89 / 0,39 / 0,29 / 0,09 / −0,26 (7 d € 2,85 van € 7,18 haalbaar). Dalend. 11-10 negatief: het optimum rekent zonder netladen (`sta_netladen_toe=False`, bewust), terwijl 11-10 7,49 kWh van het net laadde → op netlaaddagen geen bovengrens; `netarbitrage_eur` staat niet in het attribuut → meenemen in L-EMS-022.
-- H-EMS-10: `reserve_sprongen` 0 sinds installatie (06:49-07:42, ochtend, geen avond) → eerste echte toets bij de avond van 12-10.
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde; meetfout niet acuut, sturing raakt hij niet; vandaag al v5.87 + v5.88).
-
-laatste ronde: 12-10 07:40, gemeten t/m 12-10 07:42
-
-## 12-10 11:40 · tussenronde
-- 7 HA-herstarts (08:26-10:53) voor v5.89-v5.92 (andere sessie); actief **v5.92.0**. 0 EMS-fouten (1× trage logboeksensor 2,0 s, 09:40). Solcast 429 sinds 10:54 (extern; laatste verversing 07:52).
-- 07:40-11:45: import 0,099 kWh, export 0,119 kWh (regelruis); accu laadt in het blok vanaf 11:30 (57 %, 4,06 kWh beschikbaar). Geen echte verkoopkwartieren → harde regel niet geraakt.
-- L-EMS-022: 10:45 opnieuw valse vlag (−1,01 kWh bij 14 Wh export) → 9 van 9 vals.
-- PV t/m 11:45 2,80 kWh tegen Solcast 2,58 voor dezelfde uren (+8,5 %, intraday, verouderd door 429) → vandaag tot nu géén overschatting (H-EMS-2 tegenvoorbeeld, n=1 halve dag).
-- Nieuw meetbaar (v5.91 planvolging): 3 kwartieren, 66,7 % volgens plan. Classificatiefout gevonden: 11:15 oorzaak "accu" met status "verklaard" → **L-EMS-023** (zelf bouwen, dagafsluiting).
-- H-EMS-10: `reserve_sprongen` 0 (ochtend); avond 12-10 blijft de toets.
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde; niets acuut; vandaag al v5.87-v5.92).
-
-laatste ronde: 12-10 11:40, gemeten t/m 12-10 11:45
-
-## 12-10 15:40 · tussenronde
-- 6 HA-herstarts (12:38, 13:06, 13:29, 14:45, 15:02, 15:43); actief **v5.93.2** (andere sessie, 13:27). 0 EMS-fouten in het systeemlog; Solcast 429 (extern, laatste verversing 07:52).
-- Accu 57 % (11:44) → **100 % om 14:29** (7,78 kWh) alleen op zon; daarna zon naar het net: export 14-15 u 1,06 kWh, import 11:45-15:00 ~0,05 kWh. Verkoopkwartieren 12:30-15:15 hadden marge +4,3..+6,5 kWh → **0× onder de reserve**. Geen nieuwe negatieve vlag sinds 10:45 (L-EMS-022: 9 van 9 vals).
-- **PV t/m 15:45 10,22 kWh tegen Solcast 10,36** voor dezelfde uren (dag 12,69 − rest 2,33) → −1,4 % (ochtend +8,5 %). Vandaag goed voorspeld; H-EMS-2 (te hoog) krijgt een tegenvoorbeeld (n=1 dag, verouderde Solcast-run).
-- **Planvolging** (v5.93.1 bewaart over herstarts): 10 kwartieren, 50 % volgens plan; `oorzaken` geen 5 / verbruik 4 / accu 1, maar `afwijking_accu` 2 → nog een tegenstrijdig kwartier (status "afwijking accu", oorzaak verbruik). v5.93.2 voegde "sturing" toe; `oorzaak = max(zon, verbruik, rest)` staat nog los van de status (code 524c2e2 nagelezen) → L-EMS-023 blijft nodig.
-- Nacht 12→13: MC 0 %, accu vol → geen tekort in zicht. H-EMS-10: `reserve_sprongen` leeg (nog geen avond sinds installatie) → toets in de ronden van 19:40/23:40.
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde, niets acuut; vandaag al v5.87-v5.93.2). L-EMS-022/023 in de dagafsluiting.
-
-laatste ronde: 12-10 15:40, gemeten t/m 12-10 15:45
-
-## 12-10 19:40 · tussenronde
-- 2 HA-herstarts (16:12, 18:35; andere integraties); actief **v5.93.2**, 0 EMS-fouten. Solcast-run nog van 07:52 (429).
-- **PV dag 12-10: 11,75 kWh tegen Solcast 12,69 → −7,4 %** (15:45 nog −1,4 %; middag 1,53 tegen 2,33 verwacht). Weer te hoog, nu bij een heldere dag → H-EMS-2 houdt (verouderde run; dagafsluiting rekent de day-ahead tracker).
-- 15:45-19:46: import 0,68 kWh, export 1,47 kWh. **Avondverkoop** 18:45-19:46 ~1,18 kWh bij 46-48 ct (18:45 526 Wh, 19:00 329, 19:15 27, 19:30 ~300), stop 19:45 op `expensive_quarter_soc_protected`.
-- **Harde regel: 0× onder de reserve.** Kleinste marge in de echte verkoopkwartieren +0,33 / +0,006 / +0,028 kWh; 19:15 −0,02 bij 27 Wh (binnen de SoC-stap van `beschikbaar`, ~0,09 kWh per %). Live gevolgd 19:41-19:46: marge 0,17 → 0,09 → 0,03, verkoop stopte vóór 0.
-- L-EMS-022: 4 nieuwe negatieve vlaggen 16:15-17:00 (−0,09..−0,87) bij 56/15/24/15 Wh export: accu ontlaadt dan ~0,9-1,4 kW **voor het huis** (stand niet "verkopen"), export = regeloverschot bij starten/stoppen. 13 van 13 negatieve vlaggen zonder verkoop; 16:15 (56 Wh) en 19:15 (27 Wh) halen de geplande 25-Wh-grens wél → bouw aangevuld: alleen kwartieren met stand verkopen/`mag_verkopen` tellen als verkoop, regeloverschot apart.
-- H-EMS-10 (springende reserve), eerste avond na v5.87: `reserve_sprongen` 0; verkoopreserve daalde gelijkmatig 5,71 → 5,06 met `nodig_tot_blok` (4,39 → 4,05). Morgen weinig zon (Solcast 4,0 kWh, `nodig_na_blok` 5,19). Niet gezien (n=1 avond).
-- Planvolging: 26 kwartieren, 30,8 % volgens plan; `afwijking_accu` 8 tegen `oorzaken.accu` 3 (17:45 "afwijking accu" met oorzaak zon) → L-EMS-023 blijft. Verkoopkwartieren tellen als afwijking (plan 0,4 kW, gemeten 2,4 kW): plan kent de verkoopbeslissing niet.
-- MC 0 % (19:46). Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve). Geen release (tussenronde, niets acuut). L-EMS-022/023 in de dagafsluiting van 13-10.
-
-laatste ronde: 12-10 19:40, gemeten t/m 12-10 19:46
-
-## 12-10 23:40 · tussenronde
-- 6 HA-herstarts (21:10, 21:52, 22:38, 22:40, 22:41, 23:17; o.a. Gold Scalper 2.3-2.4.1); actief **v5.93.3** (19:08, andere sessie), 0 EMS-fouten.
-- 19:45-23:40: import 0,05 kWh, export 0,33 kWh; accu dekt het huis (53 → 52 % om 23:41).
-- **Harde regel: 0× onder de reserve.** Verkoop 20:45 ~0,28 kWh bij 40 ct (`mag_verkopen`, marge +0,046, kleinste +0,016); 21:00 ~8 Wh met marge −0,03 bij `mag_verkopen` false = regeloverschot binnen de SoC-stap (L-EMS-022-patroon, nu 14 van 14 zonder echte verkoop). Daarna geen verkoop: beschikbaar 3,63 < reserve 7,78 (boven capaciteit).
-- Nacht 12→13: MC 0 %, nodig tot blok (13-10 12:00) 2,50 bij 3,63 beschikbaar → marge 1,13 kWh; kalibratie 22:00 kans 0 % (Brier 0, n=3). Morgen Solcast 4,0 kWh, `nodig_na_blok` 5,18 → laadblok moet bijladen.
-- **H-EMS-10** (springende reserve): 1 `reserve_sprong` om 23:18:20, 11 s na de eerste ronde na de herstart; behoefte 10,16 → 7,77 (lange horizon 6,95 → 5,18), reserve zelf gelijk (7,78, afgekapt). Herstartartefact, geen avondsprong (avond 19:46-23:18: 0). Meetbaarheid: eerste ronde na start markeren of overslaan → meenemen in L-EMS-023-bouw (zelf bouwen: meetfout).
-- Planvolging dag 42 kwartieren 47,6 % (19:46-23:40: 12 van 16 volgens plan); `afwijking_accu` 9 tegen `oorzaken.accu` 4 → L-EMS-023 blijft.
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-10 (springende reserve; 1 avond zonder sprong). Geen release (tussenronde, niets acuut). L-EMS-022/023 in de dagafsluiting van 13-10.
-
-laatste ronde: 12-10 23:40, gemeten t/m 12-10 23:41
+## 12-10 · samenvatting dag (6 rondes; ingekort na 14 dagen)
+- Dag 11-10: PV 7,49 kWh (−17,4 % bij 13 % bewolking: ook heldere dagen te hoog → H-EMS-2 verbreed), import 8,66, huis 12,2; 40 HA-herstarts. PV 30 d MAE 10,7 % (bias −8,2). Harde regel 11-10 0× onder de reserve (direct getoetst met `verkoopkwartieren`, kleinste marge +0,035).
+- Gebouwd v5.87.0 (L-EMS-017 spaarplan = behoefte verkooptoets, L-EMS-020 reservesprongen). Andere sessies v5.88-v5.93.3 (planvolging, MC vanaf blokeinde).
+- Meetfouten gevonden: L-EMS-022 (negatieve `marge_bij_export` bij regelruis, 14/14 zonder echte verkoop) en L-EMS-023 (planvolging: oorzaak en status tegenstrijdig).
+- PV 12-10 11,75 kWh tegen Solcast 12,69 (−7,4 %). Avondverkoop ~1,46 kWh bij 40-48 ct, 0× onder de reserve. Nacht 11→12 en 12→13 geen tekort (Brier 0, n=4). H-EMS-10: 1 sprong (herstart 23:18), geen avondsprong.
 
 ## 21-10 19:40 · dagafsluiting-inhaalronde (gat 13-10 11:30 → 21-10; DAG 12..20-10 gemeten)
 - Gemeten (HA-statistiek, dagarchief, nabeschouwing_7d, planvolging, MC-kalibratie): PV, net, accu, huis per dag 12..20-10; 12-10 overgenomen uit analyse/2026-10-13 (bestand verwijderd). Context: 4e accumodule 14-10 (nominaal 11,52 kWh, v5.97.1); chatsessies bouwden v5.95-v5.114.1.
@@ -470,3 +408,16 @@ laatste ronde: 26-10 19:40, gemeten t/m 26-10 19:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-11 (avondpiek: accu dekte het huis, niets te verkopen), H-EMS-14 (stabiliteit; MC-kans 22:00 niet meer binair). Geen release (tussenronde, niets acuut; v5.136.0 nog niet geïnstalleerd).
 
 laatste ronde: 26-10 23:40, gemeten t/m 26-10 23:45
+
+## 27-10 03:40 · dagafsluiting 26-10
+- Actief **v5.135.1**; v5.136.0 gedownload (HACS), wacht op een herstart → **geen EMS-release** (niet stapelen; niets acuut). Fout 0 / storing 0. Geen purge/repack in de log; DNS-storing ~02:12 (extern).
+- Dag 26-10: PV **5,40 kWh** (day-ahead 5,24 → **+3,2 %** bij 99,6 % bewolking; gecorrigeerd L-EMS-025 4,81 → +12,3 %), import 11,62 (nachtblok + 12:30-13:00), export 2,80, accu 12,54 in / 9,78 uit, huis **11,5** (dagarchief 10,7; verwacht 8,76 → +22..31 %). Besparing € 1,26. **Harde regel: 0× onder de reserve** (4 verkoopkwartieren 07:15-08:00, 2,10 kWh, kleinste marge 5,99). Geen tekortnacht (nacht 25→26).
+- **Planvolging 26-10 43,6 %** (laagste in 14 d; mediaan verschil 249 W tegen 57-152 W): verbruik 24, accu 22, sturing 2. 11 HA-herstarts en nieuwe functies (batterijlader, airco op zonoverschot) op één dag; 7 d 58,6 %.
+- **H-EMS-2:** 7 d MAE/bias 13,8/−10,3 %, 14 d 16,8/−15,1, 30 d 12,5/−10,8; per bewolking ≤ 50 % −13,1 (n=9), 50-90 % −13,8 (n=8), > 90 % −7,3 (n=13). **L-EMS-025 dag 5: gecorrigeerd MAE 10,8 tegen ruw 10,2 → correctie nu iets slechter** (26-10 +12,3 tegen +3,2). Afronden 29-10.
+- **Nieuw (meetlat, L-EMS-042 open):** nabeschouwing 7 d realisatie **116,6 %** (€ 6,74 van € 5,78): 'best mogelijk' laadt bewust niet uit het net (v4.5), de sturing wel (26-10 netarbitrage € 1,81). Met netladen benaderd 73,2 %. De avondpiek-/ochtendpiekcijfers van H-EMS-11 komen uit die meetlat → H-EMS-11 eerst op een eerlijke meetlat.
+- **Nieuw (meetbaarheid, L-EMS-041 gepland):** MC-kalibratie mist de nacht 25→26: om 22:00 liep het blok al (21:30-06:00), `_leg_mc_22u_vast` wordt dan overgeslagen (`start > now`). Brier 0,600 (n=5). 22:00-kans avond 26-10 26,7 % → uitslag vanochtend.
+- Nacht 26→27 03:45: beschikbaar 2,30 kWh (SoC 30 %), blok 10:45, MC tot blok 2,1 %. Digital twin MAE 2,02 → **1,83 kWh**. Reservesprongen 2 echt / 38 `alleen_behoefte` / 8 `na_herstart`.
+- Stilstand: alleen *Accugezondheid over de tijd* (L-EMS-040, open; deel a gepland na v5.136.0). Nieuw in *Nog niet bepaald* (< 7 d, lopen op): verbruik per dagtype, regressiewoud, scenarioplan.
+- Hypotheses: H-EMS-2 (PV te hoog; correctie L-EMS-025 helpt nog niet), H-EMS-11 (avond-/ochtendpiek; wacht op L-EMS-042), H-EMS-14 (reservesprongen; rustig). Geen release.
+
+laatste ronde: 27-10 03:40, gemeten t/m 27-10 03:50
