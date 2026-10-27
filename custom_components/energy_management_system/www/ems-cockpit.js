@@ -86,6 +86,9 @@ const EIGEN = {
   pvNauw: "pv_forecast_accuracy",
   vaatwasser: "dishwasher_cycle_state",
   wasmachine: "washing_machine_cycle_state",
+  // v5.139.0: start, eind en voortgang in gewone taal
+  vaatwasserPlan: "dishwasher_planning",
+  wasmachinePlan: "washing_machine_planning",
   bewolking: "weather_ensemble",
   meldingen: "meldingen",
   accuGezondheid: "battery_health",
@@ -882,7 +885,7 @@ const AFHANKELIJK = {
   verkoop: ["gacs", "mc", "tekort", "uitleg", "blok"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
   zon: ["gacs", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk", "pvNauw", "bewolking", "pv"],
-  huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip"],
+  huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "vaatwasserPlan", "wasmachinePlan", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip"],
   bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "laderOverrule", "meldingenAan", "achterhoeks"],
   geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief"],
@@ -1943,7 +1946,11 @@ class EmsCockpitCard extends HTMLElement {
       if (!s) continue;
       const voortgang = num(attr(s, "geschatte_voortgang_procent"));
       const [t, k] = status(s);
-      uit.push(regel(ic, naam, voortgang != null && voortgang > 0 && voortgang < 100 ? `${fmt(voortgang)}% klaar` : "", esc(t), k));
+      // v5.139.0: de planning (start, klaar, programma) als onderregel
+      const plan = this._s(`${sleutel}Plan`);
+      const planTekst = plan && !ONBRUIKBAAR.includes(String(plan.state).toLowerCase()) && attr(plan, "status") !== "niets" ? plan.state : "";
+      const sub = planTekst || (voortgang != null && voortgang > 0 && voortgang < 100 ? `${fmt(voortgang)}% klaar` : "");
+      uit.push(regel(ic, naam, esc(sub), esc(t), attr(plan, "status") === "gepland" ? "var(--blauw)" : k));
     }
     const besluit = this._s("aircoBesluit");
     const klimaat = this._s("klimaat");

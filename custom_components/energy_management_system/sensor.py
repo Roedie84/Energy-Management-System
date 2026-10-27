@@ -113,6 +113,9 @@ async def async_setup_entry(
         WeatherEnsembleSensor(coordinator, entry.entry_id),
         DishwasherCycleStateSensor(coordinator, entry.entry_id),
         WashingMachineCycleStateSensor(coordinator, entry.entry_id),
+        # v5.139.0: start, eind en voortgang in gewone taal
+        DishwasherPlanningSensor(coordinator, entry.entry_id),
+        WashingMachinePlanningSensor(coordinator, entry.entry_id),
         MpcAdvisorySensor(coordinator, entry.entry_id),
         MonteCarloAdvisorySensor(coordinator, entry.entry_id),
         KalmanFilterAdvisorySensor(coordinator, entry.entry_id),
@@ -1781,12 +1784,23 @@ class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
 
                 elapsed_min = (dt_util.now() - started_at).total_seconds() / 60
                 progress_percent = round(min(100, 100 * elapsed_min / learned), 0)
+        # v5.139.0: de voortgang van Home Connect gaat voor de eigen schatting
+        # (gemeten 27-10: eigen 10%, Home Connect 33%), ook voor de duur van
+        # het lopende programma.
+        voortgang_bron = "geleerd" if progress_percent is not None else None
+        if self.native_value == "actief":
+            naam = "vaatwasser" if "dishwasher" in self._state_attr else "wasmachine"
+            planning = self._coordinator.get_witgoed_planning(naam, met_prijs=False)
+            if planning.get("voortgang_procent") is not None:
+                progress_percent = planning["voortgang_procent"]
+                voortgang_bron = planning.get("voortgang_bron")
         klaar = getattr(self._coordinator, "cyclus_klaar_sinds", {}) or {}
         return {
             "geleerde_cyclusduur_minuten": (
                 round(learned, 1) if learned is not None else None
             ),
             "geschatte_voortgang_procent": progress_percent,
+            "voortgang_bron": voortgang_bron,
             # v5.131.3: de cockpit toont het vermogen live terwijl hij draait
             "vermogen_sensor": self._coordinator.config.get(self._power_conf),
             "cyclusduur_geschiedenis": history,
@@ -1857,6 +1871,62 @@ class WashingMachineCycleStateSensor(_ApplianceCycleStateSensor):
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "washing_machine_cycle_state")
+
+
+class _WitgoedPlanningSensor(SensorEntity):
+    """De planning van de vaatwasser of wasmachine in gewone taal (v5.139.0).
+
+    Gevraagd 27-10: "Kunnen we iets bouwen dat we uitgestelde start en
+    eindtijd helderder in het EMS krijgen?" Toestand: "Start 14:30 · klaar
+    ±15:45 · Eco 50 · ...", "Draait (Katoen) · klaar 12:29 · 33%", "Klaar
+    sinds 12:31" of "Niets gepland". De tijden en bronnen staan in de
+    attributen. Alleen uitlezen; het EMS start of verplaatst niets.
+    """
+
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    _attr_has_entity_name = True
+    _naam = ""
+
+    def __init__(self, coordinator, entry_id: str, unique_suffix: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_{unique_suffix}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+        self._planning: dict = {}
+
+    def _bereken(self) -> dict:
+        self._planning = self._coordinator.get_witgoed_planning(self._naam)
+        return self._planning
+
+    @property
+    def native_value(self) -> str:
+        tekst = str(self._bereken().get("tekst") or "Niets gepland")
+        return tekst[:255]
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        planning = self._planning or self._bereken()
+        return {k: v for k, v in planning.items() if k != "tekst"}
+
+
+class DishwasherPlanningSensor(_WitgoedPlanningSensor):
+    _attr_name = "Vaatwasser planning"
+    _attr_icon = "mdi:dishwasher-alert"
+    _naam = "vaatwasser"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "dishwasher_planning")
+
+
+class WashingMachinePlanningSensor(_WitgoedPlanningSensor):
+    _attr_name = "Wasmachine planning"
+    _attr_icon = "mdi:washing-machine-alert"
+    _naam = "wasmachine"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "washing_machine_planning")
 
 
 class MpcAdvisorySensor(SensorEntity):

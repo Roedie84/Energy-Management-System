@@ -33969,3 +33969,20 @@ Audit 27-10 punt 1 (akkoord Ruud): de e-bikelader schakelde op 25-10 133 keer. E
 - Geldt voor fietsladers, steelstofzuiger en batterijlader. Een blok van 4 uur zonder fiets: 6 tests in plaats van 16.
 
 Tests: `test_v5138_afbouw_lege_tests.py` (3).
+
+
+## v5.139.0 — planning van vaatwasser en wasmachine: start, eind en programma
+
+Gevraagd 27-10: "Kunnen we iets bouwen dat we uitgestelde start en eindtijd helderder in het EMS krijgen? Voor o.a. wasmachine en vaatwasser." Akkoord op alle zes punten.
+
+Gemeten 27-10 10:31: de wasmachine draaide (Katoen), Home Connect gaf eindtijd 12:29 en voortgang 33%, het EMS schatte 10%. De geleerde duur was één mediaan van 150 min over alle programma's (met 23 en 96 min in de reeks). De vaatwasser kende alleen een begin, de wasmachine alleen een eind, en een draaiend apparaat verdween uit beeld.
+
+- Nieuw `witgoedplanning.py` (los van HA, getoetst): per apparaat `status` (gepland/draait/klaar/niets), `start` en `eind` met bron (home_connect/geleerd/eigen meting), voortgang, programma, duur, kWh en een prijsoordeel. Een afgeleide tijd krijgt een "±".
+- Begin én eind: vaatwasser = start + duur, wasmachine = eind - duur. Een eindtijd van Home Connect die vóór de uitgestelde start ligt (eindtijd "als hij nu zou starten") telt niet als eind.
+- Alleen gepland als Home Connect `delayedstart` zegt. Een eindtijd of starttijd die bij een gekozen programma blijft staan terwijl hij `ready` is, telt niet meer in de reserve. Zonder bruikbare toestand (cloudlimiet) geldt de regel van v1.70.0.
+- Duur en verbruik per programma (`witgoed_duur_per_programma`, `witgoed_kwh_per_programma`, bewaard over een herstart; programma vastgelegd zolang hij draait via `BSH.Common.Root.ActiveProgram`). Geldt vanaf de eerste beurt van dat programma; anders de duur over alle programma's. Daarmee komt het geplande verbruik in het juiste kwartier van de reserve, en rekent een lopende cyclus (`lopend_witgoed_kwh_in_periode`) met de eindtijd van Home Connect.
+- Voortgang en eindtijd van Home Connect gaan voor de eigen schatting (ook `geschatte_voortgang_procent` op de cyclus-status, met `voortgang_bron`).
+- Prijsoordeel (alleen informatie, het EMS bedient niets): wat het gekozen moment kost en of een ander begin vóór dezelfde eindtijd minstens € 0,02 goedkoper is. Niet in de reserve-aanroepen (die lopen per segment).
+- Nieuwe sensoren `Vaatwasser planning` en `Wasmachine planning`; kaarten op Overzicht en op de pagina Vaatwasser & wasmachine; onderregel in de cockpit bij Huis en apparaten. In de diagnostiek: `witgoed_planning` en `witgoed_per_programma`.
+
+Tests: `test_v5139_witgoedplanning.py` (18).

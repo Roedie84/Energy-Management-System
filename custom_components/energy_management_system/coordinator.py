@@ -62,6 +62,7 @@ from homeassistant.helpers.storage import Store
 
 from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging, dipplan
 from . import thuiskomst as thuiskomst_mod
+from . import witgoedplanning
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .const import (
     ACCU_MEETREEKS_DAGEN,
@@ -1632,6 +1633,11 @@ class EnergyManagementSystemCoordinator:
         self._washing_machine_cycle_started_at: datetime | None = None
         self._washing_machine_below_threshold_since: datetime | None = None
         self.washing_machine_cycle_duration_history: list[float] = []
+        # v5.139.0: duur en verbruik per programma (Home Connect), en het
+        # programma van de lopende cyclus. Zie witgoedplanning.py.
+        self.witgoed_duur_per_programma: dict[str, dict] = {}
+        self.witgoed_kwh_per_programma: dict[str, dict] = {}
+        self._witgoed_lopend_programma: dict[str, str] = {}
         # MPC advisory engine (v0.63.33) - see coordinator method
         # docstring for the "advisory only, never controls" guarantee.
         self.mpc_planned_actions: list[dict] = []
@@ -10271,16 +10277,23 @@ class EnergyManagementSystemCoordinator:
         `number.vaatwasser_begin_relatief`, de gewenste eindtijd in
         `sensor.wasmachine_programma_eindtijd`. Uitlezen, niet bedienen -
         die grens blijft staan.
+
+        v5.139.0: afgeleid uit `get_witgoed_planning` - begin én eind, de
+        duur van het gekozen programma, en alleen als Home Connect zegt dat
+        de start is uitgesteld (een starttijd die bij een gekozen programma
+        blijft staan, is geen planning). Zonder bruikbare Home
+        Connect-toestand geldt de afleiding van v1.70.0.
         """
         nu = now or dt_util.now()
         gepland: list[dict] = []
-
-        vaatwasser = self._geplande_start_vaatwasser(nu)
-        if vaatwasser is not None:
-            gepland.append(vaatwasser)
-        wasmachine = self._geplande_start_wasmachine(nu)
-        if wasmachine is not None:
-            gepland.append(wasmachine)
+        for naam in ("vaatwasser", "wasmachine"):
+            # zonder prijsoordeel: dit wordt per segment van de wandeling
+            # aangeroepen, en de reserve heeft alleen begin en kWh nodig
+            regel = self._geplande_regel(
+                self.get_witgoed_planning(naam, nu, met_prijs=False)
+            )
+            if regel is not None:
+                gepland.append(regel)
 
         return {
             "beschikbaar": bool(gepland),
@@ -10293,6 +10306,43 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    @staticmethod
+    def _geplande_regel(planning: dict) -> dict | None:
+        """Een regel voor `get_planned_appliance_load` (oude sleutels blijven)."""
+        if planning.get("status") != "gepland" or not planning.get("in_reserve"):
+            return None
+        start = dt_util.parse_datetime(planning["start"]) if planning.get("start") else None
+        if start is None:
+            return None
+        start = dt_util.as_local(start)
+        regel = {
+            "apparaat": planning["apparaat"],
+            "start": planning["start"],
+            "start_kort": start.strftime("%H:%M"),
+            "kwh": planning.get("kwh") or 0.0,
+            "herkomst": (
+                "gemeten"
+                if str(planning.get("kwh_herkomst", "")).startswith("gemeten")
+                else "schatting"
+            ),
+            "programma": planning.get("programma_naam"),
+            "tekst": planning.get("tekst"),
+        }
+        if planning.get("eind"):
+            eind = dt_util.parse_datetime(planning["eind"])
+            if eind is not None:
+                regel["eindtijd_kort"] = dt_util.as_local(eind).strftime("%H:%M")
+        if planning.get("start_bron") in ("geleerd", "eindtijd"):
+            duur = planning.get("duur_minuten")
+            regel["let_op"] = (
+                f"teruggerekend vanaf de eindtijd met {duur:.0f} min "
+                + ("duur van dit programma" if planning.get("duur_bron") == "programma"
+                   else "geleerde cyclusduur")
+                if planning.get("start_bron") == "geleerd" and duur
+                else "eindtijd bekend, cyclusduur nog niet betrouwbaar geleerd"
+            )
+        return regel
+
     def _cyclus_kwh(self, sleutel: str, standaard: float) -> tuple[float, str]:
         """Wat een cyclus kost: gemeten als het kan, anders geschat."""
         gemeten = (self.appliance_cycle_kwh or {}).get(sleutel)
@@ -10300,90 +10350,185 @@ class EnergyManagementSystemCoordinator:
             return gemeten, "gemeten"
         return standaard, "schatting"
 
-    def _geplande_start_vaatwasser(self, now: datetime) -> dict | None:
-        entity_id = self.config.get(CONF_DISHWASHER_START_IN)
-        if not entity_id:
-            return None
-        seconden = self._read_sensor_float(entity_id)
-        if seconden is None or seconden <= 0:
-            return None
-        start = now + timedelta(seconds=seconden)
-        if (start - now).total_seconds() / 3600 > APPLIANCE_PLAN_MAX_HOURS:
-            return None
-        kwh, herkomst = self._cyclus_kwh(
-            "vaatwasser", DEFAULT_DISHWASHER_CYCLE_KWH
-        )
-        return {
-            "apparaat": "vaatwasser",
-            "start": start.isoformat(),
-            "start_kort": start.strftime("%H:%M"),
-            "kwh": kwh,
-            "herkomst": herkomst,
-        }
+    # --- v5.139.0: planning per apparaat ------------------------------
 
-    def _geplande_start_wasmachine(self, now: datetime) -> dict | None:
-        entity_id = self.config.get(CONF_WASHING_MACHINE_END_AT)
+    def _hc_zuster(self, naam: str, achtervoegsel: str) -> str | None:
+        """Een Home Connect-entiteit van hetzelfde apparaat, op het einde van
+        de unique_id (v5.139.0). Gezocht vanuit de al ingestelde gereed-,
+        starttijd- of eindtijdentiteit; er is niets nieuws in te stellen."""
+        if achtervoegsel == witgoedplanning.HC_TOESTAND:
+            cache = self.__dict__.setdefault("_bedrijfstoestand_entiteit", {})
+            if naam not in cache:
+                cache[naam] = self._zoek_bedrijfstoestand(self._witgoed_bronnen(naam))
+            return cache[naam]
+        cache = self.__dict__.setdefault("_hc_zusters", {})
+        sleutel = (naam, achtervoegsel)
+        if sleutel not in cache:
+            cache[sleutel] = self._zoek_hc_zuster(
+                self._witgoed_bronnen(naam), achtervoegsel
+            )
+        return cache[sleutel]
+
+    def _witgoed_bronnen(self, naam: str) -> list[str]:
+        if naam == "vaatwasser":
+            bronnen = (CONF_DISHWASHER_READY_SENSOR, CONF_DISHWASHER_START_IN)
+        else:
+            bronnen = (CONF_WASHING_MACHINE_READY_SENSOR, CONF_WASHING_MACHINE_END_AT)
+        return [self.config.get(c) for c in bronnen if self.config.get(c)]
+
+    def _zoek_hc_zuster(self, entiteiten: list[str], achtervoegsel: str) -> str | None:
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            reg = er.async_get(self.hass)
+            for eid in entiteiten:
+                ent = reg.async_get(eid)
+                if ent is None or not ent.device_id:
+                    continue
+                for kandidaat in er.async_entries_for_device(reg, ent.device_id):
+                    if str(getattr(kandidaat, "unique_id", "") or "").endswith(
+                        achtervoegsel
+                    ):
+                        return kandidaat.entity_id
+        except Exception:  # noqa: BLE001 - zonder register: zonder die bron
+            return None
+        return None
+
+    def _hc_tekst(self, naam: str, achtervoegsel: str) -> str | None:
+        eid = self._hc_zuster(naam, achtervoegsel)
+        if not eid:
+            return None
+        st = self.hass.states.get(eid)
+        waarde = getattr(st, "state", None)
+        if waarde in witgoedplanning.ONBRUIKBAAR:
+            return None
+        return str(waarde)
+
+    def _witgoed_tijd(self, entity_id: str | None, nu: datetime) -> datetime | None:
+        """Een tijdstip uit een sensor: ISO-tijd of (sommige integraties) een
+        aantal seconden vanaf nu."""
         if not entity_id:
             return None
         staat = self.hass.states.get(entity_id)
-        if staat is None:
+        if staat is None or staat.state in witgoedplanning.ONBRUIKBAAR:
             return None
-        einde = dt_util.parse_datetime(str(staat.state))
-        if einde is None:
-            # Sommige integraties leveren een aantal seconden in plaats
-            # van een tijdstip.
-            seconden = self._read_sensor_float(entity_id)
-            if seconden is None or seconden <= 0:
-                return None
-            einde = now + timedelta(seconds=seconden)
-        if einde <= now:
+        moment = dt_util.parse_datetime(str(staat.state))
+        if moment is not None:
+            return moment
+        seconden = self._read_sensor_float(entity_id)
+        if seconden is None or seconden <= 0:
             return None
-        if (einde - now).total_seconds() / 3600 > APPLIANCE_PLAN_MAX_HOURS:
-            return None
-        kwh, herkomst = self._cyclus_kwh(
-            "wasmachine", DEFAULT_WASHING_MACHINE_CYCLE_KWH
-        )
+        return nu + timedelta(seconds=seconden)
 
-        # v1.70.0: het verbruik hoort bij het BEGIN van de cyclus, niet
-        # bij het einde.
-        #
-        # Gemeld: "wasmachine heeft inderdaad alleen een eindtijd." Die
-        # eindtijd als moment nemen legt het verbruik uren te laat: bij
-        # een programma dat om 07:00 klaar is en anderhalf uur duurt,
-        # wordt het water rond 05:30 verwarmd. Voor een reserve die de
-        # nacht moet overbruggen scheelt dat precies de verkeerde kant
-        # op - het verbruik valt dan buiten het venster dat overbrugd
-        # moet worden.
-        #
-        # De cyclusduur wordt al geleerd. Is die er en is hij
-        # plausibel, dan wordt daarmee teruggerekend; anders blijft de
-        # eindtijd staan mét de kanttekening, want een duur verzinnen is
-        # erger dan een moment dat een uur naast zit.
-        duur = self.learned_washing_machine_cycle_duration_minutes
-        if duur is not None and duur >= APPLIANCE_MIN_PLAUSIBLE_CYCLE_MINUTES:
-            moment = einde - timedelta(minutes=duur)
-            let_op = (
-                f"teruggerekend vanaf de eindtijd met {duur:.0f} min "
-                "geleerde cyclusduur"
+    def _witgoed_prijzen(self) -> list:
+        try:
+            return [
+                (b, e, p / PRICE_SCALE_FACTOR)
+                for b, e, p in (self._get_forecast_entries() or [])
+            ]
+        except Exception:  # noqa: BLE001 - zonder prijzen geen prijsoordeel
+            return []
+
+    def _witgoed_invoer(
+        self, naam: str, nu: datetime, met_prijs: bool = True
+    ) -> witgoedplanning.Invoer:
+        vaat = naam == "vaatwasser"
+        toestand = self._hc_tekst(naam, witgoedplanning.HC_TOESTAND)
+        start_over = None
+        eindtijd = None
+        if vaat:
+            start_over = self._read_sensor_float(self.config.get(CONF_DISHWASHER_START_IN))
+            eindtijd = self._witgoed_tijd(
+                self._hc_zuster(naam, witgoedplanning.HC_EINDTIJD), nu
             )
         else:
-            moment = einde
-            let_op = "eindtijd bekend, cyclusduur nog niet betrouwbaar geleerd"
+            eindtijd = self._witgoed_tijd(self.config.get(CONF_WASHING_MACHINE_END_AT), nu)
+        voortgang = None
+        voortgang_eid = self._hc_zuster(naam, witgoedplanning.HC_VOORTGANG)
+        if voortgang_eid:
+            voortgang = self._read_sensor_float(voortgang_eid)
+        programma = (
+            self._hc_tekst(naam, witgoedplanning.HC_ACTIEF_PROGRAMMA)
+            or self._witgoed_lopend_programma.get(naam)
+            or self._hc_tekst(naam, witgoedplanning.HC_GEKOZEN_PROGRAMMA)
+        )
+        staat_attr = "_dishwasher_state" if vaat else "_washing_machine_state"
+        klaar = (getattr(self, "cyclus_klaar_sinds", {}) or {}).get(staat_attr)
+        klaar_sinds = dt_util.parse_datetime(klaar) if isinstance(klaar, str) else None
+        kwh, herkomst = self._cyclus_kwh(
+            naam,
+            DEFAULT_DISHWASHER_CYCLE_KWH if vaat else DEFAULT_WASHING_MACHINE_CYCLE_KWH,
+        )
+        return witgoedplanning.Invoer(
+            naam=naam,
+            nu=nu,
+            hc_toestand=toestand.lower() if toestand else None,
+            hc_start_over_s=start_over,
+            hc_eindtijd=eindtijd,
+            hc_voortgang=voortgang,
+            programma=programma,
+            ems_toestand=getattr(self, staat_attr),
+            ems_gestart=getattr(
+                self,
+                "_dishwasher_cycle_started_at" if vaat else "_washing_machine_cycle_started_at",
+            ),
+            ems_klaar_sinds=klaar_sinds,
+            duur_per_programma=(self.witgoed_duur_per_programma or {}).get(naam) or {},
+            duur_apparaat=(
+                self.learned_dishwasher_cycle_duration_minutes
+                if vaat
+                else self.learned_washing_machine_cycle_duration_minutes
+            ),
+            kwh_per_programma=(self.witgoed_kwh_per_programma or {}).get(naam) or {},
+            kwh_apparaat=kwh,
+            kwh_herkomst=herkomst,
+            prijzen=self._witgoed_prijzen() if met_prijs else [],
+            min_duur=APPLIANCE_MIN_PLAUSIBLE_CYCLE_MINUTES,
+        )
 
-        # Ligt het begin al in het verleden, dan draait hij nu al - en
-        # dan zit het verbruik al in de live meting.
-        if moment <= now:
-            return None
+    def get_witgoed_planning(
+        self, naam: str, now: datetime | None = None, met_prijs: bool = True
+    ) -> dict:
+        """De planning van de vaatwasser of wasmachine in gewone taal (v5.139.0).
 
-        return {
-            "apparaat": "wasmachine",
-            "start": moment.isoformat(),
-            "start_kort": moment.strftime("%H:%M"),
-            "eindtijd_kort": einde.strftime("%H:%M"),
-            "kwh": kwh,
-            "herkomst": herkomst,
-            "let_op": let_op,
-        }
+        Gevraagd 27-10: "Kunnen we iets bouwen dat we uitgestelde start en
+        eindtijd helderder in het EMS krijgen?" Zie witgoedplanning.py.
+        Alleen uitlezen: er wordt niets gestart of verplaatst.
+        """
+        nu = now or dt_util.now()
+        try:
+            return witgoedplanning.bepaal(self._witgoed_invoer(naam, nu, met_prijs))
+        except Exception:  # noqa: BLE001 - de planning mag de ronde niet breken
+            _LOGGER.exception("Kon de planning van de %s niet bepalen", naam)
+            return {"apparaat": naam, "status": "niets", "tekst": "Planning niet te bepalen"}
+
+    def _noteer_lopend_programma(self, naam: str) -> None:
+        """Onthoudt het programma terwijl de cyclus loopt: bij "klaar" staat
+        het actieve programma van Home Connect al weer leeg."""
+        programma = self._hc_tekst(naam, witgoedplanning.HC_ACTIEF_PROGRAMMA)
+        sleutel = witgoedplanning.programma_sleutel(programma)
+        if sleutel:
+            self._witgoed_lopend_programma[naam] = programma
+
+    def _leer_per_programma(
+        self, naam: str, duur_minuten: float | None, kwh: float | None
+    ) -> None:
+        """Legt duur en verbruik van een afgeronde cyclus vast bij zijn
+        programma (v5.139.0)."""
+        sleutel = witgoedplanning.programma_sleutel(
+            self._witgoed_lopend_programma.pop(naam, None)
+        )
+        if not sleutel:
+            return
+        if duur_minuten is not None and duur_minuten >= APPLIANCE_CYCLE_MIN_LEARN_MINUTES:
+            self.witgoed_duur_per_programma[naam] = witgoedplanning.leer_programma(
+                (self.witgoed_duur_per_programma or {}).get(naam) or {}, sleutel, duur_minuten
+            )
+        if kwh and 0 < kwh <= APPLIANCE_CYCLE_MAX_KWH:
+            self.witgoed_kwh_per_programma[naam] = witgoedplanning.leer_programma(
+                (self.witgoed_kwh_per_programma or {}).get(naam) or {}, sleutel, kwh
+            )
+        self.schedule_persisted_state_save()
 
     @staticmethod
     def _energiemeter_sleutel(state_attr: str) -> str:
@@ -10965,12 +11110,26 @@ class EnergyManagementSystemCoordinator:
             if staat != "actief" or gestart is None:
                 continue
             cyclus_kwh, _ = self._cyclus_kwh(naam, standaard)
+            # v5.139.0: de eindtijd van Home Connect en de duur en het verbruik
+            # van het lopende programma gaan voor het gemiddelde.
+            planning = self.get_witgoed_planning(naam, nu, met_prijs=False)
+            if planning.get("kwh"):
+                cyclus_kwh = planning["kwh"]
+            if planning.get("duur_minuten"):
+                duur_geleerd = planning["duur_minuten"]
             tot_nu = self._cyclus_energie_kwh(naam, gestart, nu) or 0.0
             rest_kwh = max(0.0, cyclus_kwh - tot_nu)
             if rest_kwh <= 0:
                 continue
             verstreken_min = (nu - gestart).total_seconds() / 60
             rest_min = max(5.0, (duur_geleerd or 60.0) - verstreken_min)
+            eind = (
+                dt_util.parse_datetime(planning["eind"])
+                if planning.get("eind_bron") == "home_connect" and planning.get("eind")
+                else None
+            )
+            if eind is not None:
+                rest_min = max(5.0, (eind - nu).total_seconds() / 60)
             totaal += rest_kwh * _overlap(nu, nu + timedelta(minutes=rest_min))
 
         # v3.99.4: de vaste post blijft het hele uur staan, ook als de
@@ -38618,6 +38777,11 @@ class EnergyManagementSystemCoordinator:
 
         current_state = getattr(self, state_attr)
 
+        # v5.139.0: het programma vastleggen zolang hij draait; bij "klaar"
+        # is het actieve programma van Home Connect alweer leeg.
+        if current_state == "actief" or power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
+            self._noteer_lopend_programma(naam)
+
         if power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
             setattr(self, below_threshold_since_attr, None)
             if current_state != "actief":
@@ -38671,6 +38835,8 @@ class EnergyManagementSystemCoordinator:
                     self._leer_cyclusverbruik(naam, gemeten)
                     # v4.14: en wat de beurt kostte.
                     self.noteer_cycluskosten(naam, started_at, now, gemeten)
+                # v5.139.0: en bij welk programma deze duur en kWh horen.
+                self._leer_per_programma(naam, duration_minutes, gemeten)
                 self._appliance_power_samples[naam] = []
 
         setattr(self, state_attr, "klaar")
@@ -38705,16 +38871,7 @@ class EnergyManagementSystemCoordinator:
         in te stellen. Geen toestand gevonden of onleesbaar: het vermogen
         beslist, zoals voorheen.
         """
-        if naam == "vaatwasser":
-            bronnen = (CONF_DISHWASHER_READY_SENSOR, CONF_DISHWASHER_START_IN)
-        else:
-            bronnen = (CONF_WASHING_MACHINE_READY_SENSOR, CONF_WASHING_MACHINE_END_AT)
-        cache = self.__dict__.setdefault("_bedrijfstoestand_entiteit", {})
-        if naam not in cache:
-            cache[naam] = self._zoek_bedrijfstoestand(
-                [self.config.get(c) for c in bronnen if self.config.get(c)]
-            )
-        eid = cache[naam]
+        eid = self._hc_zuster(naam, witgoedplanning.HC_TOESTAND)
         if not eid:
             return False
         st = self.hass.states.get(eid)

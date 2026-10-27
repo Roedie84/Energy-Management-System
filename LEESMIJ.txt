@@ -1,3 +1,19 @@
+EMS v5.139.0 - planning van vaatwasser en wasmachine
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Nieuw: "Vaatwasser planning" en "Wasmachine planning". In gewone taal wat
+  er speelt, bijvoorbeeld "Start 14:30 · klaar ±15:45 · Eco 50 · ca. € 0,21",
+  "Draait (Katoen) · klaar 12:29 · 33%" of "Klaar sinds 12:31".
+  Staat op Overzicht, op de pagina Vaatwasser & wasmachine en in de cockpit.
+- Altijd begin én eind; een tijd met ± is berekend uit de geleerde duur.
+- Het EMS leert de duur en het verbruik per programma. Een snel programma
+  krijgt niet meer de duur van katoen, dus de reserve zet het verbruik in
+  het juiste kwartier.
+- Voortgang en eindtijd komen van Home Connect zolang die er zijn.
+- Bij een gepland moment: wat het kost, en of het vóór dezelfde eindtijd
+  goedkoper kan. Alleen ter informatie - het EMS start of verplaatst niets.
+
 EMS v5.138.0 - minder testschakelingen als er niets aan de lader hangt
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

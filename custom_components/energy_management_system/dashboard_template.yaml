@@ -211,6 +211,35 @@ views:
         columns: 12
         rows: auto
     - type: heading
+      heading: Vaatwasser & wasmachine
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_vaatwasser_planning'') if states(''sensor.woonkamer_energy_management_system_vaatwasser_planning'') not in [''unknown'', ''unavailable'', ''''] else ''Geen planning'' }}'
+      secondary: 'Vaatwasser{% set b = state_attr(''sensor.woonkamer_energy_management_system_vaatwasser_planning'', ''duur_bron'') %}{% if b == ''programma'' %} · duur van dit programma{% elif b == ''apparaat'' %} · gemiddelde duur{% endif %}'
+      multiline_secondary: true
+      icon: mdi:dishwasher
+      icon_color: '{% set s = state_attr(''sensor.woonkamer_energy_management_system_vaatwasser_planning'', ''status'') %}{{ {''gepland'': ''blue'', ''draait'': ''amber'', ''klaar'': ''green''}.get(s, ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_vaatwasser_planning
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_wasmachine_planning'') if states(''sensor.woonkamer_energy_management_system_wasmachine_planning'') not in [''unknown'', ''unavailable'', ''''] else ''Geen planning'' }}'
+      secondary: 'Wasmachine{% set b = state_attr(''sensor.woonkamer_energy_management_system_wasmachine_planning'', ''duur_bron'') %}{% if b == ''programma'' %} · duur van dit programma{% elif b == ''apparaat'' %} · gemiddelde duur{% endif %}'
+      multiline_secondary: true
+      icon: mdi:washing-machine
+      icon_color: '{% set s = state_attr(''sensor.woonkamer_energy_management_system_wasmachine_planning'', ''status'') %}{{ {''gepland'': ''blue'', ''draait'': ''amber'', ''klaar'': ''green''}.get(s, ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_wasmachine_planning
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: heading
       heading: Besturing
       grid_options:
         columns: 12
@@ -1868,6 +1897,30 @@ views:
     - type: custom:mushroom-title-card
       title: Vaatwasser & wasmachine
       subtitle: Cyclusstatus per apparaat
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_vaatwasser_planning'') if states(''sensor.woonkamer_energy_management_system_vaatwasser_planning'') not in [''unknown'', ''unavailable'', ''''] else ''Geen planning'' }}'
+      secondary: 'Vaatwasser · planning{% set b = state_attr(''sensor.woonkamer_energy_management_system_vaatwasser_planning'', ''duur_bron'') %}{% if b == ''programma'' %} · duur van dit programma{% elif b == ''apparaat'' %} · gemiddelde duur{% endif %}'
+      multiline_secondary: true
+      icon: mdi:dishwasher-alert
+      icon_color: '{% set s = state_attr(''sensor.woonkamer_energy_management_system_vaatwasser_planning'', ''status'') %}{{ {''gepland'': ''blue'', ''draait'': ''amber'', ''klaar'': ''green''}.get(s, ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_vaatwasser_planning
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_wasmachine_planning'') if states(''sensor.woonkamer_energy_management_system_wasmachine_planning'') not in [''unknown'', ''unavailable'', ''''] else ''Geen planning'' }}'
+      secondary: 'Wasmachine · planning{% set b = state_attr(''sensor.woonkamer_energy_management_system_wasmachine_planning'', ''duur_bron'') %}{% if b == ''programma'' %} · duur van dit programma{% elif b == ''apparaat'' %} · gemiddelde duur{% endif %}'
+      multiline_secondary: true
+      icon: mdi:washing-machine-alert
+      icon_color: '{% set s = state_attr(''sensor.woonkamer_energy_management_system_wasmachine_planning'', ''status'') %}{{ {''gepland'': ''blue'', ''draait'': ''amber'', ''klaar'': ''green''}.get(s, ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_wasmachine_planning
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
     - type: custom:mushroom-entity-card
       entity: sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status
       name: Vaatwasser

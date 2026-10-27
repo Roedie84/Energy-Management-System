@@ -3643,6 +3643,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "dishwasher_usage_hourly_history": {"type": "plain", "uursleutels": True},
     "washing_machine_cycle_duration_history": {"type": "plain"},
     "washing_machine_usage_hourly_history": {"type": "plain", "uursleutels": True},
+    # v5.139.0: duur en verbruik per programma (vaatwasser/wasmachine).
+    "witgoed_duur_per_programma": {"type": "plain"},
+    "witgoed_kwh_per_programma": {"type": "plain"},
     "living_room_temp_bucket_humidity": {"type": "plain"},
     "living_room_temp_bucket_direction": {"type": "plain"},
     "presence_week_profile": {"type": "plain"},

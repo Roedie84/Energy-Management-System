@@ -914,6 +914,18 @@ async def async_get_config_entry_diagnostics(
                 "get_planned_appliance_load",
                 coordinator.get_planned_appliance_load,
             ),
+            # v5.139.0: de planning per apparaat, en wat per programma geleerd is.
+            "witgoed_planning": _veilig(
+                "get_witgoed_planning",
+                lambda: {
+                    naam: coordinator.get_witgoed_planning(naam)
+                    for naam in ("vaatwasser", "wasmachine")
+                },
+            ),
+            "witgoed_per_programma": {
+                "duur_minuten": coordinator.witgoed_duur_per_programma,
+                "kwh": coordinator.witgoed_kwh_per_programma,
+            },
             "why_now": _veilig("get_why_now", coordinator.get_why_now),
             "aging_drivers": _veilig(
                 "get_aging_drivers", coordinator.get_aging_drivers

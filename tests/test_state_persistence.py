@@ -660,6 +660,9 @@ VLUCHTIG_MET_REDEN = {
     # terugzetten zou een verkeerd kWh-getal opleveren; de UITKOMST
     # (`appliance_cycle_kwh`) wordt wel bewaard.
     "_appliance_power_samples": "halve cyclus, hoort te vervallen",
+    # v5.139.0: het programma van de lopende cyclus; Home Connect geeft het
+    # na een herstart weer zolang hij draait.
+    "_witgoed_lopend_programma": "lopende cyclus, komt terug uit Home Connect",
     "_temp_prediction_pending": "openstaande voorspelling zonder waarde",
     # v5.48: `_veroudering_vandaag` wordt nu WEL bewaard, samen met zijn
     # dagsleutel. De reden hier ("halve dag als hele dag") klopte niet: het
