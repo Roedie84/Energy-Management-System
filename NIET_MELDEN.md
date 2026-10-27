@@ -18,6 +18,7 @@ Enige bron voor alle geplande taken (stand 27-10). Live HA-staat gaat voor: is i
 - Uitgeschakelde "Voorstel Claude"-automations.
 - IPTV-stekker 's nachts uit en Sonos/luchtbevochtiger-stekker 23-07 uit (bewust, automations).
 - Batterij gang (vervangen).
+- Afgewezen 27-10 20:16 (niet meer voorstellen of melden): Browser Mod-browsers `browser_mod_ceb3e0f4_74fcec08` (afmelden) en `browser_mod_57f6b431_68d41be1` (naam); verweesde kostensensoren `sensor.gasmeter_kosten` en `sensor.p1_meter_export_vergoeding`; L-EMS-040 accucapaciteit uit laadrondes (ook "Accugezondheid over de tijd" als 'zit vast'); luchtreiniger-voorstellen turbo bij koken, wisselen pas na 15 min vaste aanwezigheid, 's nachts naar mid; Tuya-apparaten lokaal maken (RV zolder Tuya blijft via de cloud).
 - Gebruikers/MFA/tokens controleren en een tweede DNS-server (Ruud sloeg beide over, 27-10).
 - Mosquitto 1883 onversleuteld op het LAN (bewust).
 - Matter Server automatisch bijwerken uit (bewust; watchdog staat aan).
