@@ -50,9 +50,10 @@ def test_best_mogelijk_is_nooit_duurder_dan_werkelijk():
 def test_een_perfecte_dag_mist_niets():
     """Doe werkelijk wat de beste planning doet: gemist is nul."""
     kw = _dag()
-    # v4.5: de meetlat is de planning ZONDER netarbitrage; doe precies
+    # v4.5: de meetlat was de planning ZONDER netarbitrage. v5.140.0
+    # (L-EMS-042): MET netladen, zoals de integratie zelf werkt. Doe precies
     # wat die doet en er valt niets te missen.
-    beste = beste_planning(kw, sta_netladen_toe=False, **ACCU)
+    beste = beste_planning(kw, sta_netladen_toe=True, **ACCU)
     # `accu_kwh` is wat het NET ziet (de sensor meet aan de AC-kant):
     # ontladen komt er met rendement uit, laden gaat er met rendement in.
     eta = ACCU["rendement"] ** 0.5
@@ -315,13 +316,43 @@ def test_de_nabeschouwing_meet_tegen_de_eigen_werkwijze():
         slijtage_eur_per_kwh=0.0, **ACCU,
     )
 
-    # De meetlat: geen netarbitrage. Wij deden niets en konden niets
-    # (geen zon), dus valt er vrijwel niets te missen - wat er overblijft
-    # is de waardering van de eindstand, geen gemiste sturing.
-    assert uit["gemist_eur"] < 0.10
-    # En apart: wat arbitrage zou hebben opgeleverd.
+    # v5.140.0 (L-EMS-042): de meetlat laadt uit het net, zoals de
+    # integratie. Niets doen op een dag met prijsverschil is dan gemist.
+    assert uit["meetlat"] == "met netladen"
+    assert uit["gemist_eur"] >= uit["netarbitrage_eur"] - 0.01
+    # De oude meetlat (alleen overschot) blijft zichtbaar: daar valt
+    # zonder zon vrijwel niets te missen.
+    assert uit["zonder_netladen"]["gemist_eur"] < 0.10
     assert uit["netarbitrage_eur"] > 0.05
     assert "netarbitrage" in uit["toelichting"].lower()
+
+
+def test_zonder_netladen_blijft_de_oude_meetlat():
+    kw = _zonnedag()
+    uit = nabeschouwing(
+        kw, eind_kwh=0.5, tijdstippen=[str(i) for i in range(16)],
+        slijtage_eur_per_kwh=0.0, netladen=False, **ACCU,
+    )
+    assert uit["meetlat"] == "zonder netladen"
+    assert uit["gemist_eur"] < 0.10
+    assert uit["gemist_eur"] == uit["zonder_netladen"]["gemist_eur"]
+
+
+def test_netladen_haalt_beter_dan_perfect_weg():
+    """L-EMS-042: 26-10 leverde de accu € 1,92 tegen 'best mogelijk'
+    € 0,70, omdat de sturing 's nachts uit het net laadde en de meetlat
+    niet. Met netladen in de meetlat kan de werkelijkheid er niet boven."""
+    kw = _zonnedag()
+    beste = beste_planning(kw, sta_netladen_toe=True, **ACCU)
+    eta = ACCU["rendement"] ** 0.5
+    for k, a in zip(kw, beste["acties"]):
+        k.accu_kwh = a["ontladen_kwh"] * eta - a["laden_kwh"] / eta
+    uit = nabeschouwing(
+        kw, eind_kwh=beste["eindstand_kwh"], tijdstippen=[str(i) for i in range(16)],
+        slijtage_eur_per_kwh=0.0, **ACCU,
+    )
+    assert uit["accu_leverde_op_eur"] <= uit["had_kunnen_opleveren_eur"] + 0.02
+    assert uit["zonder_netladen"]["gemist_eur"] < 0  # de oude meetlat: 'beter dan perfect'
 
 
 def test_de_kandidaat_netarbitrage_telt_over_de_dagen(make_coordinator, hass):

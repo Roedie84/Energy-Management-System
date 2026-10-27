@@ -13,9 +13,17 @@ snapshot wordt eenmaal geschreven onder de hash van zijn inhoud. Bestaat het
 id al, dan moet de inhoud gelijk zijn; anders is dat een fout, die wordt
 geteld en nooit overschreven. Wat een aanroeper terugkrijgt is een kopie.
 
-Bewaren: snapshots en evaluaties 30 dagen, kwartieren en dagrapporten 400
-dagen. Harde limiet 25 MB: daarboven verdwijnen eerst de oudste dagen met
-snapshots en evaluaties; kwartieren worden nooit door de limiet geraakt.
+Bewaren: snapshots 14 dagen, evaluaties 30 dagen, kwartieren en dagrapporten
+400 dagen. Harde limiet 40 MB: daarboven verdwijnen eerst de oudste snapshots,
+pas daarna de oudste evaluaties; kwartieren worden nooit door de limiet
+geraakt.
+
+v5.140.0 (akkoord Ruud 27-10): op 26-10 stond de meetlog op 26,6 MB tegen een
+limiet van 26,2 MB (25 MiB), na 19 dagen: snapshots 15,5 MB, evaluaties
+10,7 MB. Bij 30 dagen bewaren was dat ~42 MB geworden, en de limiet wiste
+per dag snapshot én evaluatie samen - ook de evaluaties waar de dagcontrole
+en de leerronde op rekenen. Snapshots zijn het grootst en worden achteraf het
+minst gelezen; die gaan nu eerder weg.
 
 De opslag zelf is verwisselbaar (`opslag`): in bedrijf de Home Assistant
 Store, in de toetsen een woordenboek. Geen Home Assistant in dit bestand.
@@ -28,9 +36,10 @@ import json
 from datetime import date, datetime, timedelta
 
 SOORTEN = ("snapshot", "evaluatie", "kwartier", "dagrapport")
-BEWAREN_DAGEN = {"snapshot": 30, "evaluatie": 30, "kwartier": 400, "dagrapport": 400}
+BEWAREN_DAGEN = {"snapshot": 14, "evaluatie": 30, "kwartier": 400, "dagrapport": 400}
+#: In deze volgorde: eerst alle oude snapshots, dan pas evaluaties.
 DOOR_LIMIET_TE_WISSEN = ("snapshot", "evaluatie")
-LIMIET_BYTES = 25 * 1024 * 1024
+LIMIET_BYTES = 40 * 1024 * 1024
 
 
 class SnapshotConflict(Exception):
@@ -137,13 +146,16 @@ class MeetLog:
                 self._wis(sleutel)
                 gewist.append(sleutel)
         while self.grootte_bytes() > self.limiet_bytes:
+            # v5.140.0: per soort in de volgorde van DOOR_LIMIET_TE_WISSEN,
+            # binnen een soort de oudste dag eerst.
             kandidaten = sorted(
-                (dag, soort) for soort, dag in self._groottes
+                (DOOR_LIMIET_TE_WISSEN.index(soort), dag, soort)
+                for soort, dag in self._groottes
                 if soort in DOOR_LIMIET_TE_WISSEN and dag != vandaag.isoformat()
             )
             if not kandidaten:
                 break
-            dag, soort = kandidaten[0]
+            _, dag, soort = kandidaten[0]
             self._wis((soort, dag))
             gewist.append((soort, dag))
             self.door_limiet_gewist.append(f"{soort} {dag}")

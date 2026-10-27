@@ -33997,3 +33997,19 @@ Gemeten 27-10 na v5.139.0: de wasmachine had 0,18 kWh per beurt geleerd (het EMS
 - Cyclusverbruik onder 0,25 kWh (`APPLIANCE_MIN_PLAUSIBLE_CYCLE_KWH`) wordt niet geleerd, en bij het laden uit de bewaarde reeks gehaald. Voor de wasmachine betekent dat terug naar de schatting van 0,8 kWh tot de eerste volledige was gemeten is.
 
 Tests: `test_v5139_witgoedplanning.py` (+7).
+
+
+## v5.140.0 — nabeschouwing met netladen (L-EMS-042) en meetlog-opslag
+
+Akkoord Ruud 27-10 20:16 op de punten "L-EMS-042" en "meetlog boven de opslaglimiet".
+
+**Nabeschouwing: de meetlat mag uit het net laden (L-EMS-042).** Sinds v4.5 laadde "best mogelijk" alleen uit overschot; de sturing laadt intussen zelf in goedkope blokken uit het net. Daardoor lag de werkelijkheid op 3 van 7 dagen boven het optimum (20..26-10: realisatie 116,6 %; 26-10 € 1,92 tegen € 0,70, netarbitrage € 1,81), en kwamen de dagdeelcijfers (avondpiek "te veel ontladen", ochtendpiek "vastgehouden") uit een optimum dat niet kon bijladen.
+- `nabeschouwing(..., netladen=True)`: `kosten_best_mogelijk_eur`, `had_kunnen_opleveren_eur`, `gemist_eur`, `gemist_door_*`, `te_veel_*`, `grootste_verschillen` en `per_dagdeel` rekenen tegen het optimum mét netladen. Ook de reservetoets rekent met netladen.
+- De oude meetlat blijft zichtbaar onder `zonder_netladen` (kosten, had kunnen, gemist, per dagdeel); `netarbitrage_eur` blijft het verschil tussen beide. Nieuw: `meetlat`. De toelichting zegt niet meer dat netarbitrage uit de integratie is gehaald.
+- Geldt voor nieuwe dagafsluitingen; de bewaarde dagen van vóór deze versie rollen er in een week uit.
+
+**Meetlog: 26,6 MB tegen een limiet van 26,2 MB na 19 dagen** (snapshots 15,5 MB, evaluaties 10,7 MB). De limiet wiste per dag snapshot én evaluatie samen, ook de evaluaties waar de dagcontrole op rekent.
+- Snapshots 14 dagen bewaren (was 30), evaluaties blijven 30 dagen.
+- Limiet 40 MB (was 25 MiB); boven de limiet eerst alle oude snapshots, pas daarna evaluaties.
+
+Tests: `test_v5140_meetlat_meetlog.py` (3), `test_nabeschouwing.py` (+2, 2 aangepast aan de nieuwe meetlat).

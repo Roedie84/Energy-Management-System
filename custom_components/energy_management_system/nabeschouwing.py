@@ -191,9 +191,18 @@ def nabeschouwing(
     slijtage_eur_per_kwh: float,
     tijdstippen: list[str],
     reserve_kwh: float | None = None,
+    netladen: bool = True,
 ) -> dict:
     """Werkelijk tegenover best mogelijk, met de plekken waar het
     verschil zat.
+
+    v5.140.0 (L-EMS-042, akkoord Ruud 27-10): de meetlat mag uit het net
+    laden zolang de integratie dat zelf doet (`netladen`). De meetlat van
+    v4.5 laadde alleen uit overschot; sinds de integratie in goedkope blokken
+    uit het net laadt, lag de werkelijkheid op 3 van 7 dagen BOVEN "best
+    mogelijk" (26-10: € 1,92 tegen € 0,70) en kwamen de dagdeelcijfers uit
+    een optimum dat niet kon bijladen. Het oude getal blijft staan onder
+    `zonder_netladen`.
 
     v4.2: `reserve_kwh` is de reserve die de integratie die dag aanhield
     (de mediaan over de dag). Met die reserve als harde ondergrens wordt
@@ -207,9 +216,9 @@ def nabeschouwing(
     eta = rendement ** 0.5
     werkelijk = kosten_werkelijk(kwartieren) - (eind_kwh - bodem_kwh) * gemiddelde_prijs * eta \
         + sum(max(0.0, k.accu_kwh) for k in kwartieren) * slijtage_eur_per_kwh
-    # v4.5: de meetlat is hoe de integratie werkt - laden uit overschot,
-    # geen netarbitrage. Wat arbitrage zou opleveren staat er apart bij.
-    beste = beste_planning(
+    # v4.5: de meetlat was hoe de integratie toen werkte - laden uit
+    # overschot. v5.140.0: met netladen zolang de integratie uit het net laadt.
+    zonder_net = beste_planning(
         kwartieren,
         capaciteit_kwh=capaciteit_kwh,
         begin_kwh=begin_kwh,
@@ -231,8 +240,9 @@ def nabeschouwing(
         slijtage_eur_per_kwh=slijtage_eur_per_kwh,
         sta_netladen_toe=True,
     )
-    if not beste.get("te_becijferen"):
-        return {"te_becijferen": False, "reden": beste.get("reden")}
+    if not zonder_net.get("te_becijferen"):
+        return {"te_becijferen": False, "reden": zonder_net.get("reden")}
+    beste = met_arbitrage if (netladen and met_arbitrage.get("te_becijferen")) else zonder_net
 
     # v4.2: de prijs van de reserve, apart.
     # v4.12: de reserve als POORT, niet als bodem. Zie de toelichting in
@@ -249,7 +259,7 @@ def nabeschouwing(
             ontlaad_kw=ontlaad_kw,
             rendement=rendement,
             slijtage_eur_per_kwh=slijtage_eur_per_kwh,
-            sta_netladen_toe=False,
+            sta_netladen_toe=beste is met_arbitrage,
             verkoop_onder_reserve_verboden=True,
             reserve_kwh=reserve_kwh,
         )
@@ -309,15 +319,31 @@ def nabeschouwing(
         "reserve_kwh": reserve_kwh,
         "reserve_als": "verkooppoort",
         "netarbitrage_eur": round(
-            max(0.0, beste["kosten_eur"] - met_arbitrage["kosten_eur"]), 2
-        ),
+            max(0.0, zonder_net["kosten_eur"] - met_arbitrage["kosten_eur"]), 2
+        )
+        if met_arbitrage.get("te_becijferen")
+        else 0.0,
+        "meetlat": "met netladen" if beste is met_arbitrage else "zonder netladen",
+        # v5.140.0: de oude meetlat (alleen laden uit overschot), ter vergelijking.
+        "zonder_netladen": {
+            "kosten_best_mogelijk_eur": round(zonder_net["kosten_eur"], 2),
+            "had_kunnen_opleveren_eur": round(zonder - zonder_net["kosten_eur"], 2),
+            "gemist_eur": round(werkelijk - zonder_net["kosten_eur"], 2),
+            "per_dagdeel": _per_dagdeel(kwartieren, zonder_net["acties"], tijdstippen),
+        },
         "grootste_verschillen": verschillen[:8],
         "per_dagdeel": per_dagdeel,
         "toelichting": (
-            "Best mogelijk laadt alleen uit OVERSCHOT - geen netarbitrage, "
-            "want die is uit de integratie gehaald. Wat netarbitrage zou "
-            "opleveren staat apart in `netarbitrage_eur`. Best mogelijk "
-            "rekent met PERFECTE kennis vooraf van zon, "
+            (
+                "Best mogelijk mag uit het net laden, net als de integratie zelf "
+                "in goedkope blokken. Wat laden uit het net daarin oplevert staat "
+                "apart in `netarbitrage_eur`; het optimum zonder netladen in "
+                "`zonder_netladen`. "
+                if beste is met_arbitrage
+                else "Best mogelijk laadt alleen uit OVERSCHOT; wat netarbitrage "
+                "zou opleveren staat apart in `netarbitrage_eur`. "
+            )
+            + "Best mogelijk rekent met PERFECTE kennis vooraf van zon, "
             "verbruik en prijs; dat is een ondergrens die geen sturing "
             "haalt. Het gemiste bedrag is de som van niet vooruit kunnen "
             "kijken en van de regels die de integratie volgde. De "

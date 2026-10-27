@@ -1,3 +1,14 @@
+EMS v5.140.0 - eerlijke nabeschouwing en meetlog die past
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- "Best mogelijk" in de nabeschouwing mag nu ook uit het net laden, net als
+  het EMS zelf. Geen dagen meer waarop het EMS "beter dan perfect" scoort;
+  het oude getal staat er nog naast (zonder netladen).
+- De meetlog bewaart de grote momentopnames 14 dagen in plaats van 30 en mag
+  tot 40 MB groeien. Wordt hij toch te groot, dan gaan eerst de oude
+  momentopnames weg, niet de evaluaties.
+
 EMS v5.139.1 - wasmachineverbruik klopte niet na een herstart
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
