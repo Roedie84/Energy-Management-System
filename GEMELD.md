@@ -125,3 +125,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 27-10 11:51 | ems lek-import door quooker-warmhoudpulsen buiten regelsensor (p1 +55-80 w)
 27-10 12:54 | ems meetlog boven opslaglimiet (limiet hoger of snapshots korter)
 27-10 12:54 | verweesde kostensensoren gasmeter_kosten en p1_meter_export_vergoeding verwijderen
+27-10 13:58 | ems zelf uitgesloten weerbron (openweathermap) informatief tonen i.p.v. blijvend LET OP
