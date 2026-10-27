@@ -431,3 +431,14 @@ laatste ronde: 27-10 03:40, gemeten t/m 27-10 03:50
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag 100 % bewolking), H-EMS-11 (wacht op L-EMS-042), H-EMS-14 (rustig). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 27-10 07:40, gemeten t/m 27-10 07:40
+
+## 27-10 11:40 · tussenronde
+- Herstarts 08:00 en 11:34 → **v5.139.0 actief** (andere sessie, 10:51: planning vaatwasser/wasmachine). Fout 0 / storing 0; na de herstart Zonneplan-/prijsbuffer gebruikt (afgevangen). Geen release (tussenronde, niets acuut, niets gestapeld).
+- **Nacht 26→27 afgerekend: geen tekort.** SoC 23 → **19 %** tot het blok, P1 rond 0 (5-min −31..+93 W) → geen netafname bij lege accu. 22:00-kans 26,7 % → Brier-bijdrage 0,071 (reeks n=6 ≈ 0,51, was 0,600).
+- **Harde regel:** 0 verkoopkwartieren vandaag. Laadblok vanaf 10:45 (`grid_charging_profitable`), SoC 19 → 33 % om 11:40.
+- Nieuw (n=1, observatie): `cheapest_block_start` schoof tijdens het lopende blok 10:45 → 11:00 (11:00:27, zonder herstart) → 11:30 (herstart), eind 14:30; laden liep ononderbroken door → geen gevolg. MC gaf in de eerste blokronde 100,0 (10:45:27), daarna 3-6 %. Dagafsluiting: in code nagaan welke start de sensor publiceert (lopend blok of resterend venster).
+- Digital twin MAE 1,76 → **1,59 kWh**. L-EMS-043 (airco-prijseenheid) nog in main; besluit nu "niets" (zelf bediend), knop uit → bouwen 28-10 03:40 zoals gepland.
+- Stilstand: ongewijzigd, alleen *Accugezondheid over de tijd* (L-EMS-040).
+- Hypotheses: H-EMS-2 (PV te hoog; bewolking 78 %), H-EMS-11 (wacht op L-EMS-042), H-EMS-14 (reservesprongen: 7 echt / 30 alleen_behoefte / 11 na_herstart, rustig).
+
+laatste ronde: 27-10 11:40, gemeten t/m 27-10 11:42
