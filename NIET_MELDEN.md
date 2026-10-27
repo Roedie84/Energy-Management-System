@@ -24,4 +24,7 @@ Enige bron voor alle geplande taken (stand 27-10). Live HA-staat gaat voor: is i
 - zendure_ha-deprecations (HA 2027.8): alleen melden als de maker een update uitbrengt.
 - Airco woonkamer: laatste uren van de dag ontbreken in de Daikin-telling (geaccepteerd).
 - Afname-euro's in het energiedashboard via P1 + kwartierprijs, niet via Zonneplan-cloud (bewust); gas en teruglevering wel via Zonneplan.
+- Geparkeerde opschoononderwerpen: zithoek (lux/PIR), HOBEIAN-sensoren, ab3000_* hernoemen; lege dubbele apparaten (HACS, HomeWizard, samsungtv, GA-HUM240.DW).
+- Recorder-exclude niet als algemene tip melden (alleen nieuwe, concrete kandidaten); de verwijderde brievenbus.
+- HA-herstarts door HACS-updates.
 
