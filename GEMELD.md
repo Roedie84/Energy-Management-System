@@ -121,3 +121,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 27-10 04:51 | L-GS-033 gold scalper resultaat per periode mand leest alleen btc-eur
 27-10 04:51 | updates installeren gold scalper 2.24.3 (hacs)
 27-10 06:51 | adsb.lol http 400 militaire-vliegtuigenmelder (coördinaten 15 decimalen afronden)
+27-10 07:52 | L-EMS-043 ems airco-voorverwarmen ruwe prijsreeks vs €/kWh (altijd +0,5 °C)
