@@ -1259,6 +1259,8 @@ STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES = 2
 # update tick (~5 min, UPDATE_INTERVAL_MINUTES) - no separate constant
 # needed for that half of the cycle.
 SCHEDULED_CHARGE_POLL_OFF_MINUTES = 15
+# v5.138.0: afbouw na lege tests: extra wachttijd na de 1e, 2e, 3e+ lege test (15/30/60 min)
+SCHEDULED_CHARGE_AFBOUW_EXTRA_MINUTEN = (0, 15, 45)
 
 # v5.133.0 (Ruud 26-10): "de batterijlader, stofzuiger en fietsen niet
 # controleren tussen 22:00 en 06:00, dan worden ze toch niet aangesloten en dit

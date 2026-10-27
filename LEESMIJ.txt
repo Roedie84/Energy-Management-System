@@ -1,4 +1,4 @@
-EMS v5.137.0 - batterijlader blijft aan zolang er iets aan hangt
+EMS v5.138.0 - minder testschakelingen als er niets aan de lader hangt
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 

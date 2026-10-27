@@ -33958,3 +33958,14 @@ Gemeten 27-10 (keuze B van Ruud): een vol apparaat aan de Anker laadt vanzelf bi
 
 Tests: `test_v5137_batterijlader_aan_tot_leeg.py` (4); `test_v5129_batterijlader.py` en `test_v5131_2_batterijlader_afronden.py` aangepast (overdag na vol: `vol_blijft_aan`).
 
+
+
+## v5.138.0 — minder testschakelingen als er niets aan de lader hangt
+
+Audit 27-10 punt 1 (akkoord Ruud): de e-bikelader schakelde op 25-10 133 keer. Elk kwartier een test van ~5 min zonder fiets (5-6 W, alleen de lader zelf).
+
+- Na lege tests bouwt de wachttijd op: 15, 30, daarna 60 minuten (`SCHEDULED_CHARGE_AFBOUW_EXTRA_MINUTEN` = (0, 15, 45), via `_lege_test_extra_minuten`).
+- Terug naar elk kwartier zodra er echt lading is (`_sessie_begint`) of buiten het blok (`_stop_controles`), zodat elk nieuw goedkoop blok direct test.
+- Geldt voor fietsladers, steelstofzuiger en batterijlader. Een blok van 4 uur zonder fiets: 6 tests in plaats van 16.
+
+Tests: `test_v5138_afbouw_lege_tests.py` (3).

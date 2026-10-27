@@ -148,6 +148,7 @@ from .const import (
     CONF_WATER_TOTAL_USAGE_SENSOR,
     STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
     SCHEDULED_CHARGE_POLL_OFF_MINUTES,
+    SCHEDULED_CHARGE_AFBOUW_EXTRA_MINUTEN,
     SCHEDULED_CHARGE_NACHTRUST_VAN_UUR,
     SCHEDULED_CHARGE_NACHTRUST_TOT_UUR,
     IDLE_POWER_HISTORY_LENGTH,
@@ -4812,6 +4813,7 @@ class EnergyManagementSystemCoordinator:
         - de wachtende melding vervalt.
         """
         setattr(self, charge_started_attr, now)
+        self._lege_tests_reset(last_action_attr)
         status = (getattr(self, "_kwartiercontrole", None) or {}).get(last_action_attr)
         if status:
             status["melding_wacht"] = False
@@ -4827,6 +4829,7 @@ class EnergyManagementSystemCoordinator:
     ) -> None:
         """Buiten het blok: geen controles meer, wachtende melding versturen."""
         setattr(self, next_poll_attr, None)
+        self._lege_tests_reset(last_action_attr)
         if kwartiercontrole:
             self._kwartiercontrole_klaar(now, last_action_attr, notify_title, notify_message)
 
@@ -4844,15 +4847,38 @@ class EnergyManagementSystemCoordinator:
         Fietsladers op het volgende kwartierbegin, en een wachtende melding
         gaat nu de deur uit. De rest zoals voorheen: vijftien minuten uit.
         """
+        extra = self._lege_test_extra_minuten(last_action_attr)
         if not kwartiercontrole:
             setattr(
                 self,
                 next_poll_attr,
-                now + timedelta(minutes=SCHEDULED_CHARGE_POLL_OFF_MINUTES),
+                now + timedelta(minutes=SCHEDULED_CHARGE_POLL_OFF_MINUTES + extra),
             )
             return
-        setattr(self, next_poll_attr, self._volgend_kwartier(now))
+        setattr(self, next_poll_attr, self._volgend_kwartier(now) + timedelta(minutes=extra))
         self._kwartiercontrole_klaar(now, last_action_attr, notify_title, notify_message)
+
+    def _lege_test_extra_minuten(self, last_action_attr: str) -> int:
+        """Afbouw na lege tests (v5.138.0, audit 27-10 punt 1).
+
+        Op 25-10 schakelde de e-bikelader 133 keer: elk kwartier een test
+        zonder fiets. Nu: na de 1e lege test 15 min wachten, na de 2e 30,
+        daarna 60. Een sessie of een nieuw goedkoop blok zet het terug.
+        Geeft de minuten bovenop de gewone 15 minuten.
+        """
+        tellers = getattr(self, "_lege_tests", None)
+        if tellers is None:
+            tellers = {}
+            self._lege_tests = tellers
+        aantal = tellers.get(last_action_attr, 0) + 1
+        tellers[last_action_attr] = aantal
+        return SCHEDULED_CHARGE_AFBOUW_EXTRA_MINUTEN[min(aantal, len(SCHEDULED_CHARGE_AFBOUW_EXTRA_MINUTEN)) - 1]
+
+    def _lege_tests_reset(self, last_action_attr: str) -> None:
+        """Er hangt iets aan, of een nieuw blok begint: weer elk kwartier."""
+        tellers = getattr(self, "_lege_tests", None)
+        if tellers:
+            tellers.pop(last_action_attr, None)
 
     def _kwartiercontrole_na_klaar(
         self,
