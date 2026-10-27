@@ -2,11 +2,6 @@
 
 Regel: <dd-mm HH:MM> | <sleutel>
 
-13-10 00:51 | gold scalper herkansing na afwijzing zonder force open (netting IG)
-13-10 00:51 | gold scalper netting-trades buiten t-toets en oordeel
-13-10 02:50 | gold scalper ig-sessie vernieuwen voor verlopen (403 elk uur)
-13-10 03:51 | gold scalper vloercheck valse noodstop op één meting/risicobasis
-13-10 06:51 | gold scalper runs na herstart samentellen per configuratie
 21-10 19:51 | ems solarflow ac-limiet schommelt, deadband
 21-10 19:51 | adsb.lol 429 te vaak pollen (militair-package, p2000-heli)
 21-10 19:51 | homewizard rest-sensoren time-outs scan_interval
@@ -125,3 +120,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 27-10 04:51 | L-EMS-041 ems tekortkans 22:00 bewaren als laadblok al loopt (aparte telling)
 27-10 04:51 | L-GS-033 gold scalper resultaat per periode mand leest alleen btc-eur
 27-10 04:51 | updates installeren gold scalper 2.24.3 (hacs)
+27-10 06:51 | adsb.lol http 400 militaire-vliegtuigenmelder (coördinaten 15 decimalen afronden)
