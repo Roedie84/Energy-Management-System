@@ -123,3 +123,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 27-10 06:51 | adsb.lol http 400 militaire-vliegtuigenmelder (coördinaten 15 decimalen afronden)
 27-10 07:52 | L-EMS-043 ems airco-voorverwarmen ruwe prijsreeks vs €/kWh (altijd +0,5 °C)
 27-10 11:51 | ems lek-import door quooker-warmhoudpulsen buiten regelsensor (p1 +55-80 w)
+27-10 12:54 | ems meetlog boven opslaglimiet (limiet hoger of snapshots korter)
+27-10 12:54 | verweesde kostensensoren gasmeter_kosten en p1_meter_export_vergoeding verwijderen
