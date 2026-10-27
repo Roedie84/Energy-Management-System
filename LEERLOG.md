@@ -442,3 +442,15 @@ laatste ronde: 27-10 07:40, gemeten t/m 27-10 07:40
 - Hypotheses: H-EMS-2 (PV te hoog; bewolking 78 %), H-EMS-11 (wacht op L-EMS-042), H-EMS-14 (reservesprongen: 7 echt / 30 alleen_behoefte / 11 na_herstart, rustig).
 
 laatste ronde: 27-10 11:40, gemeten t/m 27-10 11:42
+
+## 27-10 15:58 · tussenronde
+- Herstart 12:32 → **v5.139.1 actief** (andere sessie, 12:00: witgoedcyclus overleeft herstart). Fout 0 / storing 0. Zonneplan-API 500 (12:47-13:13, extern) → EMS gebruikte de laatste waarden (afgevangen). Geen release (tussenronde, niets acuut).
+- **Laadblok liep door tot de accu vol was:** `grid_charging_profitable` 10:45 → **15:45**; `cheapest_block_start` schoof mee (11:00 → 11:30 → 12:30 → 14:30 → 15:30; sensor publiceert de start van het resterende venster, by design). Netafname 11:40-14:30 5,71 kWh, **14:30-15:45 2,36 kWh tegen gem. 29,1 ct** (26,7-33,7); SoC 33 → 99 %. Met rendement 83,5 % = 34,9 ct tegen avondprijs 41+ ct → nog winstgevend. Reserve 10,37 kWh > beschikbaar 10,25 → vanavond niets te verkopen (zelfde patroon als H-EMS-11).
+- **Harde regel:** 0 verkoopkwartieren 11:40-15:55 (P1 5-min altijd ≥ 0).
+- **PV vandaag ~5,18 kWh** (t/m 16:00): day-ahead 5,95 → **−13,0 %** bij 96,5 % bewolking (H-EMS-2); gecorrigeerd (L-EMS-025, −8,1 %) 5,47 → **−5,3 %** → correctie helpt vandaag. Solcast intraday 4,17 (te laag, +24 %). Solcast-API limiet 10/10 bereikt (bekend, niet melden).
+- Weerensemble 78,5 % (26-10) → **54,0 %** ("kwaliteit te laag"), beide bronnen identiek 54,0 %. Venster = 200 daglichtwaarnemingen (~2 dagen); 'oneens' = PV > 1,3× Solcast-nu bij > 70 % bewolking → spiegelt de te lage intraday-Solcast van de laatste dagen, geen bug. Label schommelt per weertype (meetbaarheid; geen voorstel).
+- Digital twin MAE 1,59 → **1,71 kWh**. Airco: aanzetgrens 19,0 → **19,5 °C** (geleerd), besluit "verwarmen", knop uit; L-EMS-043 nog zichtbaar ("straks tot 483247300 ct") → bouwen 28-10 03:40.
+- Stilstand: ongewijzigd, alleen *Accugezondheid over de tijd* (L-EMS-040). Nog niet bepaald 14 (wachten, lopen op).
+- Hypotheses: H-EMS-2 (PV te hoog; correctie vandaag beter), H-EMS-11 (wacht op L-EMS-042), H-EMS-14 (rustig).
+
+laatste ronde: 27-10 15:58, gemeten t/m 27-10 15:55
