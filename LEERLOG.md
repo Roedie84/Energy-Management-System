@@ -465,3 +465,15 @@ laatste ronde: 27-10 15:58, gemeten t/m 27-10 15:55
 - Hypotheses: H-EMS-2 (PV te hoog; uitslag 27-10 in dagafsluiting), H-EMS-14 (live correctie + verkoop; nacht toetst), H-EMS-15 (twin in laadblokuren). H-EMS-11 wacht op L-EMS-042 (geparkeerd, max 3 actief).
 
 laatste ronde: 27-10 19:41, gemeten t/m 27-10 19:45
+
+## 27-10 23:41 · tussenronde
+- Herstart 21:01 → **v5.140.0 actief** (andere sessie 20:23: L-EMS-042 nabeschouwing met netladen + meetlog-opslag). Fout 0 / storing 0. DNS-storing 21:02-21:44 (extern: Nabu Casa, Bitvavo, IG), na de herstart prijsbuffer gebruikt - afgevangen. Geen release (tussenronde, niets acuut).
+- **Harde regel: 0× onder de reserve.** Geen verkoop 19:41-23:45; P1-export per uur 0,019-0,027 kWh (regeloverschot), import 0,016-0,040.
+- **Nacht 27→28:** 23:41 beschikbaar 4,26 kWh tegen nodig tot blok (10:15) 2,37 ruw → marge 1,89; reserve 8,21 incl. na-blokdeel 4,20 (wordt in het blok bijgeladen). 19:41-23:41 2,08 kWh uit de accu. MC 0,0 %.
+- **H-EMS-14:** 20 reservesprongen 19:47-23:00 (2 na herstart); live correctie wisselt 0 ↔ 1,5 kWh tot 21:25, daarna ≤ 1,0 en na 22:30 ≤ 0,3 (huis rustig). Uitslag nacht in de dagafsluiting.
+- **L-EMS-042:** actief sinds 21:01; `nabeschouwing_7d` toont nog alleen 20..26-10 op de oude meetlat (geen `zonder_netladen`-velden). Eerste dag op de nieuwe meetlat = 27-10 → toets in de dagafsluiting (realisatie ≤ 100 %).
+- Digital twin MAE 1,888 → **1,801 kWh** (n=60); H-EMS-15 replay in de dagafsluiting. Besparing vandaag € 1,29. Airco besluit "verwarmen" (projectie 18,8 °C), knop uit; L-EMS-043 bouwen 28-10 03:40.
+- Stilstand: **geen** (Accugezondheid over de tijd = L-EMS-040, afgewezen 27-10 → niet meer melden). Nog niet bepaald 14 (wachten).
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (live correctie; nacht toetst), H-EMS-15 (twin in laadblokuren). H-EMS-11 kan na L-EMS-042 op de nieuwe meetlat (dagafsluiting).
+
+laatste ronde: 27-10 23:41, gemeten t/m 27-10 23:45
