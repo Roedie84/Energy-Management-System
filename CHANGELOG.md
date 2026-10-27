@@ -33986,3 +33986,14 @@ Gemeten 27-10 10:31: de wasmachine draaide (Katoen), Home Connect gaf eindtijd 1
 - Nieuwe sensoren `Vaatwasser planning` en `Wasmachine planning`; kaarten op Overzicht en op de pagina Vaatwasser & wasmachine; onderregel in de cockpit bij Huis en apparaten. In de diagnostiek: `witgoed_planning` en `witgoed_per_programma`.
 
 Tests: `test_v5139_witgoedplanning.py` (18).
+
+
+## v5.139.1 — wasmachine leerde 0,18 kWh per was: herstart midden in een cyclus
+
+Gemeten 27-10 na v5.139.0: de wasmachine had 0,18 kWh per beurt geleerd (het EMS schat zelf 0,8). De HomeWizard-teller laat per was 1,1-1,6 kWh zien (14-10 t/m 26-10: 1,62 / 1,46 / 1,09 / 1,16 kWh). Ruud: "we wassen niet koud". Oorzaak: het begin van een cyclus en de meterstand bij dat begin werden niet bewaard. Na een herstart halverwege een was begon het EMS een "nieuwe" cyclus en leerde alleen het restant (centrifugeren); ook de cyclusduren 23 en 96 min kwamen zo. Daardoor telde een geplande was in de reserve voor bijna niets. Ook de lege starttijd na de herstart van 27-10 kwam hiervandaan.
+
+- `_dishwasher_cycle_started_at`, `_washing_machine_cycle_started_at` en `_meterstand_bij_cyclusstart` worden bewaard over een herstart.
+- Ziet het EMS een cyclus "beginnen" terwijl Home Connect al minstens 10% voortgang meldt (`WITGOED_MIDDEN_IN_PROCENT`), dan is het een herstart halverwege: het begin wordt teruggerekend uit voortgang en eindtijd (verstreken = resterend x voortgang / (100 - voortgang)) en de cyclus leert geen duur, verbruik of kosten (`_witgoed_cyclus_onvolledig`). Hetzelfde voor een lopende cyclus zonder bekend begin.
+- Cyclusverbruik onder 0,25 kWh (`APPLIANCE_MIN_PLAUSIBLE_CYCLE_KWH`) wordt niet geleerd, en bij het laden uit de bewaarde reeks gehaald. Voor de wasmachine betekent dat terug naar de schatting van 0,8 kWh tot de eerste volledige was gemeten is.
+
+Tests: `test_v5139_witgoedplanning.py` (+7).

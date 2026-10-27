@@ -277,3 +277,125 @@ def test_program_data_is_persisted():
 
     assert "witgoed_duur_per_programma" in PERSISTED_FIELDS
     assert "witgoed_kwh_per_programma" in PERSISTED_FIELDS
+
+
+# --- v5.139.1: herstart midden in een was ----------------------------
+# Gemeten 27-10: wasmachine 0,18 kWh per beurt geleerd; de HomeWizard-teller
+# zegt 1,1-1,6 kWh per was. Het begin en de meterstand werden niet bewaard,
+# dus na een herstart halverwege leerde het EMS alleen het restant.
+
+
+def test_start_and_meter_survive_a_restart():
+    from custom_components.energy_management_system.const import PERSISTED_FIELDS
+
+    for veld in (
+        "_washing_machine_cycle_started_at",
+        "_dishwasher_cycle_started_at",
+        "_meterstand_bij_cyclusstart",
+        "_witgoed_cyclus_onvolledig",
+    ):
+        assert veld in PERSISTED_FIELDS
+
+
+def test_a_fragment_is_not_learned_as_consumption(make_coordinator, hass):
+    c = _coordinator(make_coordinator)
+    c._leer_cyclusverbruik("wasmachine", 0.18)
+    assert "wasmachine" not in c.appliance_cycle_kwh
+    c._leer_cyclusverbruik("wasmachine", 1.4)
+    assert c.appliance_cycle_kwh["wasmachine"] == 1.4
+
+
+def test_old_fragments_are_cleaned_on_load(make_coordinator, hass):
+    c = _coordinator(make_coordinator)
+    c._appliance_cycle_history = {"wasmachine": [0.18, 0.15, 0.2], "vaatwasser": [1.2, 0.1, 1.3]}
+    c.appliance_cycle_kwh = {"wasmachine": 0.18, "vaatwasser": 1.2}
+    c._schoon_cyclusduren_op()
+    assert "wasmachine" not in c.appliance_cycle_kwh  # terug naar de schatting
+    assert c._appliance_cycle_history["vaatwasser"] == [1.2, 1.3]
+    assert c.appliance_cycle_kwh["vaatwasser"] == 1.25
+
+
+def _hc_wasmachine(c, hass, voortgang, eind):
+    c.__dict__["_bedrijfstoestand_entiteit"] = {"wasmachine": "sensor.wasmachine_status"}
+    c.__dict__["_hc_zusters"] = {("wasmachine", wp.HC_VOORTGANG): "sensor.voortgang"}
+    hass.states.set("sensor.wasmachine_status", "run")
+    hass.states.set("sensor.voortgang", str(voortgang))
+    hass.states.set("sensor.einde", eind.isoformat())
+
+
+def test_picking_up_mid_cycle_is_not_a_new_cycle(make_coordinator, hass):
+    """Ziet het EMS hem 'beginnen' terwijl Home Connect al 50% zegt, dan is
+    dit een herstart halverwege: begin uit Home Connect, en niets leren."""
+    c = _coordinator(make_coordinator, **{
+        CONF_WASHING_MACHINE_END_AT: "sensor.einde",
+        "washing_machine_power_sensor_entity": "sensor.p",
+    })
+    _hc_wasmachine(c, hass, 50, NU + timedelta(minutes=60))
+    hass.states.set("sensor.p", "500")
+    c._update_appliance_state_machine(
+        NU, power_entity="sensor.p", state_attr="_washing_machine_state",
+        cycle_started_attr="_washing_machine_cycle_started_at",
+        below_threshold_since_attr="_washing_machine_below_threshold_since",
+        duration_history_attr="washing_machine_cycle_duration_history",
+    )
+    assert c._washing_machine_state == "actief"
+    assert c._washing_machine_cycle_started_at == NU - timedelta(minutes=60)
+    assert c._witgoed_cyclus_onvolledig["wasmachine"] is True
+
+
+def test_a_real_start_is_complete(make_coordinator, hass):
+    c = _coordinator(make_coordinator, **{
+        CONF_WASHING_MACHINE_END_AT: "sensor.einde",
+        "washing_machine_power_sensor_entity": "sensor.p",
+    })
+    _hc_wasmachine(c, hass, 1, NU + timedelta(minutes=150))
+    hass.states.set("sensor.p", "500")
+    c._update_appliance_state_machine(
+        NU, power_entity="sensor.p", state_attr="_washing_machine_state",
+        cycle_started_attr="_washing_machine_cycle_started_at",
+        below_threshold_since_attr="_washing_machine_below_threshold_since",
+        duration_history_attr="washing_machine_cycle_duration_history",
+    )
+    assert c._washing_machine_cycle_started_at == NU
+    assert c._witgoed_cyclus_onvolledig["wasmachine"] is False
+
+
+def test_an_incomplete_cycle_learns_nothing(make_coordinator, hass):
+    c = _coordinator(make_coordinator, **{"washing_machine_power_sensor_entity": "sensor.p"})
+    c.__dict__["_bedrijfstoestand_entiteit"] = {"wasmachine": None}
+    c._washing_machine_state = "actief"
+    c._washing_machine_cycle_started_at = NU - timedelta(minutes=40)
+    c._witgoed_cyclus_onvolledig["wasmachine"] = True
+    voor = list(c.washing_machine_cycle_duration_history)
+    hass.states.set("sensor.p", "1")
+    kwargs = dict(
+        power_entity="sensor.p", state_attr="_washing_machine_state",
+        cycle_started_attr="_washing_machine_cycle_started_at",
+        below_threshold_since_attr="_washing_machine_below_threshold_since",
+        duration_history_attr="washing_machine_cycle_duration_history",
+    )
+    c._update_appliance_state_machine(NU, **kwargs)
+    c._update_appliance_state_machine(NU + timedelta(minutes=10), **kwargs)
+    assert c._washing_machine_state == "klaar"
+    assert c.washing_machine_cycle_duration_history == voor
+    assert "wasmachine" not in c.appliance_cycle_kwh
+
+
+def test_restored_running_cycle_gets_its_start_from_home_connect(make_coordinator, hass):
+    c = _coordinator(make_coordinator, **{
+        CONF_WASHING_MACHINE_END_AT: "sensor.einde",
+        "washing_machine_power_sensor_entity": "sensor.p",
+    })
+    _hc_wasmachine(c, hass, 53, NU + timedelta(minutes=47))
+    c._washing_machine_state = "actief"
+    c._washing_machine_cycle_started_at = None
+    hass.states.set("sensor.p", "200")
+    c._update_appliance_state_machine(
+        NU, power_entity="sensor.p", state_attr="_washing_machine_state",
+        cycle_started_attr="_washing_machine_cycle_started_at",
+        below_threshold_since_attr="_washing_machine_below_threshold_since",
+        duration_history_attr="washing_machine_cycle_duration_history",
+    )
+    begin = c._washing_machine_cycle_started_at
+    assert begin is not None and abs((NU - begin).total_seconds() / 60 - 53) < 1
+    assert c._witgoed_cyclus_onvolledig["wasmachine"] is True

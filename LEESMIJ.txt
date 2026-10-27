@@ -1,3 +1,15 @@
+EMS v5.139.1 - wasmachineverbruik klopte niet na een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het EMS had 0,18 kWh per was geleerd; echt is het 1,1-1,6 kWh. Na een
+  herstart midden in een was leerde het alleen het laatste stukje.
+- Het begin en de meterstand van een lopende was of afwas blijven nu
+  bewaard over een herstart. Begon de was vóór een herstart zonder die
+  gegevens, dan rekent het EMS het begin terug uit Home Connect en leert
+  het van die beurt niets.
+- Tot de eerste volledige was rekent de reserve met 0,8 kWh per was.
+
 EMS v5.139.0 - planning van vaatwasser en wasmachine
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

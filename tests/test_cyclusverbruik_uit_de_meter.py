@@ -159,7 +159,8 @@ def test_the_meter_wins_over_the_estimate():
         EnergyManagementSystemCoordinator as C,
     )
 
-    bron = inspect.getsource(C._update_appliance_state_machine)
+    # v5.139.1: het leren staat in een eigen functie
+    bron = inspect.getsource(C._leer_van_afgeronde_cyclus)
     uit_meter = bron.index("_cyclus_uit_de_meter_kwh")
     schatting = bron.index("_cyclus_energie_kwh")
 

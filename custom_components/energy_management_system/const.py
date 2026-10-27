@@ -1459,6 +1459,17 @@ APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES = 5
 # het klaar is; alleen de DUUR wordt niet meegeteld.
 APPLIANCE_CYCLE_MIN_LEARN_MINUTES = 15.0
 
+# v5.139.1: onder dit verbruik is een "cyclus" van vaatwasser of wasmachine
+# een fragment. Gemeten 27-10: de wasmachine had 0,18 kWh per beurt geleerd,
+# terwijl de HomeWizard-teller per was 1,1-1,6 kWh liet zien (14-10 t/m
+# 26-10). De fragmenten kwamen van herstarts halverwege een was: het begin
+# en de meterstand bij het begin werden niet bewaard, dus na de herstart
+# begon een "nieuwe" cyclus met alleen het centrifugeren.
+APPLIANCE_MIN_PLAUSIBLE_CYCLE_KWH = 0.25
+# Vanaf deze voortgang (Home Connect) is een cyclus die het EMS ziet
+# beginnen in werkelijkheid al onderweg (v5.139.1).
+WITGOED_MIDDEN_IN_PROCENT = 10
+
 # Hoeveel echte cycli er nodig zijn voordat de geleerde duur GEBRUIKT
 # wordt, en hoe dicht ze bij elkaar moeten liggen (v3.99.3).
 #
@@ -3829,6 +3840,12 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # v5.126.0 (L-EMS-034): het gekozen blok overleeft een herstart, zodat
     # een blok van vandaag niet terugkomt als dat van morgen al vastlag.
     "_gekozen_blok_start": {"type": "datetime"},
+    # v5.139.1: begin en meterstand van een lopende was/afwas overleven een
+    # herstart (anders leerde het EMS alleen het restant na de herstart).
+    "_dishwasher_cycle_started_at": {"type": "datetime"},
+    "_washing_machine_cycle_started_at": {"type": "datetime"},
+    "_meterstand_bij_cyclusstart": {"type": "plain"},
+    "_witgoed_cyclus_onvolledig": {"type": "plain"},
     "_window_energy_kwh": {"type": "plain"},
     "_window_duration_hours": {"type": "plain"},
     "_window_temp_samples": {"type": "plain"},

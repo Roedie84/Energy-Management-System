@@ -545,7 +545,6 @@ VLUCHTIG_MET_REDEN = {
     "_mpc_gemeten_op": "welke dag de MPC-vergelijking al is vastgelegd; na een herstart mag die dag opnieuw gemeten worden",
     "mpc_balans": "de energiebalans over de MPC-horizon; elke ronde opnieuw berekend uit prijzen, zon en verbruik",
     "bestandscontrole": "de uitkomst van de hashvergelijking bij het opstarten; na een herstart hoort die opnieuw berekend te worden",
-    "_meterstand_bij_cyclusstart": "de meterstand bij het begin van een lopende apparaatcyclus; na een herstart is die cyclus toch niet meer te sluiten",
     "meting_tijdstippen": "wanneer elk gespiegeld veld voor het laatst uit zijn sensor kwam; na een herstart hoort dat leeg te zijn",
     "last_plan_shortfall": "elke tick herrekend uit de kwartierplanning",
     # Elke tick opnieuw berekend; terugzetten zou een oud getal tonen

@@ -180,6 +180,8 @@ from .const import (
     BESTAAT_NIET_STORING_UREN,
     APPLIANCE_CYCLE_MIN_CYCLI,
     APPLIANCE_CYCLE_MIN_LEARN_MINUTES,
+    APPLIANCE_MIN_PLAUSIBLE_CYCLE_KWH,
+    WITGOED_MIDDEN_IN_PROCENT,
     WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN,
     WATER_SESSION_COMPLETE_SUSTAINED_MINUTES,
     WATER_BOILER_ACTIVE_W,
@@ -1638,6 +1640,9 @@ class EnergyManagementSystemCoordinator:
         self.witgoed_duur_per_programma: dict[str, dict] = {}
         self.witgoed_kwh_per_programma: dict[str, dict] = {}
         self._witgoed_lopend_programma: dict[str, str] = {}
+        # v5.139.1: cycli waarvan het begin niet gezien is (herstart midden in
+        # een was); die leren geen duur en geen verbruik.
+        self._witgoed_cyclus_onvolledig: dict[str, bool] = {}
         # MPC advisory engine (v0.63.33) - see coordinator method
         # docstring for the "advisory only, never controls" guarantee.
         self.mpc_planned_actions: list[dict] = []
@@ -4986,6 +4991,23 @@ class EnergyManagementSystemCoordinator:
                 attr,
                 [d for d in reeks if d >= APPLIANCE_CYCLE_MIN_LEARN_MINUTES],
             )
+        # v5.139.1: hetzelfde voor het verbruik. Gemeten 27-10: wasmachine
+        # 0,18 kWh geleerd, de teller zegt 1,1-1,6 kWh per was.
+        for apparaat, reeks in list((self._appliance_cycle_history or {}).items()):
+            schoon = [k for k in reeks or [] if k >= APPLIANCE_MIN_PLAUSIBLE_CYCLE_KWH]
+            if schoon == list(reeks or []):
+                continue
+            _LOGGER.info(
+                "%s: %d cyclusverbruik(en) onder %.2f kWh weggelaten (fragmenten)",
+                apparaat, len(reeks or []) - len(schoon), APPLIANCE_MIN_PLAUSIBLE_CYCLE_KWH,
+            )
+            if schoon:
+                self._appliance_cycle_history[apparaat] = schoon
+                self.appliance_cycle_kwh[apparaat] = round(statistics.median(schoon), 3)
+            else:
+                self._appliance_cycle_history.pop(apparaat, None)
+                self.appliance_cycle_kwh.pop(apparaat, None)
+            self.schedule_persisted_state_save()
 
     def _get_learned_completion_threshold_w(
         self, idle_history_attr: str, fallback_w: float
@@ -10510,6 +10532,92 @@ class EnergyManagementSystemCoordinator:
         if sleutel:
             self._witgoed_lopend_programma[naam] = programma
 
+    def _hc_begin_van_lopende_cyclus(self, naam: str, nu: datetime) -> datetime | None:
+        """Het begin van een programma dat al ver op weg is, teruggerekend uit
+        de voortgang en eindtijd van Home Connect (v5.139.1); None als het
+        programma net begint of Home Connect het niet weet.
+
+        Verstreken = resterend x voortgang / (100 - voortgang).
+        """
+        planning = self.get_witgoed_planning(naam, nu, met_prijs=False)
+        if planning.get("home_connect_toestand") not in witgoedplanning.HC_LOOPT:
+            return None
+        voortgang = planning.get("voortgang_procent") if planning.get("voortgang_bron") == "home_connect" else None
+        if voortgang is None or not (WITGOED_MIDDEN_IN_PROCENT <= voortgang < 100):
+            return None
+        eind = (
+            dt_util.parse_datetime(planning["eind"])
+            if planning.get("eind_bron") == "home_connect" and planning.get("eind")
+            else None
+        )
+        if eind is None or eind <= nu:
+            return None
+        verstreken = (eind - nu) * (voortgang / (100 - voortgang))
+        return nu - verstreken
+
+    def _leer_van_afgeronde_cyclus(
+        self,
+        now: datetime,
+        naam: str,
+        state_attr: str,
+        started_at: datetime,
+        duration_minutes: float,
+        cycle_started_attr: str,
+        duration_history_attr: str,
+    ) -> None:
+        """Duur, verbruik, kosten en programma van een volledige cyclus."""
+        self._leer_cyclusduur(
+            now,
+            cycle_started_attr=cycle_started_attr,
+            duration_history_attr=duration_history_attr,
+        )
+        if duration_minutes <= 0:
+            return
+        # v1.61.0: ook vastleggen wat de cyclus KOSTTE. Schatten is een
+        # noodgreep; zodra een hele cyclus gemeten is, is dat de waarde die
+        # in de reserve meetelt.
+        # v3.57.0: eerst de meter, dan pas de schatting.
+        gemeten = self._cyclus_uit_de_meter_kwh(state_attr)
+        if gemeten is None:
+            gemeten = self._cyclus_energie_kwh(naam, started_at, now)
+        if gemeten:
+            self._leer_cyclusverbruik(naam, gemeten)
+            # v4.14: en wat de beurt kostte.
+            self.noteer_cycluskosten(naam, started_at, now, gemeten)
+        # v5.139.0: en bij welk programma deze duur en kWh horen.
+        self._leer_per_programma(naam, duration_minutes, gemeten)
+        self._appliance_power_samples[naam] = []
+
+    def _witgoed_cyclus_begint(
+        self, naam: str, now: datetime, state_attr: str, cycle_started_attr: str
+    ) -> None:
+        """RUSTEND/KLAAR -> ACTIEF."""
+        setattr(self, cycle_started_attr, now)
+        setattr(self, state_attr, "actief")
+        # v3.57.0: de meterstand bij het begin vastleggen, zodat het
+        # cyclusverbruik straks een METING is en geen benadering uit het
+        # gemiddelde vermogen.
+        self._onthoud_meterstand_bij_start(state_attr)
+        self._witgoed_cyclus_onvolledig[naam] = False
+        # v5.139.1: is het programma al ver op weg (herstart midden in een
+        # was), dan is dit niet het begin.
+        begin = self._hc_begin_van_lopende_cyclus(naam, now)
+        if begin is not None:
+            setattr(self, cycle_started_attr, begin)
+            self._meterstand_bij_cyclusstart.pop(state_attr, None)
+            self._witgoed_cyclus_onvolledig[naam] = True
+        self.schedule_persisted_state_save()
+
+    def _herstel_onbekend_begin(
+        self, naam: str, nu: datetime, cycle_started_attr: str
+    ) -> None:
+        """Draait hij al, maar is het begin onbekend (bewaard vóór v5.139.1),
+        dan het begin uit Home Connect; de cyclus leert dan niets."""
+        begin = self._hc_begin_van_lopende_cyclus(naam, nu)
+        if begin is not None:
+            setattr(self, cycle_started_attr, begin)
+        self._witgoed_cyclus_onvolledig[naam] = True
+
     def _leer_per_programma(
         self, naam: str, duur_minuten: float | None, kwh: float | None
     ) -> None:
@@ -11055,7 +11163,8 @@ class EnergyManagementSystemCoordinator:
         metingen, want een halve lading of een eco-programma hoort het
         beeld niet te bepalen.
         """
-        if kwh <= 0:
+        # v5.139.1: een fragment (herstart halverwege) is geen cyclus.
+        if kwh < APPLIANCE_MIN_PLAUSIBLE_CYCLE_KWH:
             return
         reeks = self._appliance_cycle_history.setdefault(apparaat, [])
         reeks.append(round(kwh, 3))
@@ -38785,13 +38894,13 @@ class EnergyManagementSystemCoordinator:
         if power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
             setattr(self, below_threshold_since_attr, None)
             if current_state != "actief":
-                setattr(self, cycle_started_attr, now)
-                setattr(self, state_attr, "actief")
-                # v3.57.0: de meterstand bij het begin vastleggen, zodat
-                # het cyclusverbruik straks een METING is en geen
-                # benadering uit het gemiddelde vermogen.
-                self._onthoud_meterstand_bij_start(state_attr)
+                self._witgoed_cyclus_begint(naam, now, state_attr, cycle_started_attr)
+            elif getattr(self, cycle_started_attr) is None:
+                self._herstel_onbekend_begin(naam, now, cycle_started_attr)
             return
+
+        if current_state == "actief" and getattr(self, cycle_started_attr) is None:
+            self._herstel_onbekend_begin(naam, now, cycle_started_attr)
 
         if current_state != "actief":
             return
@@ -38814,30 +38923,20 @@ class EnergyManagementSystemCoordinator:
 
         started_at = getattr(self, cycle_started_attr)
         duration_minutes = None
+        # v5.139.1: van een cyclus waarvan het begin niet gezien is, valt
+        # niets te leren - alleen het restant na de herstart is gemeten.
+        onvolledig = bool(self._witgoed_cyclus_onvolledig.pop(naam, False))
+        if onvolledig:
+            self._meterstand_bij_cyclusstart.pop(state_attr, None)
+            self._witgoed_lopend_programma.pop(naam, None)
+            self._appliance_power_samples[naam] = []
         if started_at is not None:
             duration_minutes = (now - started_at).total_seconds() / 60
-            self._leer_cyclusduur(
-                now,
-                cycle_started_attr=cycle_started_attr,
-                duration_history_attr=duration_history_attr,
-            )
-            if duration_minutes > 0:
-
-                # v1.61.0: ook vastleggen wat de cyclus KOSTTE. Schatten
-                # is een noodgreep; zodra een hele cyclus gemeten is, is
-                # dat de waarde die in de reserve meetelt.
-                naam = "vaatwasser" if "dishwasher" in state_attr else "wasmachine"
-                # v3.57.0: eerst de meter, dan pas de schatting.
-                gemeten = self._cyclus_uit_de_meter_kwh(state_attr)
-                if gemeten is None:
-                    gemeten = self._cyclus_energie_kwh(naam, started_at, now)
-                if gemeten:
-                    self._leer_cyclusverbruik(naam, gemeten)
-                    # v4.14: en wat de beurt kostte.
-                    self.noteer_cycluskosten(naam, started_at, now, gemeten)
-                # v5.139.0: en bij welk programma deze duur en kWh horen.
-                self._leer_per_programma(naam, duration_minutes, gemeten)
-                self._appliance_power_samples[naam] = []
+            if not onvolledig:
+                self._leer_van_afgeronde_cyclus(
+                    now, naam, state_attr, started_at, duration_minutes,
+                    cycle_started_attr, duration_history_attr,
+                )
 
         setattr(self, state_attr, "klaar")
         # v5.99.7: het moment van klaar, los van last_changed (dat verspringt
