@@ -1162,6 +1162,6 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-27 16:20,lokaal_mislukt,63,132253,uitval 0; 222 verbindingen (+2); 14 nieuwe fouten 14:07-14:18 (laatste OSError Errno 113 connect failed)
 2026-10-27 16:20,sturen_bevestigd,326,327,7/7 nieuwe opdrachten bevestigd
 2026-10-27 16:20,filtergebruik_pct,0,1,
-2026-10-27 16:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (13:19:08 -> 13:34:08); na herstart 12:31 3x mid 1.6-2 min na off (12:41 12:47)
+2026-10-27 16:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (13:19:08 -> 13:34:08); na herstart 12:31 2x mid 1.6-2 min na off (12:41 12:47)
 2026-10-27 16:20,kookautomation_traces,0,5,1 herstarttrace (12:32); geen kookmoment
 2026-10-27 16:20,apparaat_pm25_bereik,2,1,apparaat 2-5 bij Ultimate 0.3-2.2: vast op 2
