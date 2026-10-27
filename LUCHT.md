@@ -341,6 +341,6 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Stand: auto 217 min (gem 0,68), mid 22 min (gem 0,46), 1,2 min unavailable. Aanwezig 0,69 (n=41) vs afwezig 0,53 (n=7): bron (avond/tv), geen standeffect.
 - Werking: tv uit 23:41:30, laatste aanwezigheid 23:42:55 → mid 23:57:55 (15 min), correct. 1 HA-herstart (21:01), stand daarna direct auto (aanwezig). Traces 5/5 zonder fout. Lokaal 63 mislukt op 135.068 (geen nieuwe), uitval 0, sturen 329/330 (1/1 nieuw), filter 0%. Apparaat-PM2.5 vast op 2.
 - Kookautomation: 1 herstarttrace, geen kookmoment.
-- CO₂ hele blok > 1.200 (gem 1.565, max 1.795 om 22:00; nu 1.354), dag 27-10 6,2 u > 1.200, ramen dicht na koken. Vocht 64 → 68,8% bij 20,7 → 18,6 °C, schimmelindicator 74 → 84 (hoogste in de log). Avond luchten na koken; luchtreiniger lost dit niet op.
+- CO₂ hele blok > 1.200 (gem 1.565, max 1.795 om 22:00; nu 1.354), dag 27-10 6,2 u > 1.200, ramen dicht na koken. Vocht 64 → 68,8% bij 20,7 → 18,6 °C, schimmelindicator 74 → 84 (stijgend; max log 93 op 17-10). Avond luchten na koken; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=11). H2 auto halveert kookpiek ~5-24 min (n=7); auto bij koken 1x: 61 en < 10 in 20 min, mid bij koken 1x: 1.147 (gerecht verschilt). Turbo ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 laatste ronde: 28-10 00:25, gemeten t/m 00:20
