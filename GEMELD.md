@@ -120,3 +120,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 27-10 00:52 | L-EMS-040 ems accucapaciteit meten uit gewone laadrondes (<30% naar 100%)
 27-10 00:52 | L-GS-032 gold scalper tijdstopvarianten n.v.t.-melding (veldproef zonder tijdstop)
 27-10 00:52 | ha herstarten om ems 5.136.0 te activeren
+27-10 01:51 | luchtreiniger turbo bij koken en pm2.5 > 100, terug naar auto onder 25
