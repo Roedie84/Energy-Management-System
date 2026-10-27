@@ -33945,3 +33945,16 @@ Gemeld 26-10 via de cockpit ("15 onbevestigde NILM-kandidaten"), punt 16 akkoord
 
 Tests: `test_v5136_nilm_kandidaten_opruimen.py` (2).
 
+
+## v5.137.0 — batterijlader blijft aan zolang er iets aan hangt
+
+Gemeten 27-10 (keuze B van Ruud): een vol apparaat aan de Anker laadt vanzelf bij, ~10 min 7 W en ~10 min 2,8 W (06:04-06:15 hoog, 06:15-06:23 laag, 06:23-06:33 hoog, 06:33-06:44 laag). Het EMS zag de lage fase als "vol" (10 min onder 3,6 W), zette uit (06:44), en bij de kwartiertest (06:45) begon het bijladen opnieuw als "nieuwe lading": 46 schakelingen sinds 26-10 10:40. Uitzetten bespaarde ~2,8 W.
+
+- Nieuw `aan_tot_leeg_minuten` in `_async_update_scheduled_charge_appliance`, alleen voor de batterijlader (`BATTERIJLADER_AAN_TOT_LEEG_MINUTEN` = 60). Het werk zit in `_aan_tot_leeg` (ratel). Na `complete_sustained_minutes` onder de drempel: één opgeladen-melding per sessie en de stand `vol_blijft_aan`; de lader blijft aan. Komt het vermogen weer boven de drempel (bijladen), dan begint de telling opnieuw. Pas na 60 minuten aaneen onder de drempel: uit, sessie afgerond, volgende test op het kwartier.
+- 's Nachts (`_is_nachtrust`, 22-06 u) geldt dit niet: uit bij vol, zoals voorheen.
+- Rustverbruik (bijna leeg) en "vol apparaat in rust" zijn aan het vermogen niet uit elkaar te houden (gemeten 1,7-2,3 W tegen 2,0-3,0 W); daarom op tijd: een uur zonder bijladen = er hangt niets meer dat laadt.
+- Stand `vol_blijft_aan` in `APPLIANCE_STATE_LABELS` en de cockpit ("vol, blijft aan", blauw). Meldingstekst aangepast.
+- Fietsladers en steelstofzuiger ongewijzigd.
+
+Tests: `test_v5137_batterijlader_aan_tot_leeg.py` (4); `test_v5129_batterijlader.py` en `test_v5131_2_batterijlader_afronden.py` aangepast (overdag na vol: `vol_blijft_aan`).
+

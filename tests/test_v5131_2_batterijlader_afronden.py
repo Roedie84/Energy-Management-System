@@ -70,8 +70,9 @@ def test_vol_pas_na_tien_minuten_rust(make_coordinator, hass):
         await c._async_update_locked()
 
     asyncio.run(run())
-    assert _schakel(hass)[-1][1] == "turn_off"
-    assert c.last_batterijlader_action == "voltooid"
+    # v5.137.0: vol na tien minuten rust; overdag blijft hij daarna aan
+    assert _schakel(hass)[-1][1] == "turn_on"
+    assert c.last_batterijlader_action == "vol_blijft_aan"
 
 
 def test_al_aan_zonder_test_krijgt_eindtijd(make_coordinator, hass):

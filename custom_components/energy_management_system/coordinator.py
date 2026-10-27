@@ -197,6 +197,7 @@ from .const import (
     WATER_SOFTENER_NIGHT_WINDOW_END_HOUR,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     BATTERIJLADER_COMPLETE_THRESHOLD_W,
+    BATTERIJLADER_AAN_TOT_LEEG_MINUTEN,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -4467,6 +4468,7 @@ class EnergyManagementSystemCoordinator:
         override_attr: str | None = None,
         kwartiercontrole: bool = False,
         complete_sustained_minutes: float = STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
+        aan_tot_leeg_minuten: float | None = None,
     ) -> None:
         """Shared logic (v0.63.13, generalised from the steelstofzuiger-
         only v0.63.12) for any appliance that should charge only during
@@ -4630,6 +4632,14 @@ class EnergyManagementSystemCoordinator:
                 since = now
                 setattr(self, below_threshold_since_attr, since)
             elapsed_minutes = (now - since).total_seconds() / 60
+            # v5.137.0: batterijlader blijft overdag aan zolang er iets aan hangt
+            if aan_tot_leeg_minuten and await self._aan_tot_leeg(
+                now, elapsed_minutes, complete_sustained_minutes, aan_tot_leeg_minuten,
+                switch_entity, charge_started_attr, below_threshold_since_attr,
+                duration_history_attr, ever_active_this_session_attr, next_poll_attr,
+                last_action_attr, notify_title, notify_message,
+            ):
+                return
             if elapsed_minutes >= complete_sustained_minutes:
                 await self._async_set_switch(switch_entity, turn_on=False)
                 self._finish_scheduled_charge_session(
@@ -4654,6 +4664,59 @@ class EnergyManagementSystemCoordinator:
             setattr(self, below_threshold_since_attr, None)
 
         setattr(self, last_action_attr, "aan_het_laden")
+
+    async def _aan_tot_leeg(
+        self,
+        now: datetime,
+        laag_minuten: float,
+        vol_na_minuten: float,
+        leeg_na_minuten: float,
+        switch_entity: str,
+        charge_started_attr: str,
+        below_threshold_since_attr: str,
+        duration_history_attr: str,
+        ever_active_this_session_attr: str,
+        next_poll_attr: str,
+        last_action_attr: str,
+        notify_title: str | None,
+        notify_message: str | None,
+    ) -> bool:
+        """Na "vol" aan laten zolang er iets aan hangt (v5.137.0, keuze B).
+
+        Een vol apparaat aan de lader laadt vanzelf bij: lading en rust wisselen
+        elkaar af. Uitzetten na de eerste rustfase gaf een lus (vol, uit, bij de
+        kwartiertest weer bijladen). Nu: na `vol_na_minuten` onder de drempel
+        één melding en de status "vol_blijft_aan"; komt er daarna een uur
+        (`leeg_na_minuten`) geen lading meer, dan hangt er niets meer dat
+        laadt en gaat hij uit. 's Nachts (nachtrust) zoals voorheen: uit bij vol.
+
+        True als dit de ronde afhandelde.
+        """
+        if laag_minuten < vol_na_minuten or self._is_nachtrust(now):
+            return False
+        gestart = getattr(self, charge_started_attr)
+        gemeld = getattr(self, "_aan_tot_leeg_gemeld", None)
+        if gemeld is None:
+            gemeld = {}
+            self._aan_tot_leeg_gemeld = gemeld
+        if laag_minuten < leeg_na_minuten:
+            if gemeld.get(last_action_attr) != gestart:
+                gemeld[last_action_attr] = gestart
+                self._meld_opgeladen(last_action_attr, notify_title, notify_message)
+            setattr(self, last_action_attr, "vol_blijft_aan")
+            return True
+        await self._async_set_switch(switch_entity, turn_on=False)
+        self._finish_scheduled_charge_session(
+            now, charge_started_attr, below_threshold_since_attr, duration_history_attr, completed=True,
+        )
+        setattr(self, ever_active_this_session_attr, False)
+        setattr(self, next_poll_attr, self._volgend_kwartier(now))
+        setattr(self, last_action_attr, "wacht_op_apparaat")
+        return True
+
+    @staticmethod
+    def _is_nachtrust(now: datetime) -> bool:
+        return now.hour >= SCHEDULED_CHARGE_NACHTRUST_VAN_UUR or now.hour < SCHEDULED_CHARGE_NACHTRUST_TOT_UUR
 
     def _wacht_of_nachtrust(
         self,
@@ -47134,12 +47197,14 @@ class EnergyManagementSystemCoordinator:
                 idle_history_attr="_batterijlader_idle_power_history",
                 notify_title="🔋 Batterijen opgeladen",
                 notify_message=(
-                    "De batterijlader in de keuken is uitgeschakeld omdat alles vol is. "
-                    "Het EMS kijkt elk kwartier of er weer iets aan hangt."
+                    "Wat aan de batterijlader in de keuken hangt, is vol. Overdag blijft "
+                    "hij aan zolang er iets aan hangt; komt er een uur geen lading meer, "
+                    "dan gaat hij uit. 's Nachts gaat hij bij vol meteen uit."
                 ),
                 override_attr="batterijlader_override",
                 kwartiercontrole=True,
                 complete_sustained_minutes=BATTERIJLADER_COMPLETE_SUSTAINED_MINUTES,
+                aan_tot_leeg_minuten=BATTERIJLADER_AAN_TOT_LEEG_MINUTEN,
             )
         except Exception:  # noqa: BLE001 - een lader mag de ronde niet meenemen
             self._noteer_staartfout("batterijlader")

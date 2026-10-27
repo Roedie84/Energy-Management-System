@@ -93,9 +93,9 @@ def test_buiten_het_blok_uit_als_vol_en_kwartiercontrole(make_coordinator, hass)
         await c._async_update_locked()
 
     asyncio.run(run())
-    assert _schakel(hass)[-1][1] == "turn_off"
-    assert c.last_batterijlader_action == "voltooid"
-    assert c._batterijlader_next_poll_at == DAY0.replace(hour=8, minute=30)
+    # v5.137.0: overdag na "vol" aan laten zolang er iets aan hangt
+    assert _schakel(hass)[-1][1] == "turn_on"
+    assert c.last_batterijlader_action == "vol_blijft_aan"
 
 
 def test_uit_als_alles_vol_is_met_10w_drempel(make_coordinator, hass):
@@ -129,13 +129,11 @@ def test_uit_als_alles_vol_is_met_10w_drempel(make_coordinator, hass):
         await c._async_update_locked()
 
     asyncio.run(run())
-    assert _schakel(hass)[-1][1] == "turn_off"
-    assert c.last_batterijlader_action == "voltooid"
-    # kwartiercontrole: niet "klaar voor de dag", maar het volgende kwartier
-    # opnieuw kijken
+    # v5.137.0: vol herkend, maar overdag blijft hij aan (uit na een uur
+    # zonder lading, zie test_v5137_batterijlader_aan_tot_leeg)
+    assert _schakel(hass)[-1][1] == "turn_on"
+    assert c.last_batterijlader_action == "vol_blijft_aan"
     assert c._batterijlader_complete_today is False
-    assert c._batterijlader_next_poll_at == DAY0.replace(hour=12, minute=30)
-    assert c.batterijlader_charge_duration_history == [20.0]
 
 
 def test_overrule_laat_de_schakelaar_met_rust(make_coordinator, hass):

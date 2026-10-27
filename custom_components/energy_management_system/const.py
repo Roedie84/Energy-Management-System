@@ -1531,6 +1531,14 @@ BATTERIJLADER_COMPLETE_THRESHOLD_W = 10.0
 BATTERIJLADER_LEARNED_MARGIN_W = 2.0
 BATTERIJLADER_COMPLETE_SUSTAINED_MINUTES = 10
 
+# v5.137.0 (Ruud 27-10, keuze B): een vol apparaat dat aan de lader blijft,
+# laadt vanzelf bij (27-10: steeds ~10 min 7 W, ~10 min 2,8 W). Het EMS zag de
+# lage fase als "vol", zette uit, en bij de kwartiertest begon het bijladen
+# opnieuw: 3-4 schakelingen per uur, 46 sinds 26-10 10:40. Nu blijft de lader
+# overdag aan zolang er iets aan hangt: na "vol" (melding) pas uit als er een
+# uur geen lading meer komt. Aan laten kost met een vol apparaat ~5 W.
+BATTERIJLADER_AAN_TOT_LEEG_MINUTEN = 60
+
 # hvac_action values that mean the climate entity's compressor/heating
 # element is actually drawing power right now - 'idle' and 'off' don't
 # count (thermostat satisfied / unit switched off).
@@ -5815,6 +5823,8 @@ APPLIANCE_STATE_LABELS = {
     "overruled": "handmatig (overrule)",
     # v5.133.0
     "nachtrust": "nachtrust (22-06 u)",
+    # v5.137.0
+    "vol_blijft_aan": "vol, blijft aan",
 }
 
 # --- Ondergrens voor de zelfconsumptie (v1.16.8) ---------------------

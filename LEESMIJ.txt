@@ -1,3 +1,14 @@
+EMS v5.137.0 - batterijlader blijft aan zolang er iets aan hangt
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Overdag gaat de batterijlader na "vol" niet meer meteen uit. Je krijgt de
+  melding, hij blijft aan zolang er iets aan hangt dat bijlaadt, en gaat pas
+  uit als er een uur geen lading meer komt. Daarmee is het aan-uit-schakelen
+  (3-4 keer per uur bij een vol apparaat) weg.
+- 's Nachts (22-06 u) gaat hij bij vol meteen uit, zoals voorheen.
+- Nieuwe stand in de cockpit: "vol, blijft aan".
+
 EMS v5.136.0 - NILM-kandidaten ruimen zichzelf op
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
