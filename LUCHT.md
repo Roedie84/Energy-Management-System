@@ -16,20 +16,10 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ dag 3,8 u > 1.200, max 1.543 (avond, ramen dicht): ventileren. Schimmelindicator 57-79.
 - Hypotheses toen: H1 raam open bij koken → nauwelijks piek (n=4), H2 auto halveert kookpiek ~5-12 min (n=2).
 
-## 13-10 00:25 (ronde 10, eerste na middernacht)
-- Dag 12-10: gem 3,5 µg/m³ (door kookpiek 135), 0,8 u > 15, 0,7 u > 25. 7d 2,7 (nulmeting okt 2025 9,1; stookseizoen 2025 vóór reiniger 16,0).
-- PM2.5 20:20-00:20: gem 2,9, mediaan 3,2, P95 4,0, max 4,4 (n=48); geen piek > 25, geen kookmoment, ramen dicht.
-- Tv-avond hield PM2.5 op 3-4 (aanwezig 3,5 vs afwezig 1,8): bron = activiteit. Auto 173 min (gem 3,4), mid 61 min (gem 1,4, staart na vertrek): geen standvergelijking.
-- Werking: mid 15 min na tv uit (23:15). 4 HA-herstarts; daarna 2 min mid terwijl tv aan (21:54) en 3 min auto na vertrek (23:30) - zelfde oorzaak, timers resetten bij unavailable/unknown. 5/5 traces zonder fout. Lokaal 10947/10947, uitval 0, sturen 53/53, filter 0%. Apparaat-PM2.5 vast op 2 (Ultimate 3-4).
-- CO₂ gem 1.281, 2,75 u > 1.200 (dag 12-10: 3,8 u, max 1.543), ramen dicht; daalt pas na ~22:45. Schimmelindicator 76 → 72. Avond ventileren.
-- Hypotheses: H1 (n=4, gesteund), H2 auto halveert kookpiek ~5-12 min (n=2), H3 (n=2): geen nieuwe pieken, geen toets.
-
-## 13-10 04:25 (ronde 11)
-- PM2.5 00:20-04:20: gem 0,64, mediaan 0,63, P95 0,76, max 0,95 (n=48); 0 uur > 15. Hele periode mid (240 min), niemand aanwezig, tv uit, ramen dicht.
-- Geen piek > 25, geen kookmoment. Nachtniveau ~2x hoger dan 12-10 (0,34), mogelijk staart van de tv-avond (start 0,73 → 0,57).
-- Werking: 0 HA-herstarts (uptime sinds 23:18), stand stabiel mid. 5/5 traces zonder fout. Lokaal 12390/12390, uitval 0, sturen 53/53, filter 0%. Apparaat-PM2.5 vast op 2.
-- CO₂ daalt 910 → 613 ppm (gem 714), schimmelindicator 72 → 71: in orde.
-- Hypotheses: H1 (n=4, gesteund), H2 auto halveert kookpiek ~5-12 min (n=2), H3 (n=2): geen nieuwe pieken, geen toets.
+## 13-10 (dag, samengevat; rondes 10-11)
+- Dag 12-10 afgesloten: gem 3,5 (kookpiek 135), 0,8 u > 15. Avond 12-10 tv: aanwezig 3,5 vs afwezig 1,8 (bron = activiteit). Nacht 13-10 hele tijd mid, gem 0,64, max 0,95.
+- Geen piek > 25, geen kookmoment. Na HA-herstarts korte verkeerde stand (timers resetten bij unavailable). Traces zonder fout, lokaal zonder fout, sturen 53/53, filter 0%. Apparaat-PM2.5 vast op 2.
+- CO₂ avond 12-10 gem 1.281, 2,75 u > 1.200; nacht daalt naar 613. Avond ventileren.
 
 ## 21-10 20:25 (ronde 12, inhaalslag 13-10 04:20 t/m 21-10 20:20; 8,5 dag geen ronde)
 - PM2.5 daggem 13-20/10: 1,1 / 1,5 / 0,8 / 1,7 / 30,9 / 14,8 / 7,0 / 1,3; 21-10 t/m nu 1,4 (max 3,4). 7d gem 8,3 (mediaan dag 1,7): rustige dagen ~1-2, gemiddelde gedragen door twee gebeurtenissen.
@@ -303,4 +293,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ gem 1.318, max 1.601, 3,0 u > 1.200 (dag 26-10: gem 846, max 1.759, 5,7 u > 1.200), ramen dicht na koken. Vocht stijgt 55 → 62,7% bij 21,3 → 18,1 °C (verwarming uit), schimmelindicator 75-79, buiten 99% / 11 °C. Na het koken luchten (CO₂ en vocht); luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=10). H2 auto halveert kookpiek ~5-24 min (n=6); mid bij koken gaf de hoogste piek (n=1), auto bij koken (nieuwe config) en turbo nog ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 27-10 00:25, gemeten t/m 00:20
+## 27-10 04:25 (ronde 44)
+- PM2.5 00:20-04:20: gem 0,27, mediaan 0,27, P95 0,37, max 0,60 (01:15) (n=48); 0 uur > 15. Laagste nachtgemiddelde in de log (12-10 0,34, 13-10 0,64). 7d (20-26/10) 2,32 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment, ramen dicht, tv uit, niemand aanwezig.
+- Stand: hele periode mid (240 min, sinds 23:12:17), 0 min unavailable. Geen aanwezigheid: geen standvergelijking.
+- Werking: 0 HA-herstarts (eerste rustige blok sinds dagen). 5/5 traces failed_conditions (nachtvenster 00-06, verwacht), geen fout. Lokaal 48 mislukt op 128.102 (geen nieuwe), uitval 0, sturen 311/312 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,2-0,6.
+- CO₂ daalt 984 → 655 (gem 796), 0 u > 1.200. Vocht 62,8 → 64,0% bij 18,1 → 17,4 °C (verwarming uit), schimmelindicator 78 → 76, buiten 99% / 11-12 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=10). H2 auto halveert kookpiek ~5-24 min (n=6); auto bij koken (nieuwe config) en turbo nog ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 27-10 04:25, gemeten t/m 04:20
