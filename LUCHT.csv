@@ -1101,3 +1101,24 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-27 04:20,filtergebruik_pct,0,1,
 2026-10-27 04:20,automation_traces_fout,0,5,5x failed_conditions (nachtvenster 00-06)
 2026-10-27 04:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.2-0.6
+2026-10-27 08:20,pm25_gem,0.47,48,5-min statistiek 04:20-08:20 CET
+2026-10-27 08:20,pm25_mediaan,0.41,48,
+2026-10-27 08:20,pm25_p95,0.95,48,
+2026-10-27 08:20,pm25_max,1.27,48,momentaan max 07:45 (ochtendactiviteit)
+2026-10-27 08:20,pm25_uren_gt15,0.00,48,
+2026-10-27 08:20,pm25_uren_gt25,0.00,48,
+2026-10-27 08:20,stand_auto_min,121,1,gem pm25 0.61 (n=24)
+2026-10-27 08:20,stand_mid_min,116,1,gem pm25 0.33 (n=24); 2.5 min unavailable
+2026-10-27 08:20,pm25_gem_aanwezig,0.55,18,mmWave (tv uit)
+2026-10-27 08:20,pm25_gem_afwezig,0.42,30,
+2026-10-27 08:20,co2_gem,663,48,5-min; 663 -> 590 -> 832 (ochtend); ramen dicht
+2026-10-27 08:20,co2_uren_gt1200,0.00,48,
+2026-10-27 08:20,vocht_max,66.2,48,64.0 -> 66.2% bij 17.2-17.4 C
+2026-10-27 08:20,schimmel_indicator,76,48,75-76; buiten 99% / 12-12.8 C
+2026-10-27 08:20,ha_herstarts,2,1,06:04 08:01
+2026-10-27 08:20,lokaal_mislukt,49,129494,uitval 0; 219 verbindingen; 1 nieuwe fout 06:04:52 ConnectionReset bij HA-herstart
+2026-10-27 08:20,sturen_bevestigd,317,318,6/6 nieuwe opdrachten bevestigd
+2026-10-27 08:20,filtergebruik_pct,0,1,
+2026-10-27 08:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (06:24:28->06:39:29; 06:55:01->07:10:01; 08:07:58->08:22:58)
+2026-10-27 08:20,kookautomation_traces,0,5,alleen herstarttraces; geen kookmoment
+2026-10-27 08:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.2-1.3

@@ -301,4 +301,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ daalt 984 → 655 (gem 796), 0 u > 1.200. Vocht 62,8 → 64,0% bij 18,1 → 17,4 °C (verwarming uit), schimmelindicator 78 → 76, buiten 99% / 11-12 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=10). H2 auto halveert kookpiek ~5-24 min (n=6); auto bij koken (nieuwe config) en turbo nog ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
 
-laatste ronde: 27-10 04:25, gemeten t/m 04:20
+## 27-10 08:25 (ronde 45)
+- PM2.5 04:20-08:20: gem 0,47, mediaan 0,41, P95 0,95, max 1,27 (07:45) (n=48); 0 uur > 15. Dag t/m nu ~0,37; 7d (20-26/10) 2,32 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit. Ochtendactiviteit vanaf 06:07: PM2.5 0,3 → ~1,0, CO₂ 590 → 832.
+- Stand: auto 121 min (gem 0,61), mid 116 min (gem 0,33), 2,5 min unavailable. Aanwezig 0,55 (n=18) vs afwezig 0,42 (n=30): bron (mensen), geen standeffect.
+- Werking: auto bij eerste aanwezigheid na 06:00 (06:07:58), mid steeds precies 15 min na laatste aanwezigheid (06:39, 07:10, 08:22). 2 HA-herstarts (06:04, 08:01); na 08:01 direct auto (aanwezig), geen voortijdige mid. 5/5 traces zonder fout. Lokaal 49 mislukt op 129.494 (1 nieuw: ConnectionReset 06:04:52 bij herstart), uitval 0, sturen 317/318 (6/6 nieuw), filter 0%. Apparaat-PM2.5 vast op 2.
+- Kookautomation: 2 herstarttraces, geen kookmoment: auto bij koken ongetoetst.
+- CO₂ gem 663, max 832, 0 u > 1.200. Vocht 64,0 → 66,2% bij 17,2-17,4 °C (verwarming uit), schimmelindicator 75-76, buiten 99% / 12-13 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=10). H2 auto halveert kookpiek ~5-24 min (n=6); auto bij koken (nieuwe config) en turbo nog ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+
+laatste ronde: 27-10 08:25, gemeten t/m 08:20
