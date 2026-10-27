@@ -121,3 +121,7 @@ Regel: <dd-mm HH:MM> | <sleutel>
 27-10 00:52 | L-GS-032 gold scalper tijdstopvarianten n.v.t.-melding (veldproef zonder tijdstop)
 27-10 00:52 | ha herstarten om ems 5.136.0 te activeren
 27-10 01:51 | luchtreiniger turbo bij koken en pm2.5 > 100, terug naar auto onder 25
+27-10 04:51 | L-EMS-042 ems nabeschouwing tegen optimum met netladen (beter dan perfect)
+27-10 04:51 | L-EMS-041 ems tekortkans 22:00 bewaren als laadblok al loopt (aparte telling)
+27-10 04:51 | L-GS-033 gold scalper resultaat per periode mand leest alleen btc-eur
+27-10 04:51 | updates installeren gold scalper 2.24.3 (hacs)
