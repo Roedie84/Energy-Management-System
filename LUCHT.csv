@@ -1143,3 +1143,25 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-27 12:20,automation_traces_fout,0,5,auto direct bij aanwezigheid 09:42:58; mid 15 min na laatste aanwezigheid (10:33:09 -> 10:48:09)
 2026-10-27 12:20,kookautomation_traces,0,5,alleen herstarttraces; geen kookmoment
 2026-10-27 12:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.2-1.0
+2026-10-27 16:20,pm25_gem,1.05,48,5-min statistiek 12:20-16:20 CET
+2026-10-27 16:20,pm25_mediaan,1.07,48,
+2026-10-27 16:20,pm25_p95,1.52,48,
+2026-10-27 16:20,pm25_max,2.22,48,momentaan max 15:10 (aanwezig; tv aan)
+2026-10-27 16:20,pm25_uren_gt15,0.00,48,
+2026-10-27 16:20,pm25_uren_gt25,0.00,48,
+2026-10-27 16:20,stand_auto_min,180,1,gem pm25 1.16 (n=35)
+2026-10-27 16:20,stand_mid_min,47,1,gem pm25 0.76 (n=10)
+2026-10-27 16:20,stand_unavailable_min,13,1,12:31-12:32 HA-herstart; 14:07:47-14:19:44 lokale verbinding weg
+2026-10-27 16:20,pm25_gem_aanwezig,1.09,36,mmWave of tv (tv 14:38-16:09)
+2026-10-27 16:20,pm25_gem_afwezig,0.93,12,
+2026-10-27 16:20,co2_gem,612,48,5-min; 574 -> 477 (14:15) -> 849 (15:40); ramen dicht
+2026-10-27 16:20,co2_uren_gt1200,0.00,48,
+2026-10-27 16:20,vocht_max,68.7,48,67.0 -> 68.7% bij 17.3 -> 18.6 -> 18.0 C
+2026-10-27 16:20,schimmel_indicator,71,48,66-71; buiten 99% / 16-18 C
+2026-10-27 16:20,ha_herstarts,1,1,12:31
+2026-10-27 16:20,lokaal_mislukt,63,132253,uitval 0; 222 verbindingen (+2); 14 nieuwe fouten 14:07-14:18 (laatste OSError Errno 113 connect failed)
+2026-10-27 16:20,sturen_bevestigd,326,327,7/7 nieuwe opdrachten bevestigd
+2026-10-27 16:20,filtergebruik_pct,0,1,
+2026-10-27 16:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (13:19:08 -> 13:34:08); na herstart 12:31 3x mid 1.6-2 min na off (12:41 12:47)
+2026-10-27 16:20,kookautomation_traces,0,5,1 herstarttrace (12:32); geen kookmoment
+2026-10-27 16:20,apparaat_pm25_bereik,2,1,apparaat 2-5 bij Ultimate 0.3-2.2: vast op 2
