@@ -491,3 +491,14 @@ laatste ronde: 27-10 23:41, gemeten t/m 27-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (live correctie), H-EMS-11 (piek-/nachtladen op de nieuwe meetlat). H-EMS-15 → L-EMS-044.
 
 laatste ronde: 28-10 03:40, gemeten t/m 28-10 04:05
+
+## 28-10 07:41 · tussenronde
+- Herstarts 06:10 en 06:52 → **v5.141.1 actief** (v5.141.0 = L-EMS-043 + L-EMS-041 sinds 06:10; v5.141.1 batterijlader, andere sessie 06:48). Fout 0 / storing 0; na de herstart prijsbuffer gebruikt (afgevangen). Geen release (tussenronde, niets acuut).
+- **Nacht 27→28 afgerekend: geen tekort.** SoC 40 % (04:05) → **30 %** (07:40), P1-import per uur 0,012-0,027 kWh → geen netafname bij lege accu. 22:00-kans 0,3 % → Brier-bijdrage ~0 (reeks wordt in de dagafsluiting bijgewerkt). H-EMS-14: tweede nacht op rij zonder tekort ondanks de schommelende live correctie.
+- **Harde regel: 0× onder de reserve.** Geen verkoop 04:05-07:40 (export per uur 0,013-0,018, regeloverschot).
+- **L-EMS-043 eerste meting na installatie:** "duur kwartier: nu 50 ct, straks 38 ct", doel 20,5 °C bij basis 21,0 → prijsschaal klopt en de tak 'halve graad lager' werkt (n=1). Aandeel +0,5 °C per dag in de dagafsluiting → dan geverifieerd.
+- Stilstand: **geen.** Gecontroleerd: airco-dagritme werkdag `bedtijd` leeg (keer_uit 2) - bewust: de vaste uittijd 22:00 gaat voor en die uitschakeling door het EMS telt niet als eigen bediening (climate.woonkamer elke avond 22:00:01 uit). Ochtend `warm_om` leeg: 's ochtends wordt de airco niet gebruikt (0/13 ochtenden). 14 'wachten' lopen op.
+- Digital twin MAE **1,746 kWh** (L-EMS-044 gepland). Blok 10:15 (`cheapest_block_start` 09:15Z).
+- Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (live correctie; 2 nachten zonder tekort), H-EMS-11 (piek-/nachtladen op de nieuwe meetlat).
+
+laatste ronde: 28-10 07:41, gemeten t/m 28-10 07:45
