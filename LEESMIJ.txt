@@ -1,3 +1,14 @@
+EMS v5.141.0 - airco-voorverwarmen rekent met de echte prijs
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Voorverwarmen met de airco vergeleek de prijs van nu met een prijsreeks die
+  tien miljoen keer te groot was. Daardoor wilde het EMS altijd een halve
+  graad warmer stoken. Nu alleen bij een echt prijsverschil (minstens 5 cent),
+  en in een duur kwartier weer een halve graad lager.
+- De tekortkans van 22:00 wordt ook bewaard als het goedkope blok dan al
+  loopt; zulke nachten staan apart in de kalibratie.
+
 EMS v5.140.0 - eerlijke nabeschouwing en meetlog die past
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

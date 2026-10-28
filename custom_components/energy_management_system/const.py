@@ -5540,6 +5540,8 @@ MC_KALIBRATIE_BLOK_UITERLIJK_UUR = 12
 # v5.47: een bewaarde stand van 22:00 met deze basis is de kans TOT het
 # goedkope blok; standen zonder (v5.45-v5.46) telden de lange horizon mee.
 MC_KANS_BASIS_TOT_BLOK = "tot_blok"
+# v5.141.0 (L-EMS-041): 22:00-stand terwijl het goedkope blok al liep.
+MC_KANS_BASIS_IN_BLOK = "in_blok"
 
 # v5.47: watersensoren in liters en L/min, welke eenheid ze ook melden. Een
 # utility_meter meldde na een herstart eerst m³ en daarna weer L.

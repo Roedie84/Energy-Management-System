@@ -179,7 +179,8 @@ def test_buffer_vlak_bij_gelijke_prijzen():
 
 def _met_prijzen(c, nu, nu_prijs, later):
     c._get_forecast_entries = lambda *a, **k: [
-        (nu + timedelta(minutes=15 * (i + 1)), nu + timedelta(minutes=15 * (i + 2)), p)
+        # v5.141.0: de reeks staat zoals in het echt in 1e-7 euro
+        (nu + timedelta(minutes=15 * (i + 1)), nu + timedelta(minutes=15 * (i + 2)), p * 10_000_000)
         for i, p in enumerate(later)
     ]
     c.huidige_prijs_eur_per_kwh = lambda now=None: nu_prijs

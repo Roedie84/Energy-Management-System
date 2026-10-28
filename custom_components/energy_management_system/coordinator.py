@@ -612,6 +612,7 @@ from .const import (
     MC_KALIBRATIE_BEWAAR_AVONDEN,
     MC_KALIBRATIE_UUR,
     MC_KANS_BASIS_TOT_BLOK,
+    MC_KANS_BASIS_IN_BLOK,
     WATER_DEBIET_NAAR_L_PER_MIN,
     WATER_VOLUME_NAAR_LITER,
     TEKORT_VOL_MARGE_PROCENT,
@@ -40205,8 +40206,14 @@ class EnergyManagementSystemCoordinator:
             self.monte_carlo_kans_incl_lange_horizon_pct = round(
                 100 * sum(1 for d in deepest_deficits if d > grens) / n, 1
             )
-            if start <= now:
-                self._leg_mc_22u_vast(now, available_kwh)
+            # v5.141.0 (L-EMS-041): loopt het goedkope blok al om 22:00, dan
+            # begint de simulatie aan het blokeinde (v5.93.0). Die avond werd
+            # stil overgeslagen; nu bewaard met een eigen basis, zodat de
+            # nacht zichtbaar is maar niet in de Brier meetelt.
+            self._leg_mc_22u_vast(
+                now, available_kwh,
+                basis=MC_KANS_BASIS_TOT_BLOK if start <= now else MC_KANS_BASIS_IN_BLOK,
+            )
 
         self.monte_carlo_note = (
             "Adviserend - de tekortkans (stand) gaat over NU TOT het goedkope "
@@ -40222,7 +40229,10 @@ class EnergyManagementSystemCoordinator:
             "reserve-marge niet aan."
         )
 
-    def _leg_mc_22u_vast(self, now: datetime, beschikbaar_kwh: float | None) -> None:
+    def _leg_mc_22u_vast(
+        self, now: datetime, beschikbaar_kwh: float | None,
+        basis: str = MC_KANS_BASIS_TOT_BLOK,
+    ) -> None:
         """Bewaart de eerste tekortkans van het uur 22 per avond (v5.45).
 
         Uit de leerronde van 7 oktober: de kalibratie (Brier 0,038 over 8
@@ -40246,7 +40256,7 @@ class EnergyManagementSystemCoordinator:
             # `basis` markeert dat, zodat de kalibratie oude standen
             # (inclusief lange horizon) herkent.
             "kans_pct": kans,
-            "basis": MC_KANS_BASIS_TOT_BLOK,
+            "basis": basis,
             "kans_incl_lange_horizon_pct": getattr(
                 self, "monte_carlo_kans_incl_lange_horizon_pct", None
             ),
@@ -40321,10 +40331,20 @@ class EnergyManagementSystemCoordinator:
         """
         paren = []
         andere: list = []
+        in_blok: list = []
         oude_basis = 0
         for r in self.reserve_daily_records or []:
             stand = r.get("mc_22u") if isinstance(r, dict) else None
             if not isinstance(stand, dict) or stand.get("kans_pct") is None:
+                continue
+            # v5.141.0 (L-EMS-041): het blok liep al om 22:00 - de kans
+            # rekent vanaf het blokeinde; zichtbaar, niet in de Brier.
+            if stand.get("basis") == MC_KANS_BASIS_IN_BLOK:
+                in_blok.append({
+                    **self._nacht_paar((r.get("date"), float(stand["kans_pct"]) / 100,
+                                        1 if r.get("shortfall") else 0)),
+                    "horizon_tot": stand.get("horizon_tot"),
+                })
                 continue
             # v5.47: alleen standen TOT het blok. Een stand van vóór v5.47
             # telde de lange horizon mee (energie na het blok) en is niet te
@@ -40375,6 +40395,8 @@ class EnergyManagementSystemCoordinator:
             "per_nacht": [self._nacht_paar(p) for p in paren],
             # v5.119.0 (L-EMS-029): avonden met het blok na 12:00 de dag erna.
             "nachten_andere_horizon": andere,
+            # v5.141.0 (L-EMS-041): avonden waarop het blok om 22:00 al liep.
+            "nachten_in_blok": in_blok,
         }
 
     @staticmethod
@@ -50104,8 +50126,12 @@ class EnergyManagementSystemCoordinator:
         if uit.get("actie") != "verwarmen" and not bijstellen:
             return uit
         basis = uit.get("doel_c") if uit.get("actie") == "verwarmen" else laatste["basis"]
+        # v5.141.0 (L-EMS-043): de reeks staat in eenheden van 1e-7 euro
+        # (PRICE_SCALE_FACTOR); de prijs van nu in euro. Zonder deling was
+        # 'straks' altijd duurder en elk verwarmbesluit een halve graad hoger.
         komende = [
-            prijs for start, _eind, prijs in (self._get_forecast_entries() or [])
+            prijs / PRICE_SCALE_FACTOR
+            for start, _eind, prijs in (self._get_forecast_entries() or [])
             if now < start <= now + timedelta(hours=airco_sturing.BUFFER_VOORUIT_UREN)
         ]
         b = airco_sturing.buffer(basis, self.huidige_prijs_eur_per_kwh(now), komende)

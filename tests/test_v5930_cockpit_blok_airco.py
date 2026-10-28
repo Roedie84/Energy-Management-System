@@ -84,8 +84,8 @@ def test_simulatie_gebruikt_het_startmoment():
     assert "cursor = start" in stuk
     assert "self._monte_carlo_centrum(\n            start, cursor" in stuk
     assert "available_kwh += extra_beschikbaar" in stuk
-    # niet als kalibratiepunt van 22:00 vastleggen tijdens een blok
-    assert "if start <= now:\n                self._leg_mc_22u_vast" in stuk
+    # tijdens een blok wel bewaren, maar met een eigen basis (v5.141.0, L-EMS-041)
+    assert "MC_KANS_BASIS_TOT_BLOK if start <= now else MC_KANS_BASIS_IN_BLOK" in stuk
 
 
 # --- Airco-verwachting ---------------------------------------------------

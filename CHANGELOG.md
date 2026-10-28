@@ -34013,3 +34013,13 @@ Akkoord Ruud 27-10 20:16 op de punten "L-EMS-042" en "meetlog boven de opslaglim
 - Limiet 40 MB (was 25 MiB); boven de limiet eerst alle oude snapshots, pas daarna evaluaties.
 
 Tests: `test_v5140_meetlat_meetlog.py` (3), `test_nabeschouwing.py` (+2, 2 aangepast aan de nieuwe meetlat).
+
+## v5.141.0 — airco-voorverwarmen op de juiste prijsschaal (L-EMS-043) en Monte Carlo-stand tijdens een laadblok (L-EMS-041)
+
+Leerronde 28-10 03:40 (dagafsluiting). Beide zelf gebouwd: een bug en een meetbaarheidspunt; de sturing van accu en airco verandert niet van regel.
+
+**Airco voorverwarmen vergeleek de ruwe prijsreeks met euro's (L-EMS-043, bug).** `_airco_buffer_ronde` gaf de komende prijzen uit `_get_forecast_entries()` (eenheden van 1e-7 €, `PRICE_SCALE_FACTOR`) ongeschaald door aan `airco_sturing.buffer`, terwijl de prijs van nu in € is. Gevolg: "straks" was altijd duurder (27-10: "nu 38 ct, straks tot 390089400 ct"), elk verwarmbesluit kreeg +0,5 °C en de tak "duur kwartier: halve graad lager" kwam nooit aan bod. Nu gedeeld door `PRICE_SCALE_FACTOR`; de regel van v5.66 (≥ 5 ct en ≤ 80 %) is ongewijzigd. Knop Airco automaat stond uit, dus er was nog geen gevolg in huis.
+
+**Monte Carlo: de stand van 22:00 ook als het goedkope blok al loopt (L-EMS-041, meetbaarheid).** Liep het blok om 22:00 al (25-10: 21:30-06:00), dan begint de simulatie aan het blokeinde (v5.93.0) en werd de 22:00-stand stil overgeslagen; die nacht verdween uit de kalibratie. Nu bewaard met `basis: "in_blok"` en in `kalibratie_22u.nachten_in_blok` getoond; telt niet in de Brier (andere horizon). Monte Carlo blijft adviserend.
+
+Tests: `test_v5141_leerronde.py` (6); `test_v565_airco_ritme.py` rekent nu met een reeks op de echte schaal; `test_v5930_cockpit_blok_airco.py` volgt de nieuwe 22:00-regel.
