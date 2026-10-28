@@ -512,3 +512,15 @@ laatste ronde: 28-10 07:41, gemeten t/m 28-10 07:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon; vandaag tot nu −6 %), H-EMS-14 (live correctie; 2 nachten zonder tekort), H-EMS-11 (piek-/nachtladen op de nieuwe meetlat).
 
 laatste ronde: 28-10 11:42, gemeten t/m 28-10 11:45
+
+## 28-10 15:43 · tussenronde
+- **v5.141.1 actief**, geen herstart sinds 10:25, geen nieuwe release op main. Fout 0 / storing 0. Zonneplan-prijzen 13:16-14:01 4× fout bij de externe integratie (`sustainability_score` None) → EMS gebruikte de laatst bekende prijzen (43 kwartieren vooruit), om 15:45 weer 228 kwartieren t/m 29-10 - extern, afgevangen. Geen release (tussenronde, niets acuut).
+- **Harde regel: 0× onder de reserve** 11:45-15:45 (geen verkoopkwartieren op 28-10; P1-export 12-15 u 0,000-0,002 kWh). Blok 10:15-15:15 afgerond: import 12-15 u 0,77/2,63/2,33/1,37 kWh, SoC **100 %** om 15:45, beschikbaar 10,37 kWh.
+- **PV (H-EMS-2):** 07-15 u werkelijk **7,38** kWh tegen Solcast 8,07 → **−8,5 %**; 11-15 u 4,95 tegen 5,49 (−9,7 %, uur-MAE 0,33): 12 u 0,95 tegen 1,79 (wolk), 13-14 u juist boven Solcast. Dag-ahead EMS 9,56 → dag komt op ~7,9 (≈ −17 %) → weer te hoog bij zon; afrekening dagafsluiting.
+- **Besparing tot nu −€ 0,42** (rauw −2,93 + SoC-correctie 2,52 voor 6,22 kWh extra in de accu à 40,4 ct): normaal na een middagblok, de opbrengst volgt bij het ontladen in de avondpiek; dagwaarde in de dagafsluiting.
+- Digital twin MAE **1,394 kWh** (1,682 → lager; vensters met het blok 26/27-10 rollen eruit). MC tot blok 0 %; Brier 0,414 (n=5), nacht 27→28 (22:00 0,3 %, geen tekort) komt in het dagrecord van 28-10.
+- Airco besluit "verwarmen" (19,4 °C < aanzet 19,5; voorverwarmen 'nu 43 ct, straks 56 ct' → +0,5 °C = L-EMS-043 werkt, n=2), knop uit.
+- **Stilstand: geen.** 'Nog niet bepaald' 11 wachten (ongewijzigd t.o.v. 11:42; Accugezondheid = L-EMS-040, niet melden).
+- Hypotheses: H-EMS-2 (PV te hoog bij zon; vandaag ≈ −17 % op dag-ahead), H-EMS-14 (live correctie; avond/nacht toetst), H-EMS-11 (piek-/nachtladen; vandaag middagblok, dagafsluiting).
+
+laatste ronde: 28-10 15:43, gemeten t/m 28-10 15:45
