@@ -1,3 +1,11 @@
+EMS v5.141.1 - batterijlader schakelt minder bij een vol apparaat
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Hangt er een vol apparaat aan de batterijlader, dan telt het korte
+  bijladen niet meer als nieuwe lading. De volgende test komt pas na 1 uur,
+  daarna 2 uur, daarna 4 uur. Na een echte lading weer zoals voorheen.
+
 EMS v5.141.0 - airco-voorverwarmen rekent met de echte prijs
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

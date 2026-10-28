@@ -1552,6 +1552,16 @@ BATTERIJLADER_COMPLETE_SUSTAINED_MINUTES = 10
 # uur geen lading meer komt. Aan laten kost met een vol apparaat ~5 W.
 BATTERIJLADER_AAN_TOT_LEEG_MINUTEN = 60
 
+# v5.141.1 (akkoord Ruud 28-10): alleen bijladen is geen nieuwe lading.
+# Gemeten 27-10: met een vol apparaat aan de lader liep overdag steeds
+# hetzelfde rondje van ~1 3/4 uur: test, ~20 min bijladen, "vol, blijft aan",
+# na een uur uit, een kwartier later weer een test (09:16, 11:02, 12:39,
+# 14:17, 16:03, 19:31). Elke test telde als lading, dus de afbouw van
+# v5.138.0 kwam nooit op gang. Een sessie die korter dan dit laadde voor hij
+# vol was, is bijladen: daarna langer wachten, oplopend.
+BATTERIJLADER_BIJLADEN_MAX_MINUTEN = 30
+BATTERIJLADER_BIJLADEN_WACHT_MINUTEN = (60, 120, 240)
+
 # hvac_action values that mean the climate entity's compressor/heating
 # element is actually drawing power right now - 'idle' and 'off' don't
 # count (thermostat satisfied / unit switched off).

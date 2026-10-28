@@ -202,6 +202,8 @@ from .const import (
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     BATTERIJLADER_COMPLETE_THRESHOLD_W,
     BATTERIJLADER_AAN_TOT_LEEG_MINUTEN,
+    BATTERIJLADER_BIJLADEN_MAX_MINUTEN,
+    BATTERIJLADER_BIJLADEN_WACHT_MINUTEN,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -4719,13 +4721,37 @@ class EnergyManagementSystemCoordinator:
             setattr(self, last_action_attr, "vol_blijft_aan")
             return True
         await self._async_set_switch(switch_entity, turn_on=False)
+        # v5.141.1: laadde hij korter dan BATTERIJLADER_BIJLADEN_MAX_MINUTEN
+        # voor hij vol was, dan was het bijladen van een vol apparaat - geen
+        # nieuwe lading. Dan langer wachten tot de volgende test.
+        wacht = self._bijladen_wachttijd(now, gestart, laag_minuten, last_action_attr)
         self._finish_scheduled_charge_session(
             now, charge_started_attr, below_threshold_since_attr, duration_history_attr, completed=True,
         )
         setattr(self, ever_active_this_session_attr, False)
-        setattr(self, next_poll_attr, self._volgend_kwartier(now))
+        setattr(self, next_poll_attr, self._volgend_kwartier(now) + timedelta(minutes=wacht))
         setattr(self, last_action_attr, "wacht_op_apparaat")
         return True
+
+    def _bijladen_wachttijd(
+        self, now: datetime, gestart: datetime | None, laag_minuten: float, last_action_attr: str
+    ) -> int:
+        """Extra minuten tot de volgende test na een sessie (v5.141.1).
+
+        0 na een echte lading (en de teller terug naar nul); na bijladen
+        oplopend volgens BATTERIJLADER_BIJLADEN_WACHT_MINUTEN.
+        """
+        tellers = self.__dict__.setdefault("_bijladen_tellers", {})
+        if gestart is None:
+            return 0
+        laadde = (now - gestart).total_seconds() / 60 - laag_minuten
+        if laadde >= BATTERIJLADER_BIJLADEN_MAX_MINUTEN:
+            tellers.pop(last_action_attr, None)
+            return 0
+        aantal = tellers.get(last_action_attr, 0) + 1
+        tellers[last_action_attr] = aantal
+        reeks = BATTERIJLADER_BIJLADEN_WACHT_MINUTEN
+        return reeks[min(aantal, len(reeks)) - 1]
 
     @staticmethod
     def _is_nachtrust(now: datetime) -> bool:
@@ -4842,6 +4868,7 @@ class EnergyManagementSystemCoordinator:
         """Buiten het blok: geen controles meer, wachtende melding versturen."""
         setattr(self, next_poll_attr, None)
         self._lege_tests_reset(last_action_attr)
+        (self.__dict__.get("_bijladen_tellers") or {}).pop(last_action_attr, None)
         if kwartiercontrole:
             self._kwartiercontrole_klaar(now, last_action_attr, notify_title, notify_message)
 

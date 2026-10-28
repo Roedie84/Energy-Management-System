@@ -34023,3 +34023,14 @@ Leerronde 28-10 03:40 (dagafsluiting). Beide zelf gebouwd: een bug en een meetba
 **Monte Carlo: de stand van 22:00 ook als het goedkope blok al loopt (L-EMS-041, meetbaarheid).** Liep het blok om 22:00 al (25-10: 21:30-06:00), dan begint de simulatie aan het blokeinde (v5.93.0) en werd de 22:00-stand stil overgeslagen; die nacht verdween uit de kalibratie. Nu bewaard met `basis: "in_blok"` en in `kalibratie_22u.nachten_in_blok` getoond; telt niet in de Brier (andere horizon). Monte Carlo blijft adviserend.
 
 Tests: `test_v5141_leerronde.py` (6); `test_v565_airco_ritme.py` rekent nu met een reeks op de echte schaal; `test_v5930_cockpit_blok_airco.py` volgt de nieuwe 22:00-regel.
+
+
+## v5.141.1 — batterijlader: alleen bijladen is geen nieuwe lading
+
+Akkoord Ruud 28-10 06:43. Gemeten 27-10: met een vol apparaat aan de lader liep overdag steeds hetzelfde rondje van ~1 3/4 uur: test, ~20 min bijladen, "vol, blijft aan", na een uur zonder lading uit, een kwartier later weer een test (uit om 09:16, 11:02, 12:39, 14:17, 16:03, 19:31; 10 schakelingen in 24 uur). Elke test telde als echte lading, dus de afbouw van v5.138.0 kwam nooit op gang.
+
+- `_bijladen_wachttijd`: laadde een sessie korter dan `BATTERIJLADER_BIJLADEN_MAX_MINUTEN` (30) voordat hij vol was, dan was het bijladen. De volgende test komt dan na 60, daarna 120, daarna 240 minuten extra (`BATTERIJLADER_BIJLADEN_WACHT_MINUTEN`). Na een echte lading (30 min of langer) en bij een nieuw goedkoop blok weer zoals voorheen.
+- Alleen de batterijlader (het "aan tot leeg"-pad van v5.137.0); fietsladers en steelstofzuiger ongewijzigd. 's Nachts blijft 22-06 zonder tests.
+- Verwacht overdag 3-4 rondjes in plaats van 6-7.
+
+Tests: `test_v5137_batterijlader_aan_tot_leeg.py` (+3).
