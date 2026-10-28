@@ -1321,3 +1321,26 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-28 20:20,automation_traces_fout,0,5,aanwezigheidsautomation uitgezet 20:16:03; daarna sleep -> low -> mid (20:16-20:19)
 2026-10-28 20:20,kookautomation_traces,0,2,alleen 2 herstarttraces bewaard; stand al auto bij koken
 2026-10-28 20:20,apparaat_pm25_bereik,6,1,apparaat 2-6 bij Ultimate 1.3-7.2
+2026-10-29 00:20,pm25_dag,1.83,24,dag 28-10; mediaan 1.40; P95 5.06; max 22.6 (12:51 kookmoment; stand auto)
+2026-10-29 00:20,pm25_uren_gt15_dag,0.00,24,dag 28-10; > 25: 0 u
+2026-10-29 00:20,pm25_7d,2.42,7,daggemiddelden 22-28/10 (22-10 23 u); mediaan 1.21
+2026-10-29 00:20,co2_dag,1144,24,dag 28-10; max 1902 (21:30); ~9.25 u > 1200
+2026-10-29 00:20,pm25_gem,1.34,48,5-min statistiek 20:20-00:20
+2026-10-29 00:20,pm25_mediaan,1.33,48,
+2026-10-29 00:20,pm25_p95,1.59,48,
+2026-10-29 00:20,pm25_max,1.91,48,momentaan max 22:05
+2026-10-29 00:20,pm25_uren_gt15,0.00,48,
+2026-10-29 00:20,pm25_uren_gt25,0.00,48,
+2026-10-29 00:20,stand_auto_min,230,1,gem pm25 1.34; 20:28:51-00:20 excl. 1.3 min unavailable (herstart 21:43)
+2026-10-29 00:20,stand_overig_min,9,1,handmatige test 20:16-20:28: sleep/low/mid/turbo 1.9/uit 1.4/high 1.7 min; geen PM-effect te meten (n=1)
+2026-10-29 00:20,co2_gem,1617,48,5-min; 1694 -> 1902 (21:30) -> 1373; hele blok > 1200; ramen dicht
+2026-10-29 00:20,co2_uren_gt1200,4.00,48,
+2026-10-29 00:20,vocht_max,64.4,48,58.4 -> 64.4% bij 22.0 -> 18.7 C (verwarming uit)
+2026-10-29 00:20,schimmel_indicator,81,48,79-81; buiten 99% / 11.5 C
+2026-10-29 00:20,ha_herstarts,1,1,21:43
+2026-10-29 00:20,lokaal_mislukt,64,143513,uitval 0; 230 verbindingen (+1 herstart); geen nieuwe fout
+2026-10-29 00:20,sturen_bevestigd,357,358,5/5 nieuwe opdrachten bevestigd (handmatige test)
+2026-10-29 00:20,filtergebruik_pct,0,1,
+2026-10-29 00:20,automation_traces_fout,0,5,automation 20:16:03-20:26:52 uit (handmatig); tv aan sinds 20:39 -> auto; 00:00/00:15 failed_conditions = nachtvenster
+2026-10-29 00:20,kookautomation_traces,0,3,alleen herstarttraces; kookplaat en oven unavailable sinds 21:45 (herstart)
+2026-10-29 00:20,apparaat_pm25_bereik,8,1,apparaat 2-8 bij Ultimate 1.0-1.9 (20:30-20:40 4-8): ~3x te hoog
