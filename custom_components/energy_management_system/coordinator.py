@@ -25139,6 +25139,42 @@ class EnergyManagementSystemCoordinator:
             return ruimte
         return None
 
+    def _plan_sparen_tussen_laden(self, now: datetime, entries) -> set:
+        """Plankwartieren tussen twee netlaadkwartieren die de sturing spaart (v5.142.2).
+
+        Gemeld 28-10 21:33 ("Dan klopt er dus iets niet?"): het plan liet de
+        kwartieren tussen de laadblokken (00:00-00:45, 01:00-01:45) op "slim"
+        met een zakkende accu, terwijl de sturing elk kwartier naar het
+        EERSTVOLGENDE laadkwartier kijkt (`_netladen_volgt_in_blok`) en daar
+        spaart: die kWh wordt anders teruggeladen tegen laadprijs / rendement
+        + slijtage (~53 ct) terwijl hij 42 ct bespaart. Het plan nam alleen de
+        spaarkwartieren tot het eerste laadmoment over. Hier dezelfde regel
+        per kwartier, met de laadkwartieren van het vorige plan
+        (`laadplan_gewijzigd`) - dezelfde bron als de sturing.
+        """
+        laden = sorted(
+            t for t in (
+                dt_util.parse_datetime(x)
+                for x in (self.laadplan_gewijzigd or {}).get("kwartieren") or []
+            ) if t is not None
+        )
+        blok_start, blok_eind = self.last_cheap_block_start, self.last_cheap_block_end
+        rendement = self.learned_battery_efficiency_percent
+        slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        if not laden or blok_start is None or blok_eind is None or not rendement or slijtage_ct is None:
+            return set()
+        prijzen = {b: p / PRICE_SCALE_FACTOR * 100 for b, _e, p in (entries or [])}
+        uit = set()
+        for begin, prijs_ct in prijzen.items():
+            if begin < now - timedelta(minutes=15) or not blok_start <= begin < blok_eind or begin in laden:
+                continue
+            volgend = next((t for t in laden if begin < t < blok_eind), None)
+            if volgend is None or prijzen.get(volgend) is None:
+                continue
+            if prijzen[volgend] / (rendement / 100) + slijtage_ct > prijs_ct:
+                uit.add(begin)
+        return uit
+
     @staticmethod
     def _plan_in_bekend_blok(start: datetime, netregels: dict) -> bool:
         """Valt dit plankwartier in het goedkope blok van de sturing? (v5.128.0)"""
@@ -25275,7 +25311,9 @@ class EnergyManagementSystemCoordinator:
                     *((self.last_spaarplan or {}).get("gespaard") or []),
                     *((self.last_sparen_in_blok or {}).get("kwartieren") or []),
                 ]
-            },
+            }
+            # v5.142.2: ook tussen twee laadblokken in hetzelfde blok sparen.
+            | self._plan_sparen_tussen_laden(now, entries),
             # De bodem uit de reserveberekening; onbekend = geen piekverkoop.
             "bodem_kwh": (self.last_reserve_margin_breakdown or {}).get(
                 "bodem_kwh", float("inf")

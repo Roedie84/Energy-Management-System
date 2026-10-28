@@ -1,3 +1,11 @@
+EMS v5.142.2 - kwartierplanning klopt nu ook tussen de laadblokken
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De kwartierplanning laat nu ook tussen twee laadblokken 's nachts
+  "sparen" zien, zoals de sturing het al deed. Eerder stond daar "slim"
+  met een zakkende accu.
+
 EMS v5.142.1 - geen valse sensormelding meer tijdens het laden
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

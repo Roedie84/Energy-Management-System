@@ -141,7 +141,7 @@ def test_coordinator_gebruikt_de_correctie_alleen_bij_netladen():
     assert bron.count("slijtage_ct = self._laadkosten_ct()") == 2       # laadbesluit en dip
     assert '"slijtage_ct": self._laadkosten_ct(),' in bron               # kwartierplan
     # verkopen blijft op de slijtage alleen
-    assert bron.count('slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")') == 4
+    assert bron.count('slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")') == 5  # v5.142.2: + _plan_sparen_tussen_laden (spiegel van _netladen_volgt_in_blok)
     assert '"laad_waarde_ct": self._laad_waarde_ct(),' in bron
     assert '"accukosten": _veilig("get_accukosten"' in _bron("diagnostics.py")
     assert '"accukosten": self._coordinator.get_accukosten(),' in _bron("sensor.py")

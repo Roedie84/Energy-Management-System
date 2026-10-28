@@ -34053,3 +34053,12 @@ Meldronde 28-10. Tijdens het laadblok zakte de sensor-gezondheid elke middag (27
 - Drempel (300 W) en venster ongewijzigd; een echte storing (sensor stil, voorraad beweegt) blijft fout.
 
 Tests: `test_v51421_balans_rendement.py` (5).
+
+## v5.142.2 — kwartierplan spaart ook tussen twee laadblokken
+
+Gemeld 28-10 21:33: "Dan klopt er dus iets niet?" Het plan toonde de kwartieren tussen de laadblokken van de nacht (00:00-00:45, 01:00-01:45) als "slim" met een zakkende accu. De sturing spaart daar wel: elk kwartier kijkt `_netladen_volgt_in_blok` naar het eerstvolgende laadkwartier, en terugladen (~41 ct / 83,5% + 4,2 ct = ~53 ct) is duurder dan de stroom nu (~42 ct). Het plan nam alleen de spaarkwartieren tot het eerste laadmoment over.
+
+- `_plan_sparen_tussen_laden`: per blokkwartier vóór een laadkwartier van het vorige plan (`laadplan_gewijzigd`) dezelfde rondtripregel als de sturing; die kwartieren gaan in `gespaard` (modus "smart_charging (sparen)").
+- Alleen het plan; de sturing is ongewijzigd.
+
+Tests: `test_v51422_sparen_tussen_laden.py` (5).
