@@ -343,4 +343,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Kookautomation: 1 herstarttrace, geen kookmoment.
 - CO₂ hele blok > 1.200 (gem 1.565, max 1.795 om 22:00; nu 1.354), dag 27-10 6,2 u > 1.200, ramen dicht na koken. Vocht 64 → 68,8% bij 20,7 → 18,6 °C, schimmelindicator 74 → 84 (stijgend; max log 93 op 17-10). Avond luchten na koken; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=11). H2 auto halveert kookpiek ~5-24 min (n=7); auto bij koken 1x: 61 en < 10 in 20 min, mid bij koken 1x: 1.147 (gerecht verschilt). Turbo ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
-laatste ronde: 28-10 00:25, gemeten t/m 00:20
+
+## 28-10 04:25 (ronde 50)
+- PM2.5 00:20-04:20: gem 0,39, mediaan 0,33, P95 0,65, max 0,93 (03:55) (n=48); 0 uur > 15. Eerste helft 0,27, vanaf ~02:50 stijging naar ~0,7 zonder aanwezigheid of open raam (zelfde als 25-10 05:30: buitenlucht). 7d (21-27/10) 2,35 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit, niemand aanwezig.
+- Stand: hele periode mid (240 min, geen wissels, 0 min unavailable); geen standvergelijking.
+- Werking: nachtvenster houdt mid vast; 5/5 traces failed_conditions (00-06, verwacht), geen fout. 0 HA-herstarts. Lokaal 63 mislukt op 136.507 (geen nieuwe), uitval 0, sturen 329/330 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2.
+- Kookautomation: geen nieuwe traces, geen kookmoment.
+- CO₂ daalt 1.362 → 870 (gem 1.072), 0,8 u > 1.200 (tot ~01:10), ramen dicht: avondlucht trekt traag weg. Vocht 68,7 → 67,4% bij 18,4 → 17,6 °C, schimmelindicator 83-84 (hoog), buiten 99% / 11 °C. Na koken luchten en verwarmen; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=11). H2 auto halveert kookpiek ~5-24 min (n=7); auto bij koken 1x: 61 en < 10 in 20 min, mid bij koken 1x: 1.147 (gerecht verschilt). Turbo ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+laatste ronde: 28-10 04:25, gemeten t/m 04:20
