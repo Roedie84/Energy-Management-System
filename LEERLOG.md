@@ -536,3 +536,15 @@ laatste ronde: 28-10 15:43, gemeten t/m 28-10 15:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon; vandaag −10 % Solcast / −17 % dag-ahead), H-EMS-14 (live correctie; schommelt per minuut, nacht toetst), H-EMS-11 (piek-/nachtladen; dagafsluiting).
 
 laatste ronde: 28-10 19:43, gemeten t/m 28-10 19:45
+
+## 28-10 23:40 · tussenronde
+- **v5.142.2 actief** (andere sessie 21:42, herstart 21:45: kwartierplan spaart ook tussen twee laadblokken). Fout 0 / storing 0. Externe DNS-storing ~23:25 (Zonneplan onbeschikbaar → laatste waarden gebruikt, afgevangen). Geen release.
+- **Harde regel: 0× onder de reserve** 19:45-23:45 (geen verkoopkwartieren; export per uur ≤ 0,024 kWh = regeloverschot).
+- Avond: SoC 77 → 67 % tot 21:21 (huis uit de accu). Vanaf 21:30 **sparen_in_blok** (blok 21:45-06:15, netladen vanaf 23:45): import 21-23 u 0,355/0,345 kWh bij 41,5 ct terwijl de accu 6,57 kWh had - bewust: terugladen kost 52,6 ct (40,4 ct / rendement + slijtage) → ~€ 0,08 voordeel. Geen schending, geen bug.
+- **Besparing tot nu +€ 0,19** (rauw −0,80 + SoC-correctie 0,98). MC in blok 0 %.
+- **L-EMS-041:** 22:00-stand van 28-10 vastgelegd met `basis: in_blok` (kans 0 %) = eerste avond met een lopend blok → telt na het dagrecord van 29-10 in `nachten_in_blok`; toets in de dagafsluiting.
+- **Digital twin MAE 1,813** (↑ van 1,486). Avondfout 20:15/21:15/22:15 **5,85/5,86/4,84 kWh** (voorspeld 1,52/0,82/1,73 tegen 7,37/6,68/6,57): tweede avond op rij dezelfde vorm (27-10 19:15-21:15 6,20/5,99/5,25) → aanvulling L-EMS-044 bevestigd (n=2 avonden). 23:15 voorspeld 10,37 tegen 6,57 (blok op vol vermogen; de sturing spaart tot 23:45). 6 open voorspellingen 00:15-05:15 alle 10,37 → toets vannacht.
+- Airco besluit "niets", knop uit. **Stilstand: geen** (11 wachten, ongewijzigd; `pv_hourly_forecast_bias`/`battery_protection` unknown = nacht/niet actief, normaal).
+- Hypotheses: H-EMS-2 (PV te hoog bij zon; dag 28-10 −10 % Solcast / −17 % dag-ahead), H-EMS-14 (live correctie; vannacht in blok, geen toets), H-EMS-11 (piek-/nachtladen; dagafsluiting).
+
+laatste ronde: 28-10 23:40, gemeten t/m 28-10 23:45
