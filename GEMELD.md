@@ -127,3 +127,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 27-10 12:54 | verweesde kostensensoren gasmeter_kosten en p1_meter_export_vergoeding verwijderen
 27-10 13:58 | ems zelf uitgesloten weerbron (openweathermap) informatief tonen i.p.v. blijvend LET OP
 27-10 19:51 | ems digital twin laadt alleen binnen blokgrenzen van voorspelmoment (laden na blokeinde gemist)
+28-10 06:51 | L-GS-011 gold scalper verdwenen positie sluitmoment van broker i.p.v. moment van ontdekken
