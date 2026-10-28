@@ -352,4 +352,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Kookautomation: geen nieuwe traces, geen kookmoment.
 - CO₂ daalt 1.362 → 870 (gem 1.072), 0,8 u > 1.200 (tot ~01:10), ramen dicht: avondlucht trekt traag weg. Vocht 68,7 → 67,4% bij 18,4 → 17,6 °C, schimmelindicator 83-84 (hoog), buiten 99% / 11 °C. Na koken luchten en verwarmen; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=11). H2 auto halveert kookpiek ~5-24 min (n=7); auto bij koken 1x: 61 en < 10 in 20 min, mid bij koken 1x: 1.147 (gerecht verschilt). Turbo ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
-laatste ronde: 28-10 04:25, gemeten t/m 04:20
+
+## 28-10 08:25 (ronde 51)
+- PM2.5 04:20-08:20: gem 0,93, mediaan 0,83, P95 1,66, max 1,84 (08:05) (n=48); 0 uur > 15. Nacht vlak 0,6-0,9 (buitenlucht, zelfde als 02:50), ochtendactiviteit vanaf 06:06 naar ~1,7. Dag t/m nu ~0,65; 7d (21-27/10) 2,35 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit. VOC-index 55 → 173 bij ochtendactiviteit.
+- Stand: auto 101 min (gem 1,10), mid 137 min (gem 0,81), 2,5 min unavailable. Aanwezig 1,01 (n=17) vs afwezig 0,89 (n=31): bron (mensen), geen standeffect.
+- Werking: auto bij eerste aanwezigheid na 06:00 (06:05:56), mid precies 15 min na laatste aanwezigheid (06:39, 07:16, 08:16). Na HA-herstart 06:52 mid om 06:59 al 1,2 min na off (bekende ontbrekende marge na herstart). 2 HA-herstarts (06:10, 06:52). 5/5 traces zonder fout. Lokaal 63 mislukt op 137.881 (geen nieuwe), uitval 0, sturen 336/337 (7/7 nieuw), filter 0%. Apparaat-PM2.5 2-3 bij Ultimate 0,6-1,8.
+- Kookautomation: 2 herstarttraces, geen kookmoment.
+- CO₂ 867 → 781 → 936 (gem 837), 0 u > 1.200. Vocht 67,5 → 66,0% bij 17,5 °C (verwarming uit), schimmelindicator 82-84 (hoog), buiten 99% / 10-11 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=11). H2 auto halveert kookpiek ~5-24 min (n=7); auto bij koken 1x: 61 en < 10 in 20 min, mid bij koken 1x: 1.147 (gerecht verschilt). Turbo ongetoetst. H3 aanhoudende bron/bezoek: auto houdt het niet bij (n=1). Geen nieuwe piek, geen toets.
+laatste ronde: 28-10 08:25, gemeten t/m 08:20
