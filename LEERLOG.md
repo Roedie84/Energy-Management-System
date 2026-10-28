@@ -524,3 +524,15 @@ laatste ronde: 28-10 11:42, gemeten t/m 28-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon; vandaag ≈ −17 % op dag-ahead), H-EMS-14 (live correctie; avond/nacht toetst), H-EMS-11 (piek-/nachtladen; vandaag middagblok, dagafsluiting).
 
 laatste ronde: 28-10 15:43, gemeten t/m 28-10 15:45
+
+## 28-10 19:43 · tussenronde
+- **v5.142.1 actief** (herstart 19:18). Andere sessie bracht vanmiddag **v5.142.0** (instelbare minimale verkoopwinst, standaard 10 ct; sturing, op verzoek van Ruud) en **v5.142.1** (balanscheck met laad-/ontlaadrendement: sensor-gezondheid nu 100). Fout 0 / storing 0. Geen release.
+- **Harde regel: 0× onder de reserve** 15:45-19:45 (geen verkoopkwartieren op 28-10). Export 15-16 u 0,245 kWh = zon bij volle accu; 17-18 u 0,068 kWh verspreid rond de herstart van 17:58 (≤ 0,026/kwartier, regeloverschot).
+- **PV dag (H-EMS-2): 7,96 kWh** tegen Solcast 8,87 (**−10,3 %**) en dag-ahead EMS 9,56 (**−16,7 %**) → weer te hoog bij zon; telt mee in de dagafsluiting.
+- **Besparing tot nu +€ 0,04** (rauw −1,39 + SoC-correctie 1,43). Avondpiek tot 54 ct, niet verkocht: reserve 10,37 (gekapt op capaciteit, lange horizon 8,9 kWh) > beschikbaar 7,60. Laadplan vannacht 23:45-04:30 in stukjes, 57 → 98 %.
+- **Digital twin MAE 1,486** (↑ van 1,394). Nieuw patroon: voorspellingen van 11:15-13:15 voor 17:15-19:15 te laag (8,32/5,92/3,48 tegen 9,56/8,76/8,06): de twin ontlaadt 's avonds op `manual`-kwartieren uit de tijdlijn die de sturing door de reserve niet uitvoert. Openstaand 23:15-01:15 voorspeld 10,37 = blok op vol vermogen (L-EMS-044, toetst vannacht opnieuw). Aanvulling bij L-EMS-044 genoteerd.
+- Reserve-sprongen 17:19-19:33: 20× alleen de behoefte, vooral `live_correctie` die per minuut tussen 0 en 1,5 kWh springt (verhouding 1,0 ↔ 1,95); reserve blijft 10,37 (boven capaciteit) → nu zonder effect. Meenemen in H-EMS-14.
+- Airco besluit "niets" (21,8 °C), knop uit. **Stilstand: geen** (11 wachten, ongewijzigd).
+- Hypotheses: H-EMS-2 (PV te hoog bij zon; vandaag −10 % Solcast / −17 % dag-ahead), H-EMS-14 (live correctie; schommelt per minuut, nacht toetst), H-EMS-11 (piek-/nachtladen; dagafsluiting).
+
+laatste ronde: 28-10 19:43, gemeten t/m 28-10 19:45
