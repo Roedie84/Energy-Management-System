@@ -134,3 +134,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 28-10 07:52 | updates installeren gold scalper 2.25.2 (hacs)
 28-10 09:51 | updates installeren ha os 18.4 (herstart host)
 28-10 12:54 | ems sensor-gezondheid kirchhoff-balanscheck zonder laadrendement (zakt tijdens netladen)
+28-10 17:51 | ems instraling met terugval helper 0 bij zon onder (knmi-hapering geeft vals LET OP)
