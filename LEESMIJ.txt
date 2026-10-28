@@ -1,3 +1,11 @@
+EMS v5.142.1 - geen valse sensormelding meer tijdens het laden
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De sensor-gezondheid zakte elke laadmiddag naar 70-80 % ("Aandacht
+  gewenst"), omdat de controle het laadverlies van de accu als meetfout
+  telde. De controle rekent nu met het gemeten laad- en ontlaadrendement.
+
 EMS v5.142.0 - meer eigen gebruik, minder kleine handel
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

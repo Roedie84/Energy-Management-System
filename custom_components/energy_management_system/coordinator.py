@@ -36826,6 +36826,25 @@ class EnergyManagementSystemCoordinator:
             return gemeten
         return min(max(schatting, ondergrens), bovengrens)
 
+    def _balans_verwacht_voorraadvermogen_w(self, vermogen_w: float) -> float:
+        """Wat een gemeten (AC-)accuvermogen in de voorraad hoort te doen (v5.142.1).
+
+        Positief is ontladen: de voorraad daalt met vermogen / ontlaadrendement.
+        Negatief is laden: de voorraad stijgt met vermogen x laadrendement.
+        Zonder geleerd halfrendement het vermogen zelf (gedrag tot v5.142.0).
+        Het rendement wordt begrensd op `ACCU_AC_MIN_RENDEMENT`..100 %.
+        """
+        if vermogen_w == 0:
+            return vermogen_w
+        half = (
+            self.learned_discharge_efficiency_percent if vermogen_w > 0
+            else self.learned_charge_efficiency_percent
+        )
+        if not half:
+            return vermogen_w
+        factor = min(max(half / 100, ACCU_AC_MIN_RENDEMENT), 1.0)
+        return vermogen_w / factor if vermogen_w > 0 else vermogen_w * factor
+
     def _update_energy_balance_validation(self, now: datetime) -> None:
         """Kirchhoff-style internal-consistency check (v0.63.28): cross-
         checks the battery power sensor's own reading against what the
@@ -36980,7 +36999,16 @@ class EnergyManagementSystemCoordinator:
         # daar hoort het gemiddelde gemeten vermogen naast - niet de
         # momentopname van nu. Die twee vergelijken was op zichzelf al
         # een bron van schijnfouten zodra het interval langer werd.
-        gemiddeld_gemeten_w = sum(vermogen_metingen) / len(vermogen_metingen)
+        # v5.142.1, meldronde 28-10: het accuvermogen is wisselstroom, de
+        # voorraad gelijkstroom. Tijdens netladen (2,0-2,3 kW, laden 80 %)
+        # scheelde dat 289-546 W, boven de drempel van 300 W: elke check in
+        # het laadblok telde als fout en de gezondheid zakte naar 70 %. Het
+        # verwachte voorraadtempo rekent daarom met het geleerde halve
+        # rendement; zonder geleerd rendement blijft de vergelijking als
+        # voorheen.
+        gemiddeld_gemeten_w = sum(
+            self._balans_verwacht_voorraadvermogen_w(w) for w in vermogen_metingen
+        ) / len(vermogen_metingen)
         implied_battery_power_w = -(delta_kwh / elapsed_hours) * 1000
         error_w = implied_battery_power_w - gemiddeld_gemeten_w
         self.last_energy_balance_error_w = round(error_w, 1)

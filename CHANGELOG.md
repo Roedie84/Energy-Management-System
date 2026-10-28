@@ -34044,3 +34044,12 @@ Gevraagd 28-10: "Sturen op meer eigen gebruik". Aanleiding: het plan verkocht 18
 - `min_winst_eur` in de verkoopreserve-uitleg. 2 ct instellen geeft het oude gedrag.
 
 Tests: `test_v5142_verkoop_min_winst.py` (6).
+
+## v5.142.1 — balanscheck rekent met het laad- en ontlaadrendement
+
+Meldronde 28-10. Tijdens het laadblok zakte de sensor-gezondheid elke middag (27-10 naar 80 %, 28-10 van 10:57 tot 12:57 per check 5 %-punt naar 70 %, "Aandacht gewenst"). Oorzaak: het accuvermogen is wisselstroom, de voorraad gelijkstroom. Bij 2,0-2,3 kW netladen en 80 % laadrendement stijgt de voorraad 400-550 W minder snel dan het gemeten vermogen, boven de vaste drempel van 300 W. Dat is geen sensorfout maar het rendement dat de check zelf al als verwacht noemde.
+
+- `_balans_verwacht_voorraadvermogen_w`: elk gemeten vermogen wordt vóór de vergelijking omgerekend naar het verwachte voorraadtempo: laden × geleerd laadrendement, ontladen ÷ geleerd ontlaadrendement (begrensd op 75-100 %). Zonder geleerd rendement de vergelijking als voorheen.
+- Drempel (300 W) en venster ongewijzigd; een echte storing (sensor stil, voorraad beweegt) blijft fout.
+
+Tests: `test_v51421_balans_rendement.py` (5).
