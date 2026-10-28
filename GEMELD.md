@@ -128,3 +128,7 @@ Regel: <dd-mm HH:MM> | <sleutel>
 27-10 13:58 | ems zelf uitgesloten weerbron (openweathermap) informatief tonen i.p.v. blijvend LET OP
 27-10 19:51 | ems digital twin laadt alleen binnen blokgrenzen van voorspelmoment (laden na blokeinde gemist)
 28-10 06:51 | L-GS-011 gold scalper verdwenen positie sluitmoment van broker i.p.v. moment van ontdekken
+28-10 07:52 | ems diagnose-reserve vs verkooptoets-reserve tegenstrijdig (één reserve tot blok)
+28-10 07:52 | looppad-lamp schakelt 's nachts op beweging (automation lamp_aan_looppad_zonsondergang)
+28-10 07:52 | L-EMS-044 ems digital twin laadt heel blok op vol vermogen (2,6 kWh ernaast)
+28-10 07:52 | updates installeren gold scalper 2.25.2 (hacs)
