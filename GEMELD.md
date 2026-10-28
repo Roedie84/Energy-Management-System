@@ -132,3 +132,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 28-10 07:52 | looppad-lamp schakelt 's nachts op beweging (automation lamp_aan_looppad_zonsondergang)
 28-10 07:52 | L-EMS-044 ems digital twin laadt heel blok op vol vermogen (2,6 kWh ernaast)
 28-10 07:52 | updates installeren gold scalper 2.25.2 (hacs)
+28-10 09:51 | updates installeren ha os 18.4 (herstart host)
