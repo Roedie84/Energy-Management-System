@@ -1275,3 +1275,27 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-28 12:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (09:54 -> 10:09, 11:50 -> 12:05); 10:40 mid 1.1 min na off (na herstart 10:24)
 2026-10-28 12:20,kookautomation_traces,0,1,1 herstarttrace; geen kookmoment
 2026-10-28 12:20,apparaat_pm25_bereik,2,1,apparaat 2-5 bij Ultimate 0.8-5.3
+2026-10-28 16:20,pm25_gem,3.29,48,5-min statistiek 12:20-16:20
+2026-10-28 16:20,pm25_mediaan,2.74,48,
+2026-10-28 16:20,pm25_p95,6.26,48,
+2026-10-28 16:20,pm25_max,22.56,1,12:51 (2-min-waarde); kookplaat 12:47-12:56
+2026-10-28 16:20,pm25_uren_gt15,0.00,48,
+2026-10-28 16:20,pm25_uren_gt25,0.00,48,
+2026-10-28 16:20,pm25_dag_tm_nu,1.67,4,gem van 4 rondes 00:20-16:20
+2026-10-28 16:20,kookmoment_pm25_max,22.56,1,kookplaat 12:47-12:56; ramen dicht; auto; aanwezig; 6.6 om 12:53; plateau 5-7 tot 13:25
+2026-10-28 16:20,halvering_min,50,1,plateau-overschot 13:10-14:35 (achtergrond 1.4); top 22.6 -> 6.6 in 2 min
+2026-10-28 16:20,stand_auto_min,227,1,gem pm25 3.41 (n=45)
+2026-10-28 16:20,stand_mid_min,13,1,gem pm25 1.59 (n=3); 0 min unavailable
+2026-10-28 16:20,pm25_gem_aanwezig,3.99,29,mmWave + tv 12:39-13:39
+2026-10-28 16:20,pm25_gem_afwezig,2.24,19,
+2026-10-28 16:20,co2_gem,1044,48,5-min; 620 -> 1344 (13:45) -> 972; ramen dicht
+2026-10-28 16:20,co2_uren_gt1200,1.17,48,
+2026-10-28 16:20,vocht_max,69.1,48,61.8-69.1% bij 17.4 -> 19.5 C
+2026-10-28 16:20,schimmel_indicator,78,48,73 -> 78 (na koken) -> 70; buiten 94-99% / 13.5-17 C
+2026-10-28 16:20,ha_herstarts,0,1,
+2026-10-28 16:20,lokaal_mislukt,63,140776,uitval 0; 226 verbindingen; geen nieuwe fout
+2026-10-28 16:20,sturen_bevestigd,348,349,4/4 nieuwe opdrachten bevestigd
+2026-10-28 16:20,filtergebruik_pct,0,1,
+2026-10-28 16:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (15:09 -> 15:24, 16:02 -> 16:17)
+2026-10-28 16:20,kookautomation_traces,0,3,voorrang aan 12:47:32 (bleef auto), uit 12:58:16; eerste kookmoment
+2026-10-28 16:20,apparaat_pm25_bereik,8,1,apparaat 2-8 bij Ultimate 1.3-22.6
