@@ -870,3 +870,8 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-28 07:41,TUSSEN,ems_airco_prijs_ct_max_in_tekst,50,1,"L-EMS-043 na installatie: 'duur kwartier: nu 50 ct, straks 38 ct', doel 20.5 bij basis 21.0 (tak halve graad lager werkt)"
 2026-10-28 07:41,TUSSEN,ems_digital_twin_mae_kwh,1.746,60,"was 1.752 (03:40); L-EMS-044 gepland"
 2026-10-28 07:41,TUSSEN,ems_stilstand_functies,0,14,"14 wachten; airco-bedtijd leeg (keer_uit 2) = bewust: vaste uittijd 22:00 (CONF_AIRCO_UIT_OM) gaat voor, EMS-uitschakeling telt niet als eigen bediening"
+2026-10-28 11:42,TUSSEN,ems_verkoop_onder_reserve,0,0,"07:45-11:45 geen verkoopkwartieren op 28-10; P1-export per uur 0.022-0.036 kWh (regeloverschot)"
+2026-10-28 11:42,TUSSEN,ems_pv_bias_pct_tot_nu,-6.3,4,"07-11 u: werkelijk 2.43 kWh tegen Solcast (actueel) 2.59; per uur 0.01/0.04, 0.21/0.30, 0.89/0.90, 1.32/1.35; dag-ahead EMS 9.56, Solcast nu 9.20"
+2026-10-28 11:42,TUSSEN,ems_digital_twin_mae_kwh,1.682,60,"was 1.746 (07:41); L-EMS-044 gepland"
+2026-10-28 11:42,TUSSEN,ems_mc_tekortkans_tot_blok_pct,0.0,1000,"11:44, blok 10:15-15:15 loopt (+6.11 kWh gepland); tekortdagen 7 d 0"
+2026-10-28 11:42,TUSSEN,ems_stilstand_functies,0,11,"11 wachten (was 14 na herstart 10:25); NILM koffiezetapparaat n=3 sinds 27-08: sensor gaf 30-08..26-10 geen data (stekker), telt sinds 26-10 weer -> geen stilstand"

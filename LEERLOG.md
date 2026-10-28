@@ -502,3 +502,13 @@ laatste ronde: 28-10 03:40, gemeten t/m 28-10 04:05
 - Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (live correctie; 2 nachten zonder tekort), H-EMS-11 (piek-/nachtladen op de nieuwe meetlat).
 
 laatste ronde: 28-10 07:41, gemeten t/m 28-10 07:45
+
+## 28-10 11:42 · tussenronde
+- Herstart 10:25 (HACS-installatie); **v5.141.1 actief**, geen release open. Fout 0 / storing 0; na de herstart Solcast/Zonneplan kort onbeschikbaar en prijsbuffer gebruikt (afgevangen). Geen release (tussenronde, niets acuut).
+- **Harde regel: 0× onder de reserve** 07:45-11:45 (geen verkoopkwartieren op 28-10; export per uur 0,022-0,036 = regeloverschot). SoC 29-33 % tot 10:00, daarna 33 → 46 % (PV + blok 10:15-15:15, +6,11 kWh gepland).
+- **PV tot nu (H-EMS-2):** 07-11 u werkelijk 2,43 kWh tegen Solcast 2,59 → **−6,3 %** (per uur 0,01/0,04 · 0,21/0,30 · 0,89/0,90 · 1,32/1,35): ochtendranden te hoog, 09-11 u ≈ goed. Dag-ahead EMS 9,56, Solcast nu 9,20; afrekening dagafsluiting.
+- Digital twin MAE **1,682 kWh** (1,746 → lager; L-EMS-044 gepland). MC tot blok 0 %; tekortnachten 7 d 0.
+- **Stilstand: geen.** Gecontroleerd: NILM *koffiezetapparaat* staat sinds 27-08 op 3 dagen → sensor gaf van 30-08 tot 26-10 geen data (stekker), telt sinds 26-10 weer: geen fout, volgroeit vanzelf. 'Nog niet bepaald' 11 wachten (sluipverbruik 27/30, NILM 39/53).
+- Hypotheses: H-EMS-2 (PV te hoog bij zon; vandaag tot nu −6 %), H-EMS-14 (live correctie; 2 nachten zonder tekort), H-EMS-11 (piek-/nachtladen op de nieuwe meetlat).
+
+laatste ronde: 28-10 11:42, gemeten t/m 28-10 11:45
