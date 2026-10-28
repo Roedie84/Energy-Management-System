@@ -1254,3 +1254,24 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-28 08:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (06:39, 07:16, 08:16); 06:59 mid 1.2 min na off (na herstart 06:52)
 2026-10-28 08:20,kookautomation_traces,0,2,2 herstarttraces; geen kookmoment
 2026-10-28 08:20,apparaat_pm25_bereik,2,1,apparaat 2-3 bij Ultimate 0.6-1.8
+2026-10-28 12:20,pm25_gem,2.06,48,5-min statistiek 08:20-12:20 CET
+2026-10-28 12:20,pm25_mediaan,2.17,48,
+2026-10-28 12:20,pm25_p95,3.55,48,
+2026-10-28 12:20,pm25_max,5.25,48,momentaan max 09:55; CO2 -190 ppm en vocht -2.6% tegelijk = buitenlucht binnen (ramen-sensoren dicht)
+2026-10-28 12:20,pm25_uren_gt15,0.00,48,
+2026-10-28 12:20,pm25_uren_gt25,0.00,48,
+2026-10-28 12:20,stand_auto_min,162,1,gem pm25 2.18 (n=33)
+2026-10-28 12:20,stand_mid_min,76,1,gem pm25 1.78 (n=15); 2.2 min unavailable bij herstart 10:24
+2026-10-28 12:20,pm25_gem_aanwezig,1.94,22,mmWave (tv uit)
+2026-10-28 12:20,pm25_gem_afwezig,2.16,26,
+2026-10-28 12:20,co2_gem,758,48,5-min; 909 -> 653 -> 725 -> 633; ramen dicht
+2026-10-28 12:20,co2_uren_gt1200,0.00,48,
+2026-10-28 12:20,vocht_max,66.1,48,66.1 -> 62.8 -> 64.8% bij 17.3-17.5 C (verwarming uit)
+2026-10-28 12:20,schimmel_indicator,84,48,84 -> 73; buiten 99% / 9.7 -> 13.5 C
+2026-10-28 12:20,ha_herstarts,1,1,10:24
+2026-10-28 12:20,lokaal_mislukt,63,139306,uitval 0; 226 verbindingen (+1 herstart); geen nieuwe fout
+2026-10-28 12:20,sturen_bevestigd,344,345,8/8 nieuwe opdrachten bevestigd
+2026-10-28 12:20,filtergebruik_pct,0,1,
+2026-10-28 12:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (09:54 -> 10:09, 11:50 -> 12:05); 10:40 mid 1.1 min na off (na herstart 10:24)
+2026-10-28 12:20,kookautomation_traces,0,1,1 herstarttrace; geen kookmoment
+2026-10-28 12:20,apparaat_pm25_bereik,2,1,apparaat 2-5 bij Ultimate 0.8-5.3
