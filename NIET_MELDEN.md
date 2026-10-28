@@ -29,3 +29,4 @@ Enige bron voor alle geplande taken (stand 27-10). Live HA-staat gaat voor: is i
 - Recorder-exclude niet als algemene tip melden (alleen nieuwe, concrete kandidaten); de verwijderde brievenbus.
 - HA-herstarts door HACS-updates.
 
+- Afgewezen 28-10: luchtreiniger bij afwezigheid op auto i.p.v. mid; EMS 's nachts minder netladen voor zonruimte (onder saldering).
