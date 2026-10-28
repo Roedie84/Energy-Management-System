@@ -299,7 +299,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: aantal passieve metingen per week, spreiding, verschil met nominaal; bij (b) reserve-afwijking voor/na.
 
 ## L-EMS-041 · Monte Carlo 22:00-stand ook als het goedkope blok al loopt (meetbaarheid)
-- Status: **gepland** (zelf bouwen: alleen meten/rapportage; Monte Carlo is adviserend, stuurt niets). v5.136.0 actief sinds de herstart van 27-10 06:04; v5.137/v5.138 (andere sessie) staan nog klaar → dagafsluiting 28-10 03:40, samen met L-EMS-040 deel a en L-EMS-043.
+- Status: **gebouwd v5.141.0** (28-10 dagafsluiting; suite 6331 groen, `test_v5141_leerronde.py`). Wacht op installatie. Meten: de eerste avond met een lopend blok om 22:00 staat in `kalibratie_22u.nachten_in_blok`; nachten + andere horizon + in blok = dagrecords met een avond ervoor. Was: gepland.
 - Onderbouwing (27-10 03:40): `kalibratie_22u` telt 5 nachten (20, 21, 22, 24, 25-10) + 1 andere horizon (23-10); de nacht 25→26 ontbreekt. Diagnostiek: dagrecord 26-10 heeft geen `mc_22u`. Code: `_run_monte_carlo_simulation` roept `_leg_mc_22u_vast` alleen aan als `start <= now`; loopt het goedkope blok al (avond 25-10: blok 21:30-06:00), dan begint de simulatie aan het blokeinde (v5.93.0) en wordt de 22:00-stand stil overgeslagen. Zo'n nacht verdwijnt uit de Brier zonder dat het zichtbaar is (7 d: 1 van 7).
 - Bouw: in dat geval de stand toch bewaren met `basis: "in_blok"` (kans vanaf het blokeinde, `horizon_tot`), in `get_mc_kalibratie_22u` apart tellen als `nachten_in_blok` (zoals `nachten_andere_horizon`), niet in de Brier. Test: avond met lopend blok → stand bewaard, niet in `per_nacht`, wel in `nachten_in_blok`.
 - Meten na installatie: `nachten` + `nachten_andere_horizon` + `nachten_in_blok` = aantal dagrecords met een avond ervoor (7 van 7).
@@ -312,8 +312,15 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: dagen met realisatie > 100 % (nu 3/7) → 0; per-dagdeel-verschillen voor/na.
 
 ## L-EMS-043 · airco voorverwarmen vergelijkt ruwe prijsreeks met €/kWh (bug)
-- Status: **gepland** (zelf bouwen: bug; de bedoelde regel van v5.66 blijft gelijk). Dagafsluiting 28-10 03:40 (v5.138.0 staat nog klaar, niet stapelen; knop Airco automaat staat uit → nu geen gevolg).
+- Status: **gebouwd v5.141.0** (28-10 dagafsluiting; suite 6331 groen, 3 nieuwe tests met een reeks op de echte schaal). Wacht op installatie. Meten: geen ct-bedragen > 200 in `airco_besluit.redenen`; aandeel verwarmbesluiten met +0,5 °C (nu 100 %). Was: gepland.
 - Onderbouwing (27-10 07:40): `sensor.…_airco_besluit` redenen "voorverwarmen: nu 38 ct, straks tot **390089400 ct** - een halve graad warmer", `doel_c` 21,5 bij basis 21,0. `coordinator._airco_buffer_ronde` haalt `komende` uit `_get_forecast_entries()` (eenheden van 1e-7 €, zie `PRICE_SCALE_FACTOR` in const.py) en geeft die met `huidige_prijs_eur_per_kwh()` (€) aan `airco_sturing.buffer`. Gevolg: `duurst − prijs_nu ≥ 0,05` en `prijs_nu ≤ 0,8 × duurst` gelden altijd → elk verwarmbesluit +0,5 °C, de tak "duur kwartier: halve graad lager" nooit. Tests `test_v565_airco_ritme.py::_met_prijzen` mocken de reeks in € en vangen het daarom niet. Andere lezers van `_get_forecast_entries` nagelopen: die geven de reeks aan helpers die zelf schalen.
 - Bouw: `komende` delen door `PRICE_SCALE_FACTOR` in `_airco_buffer_ronde`; test met een ruwe reeks (3.900.894 → 0,39 €) waarin nu 0,38 en straks 0,39-0,40 → geen voorverwarmen; en een reeks met een duur blok → wel; tekst in ct klopt.
 - Verwacht effect: voorverwarmen alleen bij echt prijsverschil (≥ 5 ct en ≤ 80 %), 'duur kwartier' werkt weer; geen onzinbedragen in de tekst.
 - Meten na installatie: in `airco_besluit.redenen` geen ct-bedragen > 200; aandeel verwarmbesluiten met +0,5 °C per dag (nu 100 %).
+
+## L-EMS-044 · digital twin laadt in elk blokkwartier op vol vermogen (meetfout, H-EMS-15)
+- Status: **gepland** (zelf bouwen: adviserende simulatie, stuurt niets; zelfde categorie als L-EMS-030). Volgende dagafsluiting na installatie van v5.141.0.
+- Onderbouwing (28-10 03:40, 60 vergelijkingen 25-10 16:00 .. 28-10 03:15): MAE 1,75 kWh; vensters (6 u) met een laadblok **2,63** (n=30) tegen **0,87** zonder (n=30). Voorbeelden: 26-10 00:00 voorspeld 10,34 tegen 2,77 (blok 21:30-06:00, werkelijk geladen 00:00-05:00); 27-10 16:15 voorspeld 0,50 tegen 10,14 (blok 14:15-19:15 lag op het voorspelmoment nog niet vast). Code: `_run_digital_twin_simulation` laadt in `smart` binnen `last_cheap_block_start/end` elk kwartier `charge_power_w` (min. ruimte), los van wat het kwartierplan (`get_quarter_plan`, `soc_procent`) per kwartier plant.
+- Bouw: in het blok de geplande SoC-stap van het kwartierplan volgen (met laadrendement); zonder plan het huidige gedrag. Test: blok van 8 u met plan dat 4 kwartieren laadt → twin laadt alleen die 4.
+- Verwacht effect: MAE in vensters met laadblok van 2,6 naar < 1,2 kWh; twin-status richting 'klaar'.
+- Meten na installatie: twin-MAE gesplitst naar venster met/zonder blok (zoals hierboven), 3 dagen.

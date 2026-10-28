@@ -477,3 +477,17 @@ laatste ronde: 27-10 19:41, gemeten t/m 27-10 19:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (live correctie; nacht toetst), H-EMS-15 (twin in laadblokuren). H-EMS-11 kan na L-EMS-042 op de nieuwe meetlat (dagafsluiting).
 
 laatste ronde: 27-10 23:41, gemeten t/m 27-10 23:45
+
+## 28-10 03:40 · dagafsluiting 27-10
+- **v5.140.0 actief** (herstart 21:01), geen purge/repack in de log. Fout 0 / storing 0. **Release v5.141.0** (L-EMS-043 + L-EMS-041, zie onder).
+- Dag 27-10: PV **5,19 kWh** bij 4,7 % bewolking (day-ahead 5,95 → **−12,9 %**; gecorrigeerd L-EMS-025 5,46 → −5,0 %), import 11,42 (laadblok 14:15-19:15), export 1,39, accu 10,93 in / 8,03 uit, huis **12,3** (verwacht 9,39 → +31 %, 4,3 graaddagen). Besparing € 0,99. **Harde regel: 0× onder de reserve** (0,99 kWh 18:30-18:45, kleinste marge 1,05). Geen tekortnacht (26→27, laagste SoC 20 %).
+- **L-EMS-042 eerste dag op de nieuwe meetlat:** realisatie **52,6 %** (€ 1,21 van € 2,30; ≤ 100 % ✓), gemist reserve 0,73 / voorspelling 0,35. Per dagdeel: optimum laadt 's nachts 6,7 kWh uit het net (−1,94) en zet die in de ochtend- (+2,10) en avondpiek (+1,96) in; de sturing laadde pas 14:15. → **H-EMS-11 herstart** op deze meetlat (n=1; oude dagen rollen er tot 03-11 uit).
+- **H-EMS-2:** 7 d MAE/bias 14,2/−10,7 %, 14 d 15,8/−14,1, 30 d 12,7/−10,9; per bewolking ≤ 50 % −13,1 (n=10), 50-90 % −14,6 (n=7), > 90 % −7,3 (n=13) → te hoog vooral bij zon. L-EMS-025 dag 6: gecorrigeerd MAE **9,9** tegen ruw 10,7 → weer iets beter; afronden 29-10.
+- **H-EMS-15 bevestigd in code:** twin-MAE 1,75 kWh; vensters met een laadblok **2,63** (n=30) tegen 0,87 (n=30). `_run_digital_twin_simulation` laadt in `smart` binnen het blok van het voorspelmoment elk kwartier op vol vermogen, los van het kwartierplan (26-10 00:00 voorspeld 10,3 tegen 2,8 - laden liep tot 05:00) en mist een blok dat later verschuift (27-10 16:15: 0,5 tegen 10,1). → **L-EMS-044** (gepland, adviserende simulatie).
+- **H-EMS-14:** nacht 26→27 geen tekort; nacht 27→28 om 04:05 beschikbaar 3,34 tegen nodig tot blok 1,19 (marge 2,15), MC 0 %. 21 sprongen (23 `alleen_behoefte`). Uitslag nacht 27→28 om 07:40.
+- MC Brier **0,414** (n=5; 27-10 26,7 % zonder tekort). Kans 27-10 22:00 0,3 %.
+- **Gebouwd v5.141.0:** L-EMS-043 (airco-buffer deelt de prijsreeks door `PRICE_SCALE_FACTOR`; geen 'straks 390089400 ct' meer, 'duur kwartier' werkt weer) en L-EMS-041 (22:00-stand ook als het blok al loopt, apart als `nachten_in_blok`). Suite 6331 groen (+6 tests).
+- Stilstand: **geen** (14 'wachten' lopen op; sluipverbruik 27/30, NILM 39/53). Airco: aanzet 19,5 °C geleerd, knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (live correctie), H-EMS-11 (piek-/nachtladen op de nieuwe meetlat). H-EMS-15 → L-EMS-044.
+
+laatste ronde: 28-10 03:40, gemeten t/m 28-10 04:05

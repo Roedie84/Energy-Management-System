@@ -92,3 +92,7 @@
 | Planvolging volgens plan | 58,6 % (7 d, 43,6-68,8) | 20..26-10 | 27-10 03:40 |
 | MC 22:00 Brier (tot blok) | 0,600 (n=5; 1 nacht zonder stand: blok liep al) | 20..25-10 | 27-10 03:40 |
 | Digital twin accu-inhoud 6 u vooruit, MAE | 1,83 kWh (n=60) | 26..27-10 | 27-10 03:40 |
+| PV-voorspelling MAE (dag, day-ahead tracker) | 12,7 % (30 d) · 15,8 % (14 d) · 14,2 % (7 d); bias −10,9 / −14,1 / −10,7 | 29-09..27-10 | 28-10 03:40 |
+| Nabeschouwing realisatie (meetlat met netladen, L-EMS-042) | 52,6 % (€ 1,21 / € 2,30), n=1 | 27-10 | 28-10 03:40 |
+| Digital twin MAE: venster met / zonder laadblok | 2,63 / 0,87 kWh (n=30/30) | 25..28-10 | 28-10 03:40 |
+| MC 22:00 Brier (tot blok) | 0,414 (n=5) | 20..26-10 | 28-10 03:40 |
