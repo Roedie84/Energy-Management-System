@@ -34034,3 +34034,13 @@ Akkoord Ruud 28-10 06:43. Gemeten 27-10: met een vol apparaat aan de lader liep 
 - Verwacht overdag 3-4 rondjes in plaats van 6-7.
 
 Tests: `test_v5137_batterijlader_aan_tot_leeg.py` (+3).
+
+## v5.142.0 — sturen op meer eigen gebruik: instelbare minimale verkoopwinst
+
+Gevraagd 28-10: "Sturen op meer eigen gebruik". Aanleiding: het plan verkocht 18:00-19:30 voor 55-56 ct om 's nachts terug te laden voor 41 ct. Terugladen kost 41,1 / 83,5% + 4,22 ct slijtage = 53,4 ct; met de vaste drempel van 2 ct ging dat net door, voor netto een dubbeltje. De gemeten accukosten geven op netladen -1,2 ct/kWh marge over 98 kWh.
+
+- `CONF_VERKOOP_MIN_WINST_CT` (optie "Minimale verkoopwinst", standaard 10 ct/kWh) vervangt de vaste `VERKOOP_NA_BLOK_MIN_WINST_EUR` (2 ct) in `_verkoopreserve_uit`. Geldt voor sturing én plan (dezelfde functie).
+- Alleen het deel van de reserve dat het goedkope blok terugladen moet; verkopen boven de volle reserve (echte overschotten) ongewijzigd.
+- `min_winst_eur` in de verkoopreserve-uitleg. 2 ct instellen geeft het oude gedrag.
+
+Tests: `test_v5142_verkoop_min_winst.py` (6).

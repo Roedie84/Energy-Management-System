@@ -813,6 +813,8 @@ from .const import (
     SPAREN_IN_BLOK_VOL_MARGE_KWH,
     SPAREN_IN_BLOK_MIN_WINST_EUR,
     VERKOOP_NA_BLOK_MIN_WINST_EUR,
+    CONF_VERKOOP_MIN_WINST_CT,
+    DEFAULT_VERKOOP_MIN_WINST_CT,
     SHORTFALL_MIN_NETIMPORT_KWH,
     TEKORT_LEEG_MARGE_PROCENT,
     REDENEN_BEWUSTE_NETAFNAME,
@@ -29999,7 +30001,8 @@ class EnergyManagementSystemCoordinator:
         terugladen = min(blokprijzen) / (rendement / 100) + slijtage_ct / 100
         uit["terugladen_eur"] = round(terugladen, 4)
         uit["prijs_eur"] = round(prijs, 4)
-        if prijs < terugladen + VERKOOP_NA_BLOK_MIN_WINST_EUR:
+        uit["min_winst_eur"] = self._verkoop_min_winst_eur()
+        if prijs < terugladen + uit["min_winst_eur"]:
             uit["reden"] = "terugladen in het blok kost te veel"
             return uit
         laad_kw = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0) / 1000
@@ -52114,6 +52117,16 @@ class EnergyManagementSystemCoordinator:
             )
             self.aansturing_onbereikbaar["sinds"] = None
         self.aansturing_onbereikbaar["reden"] = None
+
+    def _verkoop_min_winst_eur(self) -> float:
+        """Minimale winst per kWh om energie te verkopen die het goedkope blok
+        terugladen moet (v5.142.0, instelbaar; standaard 10 ct)."""
+        try:
+            ct = (self.config or {}).get(CONF_VERKOOP_MIN_WINST_CT)
+            ct = DEFAULT_VERKOOP_MIN_WINST_CT if ct is None else float(ct)
+        except (TypeError, ValueError):
+            return VERKOOP_NA_BLOK_MIN_WINST_EUR
+        return max(0.0, ct) / 100
 
     def instelling(self, sleutel: str, standaard):
         """Een instelling, met de standaard ook als er None staat

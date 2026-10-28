@@ -1,3 +1,13 @@
+EMS v5.142.0 - meer eigen gebruik, minder kleine handel
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De accu verkoopt alleen nog energie die 's nachts teruggeladen moet worden
+  als dat minstens 10 ct/kWh meer oplevert dan terugladen kost (was 2 ct).
+  Kleine prijsverschillen blijven zo voor het eigen huis; echte pieken
+  worden nog wel verkocht.
+- Instelbaar in de opties: "Minimale verkoopwinst".
+
 EMS v5.141.1 - batterijlader schakelt minder bij een vol apparaat
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

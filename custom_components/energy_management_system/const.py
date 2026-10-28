@@ -2241,7 +2241,17 @@ MARGE_TELT_NIET_MEE_SOORTEN = ("economisch", "onbekend")
 # vasthouden kost geld. Alleen als verkopen nu minstens zoveel per kWh meer
 # oplevert dan terugladen in het blok kost (blokprijs / rendement +
 # slijtage), en nooit meer dan het blok kan terugladen.
-VERKOOP_NA_BLOK_MIN_WINST_EUR = 0.02
+# v5.142.0 ("Sturen op meer eigen gebruik", Ruud 28-10): de drempel is
+# instelbaar en staat standaard op 10 ct. Bij 2 ct verkocht het plan op 28-10
+# 18:00-19:30 voor 55-56 ct om in de nacht terug te laden voor 41 ct
+# (terugladen 53,4 ct incl. rendement 83,5% en slijtage 4,2 ct): netto een
+# dubbeltje. De gemeten accukosten gaven op netladen -1,2 ct/kWh marge over
+# 98 kWh - zulke kleine verschillen halen het in de praktijk niet. Met 10 ct
+# blijft de accu voor het huis, en de echte pieken (70-80 ct) worden nog
+# wel verkocht.
+CONF_VERKOOP_MIN_WINST_CT = "verkoop_min_winst_ct"
+DEFAULT_VERKOOP_MIN_WINST_CT = 10.0
+VERKOOP_NA_BLOK_MIN_WINST_EUR = DEFAULT_VERKOOP_MIN_WINST_CT / 100
 
 # Fallback threshold (kWh) for the emergency low-battery charge trigger,
 # used only when no SoC sensor is configured (SoC% is preferred - see

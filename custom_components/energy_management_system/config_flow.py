@@ -21,6 +21,8 @@ from .const import (
     CONF_BATTERY_INVERTER_PRICE_EUR,
     CONF_BATTERY_MODULE_PRICE_EUR,
     CONF_LANGE_HORIZON,
+    CONF_VERKOOP_MIN_WINST_CT,
+    DEFAULT_VERKOOP_MIN_WINST_CT,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
     CONF_MANUAL_CHARGE_POWER,
     CONF_NEGATIVE_PRICE_CHARGE_POWER,
@@ -741,6 +743,19 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_LANGE_HORIZON,
                 default=defaults.get(CONF_LANGE_HORIZON, True),
             ): selector.BooleanSelector(),
+            # v5.142.0: hoeveel winst per kWh verkopen minstens moet opleveren
+            # boven terugladen in het goedkope blok. Hoger = meer eigen gebruik.
+            vol.Optional(
+                CONF_VERKOOP_MIN_WINST_CT,
+                default=defaults.get(
+                    CONF_VERKOOP_MIN_WINST_CT, DEFAULT_VERKOOP_MIN_WINST_CT
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=50, step=0.5, unit_of_measurement="ct/kWh",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
             # v3.99.1: de vier aannames onder de slijtageberekening.
             #
             # Uit de audit van 31 augustus: "6000 cycli is fabrikantopgave,
