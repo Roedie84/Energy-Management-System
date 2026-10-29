@@ -68,6 +68,8 @@ const EIGEN = {
   klimaat: "climate_forecast",
   water: "water_usage",
   besparing: "counterfactual_savings",
+  // v5.145.0: kasprijs en kostprijs van de stroom in de accu
+  accuprijs: "battery_savings",
   zelfvoorziening: "self_sufficiency",
   huis: "household_consumption",
   verhaal: "live_narrative",
@@ -880,7 +882,7 @@ const AFHANKELIJK = {
   meldingen: ["status", "tekort"],
   hero: ["soc", "beschikbaar", "capaciteit", "accu_vermogen", "gacs", "reden", "verwacht", "prijs", "uitleg",
     "blok", "besparing", "zelfvoorziening", "inkoop_vandaag", "teruglever_vandaag", "schema", "modus", "zon_werkelijk"],
-  stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan", "beschikbaar", "capaciteit"],
+  stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan", "beschikbaar", "capaciteit", "accuprijs"],
   planning: ["plan", "schema", "uitleg", "blok"],
   verkoop: ["gacs", "mc", "tekort", "uitleg", "blok"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
@@ -1513,9 +1515,22 @@ class EmsCockpitCard extends HTMLElement {
       knoop(P.huis, "huis", "Huis", watt(huis), "verbruik", "var(--blauw)", huis != null && huis > 20) +
       knoop(P.accu, "accu", "Accu", watt(accu == null ? null : Math.abs(accu)),
         `${accuSub}${soc != null ? PUNT + fmt(soc) + "%" : ""}`, accuKleur, accu != null && Math.abs(accu) > 20,
-        socBalk + (resttijd ? `<div class="s rest" title="Bij het huidige vermogen">${resttijd}</div>` : "")) +
+        socBalk + (resttijd ? `<div class="s rest" title="Bij het huidige vermogen">${resttijd}</div>` : "") +
+        this._accuPrijsRegel()) +
       `</div>${this._planvolgingRegel()}</div>`
     );
+  }
+
+  /* Wat de stroom in de accu kostte (v5.145.0) */
+  _accuPrijsRegel() {
+    const s = this._s("accuprijs");
+    const kas = num(attr(s, "kasprijs_eur_per_kwh"));
+    const kost = num(attr(s, "cost_basis_eur_per_kwh"));
+    if (kas == null && kost == null) return "";
+    const ct = (v) => (v == null ? STREEP : `${Math.round(v * 100)} ct`);
+    const uitleg = "Betaald: wat de stroom in de accu werkelijk kostte (net tegen de kwartierprijs, zon gratis, incl. laadverlies). " +
+      "EMS: waar het EMS mee rekent; zon telt daar als gemiste teruglevering zolang salderen geldt.";
+    return `<div class="s rest" title="${uitleg}">in accu ${ct(kas)}/kWh betaald${PUNT}EMS ${ct(kost)}</div>`;
   }
 
   /* Hoe lang nog tot vol of leeg bij het huidige vermogen (v5.92) */

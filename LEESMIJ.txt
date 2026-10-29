@@ -1,3 +1,17 @@
+EMS v5.145.0 - wat kost de stroom in de accu
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Nieuw in de accutegel van Energiestroom: "in accu .. ct/kWh betaald ·
+  EMS .. ct". Betaald is wat de stroom in de accu werkelijk kostte: stroom
+  van het net tegen de kwartierprijs, zon gratis, inclusief laadverlies.
+  EMS is waar de sturing mee rekent (zon telt zolang salderen geldt als
+  gemiste teruglevering). Ook als attribuut kasprijs_eur_per_kwh op de
+  sensor Battery savings (cost-basis model). Stuurt niets.
+- De eerste keer begint de betaalde prijs bij de EMS-prijs, omdat
+  onbekend is wat de stroom die er al in zit kostte; met elke lading wordt
+  hij nauwkeuriger.
+
 EMS v5.144.0 - geweerde weerbron geen LET OP meer, en optionele velden weer leeg te maken
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

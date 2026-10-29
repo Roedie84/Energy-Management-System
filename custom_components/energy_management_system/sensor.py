@@ -1416,6 +1416,13 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
         basis = self._coordinator.battery_cost_basis_eur_per_kwh
         return {
             "cost_basis_eur_per_kwh": round(basis, 4) if basis is not None else None,
+            # v5.145.0: wat de stroom in de accu werkelijk kostte (net
+            # betaald, zon gratis, incl. laadverlies).
+            "kasprijs_eur_per_kwh": (
+                round(self._coordinator.battery_cash_basis_eur_per_kwh, 4)
+                if self._coordinator.battery_cash_basis_eur_per_kwh is not None
+                else None
+            ),
             "total_feedin_premium_eur": round(
                 self._coordinator.total_feedin_premium_eur, 4
             ),
@@ -1482,6 +1489,12 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
         if basis is not None:
             try:
                 self._coordinator.battery_cost_basis_eur_per_kwh = float(basis)
+            except (TypeError, ValueError):
+                pass
+        kas = last_state.attributes.get("kasprijs_eur_per_kwh")
+        if kas is not None and self._coordinator.battery_cash_basis_eur_per_kwh is None:
+            try:
+                self._coordinator.battery_cash_basis_eur_per_kwh = float(kas)
             except (TypeError, ValueError):
                 pass
         premium = last_state.attributes.get("total_feedin_premium_eur")

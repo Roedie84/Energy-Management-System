@@ -202,4 +202,5 @@ def test_de_kaart_toont_de_resterende_laadtijd():
 
     js = (Path(pkg.__file__).parent / "www" / "ems-cockpit.js").read_text(encoding="utf-8")
     assert "_accuResttijd" in js
-    assert '"beschikbaar", "capaciteit"],' in js
+    # v5.145.0: "accuprijs" kwam erachter in de afhankelijkheden van stroom.
+    assert '"beschikbaar", "capaciteit"' in js

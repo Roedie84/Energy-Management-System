@@ -1544,6 +1544,11 @@ class EnergyManagementSystemCoordinator:
         # per-source lots). Revisit this assumption if/when salderen
         # ends (currently contracted until 2026-12-31).
         self.battery_cost_basis_eur_per_kwh: float | None = None
+        # v5.145.0: de kasprijs van de stroom in de accu - wat er werkelijk
+        # voor betaald is (netinkoop tegen de kwartierprijs, zon gratis),
+        # inclusief laadverlies. Naast de kostprijs hierboven, die zon
+        # waardeert tegen de gemiste teruglevering. Alleen rapportage.
+        self.battery_cash_basis_eur_per_kwh: float | None = None
         self._last_available_kwh_for_cost_basis: float | None = None
         self.total_battery_savings_eur: float = 0.0
         self.total_feedin_premium_eur: float = 0.0
@@ -36769,6 +36774,8 @@ class EnergyManagementSystemCoordinator:
             self.grid_charge_today_kwh += grid_kwh
             self.forgone_feedin_eur_total += pv_kwh * feedin_value
 
+            self._werk_kasprijs_bij(grid_kwh * current_price, delta_kwh, available_kwh)
+
             effective_charge_price = charge_cost_eur / delta_kwh
             if self.battery_cost_basis_eur_per_kwh is None:
                 self.battery_cost_basis_eur_per_kwh = effective_charge_price
@@ -36824,6 +36831,34 @@ class EnergyManagementSystemCoordinator:
                 self.total_battery_savings_eur += savings_eur
                 self.total_feedin_premium_eur += feedin_premium_eur
                 self.discharge_export_kwh_total += export_kwh
+
+    def _werk_kasprijs_bij(
+        self, kosten_eur: float, opgeslagen_kwh: float, available_kwh: float
+    ) -> None:
+        """De gemiddelde kasprijs van de stroom in de accu (v5.145.0).
+
+        Gevraagd 29-10: "Kun je ook bijhouden wat de gemiddelde prijs van de
+        stroom in de accu is? 8 kWh van het net à 30 cent, de rest zon à 0
+        cent." Netinkoop telt tegen de kwartierprijs, zon gratis, en de
+        kosten worden gedeeld door wat er werkelijk in de accu kwam - het
+        laadverlies zit er dus in. Gewogen met wat er al in zat, zoals de
+        kostprijs; ontladen verandert het gemiddelde niet.
+        """
+        if opgeslagen_kwh <= 0:
+            return
+        eerder_kwh = max(0.0, available_kwh - opgeslagen_kwh)
+        eerder_prijs = self.battery_cash_basis_eur_per_kwh
+        if eerder_prijs is None:
+            # De eerste keer (na de update): wat er al in zat is onbekend.
+            # Dan de kostprijs als beginwaarde - de beste schatting die er
+            # is; met elke lading telt hij minder mee.
+            eerder_prijs = self.battery_cost_basis_eur_per_kwh
+            if eerder_prijs is None:
+                eerder_kwh = 0.0
+                eerder_prijs = 0.0
+        self.battery_cash_basis_eur_per_kwh = (
+            eerder_prijs * eerder_kwh + kosten_eur
+        ) / (eerder_kwh + opgeslagen_kwh)
 
     # v5.80: AC-energie in en uit de accu sinds de vorige boeking.
     _accu_ac_in: float = 0.0

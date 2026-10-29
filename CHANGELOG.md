@@ -34093,3 +34093,15 @@ Akkoord Ruud 29-10 (punten 1 en 3 uit de dagcontrole).
 - het optiesformulier zet opgeslagen entiteitvelden die leeg zijn gelaten expliciet op None (`_leeggemaakte_entiteitvelden`), zodat de lege keuze wint van `entry.data`. Alleen entiteitkiezers: getallen en schakelaars houden hun standaardwaarde in de code.
 
 Tests: `test_v5144_weerbron_en_leeg_veld.py` (7); `test_apparaatinstellingen_spiegel.py` en `test_review_findings.py` aangepast (opgeslagen waarde = voorstel).
+
+## v5.145.0 — kasprijs van de stroom in de accu
+
+Gevraagd 29-10: "Kun je ook bijhouden wat de gemiddelde prijs van de stroom in de accu is? Stel 8 kWh van net = 30 cent, resterend kWh is zonne-energie = 0 cent." Graag zichtbaar in de accutegel van Energiestroom.
+
+- `battery_cash_basis_eur_per_kwh` (`_werk_kasprijs_bij`): bij elke lading de netinkoop (`grid_kwh` × kwartierprijs, zon 0) gedeeld door wat er in de accu kwam, gewogen met de inhoud ervoor. Laadverlies zit erin (zelfde AC-boeking als de kostprijs sinds v5.80). Ontladen verandert het gemiddelde niet. De eerste keer telt de bestaande inhoud tegen de kostprijs. Bewaard over een herstart (`PERSISTED_FIELDS` en het attribuut van de sensor).
+- Sensor Battery savings (cost-basis model): nieuw attribuut `kasprijs_eur_per_kwh` naast `cost_basis_eur_per_kwh`.
+- Cockpit, accutegel Energiestroom: regel "in accu .. ct/kWh betaald · EMS .. ct", met uitleg bij aanwijzen.
+- Kostprijs, sturing en besparing ongewijzigd.
+
+Tests: `test_v5145_kasprijs_accu.py` (7).
+

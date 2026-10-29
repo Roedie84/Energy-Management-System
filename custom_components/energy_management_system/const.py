@@ -3796,6 +3796,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "total_discharge_value_eur": {"type": "plain"},
     "total_charge_cost_eur": {"type": "plain"},
     "battery_cost_basis_eur_per_kwh": {"type": "plain"},
+    # v5.145.0: de kasprijs (netinkoop betaald, zon gratis).
+    "battery_cash_basis_eur_per_kwh": {"type": "plain"},
     "total_battery_savings_eur": {"type": "plain"},
     "total_feedin_premium_eur": {"type": "plain"},
     "cusum_accumulator_kw": {"type": "plain"},
