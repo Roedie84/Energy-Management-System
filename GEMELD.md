@@ -135,3 +135,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 28-10 09:51 | updates installeren ha os 18.4 (herstart host)
 28-10 12:54 | ems sensor-gezondheid kirchhoff-balanscheck zonder laadrendement (zakt tijdens netladen)
 28-10 17:51 | ems instraling met terugval helper 0 bij zon onder (knmi-hapering geeft vals LET OP)
+29-10 10:52 | updates installeren stormchase 0.60.2 (hacs)
+29-10 10:52 | ems weather.openweathermap uit ems-configuratie halen (geweerde weerbron, LET OP)
