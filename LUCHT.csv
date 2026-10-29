@@ -1425,3 +1425,26 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-29 16:20,filtergebruik_pct,0,1,
 2026-10-29 16:20,automation_traces_fout,0,5,mid 13:28:56 14:10:44 15:42:42 precies 15 min na laatste aanwezigheid
 2026-10-29 16:20,apparaat_pm25_bereik,19,1,apparaat 2-19 bij Ultimate 0.52-12.39; 16:00 19 vs 6.9
+2026-10-29 20:20,pm25_gem,3.85,48,5-min statistiek 16:20-20:20
+2026-10-29 20:20,pm25_mediaan,3.86,48,
+2026-10-29 20:20,pm25_p95,4.62,48,
+2026-10-29 20:20,pm25_max,5.43,48,momentaan max 17:35-17:40
+2026-10-29 20:20,pm25_uren_gt15,0.00,48,
+2026-10-29 20:20,pm25_uren_gt25,0.00,48,
+2026-10-29 20:20,stand_auto_min,237,47,gem pm25 3.85
+2026-10-29 20:20,stand_mid_min,3,1,18:21:44-18:24:44; gem pm25 3.73
+2026-10-29 20:20,stand_unavailable_min,0,0,0 HA-herstarts
+2026-10-29 20:20,pm25_aanwezig,3.84,46,blokken met mmWave of tv aan
+2026-10-29 20:20,pm25_afwezig,3.97,2,te weinig voor vergelijking
+2026-10-29 20:20,kookmoment_pm25_max,5.43,1,kookplaat run 16:35-17:11; ramen dicht; auto; geen piek (3.4-4.6 tijdens koken); vocht 67.6->73.6 VOC 47->135
+2026-10-29 20:20,co2_gem,1199,48,5-min; 717 -> 1480; ramen dicht
+2026-10-29 20:20,co2_uren_gt1200,2.92,48,
+2026-10-29 20:20,vocht_max,74.3,48,koken 67.6->74.3; na verwarming aan (~18:25) 61-63% bij 20.5-21 C
+2026-10-29 20:20,schimmel_indicator,83,48,76 -> 87 (koken) -> 79 -> 84; buiten 99% / 14.3-11.2 C
+2026-10-29 20:20,ha_herstarts,0,1,
+2026-10-29 20:20,lokaal_mislukt,64,150412,uitval 0; 236 verbindingen; geen nieuwe fout
+2026-10-29 20:20,sturen_bevestigd,373,374,2/2 nieuwe opdrachten bevestigd
+2026-10-29 20:20,filtergebruik_pct,0,1,
+2026-10-29 20:20,automation_traces_fout,0,5,mid 18:21:44 precies 15 min na laatste aanwezigheid 18:06:44; auto 18:24:44
+2026-10-29 20:20,kookautomation_traces,2,2,16:35 start en 17:14 einde kookplaat; stand al auto; geen fout
+2026-10-29 20:20,apparaat_pm25_bereik,10,1,apparaat 2-10 bij Ultimate 2.9-5.4; meestal 2 bij Ultimate ~4: onderschat laag bereik
