@@ -1402,3 +1402,26 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-29 12:20,filtergebruik_pct,0,1,
 2026-10-29 12:20,automation_traces_fout,0,5,10:15-11:15 traces stopped zonder fout; stand blijft mid (afwezig)
 2026-10-29 12:20,apparaat_pm25_bereik,2,1,apparaat constant 2 bij Ultimate 0.47-2.05
+2026-10-29 16:20,pm25_gem,3.88,48,5-min statistiek 12:20-16:20
+2026-10-29 16:20,pm25_mediaan,2.77,48,
+2026-10-29 16:20,pm25_p95,9.53,48,
+2026-10-29 16:20,pm25_max,12.39,48,momentaan max 14:31; 5-min gem max 11.68
+2026-10-29 16:20,pm25_uren_gt15,0.00,48,
+2026-10-29 16:20,pm25_uren_gt25,0.00,48,
+2026-10-29 16:20,stand_auto_min,166,34,gem pm25 4.99
+2026-10-29 16:20,stand_mid_min,68,14,gem pm25 1.19
+2026-10-29 16:20,stand_unavailable_min,6,5,5 HA-herstarts
+2026-10-29 16:20,pm25_aanwezig,5.23,29,blokken met mmWave of tv aan
+2026-10-29 16:20,pm25_afwezig,1.83,19,
+2026-10-29 16:20,bult_halvering_min,26,1,14:31 12.4 -> 14:57 6.5 (achtergrond 1.5); auto; geen kookmoment; CO2 710->511 en VOC 58->4: buitenlucht
+2026-10-29 16:20,bult_tot_onder10_min,6,1,14:31 -> 14:37
+2026-10-29 16:20,co2_gem,717,48,5-min; min 511 (14:35) max 790; ramen dicht
+2026-10-29 16:20,co2_uren_gt1200,0.00,48,
+2026-10-29 16:20,vocht_max,67.9,48,65.9-67.9% bij 17.3 -> 18.4 C
+2026-10-29 16:20,schimmel_indicator,77,48,77 -> 71 -> 76; buiten 99% / 12.4-16.2 C
+2026-10-29 16:20,ha_herstarts,5,1,12:40 13:50 14:34 14:44 15:53
+2026-10-29 16:20,lokaal_mislukt,64,148988,uitval 0; 236 verbindingen; geen nieuwe fout
+2026-10-29 16:20,sturen_bevestigd,371,372,5/5 nieuwe opdrachten bevestigd
+2026-10-29 16:20,filtergebruik_pct,0,1,
+2026-10-29 16:20,automation_traces_fout,0,5,mid 13:28:56 14:10:44 15:42:42 precies 15 min na laatste aanwezigheid
+2026-10-29 16:20,apparaat_pm25_bereik,19,1,apparaat 2-19 bij Ultimate 0.52-12.39; 16:00 19 vs 6.9
