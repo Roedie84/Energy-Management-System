@@ -609,3 +609,13 @@ laatste ronde: 29-10 15:45, gemeten t/m 29-10 15:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag sterk), H-EMS-14 (live correctie; nu ook twin-avondbias en de lagere behoefte na v5.147.0), H-EMS-11 (piek-/nachtladen; dagafsluiting).
 
 laatste ronde: 29-10 19:40, gemeten t/m 29-10 19:45
+
+## 29-10 23:40 · tussenronde
+- **v5.147.0 actief** (HACS: geen nieuwere; geen commits sinds 15:51). HA-herstart 19:49. Geen EMS-fouten; alleen Solcast/SolarEdge-onbeschikbaar-waarschuwingen (niet melden). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 29-10 0,234 kWh). Besparing tot nu **+€ 0,47** (rauw 1,06 + SoC-correctie −0,60).
+- **L-EMS-044 avond compleet:** `kwartierplan` n=11 MAE **0,92** (vóór bouw 2,25). 16:15-23:15 alle 8 werkelijk > voorspeld, gem. **+1,07 kWh**; 4 van 8 < 1 kWh. Oorzaak: de planvolging toont dat de accu structureel minder levert dan het kwartierplan plant (energie_verschil 25..29-10 −0,86/−2,65/−0,79/−1,50/−2,69 kWh; 21:30 gepland 1.285 W, gemeten 471 W, oorzaak 'verbruik') → geplande avondbehoefte te hoog, niet de twin. Hoort bij H-EMS-14; dagafsluiting: avondverbruik plan tegen werkelijk per uur.
+- **MC tot blok 0,0 %**; volgend blok pas 30-10 10:45 (geen nachtblok), nodig tot blok 2,24 kWh bij 5,64 beschikbaar. 22:00-stand 29-10 vastgelegd (`tot_blok`, 0 %) → telt na de dagwissel. Toets 30-10: tekortnacht ja/nee.
+- Airco besluit "niets" (iedereen slaapt), knop uit. **Stilstand: geen echte**; 12 wachten (OWM-restant, L-EMS-045 dagafsluiting).
+- Hypotheses: H-EMS-2 (PV te hoog; 29-10 −47 %), H-EMS-14 (live correctie + plan rekent 's avonds te veel verbruik: 5 dagen op rij minder ontladen dan gepland), H-EMS-11 (piek-/nachtladen; dagafsluiting).
+
+laatste ronde: 29-10 23:40, gemeten t/m 29-10 23:45
