@@ -1,3 +1,15 @@
+EMS v5.147.0 - planning niet meer opgeblazen door de vaatwasser
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Draaien de vaatwasser of de wasmachine, dan rekende de planning nog uren
+  na afloop met een veel te hoog huisverbruik (29-10: 2,3 kW verwacht bij
+  0,4 kW werkelijk) en schoof hij verkopen weg. Het gemeten vermogen van
+  die twee telt nu niet meer mee als "hoger verbruik dan normaal"; de
+  wascyclus zelf telt zoals altijd één keer mee.
+- De betaalde prijs in de accutegel toont tot de eerste lading een
+  schatting (≈ .. ct) in plaats van een streepje.
+
 EMS v5.146.1 - Vooruitblik in blokken per verwachte status
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

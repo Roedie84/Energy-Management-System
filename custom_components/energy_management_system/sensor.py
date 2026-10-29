@@ -1418,11 +1418,14 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
             "cost_basis_eur_per_kwh": round(basis, 4) if basis is not None else None,
             # v5.145.0: wat de stroom in de accu werkelijk kostte (net
             # betaald, zon gratis, incl. laadverlies).
+            # v5.147.0: tot de eerste lading na de update een schatting (de
+            # kostprijs), zodat er geen streepje staat; `kasprijs_geschat`.
             "kasprijs_eur_per_kwh": (
                 round(self._coordinator.battery_cash_basis_eur_per_kwh, 4)
                 if self._coordinator.battery_cash_basis_eur_per_kwh is not None
-                else None
+                else (round(basis, 4) if basis is not None else None)
             ),
+            "kasprijs_geschat": self._coordinator.battery_cash_basis_eur_per_kwh is None,
             "total_feedin_premium_eur": round(
                 self._coordinator.total_feedin_premium_eur, 4
             ),
@@ -1492,6 +1495,8 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
             except (TypeError, ValueError):
                 pass
         kas = last_state.attributes.get("kasprijs_eur_per_kwh")
+        if last_state.attributes.get("kasprijs_geschat"):
+            kas = None  # v5.147.0: een schatting is geen gemeten kasprijs
         if kas is not None and self._coordinator.battery_cash_basis_eur_per_kwh is None:
             try:
                 self._coordinator.battery_cash_basis_eur_per_kwh = float(kas)

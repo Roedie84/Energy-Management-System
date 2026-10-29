@@ -34126,3 +34126,13 @@ Gevraagd 29-10: "Ik wil alleen de keuze komende kwartieren en op basis van verwa
 
 Tests: `test_v5146_vooruitblik.py` bijgewerkt (6, waarvan 1 tekent de blokken in Node).
 
+## v5.147.0 — witgoed uit de live verbruikscorrectie, kasprijs als schatting
+
+Akkoord Ruud 29-10 (beide punten).
+
+**1. Witgoed telt niet mee in de live verbruikscorrectie.** Gezien 29-10 15:44: de vaatwasser trok 14:50-15:40 steeds 0,6-2,2 kW en was klaar; het huis gebruikte 0,42 kW, maar het kwartierplan rekende tot 17:45 met 2,3-2,6 kW huisverbruik (accu 92 % → 47 %, geen verkoop bij 57-80 ct). De metingen uit de verwarmingsfasen bleven in het mediaanvenster (30 min) staan, ook toen de machine tussen de fasen (~0,6 kW) niet als zwaar verbruik telde. `_track_recent_consumption_reading` haalt nu het gemeten vermogen van vaatwasser en wasmachine (`_witgoed_vermogen_w`) van elke meting af (niet onder 0). De cyclus zelf telt zoals sinds v1.61.0 één keer mee via `_gepland_witgoed`. Raakt planning, reserve en verkooptoets: alleen het onterechte deel van de correctie verdwijnt.
+
+**2. Kasprijs tot de eerste lading een schatting.** `kasprijs_eur_per_kwh` valt terug op de kostprijs met `kasprijs_geschat: true`; de cockpit toont dan "≈". Een schatting wordt na een herstart niet als gemeten kasprijs teruggezet.
+
+Tests: `test_v5147_witgoed_uit_correctie.py` (5).
+

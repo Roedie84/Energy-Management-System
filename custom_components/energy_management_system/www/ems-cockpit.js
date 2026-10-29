@@ -1554,9 +1554,12 @@ class EmsCockpitCard extends HTMLElement {
     const kost = num(attr(s, "cost_basis_eur_per_kwh"));
     if (kas == null && kost == null) return "";
     const ct = (v) => (v == null ? STREEP : `${Math.round(v * 100)} ct`);
+    // v5.147.0: tot de eerste lading een schatting
+    const geschat = attr(s, "kasprijs_geschat") === true;
     const uitleg = "Betaald: wat de stroom in de accu werkelijk kostte (net tegen de kwartierprijs, zon gratis, incl. laadverlies). " +
       "EMS: waar het EMS mee rekent; zon telt daar als gemiste teruglevering zolang salderen geldt.";
-    return `<div class="s rest" title="${uitleg}">in accu ${ct(kas)}/kWh betaald${PUNT}EMS ${ct(kost)}</div>`;
+    const extra = geschat ? " Nog een schatting: na de eerste lading wordt de betaalde prijs echt bijgehouden." : "";
+    return `<div class="s rest" title="${uitleg}${extra}">in accu ${geschat ? "\u2248" : ""}${ct(kas)} betaald${PUNT}EMS ${ct(kost)}</div>`;
   }
 
   /* Hoe lang nog tot vol of leeg bij het huidige vermogen (v5.92) */

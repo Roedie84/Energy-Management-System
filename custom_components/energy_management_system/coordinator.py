@@ -20592,11 +20592,35 @@ class EnergyManagementSystemCoordinator:
         live_power_w = self._read_corrected_consumption_power()
         if live_power_w is None:
             return
+        # v5.147.0 (akkoord Ruud 29-10): het gemeten vermogen van vaatwasser
+        # en wasmachine telt niet mee in de live verbruikscorrectie.
+        #
+        # Gezien 29-10 15:44: de vaatwasser trok 14:50-15:40 steeds 0,6-2,2 kW
+        # en was klaar, het huis gebruikte 0,42 kW, maar het kwartierplan
+        # rekende tot 17:45 met 2,3-2,6 kW huisverbruik - accu 92 % -> 47 % en
+        # geen verkoop bij 57-80 ct. De metingen uit de verwarmingsfasen
+        # bleven in het venster van de mediaan staan, ook nadat de machine
+        # niet meer als zwaar verbruik telde (tussen de fasen trekt hij
+        # ~0,6 kW). Een wascyclus is geen hoger verbruiksniveau van het
+        # huis; de cyclus zelf telt al één keer mee via `_gepland_witgoed`.
+        live_power_w = max(0.0, live_power_w - self._witgoed_vermogen_w())
         self._recent_consumption_readings_kw.append(live_power_w / 1000)
         # v5.14.2: een venster in TIJD - zie `_correctie_monsters`.
         self._recent_consumption_readings_kw = self._recent_consumption_readings_kw[
             -self._correctie_monsters():
         ]
+
+    def _witgoed_vermogen_w(self) -> float:
+        """Wat vaatwasser en wasmachine nu samen trekken, gemeten (v5.147.0)."""
+        totaal = 0.0
+        for conf in (CONF_DISHWASHER_POWER_SENSOR, CONF_WASHING_MACHINE_POWER_SENSOR):
+            entity_id = self.config.get(conf)
+            if not entity_id:
+                continue
+            w = self._read_sensor_float(entity_id)
+            if w is not None and w > 0:
+                totaal += w
+        return totaal
 
     def _update_quooker_tracking(self, now: datetime) -> None:
         """Track how long the Quooker's power draw has been continuously
