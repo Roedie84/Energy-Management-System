@@ -34105,3 +34105,14 @@ Gevraagd 29-10: "Kun je ook bijhouden wat de gemiddelde prijs van de stroom in d
 
 Tests: `test_v5145_kasprijs_accu.py` (7).
 
+## v5.146.0 — Vooruitblik in de cockpit
+
+Akkoord Ruud 29-10 (alle vier punten), naar een voorbeeld uit het Tweakers-topic "Home Assistant - Show je setup" (EMHASS-vooruitblik).
+
+1. **Vooruitblik-tabel** onder de planningsgrafiek: 8 kwartieren (`VB_KWARTIEREN`) met bladeren (‹ NU ›, `data-blader`), het lopende kwartier gemarkeerd met NU.
+2. **Vermogens per kwartier**: `planvolging.vermogens_per_kwartier` rekent per planregel het geplande accuvermogen (verschil in voorraad, + ontladen / − laden, zoals `gepland_uit_plan`), net (+ afname / − teruglevering), zon en huis in watt. `get_quarter_plan_compact` geeft `accu_w`, `net_w`, `zon_w` en `huis_w` mee; beginvoorraad via `_plan_startvoorraad_kwh`.
+3. **Accustand als balkje** per rij in de kleur van de geplande stand.
+4. **Samenvatting**: "Komende 2 uur: …; accu x% → y% om hh:mm" en "Eerstvolgende laden van net / verkopen: tijd bij prijs".
+
+Alleen weergave; sturing ongewijzigd. Tests: `test_v5146_vooruitblik.py` (6, waarvan 1 tekent de tabel in Node).
+

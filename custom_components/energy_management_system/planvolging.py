@@ -63,6 +63,34 @@ def gepland_uit_plan(rij: dict, start_kwh: float) -> dict:
     }
 
 
+def vermogens_per_kwartier(rijen: list[dict], start_kwh: float | None) -> list[dict]:
+    """Per planregel het geplande vermogen in watt (v5.146.0, Vooruitblik).
+
+    Zelfde rekenwijze als `gepland_uit_plan`: de accu is het verschil in
+    voorraad tussen twee kwartieren (+ ontladen, - laden), gedeeld door de
+    duur. Net (+ afname, - teruglevering), zon en huis uit de energie van het
+    kwartier. Zonder startvoorraad heeft het eerste kwartier geen accuwaarde.
+    """
+    uit = []
+    vorige = start_kwh
+    for rij in rijen:
+        uren = rij.get("uren") or 0.25
+        per_uur = 1000 / uren if uren > 0 else 4000
+        soc = rij.get("soc_kwh")
+        accu = None
+        if soc is not None and vorige is not None:
+            accu = round(-(soc - vorige) * per_uur)
+        net = rij.get("net_kwh")
+        uit.append({
+            "accu_w": accu,
+            "net_w": None if net is None else round(net * per_uur),
+            "zon_w": round((rij.get("zon_kwh") or 0.0) * per_uur),
+            "huis_w": round((rij.get("verbruik_kwh") or 0.0) * per_uur),
+        })
+        vorige = soc
+    return uit
+
+
 def beoordeel(
     gepland: dict, accu_w: float | None, zon_w: float | None, huis_w: float | None,
     stand: str | None = None,

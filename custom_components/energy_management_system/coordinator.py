@@ -26268,10 +26268,30 @@ class EnergyManagementSystemCoordinator:
             "eerst_voorspeld",
             "tekort",
         )
+        plan = self.get_quarter_plan(now)
+        # v5.146.0: het geplande vermogen per kwartier, voor de Vooruitblik
+        # in de cockpit (accu, net, zon en huis in watt).
+        try:
+            vermogens = planvolging.vermogens_per_kwartier(
+                plan, self._plan_startvoorraad_kwh()
+            )
+        except Exception:  # noqa: BLE001 - de tabel mag hier niet op stuklopen
+            vermogens = [{} for _ in plan]
         return [
-            {veld: regel.get(veld) for veld in velden}
-            for regel in self.get_quarter_plan(now)
+            {**{veld: regel.get(veld) for veld in velden}, **extra}
+            for regel, extra in zip(plan, vermogens)
         ]
+
+    def _plan_startvoorraad_kwh(self) -> float | None:
+        """De bruikbare voorraad nu, het beginpunt van het kwartierplan (v5.146.0)."""
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        beschikbaar = self.beschikbare_energie_kwh()
+        if capaciteit is None or beschikbaar is None:
+            return None
+        bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
+        return min(beschikbaar, bruikbaar)
 
     def _update_plan_review(self, now: datetime) -> None:
         """Legt het plan van vanochtend vast en toetst het 's avonds aan

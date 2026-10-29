@@ -1,3 +1,15 @@
+EMS v5.146.0 - Vooruitblik in de cockpit
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Onder de planningsgrafiek staat nu de Vooruitblik: 8 kwartieren (2 uur)
+  als tabel, met knoppen om te bladeren (‹ NU ›). Per kwartier de actie,
+  het geplande accuvermogen (+ ontladen, − laden), het net (imp/exp), de
+  accustand als balkje in de kleur van de stand, de prijs, zon en huis.
+- Eronder in woorden: wat de komende 2 uur gebeurt (met de accustand aan
+  het eind) en wanneer het eerstvolgende laden van het net en verkopen is.
+- Alleen weergave; de sturing verandert niet.
+
 EMS v5.145.0 - wat kost de stroom in de accu
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
