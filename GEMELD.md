@@ -137,3 +137,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 28-10 17:51 | ems instraling met terugval helper 0 bij zon onder (knmi-hapering geeft vals LET OP)
 29-10 10:52 | updates installeren stormchase 0.60.2 (hacs)
 29-10 10:52 | ems weather.openweathermap uit ems-configuratie halen (geweerde weerbron, LET OP)
+29-10 16:10 | L-EMS-045 ems 'nog niet bepaald' telt verwijderde weerbron openweathermap als wacht (12 i.p.v. 11)
+29-10 16:10 | L-GS-034 gold scalper mand rekent met startbalans 10.000 i.p.v. ingestelde 1.000.000 (noodstop bitvavo-mand)
+29-10 16:10 | L-EMS-046 ems weerbronnen per kwartier scoren, weren na >=2 dagen (akkoord)
