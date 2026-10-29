@@ -573,3 +573,16 @@ laatste ronde: 29-10 03:40, gemeten t/m 29-10 03:55
 - Hypotheses: H-EMS-2 (PV te hoog bij zon; vandaag 48 % bewolking), H-EMS-14 (live correctie; nacht in blok, geen toets), H-EMS-11 (piek-/nachtladen; ochtendpiek vandaag uit de accu, dagafsluiting).
 
 laatste ronde: 29-10 07:41, gemeten t/m 29-10 07:45
+
+## 29-10 11:40 · tussenronde
+- **v5.143.1 actief**, fout 0 / storing 0. Externe DNS-storing ~11:33 (afgevangen). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 29-10 0,065 kWh). Accu 93 %, laadt zonne-overschot (blok 09:30 loopt, reserve "geen blok").
+- **Besparing tot nu −€ 0,32** (rauw −1,48 + SoC-correctie 1,16: 2,65 kWh meer in de accu dan bij dagbegin).
+- **Weerbron geweerd (eigen leren):** 10:14 `weather.openweathermap` uit het ensemble (48,5 % van 200 waarnemingen klopte met de panelen; forecast_thuis 89 %). Ensemble-bewolking 26,6 % → **71,9 %** (10:56); de ochtend was bewolkt terwijl het ensemble 23-41 % gaf. Solcast vandaag 8,87 (28-10 21:00) → 7,51 (06:27) → **4,58** (11:17); PV tot 11:41 ~0,8 kWh → H-EMS-2 weer zon te hoog verwacht; dagafsluiting rekent af.
+- **Digital twin:** MAE 1,889 (n=60, alle `voor_bouw`); 6 open, 5 met `plan_aandeel` 1,0 (eerste afrekening 13:15). Toets L-EMS-044 15:40.
+- **L-EMS-041 (correctie planning):** het dagrecord van nacht 28→29 wordt pas bij de dagwissel van 29-10 geschreven (`_update_shortfall_detection`), niet om 09:00 → `nachten_in_blok` toetsen bij de dagafsluiting van 30-10.
+- MC tot blok **0,4 %** (horizon tot 30-10 09:00, volgend blok nog niet bepaald). Airco besluit "niets", knop uit.
+- Stilstand: **geen**; 12 wachten (+1 = weerbron OWM, nieuw vandaag).
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag bewolkt en sterk overschat), H-EMS-14 (live correctie), H-EMS-11 (piek-/nachtladen; dagafsluiting).
+
+laatste ronde: 29-10 11:40, gemeten t/m 29-10 11:45
