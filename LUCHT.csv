@@ -1344,3 +1344,22 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-29 00:20,automation_traces_fout,0,5,automation 20:16:03-20:26:52 uit (handmatig); tv aan sinds 20:39 -> auto; 00:00/00:15 failed_conditions = nachtvenster
 2026-10-29 00:20,kookautomation_traces,0,3,alleen herstarttraces; kookplaat en oven unavailable sinds 21:45 (herstart)
 2026-10-29 00:20,apparaat_pm25_bereik,8,1,apparaat 2-8 bij Ultimate 1.0-1.9 (20:30-20:40 4-8): ~3x te hoog
+2026-10-29 04:20,pm25_gem,0.58,48,5-min statistiek 00:20-04:20
+2026-10-29 04:20,pm25_mediaan,0.49,48,
+2026-10-29 04:20,pm25_p95,1.08,48,
+2026-10-29 04:20,pm25_max,1.59,48,momentaan max 00:20
+2026-10-29 04:20,pm25_uren_gt15,0.00,48,
+2026-10-29 04:20,pm25_uren_gt25,0.00,48,
+2026-10-29 04:20,stand_auto_min,43,1,gem pm25 1.08; 00:20-01:02:58
+2026-10-29 04:20,stand_mid_min,197,1,gem pm25 0.46; 01:02:58-04:20 (nacht, afwezig)
+2026-10-29 04:20,co2_gem,1071,48,5-min; 1379 -> 872 ramen dicht; niemand na 00:48
+2026-10-29 04:20,co2_uren_gt1200,1.00,48,
+2026-10-29 04:20,vocht_max,64.8,48,63.8-64.8% bij 18.7 -> 17.8 C (verwarming uit)
+2026-10-29 04:20,schimmel_indicator,81,48,79-81; buiten 99% / 11.2 C
+2026-10-29 04:20,ha_herstarts,0,1,
+2026-10-29 04:20,lokaal_mislukt,64,144949,uitval 0; 230 verbindingen; geen nieuwe fout
+2026-10-29 04:20,sturen_bevestigd,358,359,1/1 nieuwe opdracht bevestigd (mid 01:02:58)
+2026-10-29 04:20,filtergebruik_pct,0,1,
+2026-10-29 04:20,automation_traces_fout,0,5,tv uit 00:44; laatste aanwezigheid 00:47:57 -> mid 01:02:58 (15 min); traces 03:15-04:15 failed_conditions = nachtvenster
+2026-10-29 04:20,kookplaat_unavailable_u,6.6,1,kookplaat en oven unavailable sinds 21:45 (herstart 28-10); kookautomation ziet koken niet
+2026-10-29 04:20,apparaat_pm25_bereik,2,1,apparaat constant 2 bij Ultimate 0.24-1.59
