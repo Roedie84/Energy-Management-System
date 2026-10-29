@@ -34081,3 +34081,15 @@ Gemeld 29-10 06:31 (schermafdruk planning): 06:30-14:00 "Ontladen" (`solar_captu
 - Zomerdagen met zon boven het verbruik: ongewijzigd (geen afvoer).
 
 Tests: `test_v51431_zonuitstel_afvoer.py` (5).
+
+## v5.144.0 — geweerde weerbron informatief, optionele entiteitvelden leeg te maken
+
+Akkoord Ruud 29-10 (punten 1 en 3 uit de dagcontrole).
+
+**1. Geweerde weerbron is geen aandachtspunt meer.** Gemeten 29-10 10:14: het EMS weerde `weather.openweathermap` (48,5 % overeenstemming over 200 waarnemingen, `weather.forecast_thuis` 89 %). Dat is bedoeld gedrag (v5.3), maar als aandachtspunt zette het de status op "Aandacht gewenst" en de cockpit op LET OP, en dat bleef zo zolang de bron in de configuratie stond. De regel staat nu bij `informatief` via `_weerbron_melding` (nieuw: `_weerbron_geweerd_melding`; de oude spreidingsregel heet `_weerbron_spreiding_melding`), met het advies de bron uit de configuratie te halen of te vervangen. De bewolkingsinschatting en het weren zelf zijn ongewijzigd.
+
+**2. Optioneel entiteitveld weer leeg te maken.** Gemeld 29-10: `weather.openweathermap` was niet uit de configuratie te halen. `_optioneel` gaf een opgeslagen waarde mee als `default`, dus voluptuous vulde een leeggemaakt veld weer in; en een weggelaten veld viel terug op `entry.data` van de eerste installatie (`{**data, **options}`). Nu:
+- een opgeslagen waarde is een `suggested_value` (zoals `_voorstel` sinds v5.59 voor getallen); de standaardentiteiten van v3.54.0 blijven een `default`;
+- het optiesformulier zet opgeslagen entiteitvelden die leeg zijn gelaten expliciet op None (`_leeggemaakte_entiteitvelden`), zodat de lege keuze wint van `entry.data`. Alleen entiteitkiezers: getallen en schakelaars houden hun standaardwaarde in de code.
+
+Tests: `test_v5144_weerbron_en_leeg_veld.py` (7); `test_apparaatinstellingen_spiegel.py` en `test_review_findings.py` aangepast (opgeslagen waarde = voorstel).

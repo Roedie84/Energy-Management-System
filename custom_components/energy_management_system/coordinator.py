@@ -42621,17 +42621,11 @@ class EnergyManagementSystemCoordinator:
         # van "kapot".
         for regel in self.get_metingen_stilstand():
             uit.append(regel["wat"])
-        # v5.3: een geweerde weerbron hoort hier, niet als telefoonmelding.
-        # De bewolkingsinschatting bepaalt de reserve en de planning, dus
-        # dat mag niet stil veranderen - maar het is ook geen melding om
-        # 's nachts van te wakker te worden.
-        geweerd = (self.weerbron_keuze or {}).get("geweerd") or []
-        if geweerd:
-            uit.append(
-                f"Weerbron(nen) {', '.join(geweerd)} wegen niet meer mee in de "
-                "bewolkingsinschatting: ze komen te vaak niet overeen met wat de "
-                "panelen deden. De overige bronnen bepalen de voorspelling."
-            )
+        # v5.3: een geweerde weerbron hoorde hier, niet als telefoonmelding.
+        # v5.144.0 (akkoord Ruud 29-10): hij staat nu bij de informatieve
+        # punten (`_weerbron_melding`). Het weren is bedoeld gedrag; als
+        # aandachtspunt hield het de status op "Aandacht gewenst" en de
+        # cockpit op LET OP zolang de bron in de configuratie stond.
         # v5.9: een rendementsmeting die niets oplevert, hoort gezien te
         # worden. (Correctie v5.10: bij Ruud leerde hij wél - twintig per
         # richting. Deze regel is een vangnet, geen reactie op een
@@ -42671,6 +42665,35 @@ class EnergyManagementSystemCoordinator:
         return uit
 
     def _weerbron_melding(self) -> str | None:
+        """Informatieve regel over de weerbronnen (v5.144.0).
+
+        Een geweerde bron (v5.3) en bronnen die uiteenlopen (v3.93.2) in
+        één regel. Allebei informatief: het weren is bedoeld gedrag en
+        verandert niets aan de gezondheid van de integratie. Zie
+        `_weerbron_geweerd_melding` en `_weerbron_spreiding_melding`.
+        """
+        regels = [
+            r for r in (
+                self._weerbron_geweerd_melding(),
+                self._weerbron_spreiding_melding(),
+            )
+            if r
+        ]
+        return " ".join(regels) or None
+
+    def _weerbron_geweerd_melding(self) -> str | None:
+        """Welke weerbron niet meer meeweegt (v5.3, informatief sinds v5.144.0)."""
+        geweerd = (self.weerbron_keuze or {}).get("geweerd") or []
+        if not geweerd:
+            return None
+        return (
+            f"Weerbron(nen) {', '.join(geweerd)} wegen niet meer mee in de "
+            "bewolkingsinschatting: ze komen te vaak niet overeen met wat de "
+            "panelen deden. De overige bronnen bepalen de voorspelling. Haal "
+            "de bron uit de configuratie of vervang hem door een betere."
+        )
+
+    def _weerbron_spreiding_melding(self) -> str | None:
         """Wat er met de weerbronnen gebeurt als ze uiteenlopen (v3.93.2).
 
         Uit `get_diagnostic_summary` gehaald: die functie staat op de

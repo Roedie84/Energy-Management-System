@@ -329,4 +329,5 @@ def test_the_helper_omits_the_default_when_empty():
     gevuld = config_flow._optioneel("iets", {"iets": "sensor.x"})
 
     assert leeg.default is not None  # voluptuous' UNDEFINED-markering
-    assert gevuld.default() == "sensor.x"
+    # v5.144.0: gevuld = voorstel, zodat leegmaken mogelijk blijft.
+    assert gevuld.description["suggested_value"] == "sensor.x"

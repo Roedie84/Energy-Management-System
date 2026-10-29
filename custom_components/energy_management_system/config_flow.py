@@ -194,7 +194,44 @@ def _optioneel(sleutel: str, defaults: dict):
         waarde = STANDAARD_ENTITEITLIJSTEN.get(sleutel)
     if waarde in (None, ""):
         return vol.Optional(sleutel)
+    # v5.144.0: een OPGESLAGEN waarde als voorstel, niet als `default`.
+    #
+    # Gemeld 29-10: weather.openweathermap was niet uit de configuratie te
+    # halen. Met `default` vult voluptuous een leeggemaakt veld weer met de
+    # oude waarde - een eenmaal ingevuld optioneel veld kon nooit meer leeg.
+    # `suggested_value` toont de waarde wel, maar leeg blijft leeg (zoals
+    # `_voorstel` dat sinds v5.59 voor getallen doet). Alleen de
+    # standaardentiteiten van v3.54.0 blijven een `default`: die zijn nooit
+    # opgeslagen en moeten zonder invullen meekomen.
+    if defaults.get(sleutel) not in (None, "", []):
+        return vol.Optional(sleutel, description={"suggested_value": waarde})
     return vol.Optional(sleutel, default=waarde)
+
+
+def _leeggemaakte_entiteitvelden(
+    schema: vol.Schema, opgeslagen: dict, invoer: dict
+) -> dict:
+    """Entiteitvelden die opgeslagen waren en nu leeg zijn gelaten (v5.144.0).
+
+    Het optiesformulier slaat alleen op wat er is ingevuld. Een weggelaten
+    veld viel daardoor terug op de waarde uit de eerste installatie
+    (`entry.data`), want de configuratie is `{**data, **options}`. Door het
+    veld expliciet op None te zetten, wint de lege keuze.
+
+    Alleen entiteitkiezers: getallen en schakelaars hebben in de code een
+    standaardwaarde nodig, en None zou die verdringen.
+    """
+    uit = {}
+    for sleutel, kiezer in schema.schema.items():
+        if not isinstance(sleutel, vol.Optional):
+            continue
+        naam = str(sleutel.schema)
+        if not isinstance(kiezer, selector.EntitySelector):
+            continue
+        if naam in invoer or opgeslagen.get(naam) in (None, "", []):
+            continue
+        uit[naam] = None
+    return uit
 
 
 def _voorstel(waarde) -> dict | None:
@@ -849,13 +886,18 @@ class EnergyManagementSystemOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict | None = None
     ) -> config_entries.FlowResult:
+        current = {**self.config_entry.data, **self.config_entry.options}
         if user_input is not None:
             errors = _validate_input(user_input)
             if not errors:
+                user_input.update(
+                    _leeggemaakte_entiteitvelden(
+                        _schema(current), current, user_input
+                    )
+                )
                 return self.async_create_entry(title="", data=user_input)
             return self.async_show_form(
                 step_id="init", data_schema=_schema(user_input), errors=errors
             )
 
-        current = {**self.config_entry.data, **self.config_entry.options}
         return self.async_show_form(step_id="init", data_schema=_schema(current))

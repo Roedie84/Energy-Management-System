@@ -172,7 +172,9 @@ def test_a_configured_value_always_wins():
         {CONF_BATTERY_MIN_SOC_NUMBER: "number.iets_anders"},
     )
 
-    assert veld.default() == "number.iets_anders"
+    # v5.144.0: een opgeslagen waarde is een voorstel, geen `default` -
+    # anders kan het veld nooit meer leeg (zie test_v5144_weerbron_en_leeg_veld).
+    assert veld.description["suggested_value"] == "number.iets_anders"
 
 
 def test_the_power_limits_are_not_compared(make_coordinator, hass):

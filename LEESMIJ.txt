@@ -1,3 +1,13 @@
+EMS v5.144.0 - geweerde weerbron geen LET OP meer, en optionele velden weer leeg te maken
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Een weerbron die het EMS zelf weert omdat hij te vaak niet klopt, staat
+  nu bij de informatieve punten. Status en cockpit blijven op OK; wie
+  kijkt, ziet nog steeds welke bron niet meeweegt.
+- Een eenmaal ingevuld optioneel veld in het configuratiescherm kon niet
+  meer leeg: het kwam na opslaan terug. Nu blijft leeg ook echt leeg.
+
 EMS v5.143.1 - accu niet meer leeg laten lopen met "zon opvangen uitgesteld"
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
