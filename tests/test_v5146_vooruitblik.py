@@ -64,14 +64,17 @@ def test_compacte_planning_draagt_de_vermogens(make_coordinator, hass, monkeypat
 
 
 def test_de_cockpit_heeft_de_vooruitblik():
+    """v5.146.1 (Ruud 29-10): geen bladeren per kwartier, maar blokken per
+    verwachte status met een keuze voor de horizon."""
     js = JS_PAD.read_text(encoding="utf-8")
     assert "this._vooruitblik(rijen, tijden)" in js
-    assert "data-blader" in js and "const VB_KWARTIEREN = 8;" in js
-    assert "Komende 2 uur:" in js and "Eerstvolgende laden van net:" in js
+    assert "const VB_HORIZONNEN = [2, 6, 12, 24];" in js and "data-horizon" in js
+    assert "data-blader" not in js and "VB_KWARTIEREN" not in js
+    assert "Eerstvolgende laden van net:" in js
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js niet aanwezig")
-def test_de_vooruitblik_tekent(tmp_path):
+def test_de_vooruitblik_tekent_blokken(tmp_path):
     script = tmp_path / "rook.js"
     script.write_text(
         """
@@ -84,30 +87,35 @@ global.document = { createElement: () => ({}) };
 console.log = (() => { const echt = console.log; return (...a) => { if (String(a[0]).startsWith("{")) echt(...a); }; })();
 eval(src);
 const o = Object.create(global.K.prototype);
+o._s = () => undefined;
 const nu = new Date(); nu.setMinutes(Math.floor(nu.getMinutes() / 15) * 15, 0, 0);
 const rijen = [], tijden = [];
 const modi = ["smart", "smart_discharging", "verkopen (expensive_quarter)", "manual (laden)"];
-for (let i = 0; i < 20; i++) {
+for (let i = 0; i < 40; i++) {
   const d = new Date(nu.getTime() + i * 900000); tijden.push(d);
   rijen.push({ van: d.toTimeString().slice(0, 5), prijs_ct: 30 + i, modus: modi[Math.floor(i / 3) % 4],
-               soc_procent: 90 - i, accu_w: -800, net_w: 52, zon_w: 600, huis_w: 700 });
+               soc_procent: 90 - i, accu_w: i % 3 === 0 ? -900 : -1100, net_w: 52, zon_w: 600, huis_w: 700 });
 }
-o._vbStart = 0;
-const eerste = o._vooruitblik(rijen, tijden);
-o._vbStart = 16;
-const laatste = o._vooruitblik(rijen, tijden);
+o._vbUren = 2;
+const twee = o._vooruitblik(rijen, tijden);
+o._vbUren = 6;
+const zes = o._vooruitblik(rijen, tijden);
+const blokken = o._vooruitBlokken(rijen, tijden, 2, 92);
 console.log(JSON.stringify({
-  rijen1: (eerste.match(/<tr/g) || []).length, nu: eerste.includes("vb-nu"),
-  rijen3: (laatste.match(/<tr/g) || []).length,
-  samen: o._vooruitSamenvatting(rijen, tijden).replace(/<[^>]+>/g, "")
+  twee: (twee.match(/<tr/g) || []).length, zes: (zes.match(/<tr/g) || []).length,
+  nu: twee.includes("vb-nu"), knop: zes.includes('data-horizon="6" class="actief"'),
+  b0: { label: blokken[0].label, begin: blokken[0].socBegin, eind: blokken[0].socEind },
+  laadt: twee.includes("laadt 1,0 kW")
 }));
 """,
         encoding="utf-8",
     )
     uit = subprocess.run(["node", str(script), str(JS_PAD)], capture_output=True, text=True, check=True)
     r = json.loads(uit.stdout.strip().splitlines()[-1])
-    assert r["rijen1"] == 9  # kop + 8 kwartieren
-    assert r["nu"] is True
-    assert r["rijen3"] == 5  # laatste bladzijde: 4 kwartieren
-    assert r["samen"].startswith("Komende 2 uur: slim")
-    assert "Eerstvolgende laden van net:" in r["samen"]
+    # De horizon telt vanaf nu: het lopende kwartier plus 8 (2 uur) of 24 (6 uur)
+    # kwartieren, steeds 3 per status.
+    assert r["twee"] == 1 + 3   # kop + 3 blokken (9 kwartieren)
+    assert r["zes"] == 1 + 9    # kop + 9 blokken (25 kwartieren)
+    assert r["nu"] is True and r["knop"] is True
+    assert r["b0"] == {"label": "Slim", "begin": 92, "eind": 88}
+    assert r["laadt"] is True   # gemiddelde (-900, -1100, -1100) = 1,0 kW laden

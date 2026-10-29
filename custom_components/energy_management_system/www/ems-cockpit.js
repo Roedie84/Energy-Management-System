@@ -889,8 +889,9 @@ const ACHTERGROND = `
 /* De kaart                                                            */
 /* ------------------------------------------------------------------ */
 
-/* v5.146.0: kwartieren per bladzijde in de Vooruitblik (2 uur). */
-const VB_KWARTIEREN = 8;
+/* v5.146.1: Vooruitblik in blokken per verwachte status, met een horizonkeuze. */
+const VB_HORIZONNEN = [2, 6, 12, 24];
+const VB_STANDAARD_UREN = 6;
 
 /* Per paneel de sleutels waar het van afhangt. */
 const AFHANKELIJK = {
@@ -1132,11 +1133,11 @@ class EmsCockpitCard extends HTMLElement {
         this._ga(nav.dataset.nav);
         return;
       }
-      // v5.146.0: bladeren in de Vooruitblik
-      const blader = doel.closest("[data-blader]");
-      if (blader) {
-        const stap = parseInt(blader.dataset.blader, 10) || 0;
-        this._vbStart = stap === 0 ? 0 : Math.max(0, (this._vbStart || 0) + stap * VB_KWARTIEREN);
+      // v5.146.1: horizon van de Vooruitblik (2/6/12/24 uur)
+      const horizon = doel.closest("[data-horizon]");
+      if (horizon) {
+        this._vbUren = parseInt(horizon.dataset.horizon, 10) || VB_STANDAARD_UREN;
+        try { localStorage.setItem("ems-vooruitblik-uren", String(this._vbUren)); } catch (e) { /* geen opslag */ }
         this._vuil.add("planning");
         this._plan();
         return;
@@ -1775,95 +1776,90 @@ class EmsCockpitCard extends HTMLElement {
     return kop + `<div class="pb">${grafiek}${this._vooruitblik(rijen, tijden)}${tabel}</div>`;
   }
 
-  /* v5.146.0: Vooruitblik - 8 kwartieren als tabel, met bladeren en een samenvatting. */
-  _vooruitblik(rijen, tijden) {
-    const n = rijen.length;
-    if (!n) return "";
-    const maxStart = Math.max(0, Math.floor((n - 1) / VB_KWARTIEREN) * VB_KWARTIEREN);
-    const start = Math.min(this._vbStart || 0, maxStart);
-    const stuk = rijen.slice(start, start + VB_KWARTIEREN);
-    const eindTijd = (i) => new Date(tijden[i].getTime() + 15 * 60000);
-    const hhmm = (d) => d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
-    const nu = Date.now();
-    const kw = (w) => (num(w) == null ? STREEP : fmt(num(w) / 1000, 1));
-    const accuCel = (w) => {
-      const v = num(w);
-      if (v == null) return STREEP;
-      if (Math.abs(v) < 50) return `0`;
-      return `${v < 0 ? MIN : ""}${fmt(Math.abs(v))}`;
-    };
-    const netCel = (w) => {
-      const v = num(w);
-      if (v == null) return STREEP;
-      if (Math.abs(v) < 50) return `0`;
-      return `${fmt(Math.abs(v))} <small>${v > 0 ? "imp" : "exp"}</small>`;
-    };
-    const regels = stuk.map((r, j) => {
-      const i = start + j;
-      const m = modus(r.modus);
+  /* v5.146.1: gekozen horizon, onthouden per browser. */
+  _vooruitUren() {
+    if (this._vbUren == null) {
+      let u = null;
+      try { u = parseInt(localStorage.getItem("ems-vooruitblik-uren"), 10); } catch (e) { u = null; }
+      this._vbUren = VB_HORIZONNEN.includes(u) ? u : VB_STANDAARD_UREN;
+    }
+    return this._vbUren;
+  }
+
+  /* v5.146.1: de komende kwartieren samengevoegd tot blokken met dezelfde verwachte status. */
+  _vooruitBlokken(rijen, tijden, uren, socNu) {
+    const tot = Date.now() + uren * 3600000;
+    const blokken = [];
+    let vorigeSoc = socNu;
+    rijen.forEach((r, i) => {
       const t0 = tijden[i].getTime();
-      const isNu = t0 <= nu && nu < t0 + 15 * 60000;
-      const soc = num(r.soc_procent);
-      const balk = soc == null ? STREEP :
-        `<span class="vb-soc"><i style="width:${Math.max(0, Math.min(100, soc))}%;background:${m.kleur}"></i></span>${fmt(soc)}%`;
+      if (t0 + 15 * 60000 <= Date.now() || t0 >= tot) {
+        vorigeSoc = num(r.soc_procent) != null ? num(r.soc_procent) : vorigeSoc;
+        return;
+      }
+      const m = modus(r.modus);
+      let b = blokken[blokken.length - 1];
+      if (!b || b.k !== m.k) {
+        b = { k: m.k, label: m.label, kleur: m.kleur, start: tijden[i], eind: null,
+              socBegin: vorigeSoc, socEind: null, accu: [], prijzen: [], tekort: false };
+        blokken.push(b);
+      }
+      b.eind = new Date(t0 + 15 * 60000);
+      if (num(r.soc_procent) != null) { b.socEind = num(r.soc_procent); vorigeSoc = num(r.soc_procent); }
+      if (num(r.accu_w) != null) b.accu.push(num(r.accu_w));
+      if (num(r.prijs_ct) != null) b.prijzen.push(num(r.prijs_ct) / 100);
+      if (r.tekort) b.tekort = true;
+    });
+    return blokken;
+  }
+
+  _vooruitblik(rijen, tijden) {
+    if (!rijen.length) return "";
+    const uren = this._vooruitUren();
+    const blokken = this._vooruitBlokken(rijen, tijden, uren, getal(this._s("soc")));
+    const hhmm = (d) => `${dagLabel(d)}${d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`;
+    const eur = (v) => `${EURO}\u00a0${fmt(v, 2)}`;
+    const vermogen = (lijst) => {
+      if (!lijst.length) return STREEP;
+      const gem = lijst.reduce((a, v) => a + v, 0) / lijst.length;
+      if (Math.abs(gem) < 50) return "in rust";
+      return `${gem < 0 ? "laadt" : "ontlaadt"} ${fmt(Math.abs(gem) / 1000, 1)} kW`;
+    };
+    const regels = blokken.map((b) => {
+      const lo = b.prijzen.length ? Math.min(...b.prijzen) : null;
+      const hi = b.prijzen.length ? Math.max(...b.prijzen) : null;
+      const prijs = lo == null ? STREEP : hi - lo < 0.005 ? eur(lo) : `${eur(lo)}\u2013${fmt(hi, 2)}`;
+      const soc = b.socEind == null ? STREEP :
+        `<span class="vb-soc"><i style="width:${Math.max(0, Math.min(100, b.socEind))}%;background:${b.kleur}"></i></span>` +
+        `${b.socBegin != null ? fmt(b.socBegin) + "\u2192" : ""}${fmt(b.socEind)}%`;
+      const nu = b.start.getTime() <= Date.now();
       return (
-        `<tr class="${isNu ? "nu" : ""}">` +
-        `<td>${esc(dagLabel(tijden[i]))}${esc(r.van || "")}</td>` +
-        `<td><span class="modus" style="--kleur:${m.kleur}"><i></i>${esc(m.label)}</span>${isNu ? ` <span class="vb-nu">NU</span>` : ""}${r.tekort ? ` <b title="accu leeg, huis aan het net">!</b>` : ""}</td>` +
-        `<td class="r">${accuCel(r.accu_w)}</td>` +
-        `<td class="r">${netCel(r.net_w)}</td>` +
-        `<td class="vb-socc">${balk}</td>` +
-        `<td class="r">${num(r.prijs_ct) == null ? STREEP : EURO + "\u00a0" + fmt(num(r.prijs_ct) / 100, 3)}</td>` +
-        `<td class="r">${kw(r.zon_w)}</td>` +
-        `<td class="r">${kw(r.huis_w)}</td></tr>`
+        `<tr class="${nu ? "nu" : ""}"><td>${esc(hhmm(b.start))}\u2013${esc(b.eind.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }))}</td>` +
+        `<td><span class="modus" style="--kleur:${b.kleur}"><i></i>${esc(b.label)}</span>${nu ? ` <span class="vb-nu">NU</span>` : ""}${b.tekort ? ` <b title="accu leeg, huis aan het net">!</b>` : ""}</td>` +
+        `<td class="vb-socc">${soc}</td><td class="r">${vermogen(b.accu)}</td><td class="r">${prijs}</td></tr>`
       );
     }).join("");
-    const laatste = start + stuk.length - 1;
-    const kopregel =
-      `<div class="vb-kop"><b>Vooruitblik</b>` +
-      `<span class="vb-knoppen"><button data-blader="-1"${start === 0 ? " disabled" : ""} aria-label="eerder">\u2039</button>` +
-      `<button data-blader="0" class="${start === 0 ? "actief" : ""}">NU</button>` +
-      `<button data-blader="1"${start >= maxStart ? " disabled" : ""} aria-label="later">\u203a</button></span>` +
-      `<span class="vb-bereik">${stuk.length} kwartieren${PUNT}${esc(dagLabel(tijden[start]))}${hhmm(tijden[start])}\u2013${hhmm(eindTijd(laatste))}</span></div>`;
-    const tabel =
-      `<div class="tabelvak"><table class="tabel vb"><thead><tr><th>Tijd</th><th>Actie</th>` +
-      `<th class="r" title="+ ontladen, ${MIN} laden">Accu W</th><th class="r">Net W</th><th>Accu na</th>` +
-      `<th class="r">Prijs</th><th class="r">Zon kW</th><th class="r">Huis kW</th></tr></thead><tbody>${regels}</tbody></table></div>`;
+    const knoppen = VB_HORIZONNEN.map((u) =>
+      `<button data-horizon="${u}" class="${u === uren ? "actief" : ""}">${u}u</button>`).join("");
+    const kopregel = `<div class="vb-kop"><b>Vooruitblik</b><span class="vb-knoppen">${knoppen}</span>` +
+      `<span class="vb-bereik">${blokken.length} ${blokken.length === 1 ? "blok" : "blokken"} in de komende ${uren} uur</span></div>`;
+    const tabel = blokken.length
+      ? `<div class="tabelvak"><table class="tabel vb"><thead><tr><th>Tijd</th><th>Verwacht</th><th>Accu</th>` +
+        `<th class="r">Vermogen</th><th class="r">Prijs</th></tr></thead><tbody>${regels}</tbody></table></div>`
+      : `<div class="leegmelding">Geen planning voor de komende ${uren} uur.</div>`;
     return `<div class="vb-vak">${kopregel}${tabel}${this._vooruitSamenvatting(rijen, tijden)}</div>`;
   }
 
-  /* v5.146.0: de komende 2 uur en het eerstvolgende laden en verkopen, in woorden. */
+  /* v5.146.0: het eerstvolgende laden en verkopen, in woorden. */
   _vooruitSamenvatting(rijen, tijden) {
     const hhmm = (d) => d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
-    const venster = rijen.slice(0, VB_KWARTIEREN);
-    const regels = [];
-    if (venster.length) {
-      const stappen = [];
-      let vorige = null;
-      venster.forEach((r, i) => {
-        const m = modus(r.modus);
-        if (m.label !== vorige) {
-          stappen.push(i === 0 ? m.label.toLowerCase() : `${hhmm(tijden[i])} ${m.label.toLowerCase()}`);
-          vorige = m.label;
-        }
-      });
-      const s0 = num(venster[0].soc_procent);
-      const l = venster.length - 1;
-      const s1 = num(venster[l].soc_procent);
-      const eind = new Date(tijden[l].getTime() + 15 * 60000);
-      regels.push(
-        `<b>Komende 2 uur:</b> ${esc(stappen.slice(0, 3).join(", daarna "))}` +
-        (s0 != null && s1 != null ? `; accu ${fmt(s0)}% \u2192 ${fmt(s1)}% om ${hhmm(eind)}` : "") + "."
-      );
-    }
     const eerst = (k) => {
-      const i = rijen.findIndex((r) => modus(r.modus).k === k);
+      const i = rijen.findIndex((r, j) => modus(r.modus).k === k && tijden[j].getTime() + 15 * 60000 > Date.now());
       if (i < 0) return "niet in de planning";
       const p = num(rijen[i].prijs_ct);
       return `${esc(dagLabel(tijden[i]))}${hhmm(tijden[i])}${p != null ? ` bij ${EURO}\u00a0${fmt(p / 100, 3)}/kWh` : ""}`;
     };
-    regels.push(`<b>Eerstvolgende laden van net:</b> ${eerst("laden")}${PUNT}<b>verkopen:</b> ${eerst("verkopen")}.`);
-    return `<div class="vb-samen">${regels.join("<br>")}</div>`;
+    return `<div class="vb-samen"><b>Eerstvolgende laden van net:</b> ${eerst("laden")}${PUNT}<b>verkopen:</b> ${eerst("verkopen")}.</div>`;
   }
 
   /* v5.88: wanneer de laadplanning (laden uit het net) het laatst veranderde. */

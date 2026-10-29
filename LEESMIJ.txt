@@ -1,3 +1,13 @@
+EMS v5.146.1 - Vooruitblik in blokken per verwachte status
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De Vooruitblik toont nu blokken in plaats van losse kwartieren:
+  opeenvolgende kwartieren met dezelfde verwachte status staan samen in één
+  regel (tijd, status, accu begin→eind, gemiddeld vermogen, prijs van–tot).
+- Bovenaan kies je hoe ver vooruit: 2, 6, 12 of 24 uur (standaard 6, de
+  browser onthoudt je keuze). De bladerknoppen zijn weg.
+
 EMS v5.146.0 - Vooruitblik in de cockpit
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

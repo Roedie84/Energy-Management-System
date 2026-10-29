@@ -34116,3 +34116,13 @@ Akkoord Ruud 29-10 (alle vier punten), naar een voorbeeld uit het Tweakers-topic
 
 Alleen weergave; sturing ongewijzigd. Tests: `test_v5146_vooruitblik.py` (6, waarvan 1 tekent de tabel in Node).
 
+## v5.146.1 — Vooruitblik in blokken per verwachte status
+
+Gevraagd 29-10: "Ik wil alleen de keuze komende kwartieren en op basis van verwachte status, niet per kwartier kunnen doorklikken." Gekozen: blokken + horizonkeuze.
+
+- `_vooruitBlokken`: de kwartieren vanaf nu tot de horizon, samengevoegd zolang de verwachte status gelijk blijft; per blok begin/eind, accu begin→eind (begin = live laadstand of de stand na het vorige kwartier), gemiddeld accuvermogen, prijs van–tot en een tekortmarkering.
+- Horizonknoppen 2/6/12/24 uur (`VB_HORIZONNEN`, standaard 6), keuze onthouden per browser (localStorage, met try/catch). De bladerknoppen (`data-blader`) zijn weg.
+- Samenvatting: alleen nog het eerstvolgende laden van het net en verkopen (de komende uren staan in de tabel).
+
+Tests: `test_v5146_vooruitblik.py` bijgewerkt (6, waarvan 1 tekent de blokken in Node).
+
