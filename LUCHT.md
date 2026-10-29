@@ -412,4 +412,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Kookplaat en oven weer beschikbaar sinds 06:27 (herstart), na 8,7 u unavailable: kookautomation ziet koken weer. Alleen 2 herstarttraces.
 - CO₂ 859 → 804 → 1.051 (07:55), gem 866, 0 u > 1.200. Vocht 64,0 → 65,9% bij 17,7 °C (verwarming uit), schimmelindicator 79-81, buiten 99% / 11 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=13). H2 auto bij koken 3x: 61, 22,6, 7,2, steeds snel < 10; mid bij koken 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron na koken: auto houdt 4-6, halveert in ~40-50 min (n=3). Geen nieuwe piek, geen toets.
-laatste ronde: 29-10 08:25, gemeten t/m 08:20
+
+## 29-10 12:25 (ronde 58)
+- PM2.5 08:20-12:20: gem 0,76, mediaan 0,69, P95 1,25, max 2,05 (08:20, uitloop ochtend) (n=48); 0 uur > 15. Dalend 1,9 → 0,5 (09:50), daarna vlak 0,5-0,9. Dag t/m nu ~0,7; 7d (22-28/10) 2,42 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit, hele periode niemand aanwezig. VOC-index 264 → 50.
+- Stand: hele periode mid (240 min, sinds 08:17:35, geen wissels, 0 min unavailable); afwezig 0,76 (n=48), geen standvergelijking.
+- Werking: 0 HA-herstarts. 5/5 traces zonder fout (stand blijft mid). Lokaal 64 mislukt op 147.817 (geen nieuwe), uitval 0, sturen 366/367 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,5-2,0.
+- CO₂ 1.003 → 789 (gem 889), 0 u > 1.200, daalt traag zonder mensen. Vocht 65,7 → 66,4% bij 17,7 → 17,3 °C (verwarming uit), schimmelindicator 81 → 77, buiten 99% / 11-12,5 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=13). H2 auto bij koken 3x: 61, 22,6, 7,2, steeds snel < 10; mid bij koken 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron na koken: auto houdt 4-6, halveert in ~40-50 min (n=3). Geen nieuwe piek, geen toets.
+laatste ronde: 29-10 12:25, gemeten t/m 12:20
