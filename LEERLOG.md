@@ -561,3 +561,15 @@ laatste ronde: 28-10 23:40, gemeten t/m 28-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (live correctie; nachten in blok toetsen niet), H-EMS-11 (piek-/nachtladen; deels door de 10 ct-regel verklaard).
 
 laatste ronde: 29-10 03:40, gemeten t/m 29-10 03:55
+
+## 29-10 07:41 · tussenronde
+- **v5.143.1 actief** (andere sessie 06:37: zonuitstel rekent met wat de accu tijdens het wachten levert; herstart 06:40) → **v5.143.0 (L-EMS-044) is geïnstalleerd**. Fout 0 / storing 0. Externe DNS-storing ~07:35 (Zonneplan onbeschikbaar → laatste waarden, afgevangen). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 29-10 0,053 kWh).
+- **Nacht 28→29:** geen tekort. Blok: accu 6,57 (23:15) → 10,25 kWh (05:15); 07:41 SoC 94 %, beschikbaar 9,68, reserve 7,44 (+25 %). Ochtendpiek 56 ct: accu dekt het huis (`solar_capture_deferred`), blok 09:30. MC tot blok 0 %.
+- **Besparing tot nu −€ 0,32** (rauw −1,52 + SoC-correctie 1,20: 2,76 kWh meer in de accu dan bij dagbegin).
+- **Digital twin:** nachtvoorspellingen (oude methode) 03:15-07:15 fout 1,50/0,92/0,12/0,29/0,25; MAE 1,939 (n=60, alle `voor_bouw`). Eerste voorspelling met `plan_aandeel` 1 om 07:14 → afrekenen 13:15; groepen `kwartierplan`/`tijdlijn` nog 0. Toets L-EMS-044 vanaf 13:15.
+- **L-EMS-041:** `nachten_in_blok` nog leeg; het dagrecord van 29-10 volgt om 09:00 → toets 11:40.
+- Airco besluit "verwarmen" (17,8 °C < aanzet 19,0), knop uit. **Stilstand: geen** (11 wachten, ongewijzigd).
+- Hypotheses: H-EMS-2 (PV te hoog bij zon; vandaag 48 % bewolking), H-EMS-14 (live correctie; nacht in blok, geen toets), H-EMS-11 (piek-/nachtladen; ochtendpiek vandaag uit de accu, dagafsluiting).
+
+laatste ronde: 29-10 07:41, gemeten t/m 29-10 07:45
