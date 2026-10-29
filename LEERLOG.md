@@ -548,3 +548,16 @@ laatste ronde: 28-10 19:43, gemeten t/m 28-10 19:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon; dag 28-10 −10 % Solcast / −17 % dag-ahead), H-EMS-14 (live correctie; vannacht in blok, geen toets), H-EMS-11 (piek-/nachtladen; dagafsluiting).
 
 laatste ronde: 28-10 23:40, gemeten t/m 28-10 23:45
+
+## 29-10 03:40 · dagafsluiting 28-10
+- **v5.142.2 actief**, geen purge/repack in de log. Fout 0 / storing 0; externe DNS-storingen 23:25-01:00 (Zonneplan onbeschikbaar → laatste waarden, afgevangen). **Release v5.143.0** (L-EMS-044, zie onder).
+- Dag 28-10: PV **7,96 kWh** (day-ahead 9,56 → **−16,7 %**; gecorrigeerd L-EMS-025 ~8,78 → −9,3 %), import 8,38, export 0,66, accu 9,77 in / 5,67 uit, huis **11,58** (verwacht 10,31 → +12 %, 6,4 graaddagen). Besparing **−€ 0,01** (accu-opbrengst 0,73 = voorraadcorrectie: accu 's avonds vol vastgehouden). **Harde regel: 0× onder de reserve** (geen verkoopkwartieren). Geen tekortnacht (27→28, laagste SoC 29 %); nacht 28→29 loopt in het blok (SoC 91 % om 03:40).
+- **H-EMS-11 (n=2 op de nieuwe meetlat):** realisatie **46,4 %** (€ 0,90 van € 1,94; 27-10 52,6 %), zelfde vorm: optimum laadt 's nachts 3,8 kWh uit het net (−2,00) en zet die in ochtend- (+2,70) en avondpiek (+3,57, 6,94 kWh vastgehouden) in. Avondpiek 54 ct tegen terugladen ~52 ct: onder de minimale verkoopwinst van 10 ct (v5.142.0, keuze Ruud) → dagarchief telt € 0,60 als `gemist_door_regel`. Netladen 's nachts minder: afgewezen 28-10 → geen voorstel.
+- **H-EMS-2:** 7 d MAE/bias 11,5/−8,0 %, 14 d 16,4/−14,7, 30 d 13,2/−11,5; per bewolking ≤ 50 % −13,1 (n=10), 50-90 % −14,6 (n=7), > 90 % −8,5 (n=13).
+- **L-EMS-025 toets afgerond (7 d):** gecorrigeerd MAE **9,8 %** (bias +0,1) tegen ruw 11,5 % (bias −8,0) → **geverifieerd**. **L-EMS-028:** 'sturing' 0 op 27 en 28-10, 0 sinds v5.128 → **geverifieerd**. **L-EMS-043:** 3 momentopnames met juiste ct-bedragen, +0,5 °C bij 'nu 43 / straks 56 ct' → **geverifieerd** (aandeel per dag niet meetbaar: attributen niet in de recorder).
+- MC Brier **0,414** (n=5); 22:00-stand 28-10 `in_blok` (L-EMS-041) telt na het dagrecord van 29-10.
+- **Gebouwd v5.143.0 (L-EMS-044):** de digital twin volgt waar het kwartierplan reikt de geplande accustap per kwartier (geen vol vermogen meer in elk blokkwartier, geen ontladen waar de sturing vasthoudt); per voorspelling `plan_aandeel`, nieuw attribuut `kwartierplan_gevolgd` (fout per bron). Twin-MAE vóór de bouw **1,962** (nacht 00:15-03:15 voorspeld 10,37 tegen 6,9-8,9). Suite 6359 groen (+9 tests). Workflow groen, HACS ververst; wacht op installatie.
+- Stilstand: **geen** (11 wachten, ongewijzigd; sluipverbruik 28/30, NILM 39/53). Airco: aanzet geleerd 19,0 °C (was 19,5), knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (live correctie; nachten in blok toetsen niet), H-EMS-11 (piek-/nachtladen; deels door de 10 ct-regel verklaard).
+
+laatste ronde: 29-10 03:40, gemeten t/m 29-10 03:55
