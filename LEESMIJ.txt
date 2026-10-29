@@ -1,3 +1,11 @@
+EMS v5.143.1 - accu niet meer leeg laten lopen met "zon opvangen uitgesteld"
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het uitstellen van zon opvangen houdt nu rekening met wat de accu in de
+  tussentijd aan het huis levert. Alleen als de zon de accu daarna echt weer
+  vult, wordt er nog uitgesteld. Zo blijft de accu vol voor de avondpiek.
+
 EMS v5.143.0 - digital twin rekent met het kwartierplan
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -34072,3 +34072,12 @@ Leerronde 29-10 (dagafsluiting). De digital twin zat 60 vergelijkingen lang gemi
 - Adviserend: de twin stuurt niets; sturing, plan en reserve ongewijzigd.
 
 Tests: `test_v5143_twin_kwartierplan.py` (9).
+
+## v5.143.1 — zonuitstel rekent met wat de accu tijdens het wachten levert
+
+Gemeld 29-10 06:31 (schermafdruk planning): 06:30-14:00 "Ontladen" (`solar_capture_deferred`), de accu van 97% naar 70%, en de verkoop van 17:00-19:30 (75-80 ct) verdwenen. `_plan_solar_capture_moment` vergeleek de verwachte zon na het omslaguur met de ruimte van NU (0,3 kWh). Tijdens het uitstel (`smart_discharging`) dekt de accu echter het huis, dus de ruimte op het omslaguur is veel groter; het uitgangspunt "zelfde eind-SoC" (v1.22.0) gold niet.
+
+- `_zonuitstel_ruimte_bij`: ruimte nu + per uur tot het omslaguur het verbruik boven de zon (zonoverschot gaat in smart_discharging het net op), begrensd op de bruikbare capaciteit. De drempel rekent daarmee.
+- Zomerdagen met zon boven het verbruik: ongewijzigd (geen afvoer).
+
+Tests: `test_v51431_zonuitstel_afvoer.py` (5).

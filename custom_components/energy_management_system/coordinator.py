@@ -28962,7 +28962,9 @@ class EnergyManagementSystemCoordinator:
             # het vier keer in vier minuten om, precies op de grens -
             # de ruimte krimpt zolang er wordt opgevangen, en het
             # overschot schuift met elke verversing van de voorspelling.
-            drempel = ruimte * SOLAR_DEFER_SAFETY_FACTOR * (
+            # v5.143.1: de ruimte op het omslaguur, niet die van nu - zie
+            # `_zonuitstel_ruimte_bij`.
+            drempel = self._zonuitstel_ruimte_bij(now, start, ruimte, bruikbaar) * SOLAR_DEFER_SAFETY_FACTOR * (
                 1.0 - SOLAR_DEFER_HYSTERESIS_FRACTIE
                 if self._zonuitstel_actief
                 else 1.0 + SOLAR_DEFER_HYSTERESIS_FRACTIE
@@ -29012,6 +29014,37 @@ class EnergyManagementSystemCoordinator:
                 f"{winst * 100:.1f} ct meer over {ruimte:.1f} kWh."
             ),
         }
+
+    def _zonuitstel_ruimte_bij(
+        self, now: datetime, start: datetime, ruimte: float, bruikbaar: float
+    ) -> float:
+        """De lege ruimte in de accu op het omslaguur `start` (v5.143.1).
+
+        Gemeld 29-10 06:31: de planning stond van 06:30 tot 14:00 op
+        "ontladen" (`solar_capture_deferred`) en de verkoop van 17:00-19:30
+        (75-80 ct) was verdwenen. De accu stond op 97%: ruimte nu 0,3 kWh,
+        en die vult de middagzon makkelijk - dus uitstellen. Maar tijdens
+        het uitstel (`smart_discharging`) dekt de accu het huis: hij zakte
+        in het plan naar 70%, en de zon na 14:00 vulde maar ~1 kWh terug.
+        Het uitgangspunt van v1.22.0, "zelfde eind-SoC", gold niet.
+
+        Hier: de ruimte nu plus wat de accu tot `start` per uur aan het
+        huis levert (verbruik boven de zon; zonoverschot gaat in
+        smart_discharging het net op en vult niets). Begrensd op de
+        bruikbare capaciteit. Zonder schatting voor een uur: dat uur telt
+        als een vol uur verbruik zonder zon, voorzichtig.
+        """
+        afvoer = 0.0
+        t = now
+        while t < start:
+            eind = min(start, t.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+            zon = self._estimate_pv_kwh_for_period(t, eind) or 0.0
+            verbruik = self._estimate_consumption_kwh_for_period(t, eind)
+            if verbruik is None:
+                verbruik = self._verbruik_met_terugval(t, eind)
+            afvoer += max(0.0, (verbruik or 0.0) - zon)
+            t = eind
+        return min(bruikbaar, ruimte + afvoer)
 
     def _should_capture_solar_instead_of_postponing(
         self, now: datetime, should_postpone_charging: bool
