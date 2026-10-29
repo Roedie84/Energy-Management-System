@@ -1448,3 +1448,30 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-29 20:20,automation_traces_fout,0,5,mid 18:21:44 precies 15 min na laatste aanwezigheid 18:06:44; auto 18:24:44
 2026-10-29 20:20,kookautomation_traces,2,2,16:35 start en 17:14 einde kookplaat; stand al auto; geen fout
 2026-10-29 20:20,apparaat_pm25_bereik,10,1,apparaat 2-10 bij Ultimate 2.9-5.4; meestal 2 bij Ultimate ~4: onderschat laag bereik
+2026-10-29 23:59,dag_pm25_gem,2.14,288,dag 29-10; mediaan 1.19; P95 5.54
+2026-10-29 23:59,dag_pm25_max,12.39,288,14:30 bult buitenlucht; auto
+2026-10-29 23:59,dag_pm25_uren_gt15,0.00,288,
+2026-10-29 23:59,dag_co2_gem,1068,288,
+2026-10-29 23:59,dag_co2_uren_gt1200,7.92,288,
+2026-10-29 23:59,pm25_7d_gem,2.63,7,23-29/10 daggemiddelden; incl 26-10 piek 1147
+2026-10-30 00:20,pm25_gem,3.12,48,5-min statistiek 20:20-00:20
+2026-10-30 00:20,pm25_mediaan,3.30,48,
+2026-10-30 00:20,pm25_p95,3.97,48,
+2026-10-30 00:20,pm25_max,4.56,48,momentaan max 20:25
+2026-10-30 00:20,pm25_uren_gt15,0.00,48,
+2026-10-30 00:20,pm25_uren_gt25,0.00,48,
+2026-10-30 00:20,stand_auto_min,173,34,gem pm25 3.39
+2026-10-30 00:20,stand_mid_min,67,13,sinds 23:13:21; gem pm25 2.35
+2026-10-30 00:20,stand_unavailable_min,0,0,0 HA-herstarts
+2026-10-30 00:20,pm25_aanwezig,3.37,32,tv aan tot 22:56
+2026-10-30 00:20,pm25_afwezig,2.61,16,daling 3.6 -> 1.7 na vertrek; halvering ~40 min op mid
+2026-10-30 00:20,co2_gem,1681,48,5-min; max 1878 om 21:35; ramen dicht
+2026-10-30 00:20,co2_uren_gt1200,4.00,48,
+2026-10-30 00:20,vocht_max,66.9,48,60.2-66.9 bij 21.3 -> 18.0 C
+2026-10-30 00:20,schimmel_indicator,85,48,83 -> 86 -> 85; buiten 99% / 10.3-11.2 C
+2026-10-30 00:20,ha_herstarts,0,1,
+2026-10-30 00:20,lokaal_mislukt,64,151847,uitval 0; 236 verbindingen; geen nieuwe fout
+2026-10-30 00:20,sturen_bevestigd,374,375,1/1 nieuwe opdracht bevestigd
+2026-10-30 00:20,filtergebruik_pct,0,1,
+2026-10-30 00:20,automation_traces_fout,0,5,mid 23:13:21 precies 15 min na laatste aanwezigheid 22:58:21
+2026-10-30 00:20,apparaat_pm25_bereik,2,1,apparaat vast 2 bij Ultimate 1.6-4.6
