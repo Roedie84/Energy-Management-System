@@ -598,3 +598,14 @@ laatste ronde: 29-10 11:40, gemeten t/m 29-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag sterk), H-EMS-14 (live correctie), H-EMS-11 (piek-/nachtladen; dagafsluiting).
 
 laatste ronde: 29-10 15:45, gemeten t/m 29-10 15:45
+
+## 29-10 19:40 · tussenronde
+- **v5.147.0 actief** (andere sessie 15:51: witgoed uit de live verbruikscorrectie, kasprijs als schatting). Geen EMS-fouten; alleen Solcast-onbeschikbaar-waarschuwingen (niet melden). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 29-10 0,15 kWh). Besparing tot nu **+€ 0,38** (rauw 0,01 + SoC-correctie 0,37).
+- **L-EMS-044 avondtoets:** groep `kwartierplan` n=7 MAE **0,95 kWh** (vóór de bouw 2,11). Avond 16:15-19:15 fout 1,33/1,54/1,23/0,97 tegen 28-10 dezelfde uren 1,24/2,83/4,59 → sterk beter, maar 3 van 4 nog > 1 kWh en **alle vier werkelijk > voorspeld (+1,27 gem.)**: de twin ontlaadt nog meer dan de sturing doet (sturing hield vast: "niet genoeg beschikbaar voor de reserve"). Status blijft gebouwd; 3-dagentoets loopt.
+- **MC tot blok 0,0 %** (15:45 12,9 %): nodig tot blok 4,56 kWh (was 9,07) bij 7,72 beschikbaar; verbruik 17-20 u 0,36-0,69 kW. Daling past bij v5.147.0 (witgoed uit de live correctie); toets 30-10: tekortnacht ja/nee.
+- **PV 29-10 compleet 3,68 kWh:** Solcast slot +1 %, dag-ahead 8,87 (−58 %), EMS 6,95 (−47 %) → H-EMS-2; dagafsluiting rekent af.
+- Stilstand: **geen echte**; 12 wachten, OWM-regel staat er nog (L-EMS-045, bouwen bij dagafsluiting).
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag sterk), H-EMS-14 (live correctie; nu ook twin-avondbias en de lagere behoefte na v5.147.0), H-EMS-11 (piek-/nachtladen; dagafsluiting).
+
+laatste ronde: 29-10 19:40, gemeten t/m 29-10 19:45
