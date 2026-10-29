@@ -41086,6 +41086,15 @@ class EnergyManagementSystemCoordinator:
         total_profit_eur = 0.0
         hours_simulated = 0.0
 
+        # v5.143.0 (L-EMS-044): de geplande accustap per kwartier uit het
+        # kwartierplan, zodat de tweeling hetzelfde doet als de sturing.
+        # Gemeten 28-10 (60 vergelijkingen): vensters met een laadblok
+        # 2,63 kWh ernaast tegen 0,87 zonder - de tweeling laadde in elk
+        # blokkwartier op vol vermogen (26-10 00:00 voorspeld 10,34 tegen
+        # 2,77) en ontlaadde 's avonds op dure kwartieren die de sturing door
+        # de reserve niet ontlaadt (28-10 20:15-22:15 fout 4,8-5,9 kWh).
+        # Zonder plan (of buiten het plan) blijft de oude tijdlijnregel.
+
         for entry in self.last_timeline:
             start = datetime.fromisoformat(entry["start"])
             end = datetime.fromisoformat(entry["end"])
@@ -41099,7 +41108,12 @@ class EnergyManagementSystemCoordinator:
             # de splitsing van v3.45.0 elk kwartier als nacht.
             zon_kwh = self._estimate_pv_kwh_for_period(start, end) or 0.0
 
-            if mode == OPTION_MANUAL and entry["is_expensive"]:
+            gevolgd = getattr(self, "_twin_volg_plan", lambda *_a: None)(
+                now, start, end, soc_kwh, entry, usable_capacity_kwh
+            )
+            if gevolgd is not None:
+                soc_kwh, total_profit_eur = gevolgd[0], total_profit_eur + gevolgd[1]
+            elif mode == OPTION_MANUAL and entry["is_expensive"]:
                 energy_kwh = min(soc_kwh, (discharge_power_w / 1000) * interval_hours)
                 soc_kwh -= energy_kwh
                 total_profit_eur += energy_kwh * price
@@ -41168,6 +41182,7 @@ class EnergyManagementSystemCoordinator:
                     "mode": mode,
                     "soc_kwh": round(soc_kwh, 3),
                     "zon_kwh": round(zon_kwh, 3),
+                    "bron": "kwartierplan" if gevolgd is not None else "tijdlijn",
                 }
             )
             hours_simulated += interval_hours
@@ -41185,11 +41200,112 @@ class EnergyManagementSystemCoordinator:
             "Adviserend - simuleert wat de bestaande, regelgebaseerde "
             "logica (dezelfde tijdlijn als 'Overzicht komende uren') aan "
             "SoC/financieel resultaat zou opleveren, als vergelijkingspunt "
-            "naast het MPC-adviesplan (theoretisch optimum). Vereenvoudigd: "
-            "buiten het goedkoopste blok wordt de accustand gevolgd met "
+            "naast het MPC-adviesplan (theoretisch optimum). Waar het "
+            "kwartierplan reikt, volgt de accustand de geplande stap per "
+            "kwartier (laden in het blok, sparen voor de reserve); daarna "
             "het geleerde huisverbruik min de zonverwachting - dezelfde "
             "cijfers als de kwartierplanning. Stuurt nooit een commando."
         )
+
+    #: v5.143.0 (L-EMS-044): (moment, stappen) - het kwartierplan één keer
+    #: per simulatie omgezet, niet per tijdlijnpunt. Vluchtig.
+    _twin_plan_cache: tuple | None = None
+
+    def _twin_volg_plan(
+        self,
+        now: datetime,
+        start: datetime,
+        end: datetime,
+        soc_kwh: float,
+        entry: dict,
+        usable_capacity_kwh: float | None,
+    ) -> tuple[float, float] | None:
+        """(nieuwe stand, opbrengst) als het kwartierplan dit punt dekt (v5.143.0).
+
+        L-EMS-044: de tweeling volgt de geplande accustap - laden alleen in
+        de laadkwartieren van het plan, ontladen alleen waar het plan
+        ontlaadt. None = geen plan voor dit punt: de oude tijdlijnregel.
+        """
+        bewaard = self._twin_plan_cache
+        if bewaard is None or bewaard[0] != now:
+            bewaard = (now, self._twin_plan_stappen(now))
+            self._twin_plan_cache = bewaard
+        stap = self._twin_plan_stap_voor(bewaard[1], start, end) if bewaard[1] else None
+        if stap is None:
+            return None
+        plafond = usable_capacity_kwh if usable_capacity_kwh is not None else float("inf")
+        nieuw = min(plafond, max(0.0, soc_kwh + stap["delta_kwh"]))
+        verschil = nieuw - soc_kwh
+        prijs = entry["price_per_kwh"]
+        winst = 0.0
+        if verschil < 0 and entry["mode"] == OPTION_MANUAL and entry["is_expensive"]:
+            winst = -verschil * prijs
+        elif verschil > 0 and stap["net_laden"]:
+            winst = -(verschil / self._twin_laadfactor()) * prijs
+        return nieuw, winst
+
+    def _twin_plan_stappen(self, now: datetime) -> dict:
+        """Geplande accustap per kwartierstart uit het kwartierplan (v5.143.0).
+
+        L-EMS-044. Sleutel: begin van het kwartier (datetime); waarde:
+        `delta_kwh` (accustand na min vóór het kwartier, dezelfde eenheid als
+        de beschikbare energie) en `net_laden` (laadkwartier uit het net).
+        Leeg als er geen plan is - dan rekent de tweeling zoals voorheen.
+        """
+        try:
+            plan = self.get_quarter_plan(now) or []
+        except Exception:  # noqa: BLE001 - adviserend, nooit de ronde breken
+            _LOGGER.debug("Tweeling: kwartierplan niet beschikbaar", exc_info=True)
+            return {}
+        stappen: dict = {}
+        vorige: float | None = None
+        for regel in plan:
+            soc = regel.get("soc_kwh")
+            start = dt_util.parse_datetime(regel.get("start") or "")
+            if soc is None or start is None:
+                vorige = None
+                continue
+            if vorige is None:
+                # Het eerste kwartier: de stap tegenover de stand waarmee
+                # het plan begon (soc_kwh is de stand ná het kwartier).
+                begin = regel.get("soc_begin_kwh")
+                if begin is None:
+                    begin = self._twin_plan_beginstand()
+                vorige = soc if begin is None else begin
+            stappen[start] = {
+                "delta_kwh": float(soc) - float(vorige),
+                "net_laden": str(regel.get("modus") or "").startswith("manual (laden)"),
+            }
+            vorige = float(soc)
+        return stappen
+
+    def _twin_plan_beginstand(self) -> float | None:
+        """De stand waarmee het kwartierplan begint (zelfde regel als het plan)."""
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        beschikbaar = self.beschikbare_energie_kwh()
+        if beschikbaar is None:
+            return None
+        if capaciteit is None:
+            return beschikbaar
+        bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
+        return min(beschikbaar, bruikbaar)
+
+    @staticmethod
+    def _twin_plan_stap_voor(stappen: dict, start: datetime, end: datetime) -> dict | None:
+        """Som van de geplande stappen van de kwartieren in [start, end) (v5.143.0)."""
+        delta = 0.0
+        net_laden = False
+        gevonden = False
+        for moment, stap in stappen.items():
+            if start <= moment < end:
+                delta += stap["delta_kwh"]
+                net_laden = net_laden or stap["net_laden"]
+                gevonden = True
+        if not gevonden:
+            return None
+        return {"delta_kwh": delta, "net_laden": net_laden}
 
     def _nilm_excluded_entity_ids(self) -> set[str]:
         """Entities already tracked elsewhere in this integration -
@@ -45250,11 +45366,18 @@ class EnergyManagementSystemCoordinator:
         # voorspelling: bij het afrekenen is dan te zeggen of het een
         # nacht- of een dagvergelijking was.
         verwachte_zon_kwh = 0.0
+        # v5.143.0 (L-EMS-044): welk deel van het venster het kwartierplan
+        # volgde, om de fout na de bouw te kunnen splitsen.
+        punten = 0
+        uit_plan = 0
         for punt in self.digital_twin_trajectory:
             start = dt_util.parse_datetime(punt["start"])
             if start is None or not (now <= start <= beste[0]):
                 continue
             verwachte_zon_kwh += punt.get("zon_kwh") or 0.0
+            punten += 1
+            if punt.get("bron") == "kwartierplan":
+                uit_plan += 1
 
         self._digital_twin_last_queued = now
         self._digital_twin_pending.append(
@@ -45263,6 +45386,7 @@ class EnergyManagementSystemCoordinator:
                 "afrekenen_op": beste[0].isoformat(),
                 "voorspelde_soc_kwh": beste[1],
                 "verwachte_zon_kwh": round(verwachte_zon_kwh, 3),
+                "plan_aandeel": round(uit_plan / punten, 2) if punten else None,
             }
         )
         self._digital_twin_pending = self._digital_twin_pending[
@@ -45332,6 +45456,8 @@ class EnergyManagementSystemCoordinator:
                         (voorspelling.get("verwachte_zon_kwh") or 0.0)
                         >= DIGITAL_TWIN_ZON_DREMPEL_KWH
                     ),
+                    # v5.143.0 (L-EMS-044): None = voorspeld vóór de bouw.
+                    "plan_aandeel": voorspelling.get("plan_aandeel"),
                 }
             )
         # v3.73.0: dubbele afrekeningen opruimen.
@@ -45424,6 +45550,34 @@ class EnergyManagementSystemCoordinator:
                 "zonverwachting."
             )
         return uit
+
+    def get_digital_twin_plan_split(self) -> dict:
+        """Twinfout gesplitst: volgde het kwartierplan of niet (v5.143.0).
+
+        L-EMS-044. `plan_aandeel` per vergelijking; >= 0,5 telt als
+        'kwartierplan', lager als 'tijdlijn', zonder waarde als 'van vóór de
+        bouw'. Per groep aantal en gemiddelde fout.
+        """
+        groepen: dict[str, list[float]] = {"kwartierplan": [], "tijdlijn": [], "voor_bouw": []}
+        for regel in self.digital_twin_accuracy_history:
+            fout = regel.get("fout_kwh")
+            if fout is None:
+                continue
+            aandeel = regel.get("plan_aandeel")
+            if aandeel is None:
+                groep = "voor_bouw"
+            elif aandeel >= 0.5:
+                groep = "kwartierplan"
+            else:
+                groep = "tijdlijn"
+            groepen[groep].append(float(fout))
+        return {
+            naam: {
+                "aantal": len(fouten),
+                "gemiddelde_fout_kwh": round(sum(fouten) / len(fouten), 3) if fouten else None,
+            }
+            for naam, fouten in groepen.items()
+        }
 
     def get_digital_twin_accuracy_status(self) -> dict:
         """Vertaalt de gemeten fout naar een oordeel (v1.0.1).

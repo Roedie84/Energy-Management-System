@@ -1476,6 +1476,10 @@ async def async_get_config_entry_diagnostics(
             "digital_twin_final_soc_kwh": coordinator.digital_twin_final_soc_kwh,
             "digital_twin_hours_simulated": coordinator.digital_twin_hours_simulated,
             "digital_twin_note": coordinator.digital_twin_note,
+            "digital_twin_plan_kwartieren": sum(
+                1 for p in coordinator.digital_twin_trajectory or [] if p.get("bron") == "kwartierplan"
+            ),
+            "digital_twin_plan_split": _veilig("get_digital_twin_plan_split", coordinator.get_digital_twin_plan_split),
             "nilm_unconfirmed_candidates": coordinator.nilm_unconfirmed_candidates,
             "nilm_confirmed_devices": coordinator.nilm_confirmed_devices,
             "nilm_rejected_entities": coordinator.nilm_rejected_entities,

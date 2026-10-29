@@ -4956,6 +4956,8 @@ class DigitalTwinAccuracySensor(SensorEntity, RestoreEntity):
                 self._coordinator._digital_twin_pending
             ),
             "vergelijkingen": self._coordinator.digital_twin_accuracy_history[-10:],
+            # v5.143.0 (L-EMS-044): fout gesplitst naar wat de tweeling volgde.
+            "kwartierplan_gevolgd": self._coordinator.get_digital_twin_plan_split(),
             # Volledige lijsten voor het herstel na een herstart - de
             # "vergelijkingen" hierboven zijn slechts een voorbeeld voor
             # weergave.

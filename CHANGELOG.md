@@ -34062,3 +34062,13 @@ Gemeld 28-10 21:33: "Dan klopt er dus iets niet?" Het plan toonde de kwartieren 
 - Alleen het plan; de sturing is ongewijzigd.
 
 Tests: `test_v51422_sparen_tussen_laden.py` (5).
+
+## v5.143.0 — digital twin volgt het kwartierplan (L-EMS-044)
+
+Leerronde 29-10 (dagafsluiting). De digital twin zat 60 vergelijkingen lang gemiddeld 1,75-1,96 kWh naast de werkelijke accu-inhoud (6 uur vooruit); vensters met een laadblok 2,63 kWh tegen 0,87 zonder (28-10). Twee oorzaken in `_run_digital_twin_simulation`: (1) in het goedkope blok laadde de twin elk kwartier op vol vermogen, terwijl het kwartierplan maar een paar kwartieren laadt (26-10 00:00 voorspeld 10,34 tegen 2,77); (2) 's avonds ontlaadde de twin op dure `manual`-kwartieren uit de tijdlijn die de sturing door de reserve niet uitvoert (28-10 20:15-22:15 fout 4,8-5,9 kWh).
+
+- `_twin_volg_plan` / `_twin_plan_stappen`: waar het kwartierplan reikt, volgt de twin de geplande accustap per kwartier (`soc_kwh` na min vóór het kwartier; laden met het laadrendement zit al in het plan). Buiten het plan, of zonder plan, de oude tijdlijnregel.
+- Elk punt van de baan krijgt `bron` (kwartierplan/tijdlijn); elke voorspelling `plan_aandeel`. Nieuw attribuut `kwartierplan_gevolgd` op *Digital twin nauwkeurigheid* (en in de diagnostiek): gemiddelde fout gesplitst naar kwartierplan / tijdlijn / van vóór de bouw.
+- Adviserend: de twin stuurt niets; sturing, plan en reserve ongewijzigd.
+
+Tests: `test_v5143_twin_kwartierplan.py` (9).

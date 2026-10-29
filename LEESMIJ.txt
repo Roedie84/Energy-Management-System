@@ -1,3 +1,14 @@
+EMS v5.143.0 - digital twin rekent met het kwartierplan
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De digital twin (voorspelling van de accu-inhoud 6 uur vooruit) volgt
+  nu het kwartierplan: hij laadt alleen in de geplande laadkwartieren en
+  ontlaadt 's avonds niet meer waar de sturing de accu vasthoudt. Eerder
+  zat hij rond een laadblok of op een dure avond 3-6 kWh naast.
+- Nieuw op de sensor: de fout gesplitst naar 'volgde het plan' en 'niet'.
+  Stuurt niets.
+
 EMS v5.142.2 - kwartierplanning klopt nu ook tussen de laadblokken
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
