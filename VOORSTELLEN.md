@@ -325,4 +325,18 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Verwacht effect: MAE in vensters met laadblok van 2,6 naar < 1,2 kWh; twin-status richting 'klaar'.
 - Meten na installatie: twin-MAE gesplitst naar venster met/zonder blok (zoals hierboven), 3 dagen.
 - Aanvulling (28-10 19:43): ook buiten het blok wijkt de twin af: voorspellingen 11:15-13:15 voor 17:15-19:15 te laag (8,32/5,92/3,48 tegen 9,56/8,76/8,06). De twin ontlaadt op `manual`+duur-kwartieren uit `last_timeline` die de sturing niet uitvoert als de reserve ≥ beschikbaar (vandaag reserve 10,37 gekapt op capaciteit). Bij de bouw meenemen: ontladen in de twin alleen boven de verkoopreserve van dat moment, of de geplande SoC-stap van het kwartierplan volgen (dezelfde bron als het blok). Toets: avondvensters zonder verkoop → |fout| < 1 kWh.
+- Tussenstand (29-10 15:45): eerste 3 afrekeningen groep `kwartierplan` MAE 0,51 kWh (13:15-15:15, overdag); avondvensters 16:15-21:15 volgen.
 - Tussenstand (28-10 23:40): tweede avond dezelfde vorm: 20:15/21:15/22:15 fout 5,85/5,86/4,84 kWh (27-10 19:15-21:15 6,20/5,99/5,25); MAE 60 vergelijkingen 1,813.
+
+## L-EMS-045 · uit de configuratie gehaalde weerbron blijft als 'wacht' staan (rapportagefout)
+- Status: **open — zelf bouwen bij dagafsluiting 30-10** (rapportage; sturing ongewijzigd: `weerbronnen_voor_het_ensemble` gebruikt alleen geconfigureerde bronnen).
+- Onderbouwing (29-10 15:45): `openweathermap_weather_entity` is None (Ruud haalde de bron weg, mogelijk sinds v5.144.0), `sources_used` alleen `weather.forecast_thuis`, diagnose "weer 1/1 geweerd 0". Toch: *Nog niet bepaald* telt "Weerbron weather.openweathermap — 79,0 % van 200" als wachten (12 i.p.v. 11), en `betrouwbaarheid_per_bron` + `_vergelijking` ("Beide bronnen presteren vergelijkbaar") op de ensemble-sensor tonen de verwijderde bron. Oorzaak: `get_weather_source_reliability` loopt over alle sleutels van `weather_source_agreement` (opgeslagen), niet over de geconfigureerde bronnen.
+- Bouw: rapport en wachtlijst beperken tot geconfigureerde bronnen (reeks bewaren mag); test: bron verwijderd → niet in wachten/betrouwbaarheid/vergelijking.
+- Meten: na installatie *Nog niet bepaald* 11 wachten, geen OWM-regel.
+
+## L-EMS-046 · weerbron-overeenstemming telt minuten, geen onafhankelijke waarnemingen (meetbaarheid)
+- Status: **open** (raakt welke bron in het ensemble meeweegt → Ruud beslist).
+- Onderbouwing (29-10 15:45, code v5.146.1): `_record_weather_ensemble_agreement` loopt elke coordinator-tick (60 s) zodra Solcast ≥ de minimumverwachting geeft. `WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH` 200 ≈ 3,3 uur daglicht; `WEERBRON_WEREN_MIN_WAARNEMINGEN` 50 ≈ 50 minuten. Gevolg: OWM werd 10:14 geweerd op 48,5 % (in feite één ochtend), en stond enkele uren later op 79 %. Eerder (v5.13) zat forecast_thuis zo vast op 58 %.
+- Voorstel: één waarneming per kwartier (of per uur) en de reeks over ≥ 3 dagen laten lopen (bijv. 200 kwartieren ≈ 4-5 daglichtdagen); weren pas bij ≥ 2 dagen gegevens.
+- Verwacht effect: geen weren/terugnemen op één bui; stabielere ensemble-bewolking voor de PV-correctie.
+- Meten: aantal wisselingen gebruikt/geweerd per week en overeenstemming per bron per dag.

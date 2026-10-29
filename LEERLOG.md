@@ -586,3 +586,15 @@ laatste ronde: 29-10 07:41, gemeten t/m 29-10 07:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag bewolkt en sterk overschat), H-EMS-14 (live correctie), H-EMS-11 (piek-/nachtladen; dagafsluiting).
 
 laatste ronde: 29-10 11:40, gemeten t/m 29-10 11:45
+
+## 29-10 15:45 · tussenronde
+- **v5.146.1 actief** (andere sessies vandaag 5.144.0-5.146.1: weergave/kasprijs, sturing ongewijzigd). HA-herstarts ~14:45 en ~15:10; geen EMS-fouten. Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 29-10 0,065 kWh). Besparing tot nu **−€ 0,23** (rauw −1,36 + SoC-correctie 1,13).
+- **L-EMS-044 eerste afrekening:** groep `kwartierplan` n=3 MAE **0,51 kWh** (13:15/14:15/15:15: 0,69/0,53/0,32) tegen 1,96 vóór de bouw. Alle drie overdag met zon en volle accu; de echte toets zijn de avondvensters 16:15-21:15 (voorspeld 8,12 → 5,68 kWh).
+- **PV (H-EMS-2):** 3,59 kWh t/m 15:43; Solcast vandaag nu 3,63 (gisteravond 8,87). EMS-verwachting voor vandaag 6,95 → ca. −48 %. Dagafsluiting rekent af.
+- **MC tot blok 12,9 %** (horizon tot 30-10 10:15, later dan 09:00): nodig 9,07 kWh, deterministisch tekort 8,94 (p90 10,12) bij ~9,9 kWh in de accu. Toets 30-10: tekortnacht ja/nee.
+- **Weerbron:** Ruud haalde OWM uit de configuratie (`openweathermap_weather_entity` None; diagnose "weer 1/1"). Toch staat "Weerbron weather.openweathermap" (79 %, bevroren) nog in *Nog niet bepaald* en in `betrouwbaarheid_per_bron`/`_vergelijking` → **L-EMS-045** (rapportagefout, bouwen bij dagafsluiting). Gevonden: overeenstemming wordt elke tick (60 s) geteld, dus 200 waarnemingen ≈ 3,3 u daglicht en weren na 50 min; OWM ging van 48,5 % (10:14) naar 79 % → **L-EMS-046** (voorstel).
+- Stilstand: **geen echte**; 12 wachten (waarvan 1 = OWM-restant, L-EMS-045). Airco besluit "verwarmen", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag sterk), H-EMS-14 (live correctie), H-EMS-11 (piek-/nachtladen; dagafsluiting).
+
+laatste ronde: 29-10 15:45, gemeten t/m 29-10 15:45
