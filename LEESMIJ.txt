@@ -1,3 +1,17 @@
+EMS v5.148.0 - geen valse 'panelen-melding' meer, verwijderde weerbron weg
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De melding "De zon doet minder dan verwacht ... vervuiling, een
+  uitgevallen streng" kwam op 30-10 om 00:00 terwijl er één van de vijf
+  dagen gewoon klopte (26-10: 3 % ernaast). Zo'n wisselende reeks wijst
+  niet op de installatie; de kaart zegt nu "nog niet te zeggen" en er gaat
+  geen melding uit. Een echte verschuiving (elke dag lager) wordt nog
+  steeds gemeld.
+- Een weerbron die je uit de instellingen hebt gehaald (OpenWeatherMap)
+  staat niet meer in "Nog niet bepaald" en niet meer in de vergelijking
+  van de weerbronnen. Sturing ongewijzigd.
+
 EMS v5.147.0 - planning niet meer opgeblazen door de vaatwasser
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

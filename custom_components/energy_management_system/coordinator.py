@@ -19906,6 +19906,33 @@ class EnergyManagementSystemCoordinator:
                 "drift_percent": round(drift, 1),
             }
 
+        # v5.148.0: "elke dag, geen goede dag ertussen" alleen als dat ook
+        # zo is. Gemeld 30-10 00:00 (melding solar_underperforming): de
+        # laatste 5 dagen -26,1 / +3,2 / -12,9 / -16,7 / -47,0 %, mediaan
+        # -16,7 -> "verandering aan de installatie: vervuiling, een
+        # uitgevallen streng". Maar 26-10 zat er 3,2 % naast, en Solcast's
+        # eigen schatting achteraf klopte op 29-10 tot op 1 %. Een streng
+        # die uitvalt haalt elke dag omlaag; één goede dag spreekt dat
+        # tegen. Met één goede dag en te weinig voor 'twee soorten dagen'
+        # (v4.15) is het eerlijke oordeel: nog niet te zeggen.
+        if not spreiding and goed:
+            return {
+                "soort": "wisselend",
+                "status": RELIABILITY_INSUFFICIENT,
+                "reden": (
+                    f"De laatste {len(recent)} dagen wisselen: {len(goed)} "
+                    f"binnen {SOLAR_DAG_GOED_PERCENT:.0f}% en {len(ver_mis)} "
+                    f"meer dan {SOLAR_DAG_VER_MIS_PERCENT:.0f}% ernaast "
+                    f"(mediaan {recente_mediaan:.1f}%). Een dag die klopt "
+                    "past niet bij vervuiling of een uitgevallen streng; "
+                    "voor 'twee soorten dagen' zijn het er nog te weinig."
+                ),
+                "drift_percent": round(drift, 1),
+                "recente_afwijking_percent": round(recente_mediaan, 1),
+                "geleerde_bias_percent": round(geleerd, 1),
+                "dagen": len(recent),
+            }
+
         if spreiding:
             status = RELIABILITY_UNRELIABLE
             soort = "spreiding"
@@ -38956,7 +38983,25 @@ class EnergyManagementSystemCoordinator:
         eventueel besluiten.
         """
         rapport = {}
+        # v5.148.0 (L-EMS-045): alleen de bronnen die nu in de configuratie
+        # staan. De reeks van een weggehaalde bron blijft bewaard (komt hij
+        # terug, dan hoeft hij niet opnieuw te beginnen), maar hij hoort
+        # niet in 'Nog niet bepaald', de betrouwbaarheid of de vergelijking.
+        # Gemeten 29-10: OWM uit de configuratie gehaald, toch "Weerbron
+        # weather.openweathermap - 79,0 % van 200" als wacht en "Beide
+        # bronnen presteren vergelijkbaar". Zonder ingestelde bron: alles,
+        # zoals voorheen.
+        geconfigureerd = {
+            e
+            for e in (
+                self.config.get(CONF_KNMI_WEATHER_ENTITY),
+                self.config.get(CONF_OPENWEATHERMAP_WEATHER_ENTITY),
+            )
+            if e
+        }
         for entity_id, reeks in sorted(self.weather_source_agreement.items()):
+            if geconfigureerd and entity_id not in geconfigureerd:
+                continue
             aantal = len(reeks)
             if aantal < WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES:
                 rapport[entity_id] = {

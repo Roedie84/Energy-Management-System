@@ -34136,3 +34136,12 @@ Akkoord Ruud 29-10 (beide punten).
 
 Tests: `test_v5147_witgoed_uit_correctie.py` (5).
 
+## v5.148.0 — zon-zelfcontrole wijst de installatie niet aan bij een wisselende reeks; verwijderde weerbron uit het rapport (L-EMS-045)
+
+Leerronde 30-10 03:40 (dagafsluiting). Rapportage en meldingen; sturing ongewijzigd.
+
+**1. Zonvoorspelling 'klopt hij nog met de panelen?'.** Melding `solar_underperforming` 30-10 00:00: "De laatste 5 dagen liggen structureel 17 procentpunt lager dan de geleerde bias (0.0%), en dat geldt voor élke dag - geen goede dag ertussen ... vervuiling, een uitgevallen streng". De reeks was −26,1 / **+3,2** / −12,9 / −16,7 / −47,0 %: één dag klopte, en Solcast's eigen schatting achteraf klopte op 29-10 tot op 1 % (de dag-vooruit-voorspelling zat ernaast, niet de panelen). `get_solar_forecast_health` geeft het oordeel 'verschuiving' (installatie) nu alleen als er geen dag binnen 10 % zit. Met een goede dag en te weinig voor 'twee soorten dagen' (v4.15: minstens twee van elk) wordt het `soort: wisselend`, status 'te weinig gegevens', geen melding.
+
+**2. L-EMS-045: weggehaalde weerbron.** `get_weather_source_reliability` rapporteert alleen de bronnen die nu ingesteld zijn (`knmi_weather_entity`, `openweathermap_weather_entity`). De opgeslagen reeks van een weggehaalde bron blijft bewaard. Gevolg: 'Nog niet bepaald' telt OWM niet meer als wacht, en `betrouwbaarheid_per_bron`/`_vergelijking` tonen hem niet meer. Zonder ingestelde bron: ongewijzigd.
+
+Tests: `test_v5148_leerronde.py` (6).
