@@ -656,3 +656,14 @@ laatste ronde: 30-10 07:41, gemeten t/m 30-10 07:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (plan rekent te veel verbruik), H-EMS-11 (avondpiek vastgehouden; vandaag geen ruimte: accu leeg om 21:30).
 
 laatste ronde: 30-10 11:41, gemeten t/m 30-10 11:45
+
+## 30-10 15:56 · tussenronde
+- **v5.150.0 actief** (andere sessie 12:50: waterprijs/douche; HA-herstart 13:03). Geen EMS-fouten; alleen onbeschikbaar-waarschuwingen Zonneplan/Solcast bij de herstart (afgevangen) en Solcast-limiet (niet melden). Waterverbruik gevuld (80 l, toilet herkend). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 30-10 0,102 kWh). Besparing tot nu **−€ 0,29** (rauw −0,68, SoC-correctie +0,39).
+- **PV (H-EMS-2):** 5,24 kWh t/m 15:57 (Modbus) tegen Solcast ~7,02 t/m nu (dag 7,34) → **−25 %** (11:43 nog −45 %). De twin ziet hetzelfde: 12:15-15:15 werkelijk − voorspeld −0,32/−0,40/−0,53/−0,62 kWh, groeiend met de verwachte zon → het SoC-tekort vandaag komt uit de zon, niet uit het verbruik.
+- **L-EMS-044 dag 2/3:** groep `kwartierplan` n=27 MAE **0,515** (11:41 0,52; vóór de bouw 1,74). Afrekenen dagafsluiting 31-10.
+- **Vannacht:** beschikbaar 6,45 kWh, nodig tot blok (31-10 10:15) 7,79 → verwacht economisch tekort 1,33 kWh, MC tot blok **77 %** (11:41 100 %: de middagzon vulde 0,8 kWh bij). Telt mee in de Brier.
+- Stilstand: **geen echte** (12 wachten, 0 doen). Airco besluit "verwarmen", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag −25 % bij zware bewolking), H-EMS-14 (plan rekent te veel verbruik), H-EMS-11 (avondpiek vastgehouden).
+
+laatste ronde: 30-10 15:56, gemeten t/m 30-10 15:58
