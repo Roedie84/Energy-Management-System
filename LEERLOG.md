@@ -667,3 +667,14 @@ laatste ronde: 30-10 11:41, gemeten t/m 30-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag −25 % bij zware bewolking), H-EMS-14 (plan rekent te veel verbruik), H-EMS-11 (avondpiek vastgehouden).
 
 laatste ronde: 30-10 15:56, gemeten t/m 30-10 15:58
+
+## 30-10 19:40 · tussenronde
+- **v5.150.0 actief** (HACS: geen nieuwere; geen commits op main sinds 12:50). Geen EMS-fouten in de log. Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 30-10 0,237 kWh). Besparing tot nu **+€ 0,05** (15:56 −0,29).
+- **PV-dag 30-10: 5,31 kWh** (Modbus) tegen Solcast 7,34 → **−27,6 %** (H-EMS-2, 2e zware-bewolkingsdag op rij). Morgen Solcast 3,82 kWh.
+- **L-EMS-044 dag 2/3:** groep `kwartierplan` n=31 MAE **0,774** (15:56 0,515). 16:15-19:15 werkelijk − voorspeld **+2,25/+2,70/+2,82/+2,32 kWh**: de accu hield vast (accu_sparen 14:45, battery_wont_last_night 15:30) nadat de zon tegenviel; het plan van 6 u eerder rekende op ontladen. Zelfde patroon als H-EMS-14, nu aangestuurd door het zon-tekort (H-EMS-2). Afrekenen dagafsluiting 31-10 (grens 1,2 kWh).
+- **Vannacht:** beschikbaar 4,84 kWh, spaarplan nodig tot blok (31-10 10:30) 4,94; MC tot blok **14,4 %** (15:56 77 %, 11:41 100 %); plan_tekort hersteld 18:06. Toets 31-10: tekortnacht ja/nee voor de Brier.
+- **Stilstand-check:** *Nog niet bepaald* 14 (pendelt 12↔14 sinds 28-10, 0 doen). Gevonden: proefstandregels zetten de omschrijving (`betrouwbaarheid`) in *wat_ontbreekt* i.p.v. de echte reden: "Plan gewogen over drie scenario's" toont niet "7 van 14 dagen gemeten" (haalt de drempel 06-11, geen stilstand) en "Regressiewoud" staat als 'wachten' terwijl hij al is uitgerekend (−13,2 % slechter, 15 toetsdagen). → **L-EMS-048** (rapportage, zelf bouwen in de dagafsluiting met L-EMS-047). Airco besluit "niets", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog; −28 % vandaag), H-EMS-14 (plan rekent op ontladen dat de reserve later blokkeert), H-EMS-11 (avondpiek vastgehouden).
+
+laatste ronde: 30-10 19:40, gemeten t/m 30-10 19:45

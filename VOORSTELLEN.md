@@ -351,3 +351,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: ontbrekende kwartieren aanvullen uit de uurstatistiek (`dagen_uit_statistiek` bestaat al voor het zaaien) of, eenvoudiger, de dagtotalen zon/import/export uit de dagtellers nemen als de meetlog < 96 kwartieren heeft, met `bron` 'meetlog+statistiek' en het aantal aangevulde kwartieren. Test: dag met 3 ontbrekende middagkwartieren → zon gelijk aan de teller.
 - Verwacht effect: dagarchief zon/verbruik/kosten gelijk aan SolarEdge/P1 (±1 %) ook op herstartdagen; PV-afrekening en besparing per dag zuiver.
 - Meten: dagelijks `zon_kwh` tegen SolarEdge-statistiek; aantal dagen met > 2 % verschil (nu 3 van 7).
+
+## L-EMS-048 · *Nog niet bepaald*: proefstandregels tonen de omschrijving i.p.v. wat ontbreekt (rapportage)
+- Status: **gepland — zelf bouwen** (alleen rapportage; sturing ongewijzigd). Dagafsluiting 31-10 samen met L-EMS-047, mits suite groen.
+- Onderbouwing (30-10 19:40, v5.150.0): `coordinator.py` `get_pending_overview` (r. ~12146) zet voor elke proefstandkandidaat die niet 'betrouwbaar' is `wat_ontbreekt = kandidaat["betrouwbaarheid"]` (de omschrijving). Live: "Plan gewogen over drie scenario's" toont "Verwachte kosten over drie zonscenario's … Stuurt niets." terwijl `zou_hebben_opgeleverd.reden` = "7 van 14 dagen gemeten sinds v5.122.0"; "Regressiewoud" staat als 'wachten' met de methodetekst, terwijl hij al is uitgerekend (−13,2 % tegen de huidige uurcorrectie, 15 ongeziene dagen). De stilstand-check kan zo niet zien hoe ver een kandidaat is.
+- Bouw: `wat_ontbreekt` = `zou_hebben_opgeleverd.reden` als `te_becijferen` False (anders `waarde` + reden, bv. "uitgerekend: −13,2 % - niet beter dan nu"); omschrijving apart als `toelichting`. Test: kandidaat met reden "7 van 14 dagen" → die tekst in *wat_ontbreekt*.
+- Verwacht effect: elke wachtende proefstandregel zegt hoeveel er nog ontbreekt; uitgerekende kandidaten herkenbaar als 'klaar, niet beter'.
+- Meten: *Nog niet bepaald* → proefstandregels bevatten een teller of uitkomst (nu 0 van 4).
