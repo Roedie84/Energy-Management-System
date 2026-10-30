@@ -1533,3 +1533,24 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-30 12:20,filtergebruik_pct,0,1,
 2026-10-30 12:20,automation_traces_fout,0,5,stand blijft mid
 2026-10-30 12:20,apparaat_pm25_bereik,2,1,apparaat vast 2 bij Ultimate 0.5-2.1
+2026-10-30 16:45,pm25_gem,2.76,53,5-min statistiek 12:20-16:45
+2026-10-30 16:45,pm25_mediaan,2.28,53,
+2026-10-30 16:45,pm25_p95,6.90,53,
+2026-10-30 16:45,pm25_max,8.03,53,momentaan max 16:30-16:40; bult bij aanwezigheid zonder koken
+2026-10-30 16:45,pm25_uren_gt15,0.00,53,
+2026-10-30 16:45,pm25_uren_gt25,0.00,53,
+2026-10-30 16:45,stand_auto_min,189,36,gem pm25 3.34
+2026-10-30 16:45,stand_mid_min,74,16,gem pm25 1.53
+2026-10-30 16:45,stand_unavailable_min,2.0,1,HA-herstart 13:02
+2026-10-30 16:45,pm25_aanwezig,3.38,33,
+2026-10-30 16:45,pm25_afwezig,1.74,20,
+2026-10-30 16:45,co2_gem,984,53,5-min; 780 -> 1537 om 16:40; ramen dicht
+2026-10-30 16:45,co2_uren_gt1200,0.92,53,
+2026-10-30 16:45,vocht_max,67.08,53,63.8 -> 67.1 bij 17.1 -> 18.9 C
+2026-10-30 16:45,schimmel_indicator,79,53,79 -> 69 -> 78; buiten 99% / 10.7 -> 15.9 -> 13.5 C
+2026-10-30 16:45,ha_herstarts,1,1,13:02; stand 13:04 terug auto
+2026-10-30 16:45,lokaal_mislukt,64,157704,uitval 0; 239 verbindingen; geen nieuwe fout
+2026-10-30 16:45,sturen_bevestigd,385,386,5/5 nieuwe opdrachten bevestigd
+2026-10-30 16:45,filtergebruik_pct,0,1,
+2026-10-30 16:45,automation_traces_fout,0,5,mid precies 15 min na laatste aanwezigheid (13:37:22; 14:22:07)
+2026-10-30 16:45,apparaat_pm25_bereik,5,1,apparaat 2 tot 16:10 daarna 3-5 bij Ultimate 3.5-8.0
