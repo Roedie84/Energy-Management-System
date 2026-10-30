@@ -459,4 +459,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Werking: auto bij eerste aanwezigheid na 06:00 (06:06:07), mid precies 15 min na laatste aanwezigheid (08:01:55 → 08:16:56). Na HA-herstarts 06:18 en 07:39 2x mid te vroeg (24 s en 1,8 min na off) - bekende ontbrekende marge na herstart, binnen minuten weer auto. 5/5 traces zonder fout. Lokaal 64 mislukt op 154.697 (geen nieuwe), uitval 0, sturen 380/381 (6/6 nieuw), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,4-2,5.
 - CO₂ 1.071 → 947 → 1.085 (07:35), gem 1.007, 0 u > 1.200. Vocht 64,8 → 62,6% bij 17,4 → 17,2 °C (verwarming uit), schimmelindicator 84-86 (hoog), buiten 99% / 9 → 7,7 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=14). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4 - nooit lang > 10; mid bij koken 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid: auto houdt 3-6, pas na vertrek daalt het (n=6). Geen nieuwe piek, geen toets.
-laatste ronde: 30-10 08:25, gemeten t/m 08:20
+
+## 30-10 12:25 (ronde 64)
+- PM2.5 08:20-12:20: gem 0,91, mediaan 0,80, P95 1,57, max 2,09 (08:20, uitloop ochtend) (n=48); 0 uur > 15. Dalend 2,0 → 0,8 (09:30), daarna vlak 0,5-0,8. Dag t/m nu ~0,95; 7d (23-29/10) 2,63 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit, hele periode niemand aanwezig. VOC-index 355 → ~90.
+- Stand: hele periode mid (240 min, sinds 08:16:56, geen wissels, 0 min unavailable); afwezig 0,91 (n=48), geen standvergelijking.
+- Werking: 0 HA-herstarts. 5/5 traces zonder fout (stand blijft mid). Lokaal 64 mislukt op 156.152 (geen nieuwe), uitval 0, sturen 380/381 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,5-2,1.
+- CO₂ 1.052 → 867 (gem 951), 0 u > 1.200, daalt traag zonder mensen. Vocht 62,7 → 64,6% bij 17,2 → 17,1 °C (verwarming uit), schimmelindicator 85 → 79, buiten 99% / 7,7 → 10,7 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=14). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4 - nooit lang > 10; mid bij koken 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid: auto houdt 3-6, pas na vertrek daalt het (n=6). Geen nieuwe piek, geen toets.
+laatste ronde: 30-10 12:25, gemeten t/m 12:20
