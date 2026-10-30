@@ -645,3 +645,14 @@ laatste ronde: 30-10 03:40, gemeten t/m 30-10 03:55
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag 97 % bewolking), H-EMS-14 (plan rekent te veel verbruik: avond én nacht), H-EMS-11 (avondpiek vastgehouden).
 
 laatste ronde: 30-10 07:41, gemeten t/m 30-10 07:45
+
+## 30-10 11:41 · tussenronde
+- **v5.149.0 actief** (HACS: geen nieuwere; geen commits op main sinds 07:30). Geen EMS-fouten na 07:45 (alleen Zonneplan-onbeschikbaar bij de herstart, afgevangen; niet melden). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 30-10 0,102 kWh). Besparing tot nu **−€ 0,21** (rauw +0,42, SoC-correctie −0,62).
+- **Laadblok 10:45-14:30 kost 39 ct** (duurste dag van de week); plan "sparen" laadt maar +0,12 kWh uit het net. Plan: accu leeg 21:30, daarna net 41-44 ct. Laden à 39 ct met ~85 % rendement (≈ 46 ct) is duurder dan 41-44 ct netafname → economisch juiste keuze, geen bug. **MC tot blok 100 %** (horizon 31-10 09:00, determ. tekort 7,79, p90 8,96) → vannacht vermoedelijk een *economische* tekortnacht; telt mee in de Brier (kans 100 % ⇒ goed gekalibreerd als hij optreedt).
+- **L-EMS-044 dag 2/3:** groep `kwartierplan` n=23 MAE **0,52** (07:41 0,62; vóór de bouw 1,70). Dag 3 sluit 31-10 06:40 → afrekenen in de dagafsluiting 31-10.
+- **PV (H-EMS-2):** 1,50 kWh t/m 11:43 (Modbus `solaredge_i1_ac_energy`); Solcast verwachtte t/m nu ~2,74 (dag 7,68) → −45 %, bewolking 99 %. **Meetbaarheid:** `sensor.solaredge_production_energy` (cloud) staat vandaag op unknown; dagafsluiting rekent met de Modbus-teller.
+- Stilstand: **geen echte** (12 wachten, 0 doen). Airco besluit "niets" (niemand thuis), aanzet 19,0 / doel 21,0 gevuld; knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (plan rekent te veel verbruik), H-EMS-11 (avondpiek vastgehouden; vandaag geen ruimte: accu leeg om 21:30).
+
+laatste ronde: 30-10 11:41, gemeten t/m 30-10 11:45
