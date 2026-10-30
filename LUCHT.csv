@@ -1475,3 +1475,22 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-30 00:20,filtergebruik_pct,0,1,
 2026-10-30 00:20,automation_traces_fout,0,5,mid 23:13:21 precies 15 min na laatste aanwezigheid 22:58:21
 2026-10-30 00:20,apparaat_pm25_bereik,2,1,apparaat vast 2 bij Ultimate 1.6-4.6
+2026-10-30 04:20,pm25_gem,1.01,48,5-min statistiek 00:20-04:20
+2026-10-30 04:20,pm25_mediaan,0.89,48,
+2026-10-30 04:20,pm25_p95,1.72,48,
+2026-10-30 04:20,pm25_max,2.09,48,momentaan max 00:25; daalt 1.9 -> 0.5
+2026-10-30 04:20,pm25_uren_gt15,0.00,48,
+2026-10-30 04:20,pm25_uren_gt25,0.00,48,
+2026-10-30 04:20,stand_mid_min,240,48,hele periode mid; nachtvenster; gem pm25 1.01
+2026-10-30 04:20,stand_unavailable_min,0,0,0 HA-herstarts
+2026-10-30 04:20,pm25_afwezig,1.01,48,niemand aanwezig; tv uit; ramen dicht
+2026-10-30 04:20,co2_gem,1290,48,5-min; 1545 -> 1078; ramen dicht
+2026-10-30 04:20,co2_uren_gt1200,2.75,48,tot ~03:05
+2026-10-30 04:20,vocht_max,66.95,48,66.9 -> 64.9 bij 18.0 -> 17.4 C
+2026-10-30 04:20,schimmel_indicator,85,48,84-85; buiten 99% / 10.3 -> 9.0 C
+2026-10-30 04:20,ha_herstarts,0,1,
+2026-10-30 04:20,lokaal_mislukt,64,153286,uitval 0; 236 verbindingen; geen nieuwe fout
+2026-10-30 04:20,sturen_bevestigd,374,375,geen nieuwe opdrachten
+2026-10-30 04:20,filtergebruik_pct,0,1,
+2026-10-30 04:20,automation_traces_fout,0,5,failed_conditions = nachtvenster 00-06
+2026-10-30 04:20,apparaat_pm25_bereik,2,1,apparaat vast 2 bij Ultimate 0.5-2.1

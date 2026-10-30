@@ -443,4 +443,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Werking: mid precies 15 min na laatste aanwezigheid (22:58:21 → 23:13:21). 0 HA-herstarts. Traces 5/5 zonder fout (23:00/23:15 voorwaarden niet vervuld = gewenst). Lokaal 64 mislukt op 151.847 (geen nieuwe), uitval 0, sturen 374/375 (1/1 nieuw), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 1,6-4,6: onderschat.
 - CO₂ hele blok > 1.200 (gem 1.681, max 1.878 om 21:35), ramen dicht, aanwezig; dag 29-10 gem 1.068, 7,9 u > 1.200. Vocht 60-67% bij 21,3 → 18,0 °C, schimmelindicator 83-86, buiten 99% / 10-11 °C. Avond ventileren; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=14: 6x piek > 25). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4 - nooit lang > 10; mid bij koken 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid: auto houdt 3-6, pas na vertrek daalt het (n=6) - gesteund. Geen nieuwe piek, geen toets H2.
-laatste ronde: 30-10 00:25, gemeten t/m 00:20
+
+## 30-10 04:25 (ronde 62)
+- PM2.5 00:20-04:20: gem 1,01, mediaan 0,89, P95 1,72, max 2,09 (00:25) (n=48); 0 uur > 15. Daalt 1,9 → 0,5 (staart van de avond, 3,1); hoogste nacht sinds 25-10 (schone nachten 0,2-0,4).
+- Geen piek > 25, geen kookmoment, ramen dicht, tv uit, niemand aanwezig.
+- Stand: hele periode mid (240 min, geen wissels, 0 min unavailable); geen standvergelijking.
+- Werking: nachtvenster houdt mid vast; 5/5 traces failed_conditions (00-06, verwacht), geen fout. 0 HA-herstarts. Lokaal 64 mislukt op 153.286 (geen nieuwe), uitval 0, sturen 374/375 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,5-2,1.
+- CO₂ daalt 1.545 → 1.078 (gem 1.290), 2,75 u > 1.200 (tot ~03:05), ramen dicht: avondlucht trekt traag weg. Vocht 66,9 → 64,9% bij 18,0 → 17,4 °C, schimmelindicator 84-85 (hoog), buiten 99% / 10 → 9 °C. Avond ventileren en overdag verwarmen; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=14). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4 - nooit lang > 10; mid bij koken 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid: auto houdt 3-6, pas na vertrek daalt het (n=6). Geen nieuwe piek, geen toets.
+laatste ronde: 30-10 04:25, gemeten t/m 04:20
