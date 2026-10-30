@@ -1554,3 +1554,26 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-30 16:45,filtergebruik_pct,0,1,
 2026-10-30 16:45,automation_traces_fout,0,5,mid precies 15 min na laatste aanwezigheid (13:37:22; 14:22:07)
 2026-10-30 16:45,apparaat_pm25_bereik,5,1,apparaat 2 tot 16:10 daarna 3-5 bij Ultimate 3.5-8.0
+2026-10-30 20:00,pm25_gem,10.19,43,5-min statistiek 16:45-20:00
+2026-10-30 20:00,pm25_mediaan,10.79,43,
+2026-10-30 20:00,pm25_p95,18.89,43,
+2026-10-30 20:00,pm25_max,23.97,43,momentaan max 17:05-17:10; bult zonder kookplaat/oven; 2e tik 23.2 om 18:30
+2026-10-30 20:00,pm25_uren_gt15,0.92,43,
+2026-10-30 20:00,pm25_uren_gt25,0.00,43,
+2026-10-30 20:00,bult_halvering_auto_min,40-60,10,17:20-19:05 auto bij aanwezigheid; < 10 pas 19:10 (~2 u na top)
+2026-10-30 20:00,bult_halvering_mid_min,18,9,19:15-20:00 na vertrek; bron weg
+2026-10-30 20:00,stand_auto_min,147,29,gem pm25 13.43 (t/m 19:11)
+2026-10-30 20:00,stand_mid_min,48,14,gem pm25 3.49 (vanaf 19:11:52)
+2026-10-30 20:00,stand_unavailable_min,0.1,1,HA-herstart 18:51 (5 s)
+2026-10-30 20:00,pm25_aanwezig,13.4,29,aanwezig t/m 18:56
+2026-10-30 20:00,pm25_afwezig,3.5,14,
+2026-10-30 20:00,co2_gem,1587,43,5-min; max 1912 om 17:30; 1303 om 20:00; ramen dicht
+2026-10-30 20:00,co2_uren_gt1200,3.58,43,
+2026-10-30 20:00,vocht_max,78.50,43,66.7 -> 78.5 om 17:10 -> 68.1; 18.5 -> 17.4 C
+2026-10-30 20:00,schimmel_indicator,94,43,78 -> 94 -> 84; buiten 99% / 13.4 -> 10.8 C
+2026-10-30 20:00,ha_herstarts,1,1,18:51; stand 5 s later terug auto
+2026-10-30 20:00,lokaal_mislukt,65,158990,+1 = herstart 18:51 (connection reset); uitval 0; 240 verbindingen
+2026-10-30 20:00,sturen_bevestigd,386,387,1/1 nieuw (mid 19:11)
+2026-10-30 20:00,filtergebruik_pct,0,1,
+2026-10-30 20:00,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (18:56:51 -> 19:11:52)
+2026-10-30 20:00,apparaat_pm25_bereik,39,1,apparaat max 39 bij Ultimate 24 (overschat); daarna 2-21
