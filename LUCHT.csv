@@ -1577,3 +1577,32 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-30 20:00,filtergebruik_pct,0,1,
 2026-10-30 20:00,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (18:56:51 -> 19:11:52)
 2026-10-30 20:00,apparaat_pm25_bereik,39,1,apparaat max 39 bij Ultimate 24 (overschat); daarna 2-21
+2026-10-30,pm25_gem,2.85,288,dag 30-10 UltimateSensor 5-min
+2026-10-30,pm25_mediaan,1.64,288,
+2026-10-30,pm25_p95,12.18,288,
+2026-10-30,pm25_max,23.97,288,momentaan 17:05-17:10; bult zonder kookplaat/oven
+2026-10-30,pm25_uren_gt15,0.92,288,
+2026-10-30,pm25_uren_gt25,0.00,288,
+2026-10-30,pm25_7d_gem,3.00,7,24-30/10 daggemiddelden; mediaan dag 1.83
+2026-10-30,co2_gem,1144,288,dag; max 1912
+2026-10-30,co2_uren_gt1200,8.6,288,som rondes
+2026-10-31 00:20,pm25_gem,2.08,52,5-min statistiek 20:00-00:20
+2026-10-31 00:20,pm25_mediaan,1.86,52,
+2026-10-31 00:20,pm25_p95,3.49,52,
+2026-10-31 00:20,pm25_max,3.85,52,momentaan 23:35; bult 23:15-23:40 bij kort aanwezig
+2026-10-31 00:20,pm25_uren_gt15,0.00,52,
+2026-10-31 00:20,pm25_uren_gt25,0.00,52,
+2026-10-31 00:20,stand_mid_min,231,46,gem pm25 1.97
+2026-10-31 00:20,stand_auto_min,29,6,gem pm25 2.96 (23:12:15-23:41:14)
+2026-10-31 00:20,pm25_aanwezig,2.6,4,23:12-23:26
+2026-10-31 00:20,pm25_afwezig,2.04,48,
+2026-10-31 00:20,co2_gem,1078,52,5-min; 1368 -> 919; ramen dicht
+2026-10-31 00:20,co2_uren_gt1200,1.00,52,
+2026-10-31 00:20,vocht_max,69.6,4,uurmax 20:00; 69 -> 66 bij 17.6 -> 17.0 C
+2026-10-31 00:20,schimmel_indicator,85,4,85 -> 82; buiten 99% / 10 C
+2026-10-31 00:20,ha_herstarts,0,1,
+2026-10-31 00:20,lokaal_mislukt,65,160435,geen nieuwe; uitval 0; 240 verbindingen
+2026-10-31 00:20,sturen_bevestigd,388,389,2/2 nieuw (auto 23:12; mid 23:41)
+2026-10-31 00:20,filtergebruik_pct,0,1,
+2026-10-31 00:20,automation_traces_fout,0,5,mid 15 min na laatste aanwezigheid (23:26:14 -> 23:41:14)
+2026-10-31 00:20,apparaat_pm25_bereik,4,1,apparaat 2-4 bij Ultimate 1.5-3.7
