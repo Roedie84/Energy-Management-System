@@ -148,3 +148,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 30-10 11:53 | browser mod-browser d7443779 (onbeschikbaar sinds 22-10) apparaat verwijderen
 30-10 14:51 | updates installeren matter server 9.3.0 (app)
 30-10 16:51 | updates installeren music assistant 2.10.9 (app)
+30-10 17:51 | ems accu pendelt ±2 kW tegen pulserende last, pendeldetectie p1-regeling (gemiddelde ~60 s, quooker-filter exportkant)
