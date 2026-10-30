@@ -633,3 +633,15 @@ laatste ronde: 29-10 23:40, gemeten t/m 29-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (avondverbruik plan te hoog → reserve houdt vast), H-EMS-11 (avondpiek vastgehouden; deels de 10 ct-regel).
 
 laatste ronde: 30-10 03:40, gemeten t/m 30-10 03:55
+
+## 30-10 07:41 · tussenronde
+- **v5.149.0 actief** (andere sessie 07:30: NILM-dag overleeft een herstart; HA-herstart 07:40, EMS nog in opstart bij meting). Alleen onbeschikbaar-waarschuwingen Zonneplan (laatste waarden, afgevangen; niet melden). Geen release (tussenronde, geen acute bug).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 30-10 0,10 kWh, 29-10 0,238).
+- **Nacht 29→30: geen tekort.** 07:42 SoC 44 %, beschikbaar 3,92 kWh, nodig tot blok 10:45 0,21 (MC tot blok 0 %, p90 0,91); ochtendpiek 52 ct uit de accu (smart). Besparing tot nu −€ 0,11. Na het blok nog 5,10 kWh (lange horizon, 100 %) → bijladen in het blok.
+- **L-EMS-044 dag 2/3:** groep `kwartierplan` n=19 MAE **0,62** (03:40 0,76; vóór_bouw n=41 1,85). Nacht 00:15-07:15 (n=8) werkelijk − voorspeld **+0,21 kWh** gemiddeld, 8/8 positief → het plan rekent ook 's nachts iets meer verbruik dan er is (steun H-EMS-14, nu ook buiten de avond).
+- **L-EMS-045 geverifieerd:** *Nog niet bepaald* 12 (was 13), geen OWM-regel; zonregel toont nu "wisselen … past niet bij vervuiling" zonder melding (v5.148.0-fix werkt).
+- **Te volgen (controleronde):** "CV-ketel mogelijk defect" staat na v5.149.0 nog in de uitleg (vlag van 30-10 00:00, gebaseerd op de afgekapte dag 29-10). Toets 31-10 00:00: verdwijnt hij met een volle dag.
+- Stilstand: **geen echte** (12 wachten). Airco besluit "verwarmen", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag 97 % bewolking), H-EMS-14 (plan rekent te veel verbruik: avond én nacht), H-EMS-11 (avondpiek vastgehouden).
+
+laatste ronde: 30-10 07:41, gemeten t/m 30-10 07:45
