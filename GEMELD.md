@@ -140,3 +140,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 29-10 16:10 | L-EMS-045 ems 'nog niet bepaald' telt verwijderde weerbron openweathermap als wacht (12 i.p.v. 11)
 29-10 16:10 | L-GS-034 gold scalper mand rekent met startbalans 10.000 i.p.v. ingestelde 1.000.000 (noodstop bitvavo-mand)
 29-10 16:10 | L-EMS-046 ems weerbronnen per kwartier scoren, weren na >=2 dagen (akkoord)
+30-10 06:51 | ems nilm-driftdetectie marge voor verwarmende apparaten (cv-ketel vals defectalarm)
+30-10 06:51 | L-EMS-047 ems dagarchief mist kwartieren rond herstart (zon 3,23 vs 3,68)
+30-10 06:51 | stormchase knmi-waarschuwing begin-/eindtijd 1-2 uur later dan knmi-tekst (H-SC-12)
