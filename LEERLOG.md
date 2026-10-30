@@ -678,3 +678,13 @@ laatste ronde: 30-10 15:56, gemeten t/m 30-10 15:58
 - Hypotheses: H-EMS-2 (PV te hoog; −28 % vandaag), H-EMS-14 (plan rekent op ontladen dat de reserve later blokkeert), H-EMS-11 (avondpiek vastgehouden).
 
 laatste ronde: 30-10 19:40, gemeten t/m 30-10 19:45
+
+## 30-10 23:40 · tussenronde
+- **v5.150.0 actief** (geen commits op main sinds 12:50). Geen EMS-fouten na 19:45. Geen release (tussenronde; gevonden bug is alleen weergave).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 30-10 0,274 kWh). Besparing dag **+€ 0,01** (rauw +0,68, SoC-correctie −0,67).
+- **Nacht 30→31:** 23:4x SoC 47 %, beschikbaar 4,26 kWh, spaarplan nodig tot blok (31-10 10:30) 2,70 → marge +1,56. MC tot blok **0 %** (19:40 14,4; det. diepste 2,71, p90 3,49); 22:00-kalibratiestand kans 0 %, beschikbaar 4,38. Het economische tekort van 15:56 (77 %) is weg: de avond verbruikte minder dan het spaarplan (H-EMS-14). Toets 31-10: tekortnacht ja/nee.
+- **L-EMS-044:** groep `kwartierplan` n=35 MAE **0,997** (19:40 0,774) — loopt op door de avond (accu hield vast); grens 1,2 kWh, afrekenen dagafsluiting 31-10.
+- **Stilstand-check:** *Nog niet bepaald* 14 wachten, **1 doen**: "Stand van de zon klopt niet" (5,3°). Oorzaak: de toets vergelijkt een 20 min oude azimut met de zon van nú; 's nachts ~85 min per nacht vals → **L-EMS-049** (bug, zelf bouwen dagafsluiting met L-EMS-047/048). Airco besluit "verwarmen" (17,0 °C < 19,0), knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog; −28 % vandaag), H-EMS-14 (plan rekent te veel verbruik; vanavond bevestigd: tekortkans 77 → 0 %), H-EMS-11 (avondpiek vastgehouden).
+
+laatste ronde: 30-10 23:40, gemeten t/m 30-10 23:45

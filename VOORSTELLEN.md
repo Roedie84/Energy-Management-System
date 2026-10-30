@@ -358,3 +358,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: `wat_ontbreekt` = `zou_hebben_opgeleverd.reden` als `te_becijferen` False (anders `waarde` + reden, bv. "uitgerekend: −13,2 % - niet beter dan nu"); omschrijving apart als `toelichting`. Test: kandidaat met reden "7 van 14 dagen" → die tekst in *wat_ontbreekt*.
 - Verwacht effect: elke wachtende proefstandregel zegt hoeveel er nog ontbreekt; uitgerekende kandidaten herkenbaar als 'klaar, niet beter'.
 - Meten: *Nog niet bepaald* → proefstandregels bevatten een teller of uitkomst (nu 0 van 4).
+
+## L-EMS-049 · zonstand-toets vergelijkt een oude azimut met de zon van nú (vals 'doen' 's nachts)
+- Status: **gepland — zelf bouwen** (bug in rapportage; sturing ongewijzigd). Dagafsluiting 31-10 samen met L-EMS-047/048, mits suite groen.
+- Onderbouwing (30-10 23:40, v5.150.0): *Nog niet bepaald* toont 1× **doen** "Stand van de zon klopt niet: gemeten 340,7° tegen 346,1° berekend, 5,3° verschil". `get_sun_position_check` (coordinator.py r. ~11813) rekent de zonstand uit voor `dt_util.now()`, maar `sensor.zon_van_eibergen_azimut` ververst 's nachts maar elke 20 min (overdag 2-8 min) terwijl de azimut rond middernacht 6-8° per 20 min draait (history 29/30-10: 23:10 334,6 → 23:30 341,9 → 23:50 349,5). Tolerantie 5,0° → elke nacht ~85 min (≈ 21:10-03:30, telkens het laatste deel van een interval) een valse handeling; sensor zelf klopt (sun.sun 339,6° om 23:24). De docstring noemt de veroudering al ("een paar minuten oud loopt tot een graad achter") maar rekent er niet mee.
+- Bouw: berekende stand voor het `last_updated`-moment van de gelezen sensor (sun.sun idem) i.p.v. nu; `berekend_azimut` voor de pv-modelsamples blijft 'nu'. Test: sensor 20 min oud bij 7°/20 min draaiing → status betrouwbaar; sensor met vaste 10° offset → nog steeds onbetrouwbaar.
+- Verwacht effect: 0 valse 'doen'-regels 's nachts; een echte verkeerde sensor wordt nog steeds gevangen.
+- Meten: `aantal_doen` in *Nog niet bepaald* rond 23:40 (nu 1, onterecht).
