@@ -619,3 +619,17 @@ laatste ronde: 29-10 19:40, gemeten t/m 29-10 19:45
 - Hypotheses: H-EMS-2 (PV te hoog; 29-10 −47 %), H-EMS-14 (live correctie + plan rekent 's avonds te veel verbruik: 5 dagen op rij minder ontladen dan gepland), H-EMS-11 (piek-/nachtladen; dagafsluiting).
 
 laatste ronde: 29-10 23:40, gemeten t/m 29-10 23:45
+
+## 30-10 03:40 · dagafsluiting 29-10
+- **v5.147.0 actief**, geen purge/repack, geen EMS-fouten (alleen onbeschikbaar-waarschuwingen Zonneplan/SolarEdge, niet melden). **Release v5.148.0** (zie onder).
+- Dag 29-10: PV **3,68 kWh** (SolarEdge; day-ahead 6,95 → **−47 %**, Solcast slot +1 %), import 6,20, export 0,86, accu 5,59 in / 5,50 uit, huis 8,47 (verwacht 9,2 → −8 %). Besparing **€ 0,87** (opbrengst incl. voorraad 0,19). **Harde regel: 0× onder de reserve.** Geen tekortnacht; nacht 29→30 loopt (03:44 beschikbaar 4,95, MC 0 %, blok 10:45).
+- **H-EMS-11:** realisatie 29-10 **80,4 %** (€ 3,53 / 4,39); 3 d 65,4 %. Avondpiek 3e dag op rij vastgehouden (6,29/6,94/5,53 kWh, +1,96/+3,57/+2,93 €); `gemist_door_regel` 29-10 **€ 1,29** (min. verkoopwinst 10 ct, keuze Ruud v5.142.0; 3 d 0,46/0,60/1,29). Alleen vastgelegd, geen voorstel (regel net gekozen).
+- **H-EMS-2:** 7 d MAE/bias 17,1/−13,6 %, 14 d 18,8/−17,0, 30 d 14,7/−13,1; ≤ 50 % bewolking −17,9 (n=10). 29-10 sterk: day-ahead zat ernaast, de panelen niet (Solcast achteraf +1 %).
+- **Gevonden:** 00:00 melding `solar_underperforming` "élke dag lager, geen goede dag ertussen → vervuiling/uitgevallen streng" bij reeks −26,1/**+3,2**/−12,9/−16,7/−47,0 (geleerde bias None → 0). Onterecht → gebouwd. En dagarchief telt kwartieren rond herstarts niet: zon 3,23 tegen SolarEdge 3,68 (26-10 −0,23) → **L-EMS-047** (meetfout, gepland).
+- **L-EMS-041 geverifieerd:** 22:00-stand 29-10 in `nachten_in_blok` (0 %, geen tekort), niet in de Brier; 6/7 dagrecords (26-10 = gat van vóór de fix). Brier **0,268** (n=4).
+- **L-EMS-044 dag 1/3:** groep `kwartierplan` n=15 MAE **0,76** (vóór 2,23); restfout avond = H-EMS-14.
+- **Gebouwd v5.148.0:** (1) zon-zelfcontrole: installatie-oordeel alleen zonder goede dag, anders 'wisselend' zonder melding; (2) **L-EMS-045** weggehaalde weerbron uit betrouwbaarheid/vergelijking/wachten. Suite 6395 groen (+6), workflow groen, HACS ververst.
+- Stilstand: **geen echte**; 13 wachten (beide extra regels weg na installatie → 11). Airco besluit "niets", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (avondverbruik plan te hoog → reserve houdt vast), H-EMS-11 (avondpiek vastgehouden; deels de 10 ct-regel).
+
+laatste ronde: 30-10 03:40, gemeten t/m 30-10 03:55

@@ -100,3 +100,7 @@
 | PV day-ahead gecorrigeerd (L-EMS-025) | MAE 9,8 % / bias +0,1 tegen ruw 11,5 % / −8,0 | 22..28-10, n=7 | 29-10 03:40 |
 | Nabeschouwing realisatie (meetlat met netladen, L-EMS-042) | 52,6 % (27-10) · 46,4 % (28-10) | n=2 | 29-10 03:40 |
 | Digital twin MAE vóór L-EMS-044 | 1,96 kWh (n=60); referentie voor v5.143.0 | 26..29-10 | 29-10 03:40 |
+| PV-voorspelling MAE (dag, day-ahead tracker) | 14,7 % (30 d) · 18,8 % (14 d) · 17,1 % (7 d); bias −13,1 / −17,0 / −13,6 | 30-09..29-10 | 30-10 03:40 |
+| Nabeschouwing realisatie (meetlat met netladen, L-EMS-042) | 65,4 % (3 d: 52,6 / 46,4 / 80,4) | 27..29-10 | 30-10 03:40 |
+| Digital twin MAE groep 'kwartierplan' (na L-EMS-044) | 0,76 kWh (n=15) tegen 2,23 vóór de bouw (n=45) | 29-10 | 30-10 03:40 |
+| MC 22:00 Brier (tot blok) | 0,268 (n=4) + 1 nacht in blok (0 %, geen tekort) | 24..29-10 | 30-10 03:40 |
