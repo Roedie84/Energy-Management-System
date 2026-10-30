@@ -34145,3 +34145,13 @@ Leerronde 30-10 03:40 (dagafsluiting). Rapportage en meldingen; sturing ongewijz
 **2. L-EMS-045: weggehaalde weerbron.** `get_weather_source_reliability` rapporteert alleen de bronnen die nu ingesteld zijn (`knmi_weather_entity`, `openweathermap_weather_entity`). De opgeslagen reeks van een weggehaalde bron blijft bewaard. Gevolg: 'Nog niet bepaald' telt OWM niet meer als wacht, en `betrouwbaarheid_per_bron`/`_vergelijking` tonen hem niet meer. Zonder ingestelde bron: ongewijzigd.
 
 Tests: `test_v5148_leerronde.py` (6).
+
+## v5.149.0 — een herstart wist de lopende NILM-dag niet meer
+
+Gevonden bij de melding "CV-ketel mogelijk defect (+61 %)" op 30-10 00:00. EMS rekende voor 29-10 een daggemiddelde van 13,56 W, de recorder (tijdgewogen) 9,89 W. De laatste herstart was om 15:54. De NILM-Store werd alleen om middernacht (of bij een keuze in de lijst) weggeschreven, en `_check_date` kwam na het laden als tekst terug. Daardoor begon de lopende dag na elke herstart opnieuw bij nul. 15:54-24:00 is 8,1 uur, net genoeg voor een dagcijfer, dus de dag bestond alleen uit de avond (met het stoken, 18:00-19:00 gemiddeld 34,5 W) zonder de zuinige nacht. Een herrekening over dat venster geeft 13,2 W. Elke dag met een herstart werd zo een avonddag; de eerdere 12-14 W-dagen in de reeks passen daarbij.
+
+- De Store wordt nu ook elk uur weggeschreven, en bij het afsluiten van Home Assistant en het herladen van de integratie (`_bewaar_nilm_lopende_dag`, alleen als de Store al gelezen is).
+- `_check_date` wordt bij het laden en in de lus teruggezet naar een datum (`_nilm_datum`). Herstart op dezelfde dag: de dag loopt door. Herstart over middernacht heen: gisteren wordt met de bewaarde tellers afgerond, zoals zonder herstart.
+- De temperatuurmarge voor verwarmende apparaten (akkoord 30-10) is niet gebouwd: over 46 dagen (21 °C tot 9 °C buiten) is er geen verband tussen buitentemperatuur en het daggemiddelde van de ketel (8-10 W, afwisselend per dag). Het alarm kwam door de afgekapte dag, niet door het weer.
+
+Tests: `test_v5149_nilm_lopende_dag.py` (6).

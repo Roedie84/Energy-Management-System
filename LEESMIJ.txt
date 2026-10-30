@@ -1,3 +1,14 @@
+EMS v5.149.0 - geen vals 'mogelijk defect' meer na een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Na een herstart begon het daggemiddelde van de bevestigde apparaten
+  (NILM) opnieuw bij nul. Op een dag met een herstart om 15:54 telde
+  alleen de avond mee; de CV-ketel kwam zo op 13,6 W in plaats van
+  9,9 W en kreeg "mogelijk defect (+61 %)". De lopende dag wordt nu elk
+  uur en bij het afsluiten bewaard en loopt na een herstart gewoon door.
+  Dit werkt vanaf de eerste herstart na deze update.
+
 EMS v5.148.0 - geen valse 'panelen-melding' meer, verwijderde weerbron weg
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

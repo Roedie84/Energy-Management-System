@@ -2458,6 +2458,8 @@ class EnergyManagementSystemCoordinator:
                 await laag.bewaar_nu()
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Kon de meetlaag bij het afsluiten niet wegschrijven")
+        # v5.149.0: en de lopende dag van de NILM-apparaten.
+        await self._bewaar_nilm_lopende_dag()
 
     async def _handle_hass_started(self, _event: Event) -> None:
         """Run the first real update once Home Assistant has finished
@@ -2731,6 +2733,29 @@ class EnergyManagementSystemCoordinator:
                 await laag.bewaar_nu()
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Kon de meetlaag bij het herladen niet wegschrijven")
+        await self._bewaar_nilm_lopende_dag()
+
+    async def _bewaar_nilm_lopende_dag(self) -> None:
+        """Schrijft de NILM-Store weg, inclusief de lopende dag
+        (v5.149.0).
+
+        Gevonden bij een "mogelijk defect" van de CV-ketel: EMS rekende
+        29-10 een daggemiddelde van 13,56 W, de recorder 9,89 W. De
+        laatste herstart was om 15:54, en de Store werd alleen om
+        middernacht weggeschreven - dus de tellers van de dag begonnen
+        na die herstart opnieuw bij nul. Over 15:54-24:00 (8,1 uur,
+        net genoeg voor een dagcijfer) zit de avond met het stoken erin
+        en de zuinige nacht niet: precies 13,5 W. Elke dag met een
+        herstart werd zo een avonddag.
+        """
+        if not getattr(self, "_nilm_store_loaded", False):
+            # Nooit een lege lijst over een Store heen schrijven die nog
+            # niet gelezen is.
+            return
+        try:
+            await self._async_save_nilm_confirmed_devices_store()
+        except Exception:  # noqa: BLE001 - afsluiten mag hier niet op stuklopen
+            _LOGGER.exception("Kon de NILM-apparaten niet wegschrijven")
 
     @callback
     async def _watchdog(self, _now) -> None:
@@ -42165,6 +42190,14 @@ class EnergyManagementSystemCoordinator:
             return
         devices = stored.get("nilm_confirmed_devices")
         if isinstance(devices, dict):
+            # v5.149.0: de Store bewaart de datum als tekst. Zonder
+            # terugzetten is hij nooit gelijk aan vandaag en begint de
+            # lopende dag na elke herstart opnieuw bij nul.
+            for device in devices.values():
+                if isinstance(device, dict):
+                    device["_check_date"] = self._nilm_datum(
+                        device.get("_check_date")
+                    )
             self.nilm_confirmed_devices = devices
             if devices:
                 self._nilm_store_had_data = True
@@ -42184,6 +42217,18 @@ class EnergyManagementSystemCoordinator:
             self.nilm_dismissed_duplicate_pairs = dismissed
             if dismissed:
                 self._nilm_store_had_data = True
+
+    @staticmethod
+    def _nilm_datum(waarde):
+        """Een opgeslagen controledatum als `date` (v5.149.0)."""
+        if isinstance(waarde, datetime):
+            return waarde.date()
+        if isinstance(waarde, date) or waarde is None:
+            return waarde
+        try:
+            return date.fromisoformat(str(waarde)[:10])
+        except ValueError:
+            return None
 
     async def _async_save_nilm_confirmed_devices_store(self) -> None:
         """Persists confirmed NILM devices + rejected entities to the
@@ -43670,7 +43715,8 @@ class EnergyManagementSystemCoordinator:
         for entity_id, device in self.nilm_confirmed_devices.items():
             power_w = self._read_sensor_float(entity_id)
 
-            check_date = device.get("_check_date")
+            check_date = self._nilm_datum(device.get("_check_date"))
+            device["_check_date"] = check_date
             if check_date != now.date():
                 # v1.21.3: pas afronden bij genoeg metingen. Met vijf
                 # metingen - een kwartier na een herstart - meldde de
@@ -43712,7 +43758,14 @@ class EnergyManagementSystemCoordinator:
                         device.get("_today_on_sum", 0.0) + power_w
                     )
 
-        if any_finalized:
+        # v5.149.0: ook elk uur, zodat een herstart (of crash) de lopende
+        # dag niet meer wist - zie `_bewaar_nilm_lopende_dag`.
+        uur = (now.date(), now.hour)
+        if any_finalized or (
+            self.nilm_confirmed_devices
+            and getattr(self, "_nilm_bewaard_uur", None) != uur
+        ):
+            self._nilm_bewaard_uur = uur
             # v0.63.66: persist the newly-learned daily history/CUSUM
             # state to the dedicated Store, not just kept in memory.
             self.hass.async_create_task(
