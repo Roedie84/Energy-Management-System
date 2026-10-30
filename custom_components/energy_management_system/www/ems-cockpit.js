@@ -2127,7 +2127,20 @@ class EmsCockpitCard extends HTMLElement {
     if (water) {
       const liter = num(attr(water, "vandaag_liter"));
       const gem = num(attr(water, "gemiddeld_liter_per_dag"));
-      uit.push(regel("druppel", "Water", gem != null ? `gemiddeld ${fmt(gem)} L per dag` : "", `${liter == null ? STREEP : fmt(liter) + " L"}`, "var(--blauw)"));
+      // v5.150.0: wat het water vandaag kost, en de douche.
+      const wEur = num(attr(water, "vandaag_eur"));
+      uit.push(regel("druppel", "Water",
+        (gem != null ? `gemiddeld ${fmt(gem)} L per dag` : "") + (wEur != null ? `${gem != null ? PUNT : ""}${euro(wEur)} vandaag` : ""),
+        `${liter == null ? STREEP : fmt(liter) + " L"}`, "var(--blauw)"));
+      const dou = attr(water, "douche") || {};
+      if (dou.beschikbaar) {
+        const lst = dou.laatste || {};
+        const lstD = alsDatum(lst.gestart);
+        uit.push(regel("druppel", "Douche",
+          `gemiddeld ${fmt(dou.gem_minuten, 0)} min${PUNT}${fmt(dou.gem_liter, 0)} L${PUNT}${euro(dou.gem_eur)} per beurt (${fmt(dou.aantal)}\u00d7 in ${fmt(dou.dagen)} d)`,
+          lstD ? `${esc(klok(lstD))} <span class="leeg">${fmt(lst.duur_minuten, 0)} min${lst.kosten_eur != null ? PUNT + euro(lst.kosten_eur) : ""}</span>` : "",
+          "var(--blauw)"));
+      }
       // v5.104.1: wanneer de waterontharder het laatst regenereerde
       // (gevraagd 19-10: "Energycockpit bij apparaten graag").
       const reg = alsDatum(attr(water, "waterontharder_laatste_regeneratie"));

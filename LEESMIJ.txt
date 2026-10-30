@@ -1,3 +1,16 @@
+EMS v5.150.0 - wat kost water, en wat kost een douche
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Nieuwe instelling: waterprijs per m³ (standaard € 1,82, Vitens 2026).
+  De Water-regel in de cockpit toont wat het water vandaag kost.
+- Elk tapmoment krijgt een bedrag. Bij een douche komt het gas erbij,
+  gemeten met de gasmeter (nieuwe instelling: gasmeterstand in m³); de
+  douche van 29-10 kwam zo op € 1,28.
+- Nieuwe regel Douche in de cockpit en op het watertabblad: gemiddelde
+  duur, liters en kosten per beurt over 30 dagen.
+- Een watersessie bevestigen met een tijd (`sessie: 08:06`) werkt nu.
+
 EMS v5.149.0 - geen vals 'mogelijk defect' meer na een herstart
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

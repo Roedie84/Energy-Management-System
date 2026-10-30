@@ -34155,3 +34155,17 @@ Gevonden bij de melding "CV-ketel mogelijk defect (+61 %)" op 30-10 00:00. EMS r
 - De temperatuurmarge voor verwarmende apparaten (akkoord 30-10) is niet gebouwd: over 46 dagen (21 °C tot 9 °C buiten) is er geen verband tussen buitentemperatuur en het daggemiddelde van de ketel (8-10 W, afwisselend per dag). Het alarm kwam door de afgekapte dag, niet door het weer.
 
 Tests: `test_v5149_nilm_lopende_dag.py` (6).
+
+## v5.150.0 — wat kost water, en de douche
+
+Gevraagd 30-10: "Hoelang duurt een gemiddelde douchebeurt bij ons en wat kost dit" en "Neem je de waterprijzen ook al in het EMS mee?". Akkoord op alle drie de punten. Nieuwe module `waterkosten.py`.
+
+**1. Waterprijs.** Nieuwe instelling `water_price_eur_per_m3`, standaard € 1,82 (Vitens 2026 incl. btw: € 1,34 drinkwater + € 0,48 belasting op leidingwater). Watersensor: `waterprijs_eur_per_m3` en `vandaag_eur`. Cockpit, regel Water: "… · € x vandaag".
+
+**2. Kosten per tapmoment.** Elk afgerond moment krijgt `water_eur`, `kosten_eur` en `kosten_tekst`. Bij een douche wordt het gas gemeten: de gasmeterstand bij het begin (`_water_gas_start`) tegen de eerste stand ná het einde (`gas_wacht`, afgerond in `_verwerk_gas_wachtrij`). Een combiketel verwarmt niet tijdens het tappen, dus die meterstijging is het warme water. Geen nieuwe stand binnen 75 minuten, geen gasmeter, of een onmogelijke meting (dagteller om, meer dan 12 L gas per L water): schatting uit het volume (38 °C uit 10 °C, rendement 90 %). Kort warm water ('warm water kort') altijd geschat, want een gasstand per vijf minuten zegt niets over een minuut kraan. Nieuwe instelling `gas_meter_total_sensor_entity`; zonder die valt de meting terug op de dagteller `gas_m3_vandaag_sensor_entity`. Referentie 29-10: 21,8 min, 140 L, 0,51 m³ gas → € 0,25 water + € 1,02 gas = € 1,28.
+
+**3. Douche-overzicht.** `water_douche_history` (bewaard, 150 beurten) en `get_douche_overzicht()`: aantal, gemiddelde duur, liters, gas en kosten per beurt over 30 dagen, totaal, laatste beurt en per week. Watersensor: `douche` en `douche_tekst`; ook in de diagnostiek. Cockpit: regel Douche. Watertabblad: kolom Kosten en de douchezin. Een bevestiging via `confirm_water_source` werkt door (douche erbij of eruit). Bij de eerste ronde worden de herkende douches uit de recente momenten overgenomen (gas geschat).
+
+**Ook:** `confirm_water_source` met een `sessie`-tijd zocht in het veld `moment`, dat niet bestaat (de sessies heten `gestart`). Een opgegeven tijd vond daardoor nooit iets; nu wel.
+
+Tests: `test_v5150_waterkosten.py` (11).

@@ -220,6 +220,11 @@ CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
 CONF_WATER_ACTIVE_USAGE_SENSOR = "water_active_usage_sensor_entity"
 CONF_WATER_DAILY_TOTAL_SENSOR = "water_daily_total_sensor_entity"
 CONF_WATER_TOTAL_USAGE_SENSOR = "water_total_usage_sensor_entity"
+# v5.150.0: wat een tapmoment kost. De waterprijs in euro per m³ (inclusief
+# btw en belasting op leidingwater) en de gasmeterstand in m³, voor het gas
+# van een douche.
+CONF_WATER_PRICE_EUR_PER_M3 = "water_price_eur_per_m3"
+CONF_GAS_METER_TOTAL_SENSOR = "gas_meter_total_sensor_entity"
 
 # Emoji shown in the mode/power-change notification title (v0.63.8), one
 # per possible coordinator.last_reason value - see _maybe_notify_mode_change.
@@ -3791,6 +3796,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "water_dagprofiel_vandaag": {"type": "plain"},
     "water_dagprofielen": {"type": "plain"},
     "water_session_history": {"type": "plain"},
+    # v5.150.0: douchebeurten met duur en kosten, voor het overzicht.
+    "water_douche_history": {"type": "plain"},
     "weather_ensemble_agreement_history": {"type": "plain"},
     "energy_bridge_transition_log": {"type": "plain"},
     "total_discharge_value_eur": {"type": "plain"},

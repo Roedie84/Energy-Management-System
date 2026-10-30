@@ -1670,13 +1670,16 @@ views:
         rows: auto
     - type: markdown
       title: Waterverbruik vandaag
-      content: '{% set alles = state_attr(''sensor.woonkamer_energy_management_system_waterverbruik'', ''recente_gebruiksmomenten'') or [] %}{% set dag = now().strftime(''%Y-%m-%d'') %}{% set ns = namespace(v=[]) %}{% for s in alles %}{%- if s.gestart and dag in s.gestart %}{%- set ns.v = ns.v + [s] %}{%- endif %}{%- endfor %}{% if ns.v | length == 0 %}Nog geen gebruiksmomenten vandaag.{% else %}| Gestart | Duur | Volume |
+      content: '{% set alles = state_attr(''sensor.woonkamer_energy_management_system_waterverbruik'', ''recente_gebruiksmomenten'') or [] %}{% set dag = now().strftime(''%Y-%m-%d'') %}{% set ns = namespace(v=[]) %}{% for s in alles %}{%- if s.gestart and dag in s.gestart %}{%- set ns.v = ns.v + [s] %}{%- endif %}{%- endfor %}{% if ns.v | length == 0 %}Nog geen gebruiksmomenten vandaag.{% else %}| Gestart | Duur | Volume | Kosten |
 
-        |---|---|---|
+        |---|---|---|---|
 
-        {% for s in ns.v %}| {{ as_timestamp(s.gestart) | timestamp_custom(''%H:%M'') }} | {{ s.duur_minuten }} min | {{ s.liter }} L |
+        {% for s in ns.v %}| {{ as_timestamp(s.gestart) | timestamp_custom(''%H:%M'') }} | {{ s.duur_minuten }} min | {{ s.liter }} L | {{ s.kosten_tekst }} |
 
         {% endfor %}{% endif %}
+
+
+        {{ state_attr(''sensor.woonkamer_energy_management_system_waterverbruik'', ''douche_tekst'') }}
 
         '
     - type: markdown
@@ -1690,10 +1693,10 @@ views:
         {% endfor %}{% endif %}
 
 
-        **Hoe dit werkt.** Draait de vaatwasser of wasmachine, dan gaat het water daarheen. Maakt de CV-ketel warm water, dan is het douchen (langer dan 3 minuten) of handen wassen. Is de Quooker actief, dan is het de keuken. Staat er niets aan, dan blijft het volumepatroon over - een wc-spoeling is opvallend constant.
+        **Hoe dit werkt.** Draait de vaatwasser of wasmachine, dan gaat het water daarheen. Maakt de CV-ketel warm water, dan is het douchen (langer dan 3 minuten) of handen wassen. Is de Quooker actief, dan is het de keuken. Anders telt het volumepatroon: een wc-spoeling is opvallend constant.
 
 
-        _Klopt een toewijzing niet? Bevestig hieronder, net als bij de apparaten. Andere sessie: actie `confirm_water_source`, veld `sessie` (`08:06`)._'
+        _Klopt een toewijzing niet? Bevestig hieronder. Andere sessie: actie `confirm_water_source`, veld `sessie` (`08:06`)._'
       grid_options:
         columns: 12
         rows: auto

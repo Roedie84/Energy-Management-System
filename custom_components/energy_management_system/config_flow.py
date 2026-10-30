@@ -112,6 +112,8 @@ from .const import (
     CONF_WATER_ACTIVE_USAGE_SENSOR,
     CONF_WATER_DAILY_TOTAL_SENSOR,
     CONF_WATER_TOTAL_USAGE_SENSOR,
+    CONF_WATER_PRICE_EUR_PER_M3,
+    CONF_GAS_METER_TOTAL_SENSOR,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_BATTERY_MIN_SOC_NUMBER,
@@ -651,6 +653,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             _optioneel(CONF_WATER_ACTIVE_USAGE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_WATER_DAILY_TOTAL_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_WATER_TOTAL_USAGE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            # v5.150.0: wat een tapmoment kost.
+            vol.Optional(
+                CONF_WATER_PRICE_EUR_PER_M3,
+                default=defaults.get(CONF_WATER_PRICE_EUR_PER_M3, 1.82),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0, max=10, step=0.01, mode="box")
+            ),
+            _optioneel(CONF_GAS_METER_TOTAL_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_APPLIANCE_NOTIFY_SERVICE,
                 default=defaults.get(CONF_APPLIANCE_NOTIFY_SERVICE, ""),

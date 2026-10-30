@@ -63,6 +63,7 @@ from homeassistant.helpers.storage import Store
 from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging, dipplan
 from . import thuiskomst as thuiskomst_mod
 from . import witgoedplanning
+from . import waterkosten
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .const import (
     ACCU_MEETREEKS_DAGEN,
@@ -147,6 +148,8 @@ from .const import (
     CONF_WATER_ACTIVE_USAGE_SENSOR,
     CONF_WATER_DAILY_TOTAL_SENSOR,
     CONF_WATER_TOTAL_USAGE_SENSOR,
+    CONF_WATER_PRICE_EUR_PER_M3,
+    CONF_GAS_METER_TOTAL_SENSOR,
     STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
     SCHEDULED_CHARGE_POLL_OFF_MINUTES,
     SCHEDULED_CHARGE_AFBOUW_EXTRA_MINUTEN,
@@ -8465,7 +8468,9 @@ class EnergyManagementSystemCoordinator:
         gekozen = None
         if sessie_tijd:
             for s in reversed(self.water_session_history):
-                moment = str(s.get("moment") or "")
+                # v5.150.0: de sessies heten "gestart", niet "moment" -
+                # een opgegeven tijd vond daardoor nooit iets.
+                moment = str(s.get("gestart") or s.get("moment") or "")
                 if moment[11:16] == sessie_tijd:
                     gekozen = s
                     break
@@ -8483,6 +8488,7 @@ class EnergyManagementSystemCoordinator:
         gekozen["bron"] = bron
         gekozen["zekerheid"] = "bevestigd"
         gekozen["reden"] = "Door jou bevestigd."
+        self._herzie_douche_na_bevestiging(gekozen)
 
         geschiedenis = self.water_source_profiles.setdefault(
             bron, {"liters": [], "duur_minuten": []}
@@ -8498,6 +8504,28 @@ class EnergyManagementSystemCoordinator:
                 -WATER_SOURCE_HISTORY_LENGTH:
             ]
         self.schedule_persisted_state_save()
+
+    def _herzie_douche_na_bevestiging(self, sessie: dict) -> None:
+        """Een bevestigde bron werkt door in het douche-overzicht
+        (v5.150.0)."""
+        if sessie.get("bron") == "douche":
+            if sessie.get("gas_wacht"):
+                return
+            gemeten = sessie.get("gas_m3") if sessie.get("gas_bron") == "gasmeter" else None
+            self._rond_gas_af(sessie, gemeten)
+            return
+        self.water_douche_history = [
+            d for d in (self.water_douche_history or [])
+            if d.get("gestart") != sessie.get("gestart")
+        ]
+        sessie.pop("gas_wacht", None)
+        if sessie.get("bron") not in waterkosten.WARM_WATER_BRONNEN:
+            for sleutel in ("gas_m3", "gas_eur", "gas_bron"):
+                sessie.pop(sleutel, None)
+            sessie.update(
+                waterkosten.kosten(sessie.get("liter"), self.waterprijs_eur_per_m3())
+            )
+        sessie["kosten_tekst"] = self.kosten_tekst(sessie)
 
     def get_water_source_overview(self) -> dict:
         """Wat is er geleerd over de waterbronnen? (v1.18.0)"""
@@ -39388,6 +39416,7 @@ class EnergyManagementSystemCoordinator:
                 self._water_session_started_at = now
                 self._water_usage_state = "actief"
                 self._water_session_liters_integrated = 0.0
+                self._water_gas_start = self._gasstand_m3()
                 if total_entity:
                     # v5.47: in m³, ook als de meter liters meldt.
                     start_l = self._read_water_volume_l(total_entity, standaard="m³")
@@ -39495,6 +39524,7 @@ class EnergyManagementSystemCoordinator:
                     ),
                 }
             )
+            self._waterkosten_bij_sessie(self.water_session_history[-1], now)
             self.water_session_history = self.water_session_history[
                 -WATER_SESSION_HISTORY_LENGTH:
             ]
@@ -39906,6 +39936,8 @@ class EnergyManagementSystemCoordinator:
                 self._water_onthoud_dag(daily_entity, now)
                 self._water_profiel_bij(daily_total, now)
 
+        # v5.150.0: wachtende gasmetingen van een douche afronden.
+        self._verwerk_gas_wachtrij(now)
         active_entity = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
         if not active_entity:
             return
@@ -39914,6 +39946,175 @@ class EnergyManagementSystemCoordinator:
             return
 
         self._process_water_flow_sample(flow_l_per_min, now)
+
+    # --- v5.150.0: wat kost een tapmoment? -------------------------------
+    # Als klasse-attributen, zie `_nachtrust_onderbroken_sinds`.
+    _water_gas_start: float | None = None
+    water_douche_history: list = []
+
+    def waterprijs_eur_per_m3(self) -> float:
+        """De ingestelde waterprijs, of die van Vitens 2026."""
+        try:
+            prijs = float(self.config.get(CONF_WATER_PRICE_EUR_PER_M3))
+        except (TypeError, ValueError):
+            return waterkosten.WATERPRIJS_STANDAARD_EUR_PER_M3
+        return prijs if prijs >= 0 else waterkosten.WATERPRIJS_STANDAARD_EUR_PER_M3
+
+    def _gasstand_m3(self) -> float | None:
+        """De gasmeterstand, of anders de dagteller van de leverancier."""
+        for sleutel in (CONF_GAS_METER_TOTAL_SENSOR, CONF_GAS_M3_VANDAAG_SENSOR):
+            waarde = self._lees_optionele_sensor(sleutel)
+            if waarde is not None:
+                return waarde
+        return None
+
+    def _gasstand_bijgewerkt(self):
+        """Wanneer de gasstand voor het laatst veranderde."""
+        for sleutel in (CONF_GAS_METER_TOTAL_SENSOR, CONF_GAS_M3_VANDAAG_SENSOR):
+            entiteit = self.config.get(sleutel)
+            staat = self.hass.states.get(entiteit) if entiteit else None
+            if staat is not None and self._read_sensor_float(entiteit) is not None:
+                return getattr(staat, "last_changed", None)
+        return None
+
+    def _waterkosten_bij_sessie(self, sessie: dict, now: datetime) -> None:
+        """Zet de kosten bij een afgerond tapmoment (v5.150.0).
+
+        Water direct. Bij een douche wacht het gas op de eerste
+        gasmeterstand na het einde (zie `waterkosten`); bij kort warm
+        water een schatting, want een gasstand per vijf minuten zegt
+        niets over een minuut handen wassen.
+        """
+        start = self._water_gas_start
+        self._water_gas_start = None
+        sessie.update(
+            waterkosten.kosten(sessie.get("liter"), self.waterprijs_eur_per_m3())
+        )
+        if sessie.get("bron") == "douche" and start is not None:
+            sessie["gas_wacht"] = {"start_m3": start, "einde": now.isoformat()}
+        elif sessie.get("bron") in waterkosten.WARM_WATER_BRONNEN:
+            self._rond_gas_af(sessie, None)
+        sessie["kosten_tekst"] = self.kosten_tekst(sessie)
+
+    def _rond_gas_af(self, sessie: dict, gemeten: float | None) -> None:
+        """Gas en totaal bij een warm tapmoment invullen."""
+        sessie.pop("gas_wacht", None)
+        gas = gemeten
+        sessie["gas_bron"] = "gasmeter"
+        if gas is None:
+            gas = waterkosten.schat_gas_m3(sessie.get("liter"))
+            sessie["gas_bron"] = "schatting"
+        sessie.update(
+            waterkosten.kosten(
+                sessie.get("liter"),
+                self.waterprijs_eur_per_m3(),
+                gas,
+                self._lees_optionele_sensor(CONF_GAS_PRICE_SENSOR),
+            )
+        )
+        sessie["kosten_tekst"] = self.kosten_tekst(sessie)
+        if sessie.get("bron") == "douche":
+            self._bewaar_douche(sessie)
+
+    def _bewaar_douche(self, sessie: dict) -> None:
+        """Een douchebeurt in het overzicht (eenmaal per beurt)."""
+        rij = {
+            k: sessie.get(k)
+            for k in (
+                "gestart", "duur_minuten", "liter", "gas_m3", "gas_bron",
+                "water_eur", "gas_eur", "kosten_eur",
+            )
+        }
+        lijst = [
+            d for d in (self.water_douche_history or [])
+            if d.get("gestart") != rij["gestart"]
+        ]
+        lijst.append(rij)
+        self.water_douche_history = lijst[-waterkosten.DOUCHE_HISTORIE_LENGTE:]
+        self.schedule_persisted_state_save()
+
+    _douches_overgenomen: bool = False
+
+    def _neem_bestaande_douches_over(self) -> None:
+        """Eenmalig na het opstarten: herkende douches uit de recente
+        momenten die nog geen bedrag hebben, met een geschat gasverbruik
+        (het gas is achteraf niet meer per moment te meten)."""
+        self._douches_overgenomen = True
+        bekend = {d.get("gestart") for d in (self.water_douche_history or [])}
+        for sessie in self.water_session_history:
+            if (
+                sessie.get("bron") == "douche"
+                and not sessie.get("gas_wacht")
+                and sessie.get("gestart") not in bekend
+            ):
+                self._rond_gas_af(
+                    sessie,
+                    sessie.get("gas_m3") if sessie.get("gas_bron") == "gasmeter" else None,
+                )
+
+    def _verwerk_gas_wachtrij(self, now: datetime) -> None:
+        """Rondt douches af zodra er een gasstand na het einde is."""
+        if not self._douches_overgenomen and self.water_session_history:
+            self._neem_bestaande_douches_over()
+        for sessie in self.water_session_history:
+            wacht = sessie.get("gas_wacht")
+            if not isinstance(wacht, dict):
+                continue
+            einde = dt_util.parse_datetime(str(wacht.get("einde")))
+            if einde is None:
+                self._rond_gas_af(sessie, None)
+                continue
+            bijgewerkt = self._gasstand_bijgewerkt()
+            if bijgewerkt is not None and bijgewerkt >= einde:
+                self._rond_gas_af(
+                    sessie,
+                    waterkosten.gemeten_gas_m3(
+                        wacht.get("start_m3"), self._gasstand_m3(), sessie.get("liter")
+                    ),
+                )
+            elif now - einde > timedelta(minutes=waterkosten.GAS_WACHTTIJD_MINUTEN):
+                self._rond_gas_af(sessie, None)
+
+    @staticmethod
+    def kosten_tekst(sessie: dict) -> str:
+        """Het bedrag bij een tapmoment als korte tekst (v5.150.0)."""
+        if sessie.get("gas_wacht"):
+            return "wacht op gasmeter"
+        totaal = sessie.get("kosten_eur")
+        if totaal is None:
+            return ""
+        tekst = f"€ {totaal:.2f}".replace(".", ",")
+        if sessie.get("gas_eur") is not None:
+            gas = f"{sessie['gas_eur']:.2f}".replace(".", ",")
+            tekst += f" (gas € {gas}{', geschat' if sessie.get('gas_bron') == 'schatting' else ''})"
+        return tekst
+
+    def douche_tekst(self, overzicht: dict | None = None) -> str:
+        """Eén zin over de douche, voor het watertabblad (v5.150.0)."""
+        o = overzicht or self.get_douche_overzicht()
+        if not o.get("beschikbaar"):
+            return "Nog geen douchebeurten herkend in de laatste 30 dagen."
+        def eur(w):
+            return f"€ {w:.2f}".replace(".", ",") if w is not None else "-"
+        return (
+            f"Douche: {o['aantal']}× in {o['dagen']} dagen, gemiddeld "
+            f"{o['gem_minuten']:.0f} min en {o['gem_liter']:.0f} L: "
+            f"{eur(o['gem_eur'])} per beurt ({eur(o['totaal_eur'])} in totaal; "
+            f"gas {o['gas_gemeten']} van de {o['aantal']} gemeten, de rest geschat)."
+        )
+
+    def water_vandaag_eur(self) -> float | None:
+        """Wat het water vandaag kostte (alleen het water, niet het gas)."""
+        liter = self.water_daily_total_l
+        if liter is None:
+            return None
+        return round(liter / 1000 * self.waterprijs_eur_per_m3(), 2)
+
+    def get_douche_overzicht(self, now: datetime | None = None) -> dict:
+        """Duur en kosten per douchebeurt over dertig dagen."""
+        return waterkosten.douche_overzicht(
+            self.water_douche_history, now or dt_util.now()
+        )
 
     def _compute_mpc_plan(self, now: datetime, entries: list[PriceEntry]) -> None:
         """MPC (Model Predictive Control) advisory engine (v0.63.33).

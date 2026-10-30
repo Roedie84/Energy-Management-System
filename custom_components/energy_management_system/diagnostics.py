@@ -1062,6 +1062,8 @@ async def async_get_config_entry_diagnostics(
             ),
             "water_source_profiles": coordinator.water_source_profiles,
             "water_source_overview": _veilig("get_water_source_overview", coordinator.get_water_source_overview),
+            # v5.150.0: duur en kosten per douchebeurt.
+            "douche_overzicht": _veilig("get_douche_overzicht", coordinator.get_douche_overzicht),
             "living_room_temp_bucket_direction": (
                 coordinator.living_room_temp_bucket_direction
             ),

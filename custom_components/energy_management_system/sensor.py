@@ -3737,6 +3737,7 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
         # dagen (dat gaf overdag altijd zo'n -85%). Zie `water_trend`.
         trend = self._coordinator.water_trend()
         last_regen = self._coordinator.water_softener_last_regeneration
+        douche = self._coordinator.get_douche_overzicht()
         return {
             "vandaag_liter": vandaag_l,
             "gemiddeld_liter_per_dag": gemiddeld_l,
@@ -3751,6 +3752,11 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
             "waterontharder_laatste_regeneratie": (
                 last_regen.isoformat() if last_regen is not None else None
             ),
+            # v5.150.0: wat het water kost, en de douche.
+            "waterprijs_eur_per_m3": self._coordinator.waterprijs_eur_per_m3(),
+            "vandaag_eur": self._coordinator.water_vandaag_eur(),
+            "douche": douche,
+            "douche_tekst": self._coordinator.douche_tekst(douche),
         }
 
     @_store_wint
