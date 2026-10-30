@@ -143,3 +143,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 30-10 06:51 | ems nilm-driftdetectie marge voor verwarmende apparaten (cv-ketel vals defectalarm)
 30-10 06:51 | L-EMS-047 ems dagarchief mist kwartieren rond herstart (zon 3,23 vs 3,68)
 30-10 06:51 | stormchase knmi-waarschuwing begin-/eindtijd 1-2 uur later dan knmi-tekst (H-SC-12)
+30-10 07:53 | ems p1-doel in dure kwartieren <=0 w en sprongen >300 w sneller bijregelen (avondpiek-import)
+30-10 07:53 | L-GS-035 gold scalper oude vloer-noodstop van markt uit mand bij opstart opnieuw toetsen (akkoord)
