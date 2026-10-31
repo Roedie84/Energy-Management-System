@@ -20,7 +20,10 @@ def test_drempel_batterijlader_2w_boven_rust(make_coordinator, hass):
     c._fietsladers_idle_power_history = list(RUST)
     lader = c._get_learned_completion_threshold_w("_batterijlader_idle_power_history", 10.0)
     fiets = c._get_learned_completion_threshold_w("_fietsladers_idle_power_history", 20.0)
-    assert round(lader, 2) == round(1.69 + 2.0, 2)
+    # v5.154.1: de batterijlader rekent vanaf het onderste kwart, niet de mediaan.
+    import statistics
+    assert round(lader, 2) == round(statistics.quantiles(RUST, n=4)[0] + 2.0, 2)
+    assert lader < 1.69 + 2.0
     assert round(fiets, 2) == round(1.69 + 5.0, 2)
 
 

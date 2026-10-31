@@ -1570,6 +1570,12 @@ BATTERIJLADER_AAN_TOT_LEEG_MINUTEN = 60
 BATTERIJLADER_BIJLADEN_MAX_MINUTEN = 30
 BATTERIJLADER_BIJLADEN_WACHT_MINUTEN = (60, 120, 240)
 
+# v5.154.1 (akkoord Ruud 31-10): het geheugen voor het rustverbruik van de
+# batterijlader, en hoeveel boven dat rustverbruik een test nog een ronde
+# doorloopt (iets aangesloten vlak voor het einde van de test).
+BATTERIJLADER_IDLE_ATTR = "_batterijlader_idle_power_history"
+BATTERIJLADER_TEST_STIJGING_W = 1.0
+
 # hvac_action values that mean the climate entity's compressor/heating
 # element is actually drawing power right now - 'idle' and 'off' don't
 # count (thermostat satisfied / unit switched off).

@@ -212,6 +212,8 @@ from .const import (
     BATTERIJLADER_AAN_TOT_LEEG_MINUTEN,
     BATTERIJLADER_BIJLADEN_MAX_MINUTEN,
     BATTERIJLADER_BIJLADEN_WACHT_MINUTEN,
+    BATTERIJLADER_IDLE_ATTR,
+    BATTERIJLADER_TEST_STIJGING_W,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -4655,7 +4657,8 @@ class EnergyManagementSystemCoordinator:
         # data), so a tick can't influence its own classification.
         if not ever_active and power_entity and power_w is not None:
             if power_w < effective_threshold_w:
-                self._record_idle_power_sample(idle_history_attr, power_w)
+                # v5.154.1: batterijlader alleen het laagste van een lege test.
+                self._noteer_rustmeting(idle_history_attr, power_w)
 
         # Register genuine activity, regardless of what happens below -
         # a tick that crosses the threshold always counts, even the
@@ -4673,7 +4676,10 @@ class EnergyManagementSystemCoordinator:
         if not ever_active:
             # Still in the poll-test window - has it elapsed without
             # detecting anything?
-            if now >= self._testeindtijd(now, next_poll_attr):
+            # v5.154.1: loopt het vermogen op aan het eind, nog een ronde.
+            if now >= self._testeindtijd(now, next_poll_attr) and not self._test_loopt_door(
+                now, idle_history_attr, power_w, next_poll_attr
+            ):
                 await self._async_set_switch(switch_entity, turn_on=False)
                 # v5.30: fietsladers op het kwartier, elk kwartier.
                 self._plan_volgende_test(
@@ -5099,11 +5105,81 @@ class EnergyManagementSystemCoordinator:
         if len(history) < LEARNED_THRESHOLD_MIN_SAMPLES:
             return fallback_w
         idle_baseline_w = statistics.median(history)
+        if idle_history_attr == BATTERIJLADER_IDLE_ATTR:
+            # v5.154.1: het onderste kwart - de lader laadt zelf zuinig.
+            idle_baseline_w = statistics.quantiles(history, n=4)[0]
         # v5.131.2: de batterijlader laadt kleine apparaten met ~5 W af;
         # daar is 5 W marge te veel (zie BATTERIJLADER_LEARNED_MARGIN_W).
-        if idle_history_attr == "_batterijlader_idle_power_history":
+        if idle_history_attr == BATTERIJLADER_IDLE_ATTR:
             return idle_baseline_w + BATTERIJLADER_LEARNED_MARGIN_W
         return idle_baseline_w + LEARNED_THRESHOLD_MARGIN_W
+
+    def _noteer_rustmeting(self, idle_history_attr: str, power_w: float) -> None:
+        """Een rustmeting tijdens een test: per tick, of voor de batterijlader
+        alleen het minimum van de test (v5.154.1)."""
+        if not self._noteer_testminimum(idle_history_attr, power_w):
+            self._record_idle_power_sample(idle_history_attr, power_w)
+
+    def _test_loopt_door(
+        self, now: datetime, idle_history_attr: str, power_w: float | None, next_poll_attr: str
+    ) -> bool:
+        """Aan het eind van een test: nog een ronde (True), of is hij leeg
+        afgelopen en telt het minimum als rustmeting (False)? (v5.154.1)"""
+        if self._test_verlengen(now, idle_history_attr, power_w, next_poll_attr):
+            return True
+        self._leg_testminimum_vast(idle_history_attr)
+        return False
+
+    def _noteer_testminimum(self, idle_history_attr: str, power_w: float) -> bool:
+        """Batterijlader: onthoud het laagste vermogen van de lopende test (v5.154.1).
+
+        Gemeld 31-10 16:51: de geleerde drempel was 4,1 W, omdat ook het
+        nadruppelen van een VOLLE batterij tijdens een test (3,2-3,3 W) als
+        rustverbruik werd opgeslagen - elke tick een meting. De lader zelf
+        trekt zonder last 0,7-1,6 W. Nu telt per test alleen het minimum, en
+        pas als de test leeg afloopt (`_leg_testminimum_vast`).
+        True als de meting hier is afgehandeld (alleen de batterijlader).
+        """
+        if idle_history_attr != BATTERIJLADER_IDLE_ATTR:
+            return False
+        minima = self.__dict__.setdefault("_testminimum", {})
+        vorig = minima.get(idle_history_attr)
+        minima[idle_history_attr] = power_w if vorig is None else min(vorig, power_w)
+        return True
+
+    def _leg_testminimum_vast(self, idle_history_attr: str) -> None:
+        """Een lege test: het laagste vermogen telt als rustmeting (v5.154.1)."""
+        minima = self.__dict__.setdefault("_testminimum", {})
+        laagste = minima.pop(idle_history_attr, None)
+        self.__dict__.setdefault("_test_verlengd", {}).pop(idle_history_attr, None)
+        if laagste is not None:
+            self._record_idle_power_sample(idle_history_attr, laagste)
+
+    def _test_verlengen(
+        self, now: datetime, idle_history_attr: str, power_w: float | None, next_poll_attr: str
+    ) -> bool:
+        """Batterijlader: loopt een test nog een ronde door? (v5.154.1)
+
+        31-10 16:49: batterijen aangesloten vlak voor het einde van de test van
+        16:45; de lader trok 3,4-3,7 W en ging om 16:50 uit. Ligt het vermogen
+        aan het eind minstens BATTERIJLADER_TEST_STIJGING_W boven het
+        rustverbruik (onderste kwart), dan één ronde extra - eenmalig per test.
+        """
+        if idle_history_attr != BATTERIJLADER_IDLE_ATTR or power_w is None:
+            return False
+        verlengd = self.__dict__.setdefault("_test_verlengd", {})
+        if verlengd.get(idle_history_attr):
+            return False
+        history = getattr(self, idle_history_attr, [])
+        if len(history) >= 4:
+            rust = statistics.quantiles(history, n=4)[0]
+        else:
+            rust = min(history) if history else 0.0
+        if power_w < rust + BATTERIJLADER_TEST_STIJGING_W:
+            return False
+        verlengd[idle_history_attr] = True
+        setattr(self, next_poll_attr, now + timedelta(minutes=UPDATE_INTERVAL_MINUTES))
+        return True
 
     def _record_idle_power_sample(self, idle_history_attr: str, power_w: float) -> None:
         history = getattr(self, idle_history_attr, [])

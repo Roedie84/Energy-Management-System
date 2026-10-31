@@ -34207,3 +34207,13 @@ Akkoord Ruud 31-10. De accu pendelde tegen apparaten die in pulsen van ~2 kW aan
 Nu `_p1_pendel` in `p1_regeldoel` (de sensor waarop zendure_ha regelt): een tekenwissel telt als de regelsensor van afname naar teruglevering gaat (of andersom) met samen meer dan 1 kW tussen de toppen; binnen ±100 W van nul telt niet. Bij ≥ 3 wissels in 60 s krijgt de Zendure het tijdgewogen gemiddelde over 60 s (`_tijdgewogen_gemiddelde`); na 120 s zonder wissel weer de momentwaarde. In 2027 wordt eerst gedempt en dan de verschuiving eraf gehaald. Nieuwe schakelaar **P1 pendeldemping** (standaard aan; uit = alleen tellen). Attribuut `pendel` op P1 regeldoel: actief, gedempt, tekenwissels in 60 s, gemiddelde, keren en minuten vandaag. Constanten `PENDEL_*` in const.py.
 
 Tests: `test_v5154_p1_pendeldemping.py` (11).
+
+## v5.154.1 — batterijlader herkent een zuinig ladende batterij (akkoord Ruud 31-10)
+
+Gemeld 31-10 16:51: "heb net zaken aangesloten en toen was hij nog aan". Batterijen aangesloten om 16:49:45, vlak voor het einde van de test van 16:45; de lader trok 3,4-3,7 W en ging om 16:50 uit. De geleerde drempel was 4,1 W (mediaan rust 2,09 + 2 W), omdat het nadruppelen van een volle batterij tijdens tests (3,2-3,3 W) elke tick als rustverbruik werd opgeslagen. Zonder last trekt de lader 0,7-1,6 W.
+
+1. `_noteer_testminimum` / `_leg_testminimum_vast`: de batterijlader leert per test alleen het laagste vermogen, en alleen als de test leeg afloopt.
+2. Drempel vanaf het onderste kwart (`statistics.quantiles(n=4)[0]`) + 2 W in plaats van de mediaan (31-10: ~3,2 W in plaats van 4,1 W). Andere apparaten ongewijzigd.
+3. `_test_verlengen`: ligt het vermogen aan het eind van een test `BATTERIJLADER_TEST_STIJGING_W` (1 W) boven het rustverbruik, dan één ronde extra.
+
+Tests: `test_v51541_batterijlader_drempel.py` (6); `test_v5131_2_batterijlader_afronden.py` aangepast (kwartiel).
