@@ -725,3 +725,15 @@ laatste ronde: 31-10 07:42, gemeten t/m 31-10 07:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (plan avond/nacht te hoog; vanavond herhaling van 30-10), H-EMS-11 (piek vastgehouden).
 
 laatste ronde: 31-10 11:43, gemeten t/m 31-10 11:45
+
+## 31-10 15:40 · tussenronde
+- **Draait nog v5.150.0** (geen herstart sinds 30-10 13:03; v5.152.0 in HACS) → L-EMS-046..049 nog niet meetbaar. Geen EMS-fouten na 11:45. Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 0,01 kWh). Besparing tot nu −€ 0,12.
+- **PV (H-EMS-2) — tegenvoorbeeld:** 4,81 kWh t/m 15:43 tegen EMS day-ahead 3,82 (**+26 %**) en Solcast-ochtend 4,16 (+16 %). Solcast hoogde intraday op van 3,78 (10:20) naar 6,48 (14:13) → t/m nu ~6,21 (−23 %). Eerste te lage day-ahead sinds 26-10; telt in de dagafsluiting mee in de 7/14/30 d-bias.
+- **Twin** `kwartierplan` n=51 MAE **0,895** (11:40 0,85): 13:15-15:15 fout +1,5..+1,8 — plan rekende op ontladen (3,85 → 3,05 kWh), accu hield 4,7-4,8 (`battery_saved_for_peak`). Restfout = plan, past bij H-EMS-14.
+- **MC tot blok 100 %** (blok verschoof ~10:30 van 01-11 09:00 naar 13:00; 12:20-14:33 91-98 %). Toets H-EMS-14 vanavond (23:40: zakt de kans weer naar ~0 zoals 30-10?).
+- Reservesprongen: 33× alleen behoefte; 14:59-15:41 live correctie per minuut 1,0 ↔ 1,5 kWh (verhouding tot 5,0 om 15:09); reserve afgekapt (10,37) → geen effect (bekend, L-EMS-031).
+- Stilstand: **geen echte** (8 wachten, 0 doen). Airco besluit "niets", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog; vandaag tegenvoorbeeld), H-EMS-14 (plan avond/nacht/middag te veel ontladen), H-EMS-11 (piek vastgehouden).
+
+laatste ronde: 31-10 15:41, gemeten t/m 31-10 15:45
