@@ -7799,3 +7799,18 @@ ACCU_MEETREEKS_DAGEN = 40
 HERSPEEL_DAGEN = 40
 #: Zoveel versies blijven bewaard voor de voor-en-navergelijking.
 HERSPEEL_VERSIES = 10
+
+# v5.154.0 (akkoord Ruud 31-10): pendeldemping in "P1 regeldoel". De accu
+# pendelt tegen apparaten die in pulsen van ~2 kW aan en uit gaan: hij volgt
+# met een paar seconden vertraging en duwt dan stroom het net op. Wisselt het
+# teken van de regelsensor minstens PENDEL_MIN_WISSELS keer binnen
+# PENDEL_VENSTER_S, met sprongen van meer dan PENDEL_SPRONG_W, dan krijgt de
+# Zendure het tijdgewogen gemiddelde over PENDEL_VENSTER_S in plaats van de
+# momentwaarde. Na PENDEL_LOS_S zonder wissel weer de momentwaarde.
+PENDEL_VENSTER_S = 60
+PENDEL_MIN_WISSELS = 3
+PENDEL_SPRONG_W = 1000.0
+# Onder deze waarde (in absolute zin) telt een meting niet als afname of
+# teruglevering: rond nul wisselt het teken vanzelf.
+PENDEL_RUIS_W = 100.0
+PENDEL_LOS_S = 120

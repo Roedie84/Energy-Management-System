@@ -1,3 +1,16 @@
+EMS v5.154.0 - accu pendelt niet meer mee met pulserende apparaten
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Gaat een apparaat in snelle pulsen aan en uit (Quooker, kookplaat,
+  oven), dan liep de accu steeds een paar seconden achter: eerst kwam
+  stroom van het net, daarna duwde de accu stroom het net op. Wisselt de
+  meter minstens 3 keer per minuut met sprongen van meer dan 1 kW, dan
+  levert de accu nu rustig het gemiddelde van de laatste minuut. Twee
+  minuten na de laatste wissel regelt hij weer direct op de meter.
+- Nieuwe schakelaar "P1 pendeldemping" (standaard aan). Uit = zoals
+  voorheen; er wordt dan alleen geteld.
+
 EMS v5.153.0 - kwartierplan klopt in een goedkoop blok dat nog komt
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

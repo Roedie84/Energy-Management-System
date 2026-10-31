@@ -70,6 +70,11 @@ from .const import (
     HERSPEEL_DAGEN,
     HERSPEEL_VERSIES,
     P1_VERSCHIL_MONSTERS,
+    PENDEL_LOS_S,
+    PENDEL_MIN_WISSELS,
+    PENDEL_RUIS_W,
+    PENDEL_SPRONG_W,
+    PENDEL_VENSTER_S,
     REGELVERSCHUIVING_MAX_W,
     WITGOED_HORIZON_UUR,
     WITGOED_KWARTIEREN,
@@ -1309,6 +1314,8 @@ class EnergyManagementSystemCoordinator:
         self._last_plan_alert: dict[str, str] = {}
         # v1.24.0: meldingen in het Achterhoeks.
         self.achterhoeks: bool = False
+        # v5.154.0: pendeldemping in P1 regeldoel (schakelaar, standaard aan).
+        self.p1_pendeldemping: bool = True
         # If True: compute and learn everything as normal, but never send
         # commands to the Zendure entities. Set via a dedicated switch.
         self.learning_only: bool = False
@@ -53626,6 +53633,9 @@ class EnergyManagementSystemCoordinator:
         monsters = self._p1_verschil_monsters or []
         verschuiving = statistics.median(monsters) if monsters else 0.0
         salderen = self._is_salderen_active(now)
+        pendel = self._p1_pendel(regel_w, now)
+        if regel_w is not None and pendel["gedempt"]:
+            regel_w = pendel["gemiddelde_w"]
         if regel_w is None:
             waarde = None
         elif salderen:
@@ -53634,11 +53644,104 @@ class EnergyManagementSystemCoordinator:
             waarde = regel_w - verschuiving - P1_DOEL_2027_W
         return {
             "waarde_w": round(waarde, 1) if waarde is not None else None,
+            "pendel": pendel,
             "modus": "spiegel van de regelsensor (salderen)" if salderen else f"2027: doel {P1_DOEL_2027_W:.0f} W op de meter",
             "template_verschuiving_w": round(verschuiving, 1),
             "doel_w": -round(verschuiving, 1) if salderen else P1_DOEL_2027_W,
             "monsters": len(monsters),
         }
+
+    _p1_pendel_staat: dict | None = None
+
+    def _p1_pendel(self, regel_w: float | None, now: datetime) -> dict:
+        """Pendeldetectie en -demping voor "P1 regeldoel" (v5.154.0, akkoord Ruud 31-10).
+
+        Gemeld 30-10 en 31-10 (EMS-kaart): de accu pendelt tegen apparaten die
+        in pulsen van ~2 kW aan en uit gaan. De Zendure volgt de momentwaarde
+        met een paar seconden vertraging: als hij bijgeregeld heeft is de puls
+        voorbij en gaat de accustroom het net op (30-10 16:45-17:55: 0,24 kWh
+        import in de avondpiek terwijl er 0,14 kWh uit de accu het net op ging;
+        31-10 14:08-15:08: 7 tekenwissels, import tot 3,6 kW).
+
+        Een tekenwissel telt als de regelsensor van afname naar teruglevering
+        gaat (of andersom) met samen meer dan `PENDEL_SPRONG_W` tussen de top
+        van de vorige en de huidige reeks; waarden binnen `PENDEL_RUIS_W` van
+        nul tellen niet. Bij minstens `PENDEL_MIN_WISSELS` wissels binnen
+        `PENDEL_VENSTER_S` krijgt de Zendure het tijdgewogen gemiddelde over
+        dat venster. Na `PENDEL_LOS_S` zonder wissel weer de momentwaarde.
+        Met de schakelaar "P1 pendeldemping" uit wordt er alleen geteld.
+        """
+        st = self._p1_pendel_staat
+        if st is None:
+            st = self._p1_pendel_staat = {
+                "monsters": [], "wissels": [], "teken": 0, "top": 0.0,
+                "vorige_top": 0.0, "geteld": True, "actief_sinds": None,
+                "vandaag": None, "keren_vandaag": 0, "seconden_vandaag": 0.0,
+                "laatst": None,
+            }
+        dag = now.date().isoformat()
+        if st["vandaag"] != dag:
+            st.update(vandaag=dag, keren_vandaag=0, seconden_vandaag=0.0)
+        venster = timedelta(seconds=PENDEL_VENSTER_S)
+        if regel_w is not None:
+            st["monsters"].append((now, float(regel_w)))
+            if abs(regel_w) > PENDEL_RUIS_W:
+                teken = 1 if regel_w > 0 else -1
+                if teken != st["teken"]:
+                    st.update(vorige_top=st["top"] if st["teken"] else 0.0, teken=teken,
+                              top=abs(regel_w), geteld=st["teken"] == 0)
+                else:
+                    st["top"] = max(st["top"], abs(regel_w))
+                if not st["geteld"] and st["vorige_top"] + st["top"] > PENDEL_SPRONG_W:
+                    st["wissels"].append(now)
+                    st["geteld"] = True
+        # Eén monster vóór het venster blijft staan: het geldt tot het volgende.
+        monsters = st["monsters"]
+        while len(monsters) > 1 and monsters[1][0] <= now - venster:
+            monsters.pop(0)
+        st["wissels"] = [t for t in st["wissels"] if t > now - timedelta(seconds=PENDEL_LOS_S)]
+        recent = [t for t in st["wissels"] if t > now - venster]
+        if st["laatst"] is not None and st["actief_sinds"] is not None:
+            st["seconden_vandaag"] += max(0.0, (now - st["laatst"]).total_seconds())
+        if len(recent) >= PENDEL_MIN_WISSELS:
+            if st["actief_sinds"] is None:
+                st["actief_sinds"] = now
+                st["keren_vandaag"] += 1
+        elif not st["wissels"]:
+            st["actief_sinds"] = None
+        st["laatst"] = now
+        gemiddelde = self._tijdgewogen_gemiddelde(monsters, now - venster, now)
+        actief = st["actief_sinds"] is not None
+        return {
+            "actief": actief,
+            "gedempt": actief and self.p1_pendeldemping and gemiddelde is not None,
+            "demping_aan": self.p1_pendeldemping,
+            "tekenwissels_60s": len(recent),
+            "gemiddelde_w": round(gemiddelde, 1) if gemiddelde is not None else None,
+            "actief_sinds": st["actief_sinds"].isoformat() if actief else None,
+            "keren_vandaag": st["keren_vandaag"],
+            "minuten_vandaag": round(st["seconden_vandaag"] / 60, 1),
+        }
+
+    @staticmethod
+    def _tijdgewogen_gemiddelde(monsters: list, van: datetime, tot: datetime) -> float | None:
+        """Tijdgewogen gemiddelde van (moment, waarde) over [van, tot] (v5.154.0).
+
+        Een meting geldt tot de volgende (de P1-meter meldt alleen wijzigingen).
+        """
+        if not monsters:
+            return None
+        totaal = duur = 0.0
+        for i, (t, w) in enumerate(monsters):
+            begin = max(t, van)
+            eind = monsters[i + 1][0] if i + 1 < len(monsters) else tot
+            seconden = (min(eind, tot) - begin).total_seconds()
+            if seconden > 0:
+                totaal += w * seconden
+                duur += seconden
+        if duur <= 0:
+            return monsters[-1][1]
+        return totaal / duur
 
     def _zendure_p1meter(self) -> str | None:
         """De P1-sensor waarop zendure_ha regelt (uit zijn opties)."""

@@ -34199,3 +34199,11 @@ Akkoord Ruud 31-10. Gemeld 31-10 15:08: het plan voor 1-11 liet de accu in het b
 Nu `_plan_sparen_in_komend_blok`: dezelfde regel per kwartier van een blok dat nog niet begonnen is, met de geplande laadstand. `_waarde_na_blok` is opgesplitst in `_tekort_na_blok` (een keer per blok) en `_duurste_ongedekt`; de rekensom van de sturing is ongewijzigd. Alleen het plan verandert; de sturing niet.
 
 Tests: `test_v5153_plan_sparen_komend_blok.py` (10).
+
+## v5.154.0 — pendeldemping in P1 regeldoel
+
+Akkoord Ruud 31-10. De accu pendelde tegen apparaten die in pulsen van ~2 kW aan en uit gaan: de Zendure volgt de momentwaarde met een paar seconden vertraging, en als hij bijgeregeld heeft is de puls voorbij en gaat de accustroom het net op. 30-10 16:45-17:55: 0,24 kWh import in de avondpiek (54 ct) terwijl de accu 5,4-6,3 kWh had, en 0,14 kWh uit de accu het net op in pieken tot −1,9 kW. 31-10 14:08-15:08: 7 tekenwissels met sprongen > 1 kW, import tot 3,6 kW.
+
+Nu `_p1_pendel` in `p1_regeldoel` (de sensor waarop zendure_ha regelt): een tekenwissel telt als de regelsensor van afname naar teruglevering gaat (of andersom) met samen meer dan 1 kW tussen de toppen; binnen ±100 W van nul telt niet. Bij ≥ 3 wissels in 60 s krijgt de Zendure het tijdgewogen gemiddelde over 60 s (`_tijdgewogen_gemiddelde`); na 120 s zonder wissel weer de momentwaarde. In 2027 wordt eerst gedempt en dan de verschuiving eraf gehaald. Nieuwe schakelaar **P1 pendeldemping** (standaard aan; uit = alleen tellen). Attribuut `pendel` op P1 regeldoel: actief, gedempt, tekenwissels in 60 s, gemiddelde, keren en minuten vandaag. Constanten `PENDEL_*` in const.py.
+
+Tests: `test_v5154_p1_pendeldemping.py` (11).
