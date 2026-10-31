@@ -1,3 +1,14 @@
+EMS v5.155.0 - de accu houdt zijn lading niet meer te lang vast
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Bewaart de accu zijn lading voor de duurste uren, dan kost dat wachten
+  zelf ook stroom: ~8 W uit de accu. Bij lang wachten en een klein
+  prijsverschil is dat meer dan het oplevert (31-10: 18,5 uur wachten
+  kostte ~7 ct, het prijsverschil leverde ~2 ct). Dan gebruikt de accu
+  zijn lading nu. Bij een groot prijsverschil spaart hij zoals voorheen.
+- Rekent alleen met een gemeten sluimerverbruik (minstens 6 uur).
+
 EMS v5.154.1 - batterijlader gaat niet meer uit als je net iets aansluit
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

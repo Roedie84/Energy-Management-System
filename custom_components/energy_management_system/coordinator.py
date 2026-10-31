@@ -824,6 +824,7 @@ from .const import (
     # v5.73
     SPAREN_IN_BLOK_VOL_MARGE_KWH,
     SPAREN_IN_BLOK_MIN_WINST_EUR,
+    SPAREN_SLUIMER_MEETELLEN,
     VERKOOP_NA_BLOK_MIN_WINST_EUR,
     CONF_VERKOOP_MIN_WINST_CT,
     DEFAULT_VERKOOP_MIN_WINST_CT,
@@ -49080,7 +49081,74 @@ class EnergyManagementSystemCoordinator:
             kwartieren.append((begin, eind, prijs_eur, tekort))
         return kwartieren
 
-    def _spaarbesluit_dit_kwartier(self, huidig, gedekt: set, grens) -> bool:
+    def _sluimer_bij_sparen(
+        self, now: datetime, kwartieren: list, gedekt: set, grens, beschikbaar: float
+    ) -> dict:
+        """Loont het vasthouden nog als het sluimerverbruik meetelt? (v5.155.0)
+
+        Gemeld 31-10 21:10 (akkoord Ruud): het plan hield 1,38 kWh ~18,5 uur
+        vast (nu 47,9 ct, gebruik morgen 49,3-50 ct). Sparen kost gemeten
+        7,8 W uit de cellen = ~0,14 kWh (~EUR 0,07); de prijswinst was ~EUR 0,02.
+
+        winst  = netkosten als de accu op de klok ontlaadt ("smart") min de
+                 netkosten van het spaarplan (lading naar de duurste kwartieren)
+        verlies = (sluimer bij sparen - sluimer leeg) x uren tot het eerste
+                 gedekte kwartier x grensprijs (die kWh mist in het
+                 goedkoopste gedekte kwartier)
+
+        Alleen met een betrouwbare meting (`get_sluimerverbruik`, >= 6 uur
+        sparen). Bij twijfel niets veranderen (nu_gebruiken False).
+        """
+        uit: dict = {"nu_gebruiken": False}
+        if not SPAREN_SLUIMER_MEETELLEN or grens is None or not gedekt:
+            return uit
+        try:
+            per = (self.get_sluimerverbruik(now) or {}).get("per_stand") or {}
+            sp = per.get("sparen") or {}
+            if not sp.get("betrouwbaar") or sp.get("gemiddeld_w") is None:
+                uit["reden"] = "sluimerverbruik bij sparen nog niet betrouwbaar gemeten"
+                return uit
+            leeg_w = (per.get("leeg") or {}).get("gemiddeld_w") or 0.0
+            extra_w = max(0.0, float(sp["gemiddeld_w"]) - float(leeg_w))
+            toekomst = [k for k in kwartieren if k[1] > now]
+            eerste = min((k[0] for k in toekomst if k[0] in gedekt), default=None)
+            if eerste is None:
+                return uit
+            uren = max(0.0, (eerste - now).total_seconds() / 3600)
+
+            def netkosten(volgorde) -> float:
+                rest, kosten = beschikbaar, 0.0
+                for _b, _e, prijs, tekort in volgorde:
+                    if tekort <= 0:
+                        continue
+                    dekt = min(rest, tekort)
+                    rest -= dekt
+                    kosten += (tekort - dekt) * prijs
+                return kosten
+
+            smart = netkosten(sorted(toekomst, key=lambda k: k[0]))
+            plan = netkosten(sorted(toekomst, key=lambda k: k[2], reverse=True))
+            winst = smart - plan
+            verlies_kwh = extra_w / 1000 * uren
+            verlies = verlies_kwh * grens
+            uit.update(
+                {
+                    "sluimer_w": round(extra_w, 1),
+                    "uren_tot_gebruik": round(uren, 2),
+                    "verlies_kwh": round(verlies_kwh, 3),
+                    "verlies_eur": round(verlies, 3),
+                    "winst_eur": round(winst, 3),
+                    "nu_gebruiken": verlies > winst,
+                }
+            )
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Sluimer bij sparen niet berekend", exc_info=True)
+            return {"nu_gebruiken": False}
+        return uit
+
+    def _spaarbesluit_dit_kwartier(
+        self, huidig, gedekt: set, grens, sluimer_te_duur: bool = False
+    ) -> bool:
         """Sparen in dit kwartier? Een besluit per kwartier (v5.27.4).
 
         Vervangt de marge van 2 ct, die met het verkeerde kwartier vergeleek
@@ -49094,7 +49162,8 @@ class EnergyManagementSystemCoordinator:
         if bewaard is not None and bewaard[0] == huidig[0]:
             return bewaard[1]
         sparen = (
-            huidig[0] not in gedekt
+            not sluimer_te_duur
+            and huidig[0] not in gedekt
             and huidig[3] > 0
             and grens is not None
             and huidig[2] < grens
@@ -49196,7 +49265,12 @@ class EnergyManagementSystemCoordinator:
         # mee - het schoof elke ronde verder door, naar de late avond tegen
         # 38-43 ct. Een besluit per kwartier voorkomt het schakelen ook, en
         # laat het tekort komen waar het hoort.
-        sparen = self._spaarbesluit_dit_kwartier(huidig, gedekt, grens)
+        # v5.155.0: kost het vasthouden aan sluimerverbruik meer dan het
+        # verschuiven oplevert, dan nu gebruiken (en het plan rekent "smart").
+        sluimer = self._sluimer_bij_sparen(now, kwartieren, gedekt, grens, beschikbaar)
+        uit["sluimer"] = sluimer
+        te_duur = bool(sluimer.get("nu_gebruiken"))
+        sparen = self._spaarbesluit_dit_kwartier(huidig, gedekt, grens, te_duur)
         uit.update(
             {
                 "actief": True,
@@ -49208,14 +49282,18 @@ class EnergyManagementSystemCoordinator:
                     sorted(k for k in kwartieren if k[0] in gedekt)
                 ),
                 # Voor het kwartierplan: welke kwartieren van het net komen.
-                "gespaard": [
+                "gespaard": [] if te_duur and not sparen else [
                     k[0].isoformat() for k in kwartieren
                     if k[0] not in gedekt and k[3] > 0
                 ],
                 "reden": (
                     "dit kwartier is goedkoper - de lading gaat naar de duurste"
                     if sparen
-                    else "dit kwartier hoort bij de duurste en wordt gedekt"
+                    else (
+                        "vasthouden kost meer sluimerverbruik dan het oplevert - nu gebruiken"
+                        if te_duur and huidig is not None and huidig[0] not in gedekt
+                        else "dit kwartier hoort bij de duurste en wordt gedekt"
+                    )
                 ),
             }
         )

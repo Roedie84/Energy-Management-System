@@ -34217,3 +34217,11 @@ Gemeld 31-10 16:51: "heb net zaken aangesloten en toen was hij nog aan". Batteri
 3. `_test_verlengen`: ligt het vermogen aan het eind van een test `BATTERIJLADER_TEST_STIJGING_W` (1 W) boven het rustverbruik, dan één ronde extra.
 
 Tests: `test_v51541_batterijlader_drempel.py` (6); `test_v5131_2_batterijlader_afronden.py` aangepast (kwartiel).
+
+## v5.155.0 — sluimerverbruik telt mee bij lang vasthouden (akkoord Ruud 31-10)
+
+Gemeld 31-10 21:10: het spaarplan (v5.25, `battery_saved_for_peak`) hield 1,38 kWh ~18,5 uur vast (nu 47,9 ct, gebruik 1-11 15:45-20:00 tegen 49,3-50 ct). Sparen kost gemeten 7,8 W uit de cellen (51,8 u, `get_sluimerverbruik`) = ~0,14 kWh ≈ € 0,07, tegen ~€ 0,02 prijswinst.
+
+Nu `_sluimer_bij_sparen` in `spaarplan`: winst = netkosten bij ontladen op de klok ("smart") min die van het spaarplan; verlies = (sluimer sparen − sluimer leeg) × uren tot het eerste gedekte kwartier × grensprijs. Verlies > winst: `sparen_nu` False en `gespaard` leeg (het kwartierplan rekent dan "smart"). Alleen met een betrouwbare meting (≥ 6 u sparen); bij een fout of zonder meting zoals voorheen. Uitzetten: `SPAREN_SLUIMER_MEETELLEN`. Zichtbaar als `sluimer` in het spaarplan. Sparen in het blok (v5.73) en laden in een dip ongewijzigd.
+
+Tests: `test_v5155_sluimer_bij_sparen.py` (6).

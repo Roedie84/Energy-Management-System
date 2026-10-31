@@ -7714,6 +7714,11 @@ SPAREN_IN_BLOK_VOL_MARGE_KWH = 0.10
 # Dezelfde marge als de vergelijking net tegen accu (GRID_CHEAPER_MARGIN_EUR).
 SPAREN_IN_BLOK_MIN_WINST_EUR = 0.02
 
+# v5.155.0 (akkoord Ruud 31-10): het sluimerverbruik van de accu tijdens het
+# sparen telt mee. Kost het vasthouden tot het eerste gedekte kwartier meer
+# dan het verschuiven oplevert, dan wordt de lading nu gebruikt.
+SPAREN_SLUIMER_MEETELLEN = True
+
 # v5.74 (verbruiksaudit, akkoord Ruud): de haalbare startvensters voor de
 # eerlijke maatstaf van een witgoedbeurt - start tussen deze tijden, klaar
 # vóór middernacht.
