@@ -1,3 +1,17 @@
+EMS v5.151.0 - dagarchief compleet op herstartdagen, minder valse meldingen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het dagarchief miste de kwartieren rond een herstart: op 29-10 stond
+  er 3,23 kWh zon in terwijl de omvormer 3,68 kWh gaf. Ontbrekende
+  kwartieren worden nu aangevuld uit de uurstatistiek van Home
+  Assistant; vanaf de eerste dag na deze update.
+- "Nog niet bepaald" zegt bij de proefstand nu hoe ver een kandidaat is
+  (bijv. "7 van 14 dagen gemeten") in plaats van de omschrijving.
+- 's Nachts stond er soms "Stand van de zon klopt niet" omdat de
+  zonnesensor dan maar elke 20 minuten ververst. De toets rekent nu met
+  het moment van de meting. Sturing ongewijzigd.
+
 EMS v5.150.0 - wat kost water, en wat kost een douche
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

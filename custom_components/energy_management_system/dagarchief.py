@@ -34,6 +34,8 @@ Velden (korte sleutels, uitgeschreven in `uitgeschreven`):
     vk/vkm/vko  verkocht uit de accu (kWh) / kleinste marge tegen de
            verkoopreserve bij verkoop (kWh) / kwartieren verkocht onder de
            reserve (v5.115.1, L-EMS-027; uit het dagverloop)
+    aq/su  ontbrekende meetlogkwartieren die uit de uurstatistiek zijn
+           aangevuld / aantal uren uit de statistiek (v5.151.0, L-EMS-047)
 
 Zuivere functies, zonder Home Assistant.
 """
@@ -70,6 +72,7 @@ NAMEN = {
     "vk": "verkocht_kwh", "vkm": "kleinste_verkoopmarge_kwh",
     "vko": "kwartieren_onder_verkoopreserve",
     "bv": "accu_voorraadcorrectie_eur",
+    "aq": "aangevulde_kwartieren", "su": "uren_uit_statistiek",
 }
 BRONNEN = {"m": "meetlog", "s": "statistiek"}
 #: Velden die na de meting worden aangevuld en een nieuwe meting overleven.
@@ -148,15 +151,16 @@ def dag_uit_kwartieren(kwartieren: list[dict]) -> dict | None:
     return _vat_samen(blokken, MIN_KWARTIEREN, "m")
 
 
-def dagen_uit_statistiek(uren: dict[str, dict[datetime, float]], prijzen: dict[datetime, float]) -> dict[str, dict]:
-    """Dagen uit de uurwaarden van de langetermijnstatistiek.
+def _uurblokken(uren: dict[str, dict[datetime, float]], prijzen: dict[datetime, float]) -> dict[datetime, dict]:
+    """Per uur (sleutel: begin van het uur) een blok uit de langetermijnstatistiek.
 
     `uren`: per teller (grid_import, grid_export, pv, battery_out, battery_in)
-    de verandering per uur (kWh), sleutel het begin van het uur. Een teller
-    die er niet is (de accu van vóór de accu): 0. Netafname en zon zijn
-    verplicht. `prijzen`: het uurgemiddelde van de prijssensor (€/kWh).
+    de verandering per uur (kWh). Een teller die er niet is (de accu van
+    vóór de accu): 0. Netafname en zon zijn verplicht. `prijzen`: het
+    uurgemiddelde van de prijssensor (€/kWh). Elk blok draagt zijn lokale
+    datum (`dag`) en uur (`uur`).
     """
-    per_dag: dict[str, list] = {}
+    uit: dict[datetime, dict] = {}
     imp, exp, pv = (uren.get(t) or {} for t in ("grid_import", "grid_export", "pv"))
     uit_, in_ = uren.get("battery_out") or {}, uren.get("battery_in") or {}
     if bool(uit_) != bool(in_):
@@ -178,14 +182,102 @@ def dagen_uit_statistiek(uren: dict[str, dict[datetime, float]], prijzen: dict[d
         prijs = prijzen.get(moment)
         if prijs is not None and not 0.0 <= prijs <= 2.0:
             prijs = None   # een ander niveau of een andere eenheid: niet mengen
-        per_dag.setdefault(lokaal.date().isoformat(), []).append(
-            {"i": i, "e": e, "p": p, "o": o, "c": c, "h": h, "uur": lokaal.hour, "prijs": prijs})
+        uit[moment.astimezone(timezone.utc)] = {
+            "i": i, "e": e, "p": p, "o": o, "c": c, "h": h, "uur": lokaal.hour, "prijs": prijs,
+            "dag": lokaal.date().isoformat(),
+        }
+    return uit
+
+
+def dagen_uit_statistiek(uren: dict[str, dict[datetime, float]], prijzen: dict[datetime, float]) -> dict[str, dict]:
+    """Dagen uit de uurwaarden van de langetermijnstatistiek (zie `_uurblokken`)."""
+    per_dag: dict[str, list] = {}
+    for blok in _uurblokken(uren, prijzen).values():
+        per_dag.setdefault(blok["dag"], []).append(blok)
     uit = {}
     for dag, blokken in per_dag.items():
         regel = _vat_samen(blokken, MIN_UREN, "s")
         if regel is not None:
             uit[dag] = regel
     return uit
+
+
+def verwachte_kwartieren(datum: str) -> int:
+    """Kwartieren in deze lokale dag: 96, of 92/100 bij de klokwissel."""
+    dag = date.fromisoformat(datum)
+    begin = datetime(dag.year, dag.month, dag.day, tzinfo=TZ)
+    volgende = dag + timedelta(days=1)
+    eind = datetime(volgende.year, volgende.month, volgende.day, tzinfo=TZ)
+    return int((eind.astimezone(timezone.utc) - begin.astimezone(timezone.utc)).total_seconds() // 900)
+
+
+def _kwartierblokken(kwartieren: list[dict]) -> list[tuple[datetime, dict]]:
+    """Geldige meetlogkwartieren met het begin van hun uur (UTC)."""
+    uit = []
+    for r in kwartieren:
+        if r.get("quality") == "invalid":
+            continue
+        waarden = [r.get(s) for s in ("grid_import_kwh", "grid_export_kwh", "pv_kwh",
+                                      "battery_out_kwh", "battery_in_kwh", "house_kwh")]
+        if any(w is None for w in waarden):
+            continue
+        try:
+            moment = datetime.fromisoformat(r["kwartier"])
+            uur = moment.astimezone(TZ).hour
+        except (KeyError, TypeError, ValueError):
+            continue
+        i, e, p, o, c, h = waarden
+        sleutel = moment.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        uit.append((sleutel, {"i": i, "e": e, "p": p, "o": o, "c": c, "h": h, "uur": uur,
+                              "prijs": r.get("prijs_eur")}))
+    return uit
+
+
+def dag_uit_kwartieren_en_statistiek(
+    kwartieren: list[dict], uren: dict[str, dict[datetime, float]],
+    prijzen: dict[datetime, float], datum: str,
+) -> dict | None:
+    """Een meetlogdag waarin kwartieren ontbreken, aangevuld uit de uurstatistiek
+    (v5.151.0, L-EMS-047).
+
+    Rond een herstart valt een kwartier uit de meetlog (geen beginstand), en
+    `dag_uit_kwartieren` telde dan zon, verbruik, net en kosten van dat
+    kwartier niet: 29-10 zon 3,23 tegen SolarEdge 3,68 kWh (93/96). Nu: elk
+    uur met vier geldige kwartieren uit de meetlog; een onvolledig uur
+    (ook een met een ongeldig kwartier) uit de langetermijnstatistiek van
+    datzelfde uur, als die er is - anders de kwartieren die er wel zijn.
+    `q` blijft het aantal meetlogkwartieren; `aq` telt de ontbrekende
+    kwartieren die de statistiek dekt, `su` de uren uit de statistiek.
+    """
+    per_uur: dict[datetime, list[dict]] = {}
+    for sleutel, blok in _kwartierblokken(kwartieren):
+        per_uur.setdefault(sleutel, []).append(blok)
+    stat = {m: b for m, b in _uurblokken(uren, prijzen).items() if b["dag"] == datum}
+    blokken: list[dict] = []
+    gedekt = 0
+    aangevuld = 0
+    stat_uren = 0
+    for sleutel in sorted(set(per_uur) | set(stat)):
+        meetlog = per_uur.get(sleutel) or []
+        if len(meetlog) >= 4 or sleutel not in stat:
+            blokken.extend(meetlog)
+            gedekt += len(meetlog)
+            continue
+        blok = {k: v for k, v in stat[sleutel].items() if k != "dag"}
+        blokken.append(blok)
+        gedekt += 4
+        aangevuld += 4 - len(meetlog)
+        stat_uren += 1
+    if gedekt < MIN_KWARTIEREN:
+        return None
+    regel = _vat_samen(blokken, 0, "m")
+    if regel is None:
+        return None
+    regel["q"] = sum(len(v) for v in per_uur.values())
+    if stat_uren:
+        regel["aq"] = aangevuld
+        regel["su"] = stat_uren
+    return regel
 
 
 def leeg() -> dict:

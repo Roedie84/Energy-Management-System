@@ -34169,3 +34169,16 @@ Gevraagd 30-10: "Hoelang duurt een gemiddelde douchebeurt bij ons en wat kost di
 **Ook:** `confirm_water_source` met een `sessie`-tijd zocht in het veld `moment`, dat niet bestaat (de sessies heten `gestart`). Een opgegeven tijd vond daardoor nooit iets; nu wel.
 
 Tests: `test_v5150_waterkosten.py` (11).
+
+## v5.151.0 — leerronde 31-10: dagarchief vult herstartkwartieren aan, zonstandtoets en proefstandregels
+
+Dagafsluiting van de leerronde (L-EMS-047, L-EMS-048, L-EMS-049). Alleen meting en rapportage; sturing, reserve en drempels zijn ongewijzigd.
+
+**1. Dagarchief mist geen kwartieren meer rond een herstart (L-EMS-047).** `dag_uit_kwartieren` telde alleen meetlogkwartieren met alle zes waarden; rond een herstart valt er een weg (geen beginstand) en dan ontbraken zon, verbruik, net en kosten van dat kwartier. 29-10: zon 3,23 tegen SolarEdge 3,68 kWh (93/96 kwartieren, herstarts 06:40/14:45/15:10/19:49); 26-10 −0,23, 25-10 −0,42. Nu wordt een dag met minder kwartieren dan de dag lang is (96, of 92/100 bij de klokwissel) aangevuld uit de langetermijnstatistiek: elk uur met vier geldige kwartieren uit de meetlog, een onvolledig uur uit de uurwaarden van dezelfde tellers (`dag_uit_kwartieren_en_statistiek`). Nieuwe velden `aangevulde_kwartieren` en `uren_uit_statistiek`; `blokken` blijft het aantal meetlogkwartieren. Zonder statistiek: zoals voorheen. Het ophalen van de uurstatistiek is één helper (`_haal_uurstatistiek`) voor het zaaien en het aanvullen.
+
+**2. *Nog niet bepaald*: proefstandregels zeggen hoe ver ze zijn (L-EMS-048).** `wat_ontbreekt` was de omschrijving van de kandidaat ("Verwachte kosten over drie zonscenario's … Stuurt niets."). Nu de reden uit `zou_hebben_opgeleverd` ("7 van 14 dagen gemeten sinds v5.122.0"), of bij een al uitgerekende kandidaat "Uitgerekend: −13,2 % … - nog niet betrouwbaar genoeg om te gebruiken" met de reden. De omschrijving staat apart in `toelichting`.
+
+**3. Zonstandtoets niet meer 's nachts vals op 'doen' (L-EMS-049).** De toets vergeleek de gelezen azimut met de berekende stand van nú. `sensor.zon_van_eibergen_azimut` ververst 's nachts maar elke 20 minuten terwijl de azimut rond middernacht 6-8° per 20 minuten draait; met een tolerantie van 5° gaf dat elke nacht ~85 minuten "Stand van de zon klopt niet". Nu rekent de toets de stand uit voor het moment waarop de sensor zijn waarde kreeg (`last_updated`, tot 60 minuten oud; een oudere waarde telt als nu, zodat een vastgelopen sensor opvalt). Nieuwe attributen `gemeten_om`, `leeftijd_meting_min`, `berekend_azimut_op_meetmoment`; `berekend_azimut` blijft de stand van nu (de pv-modelsamples gebruiken die). Een sensor met een vaste afwijking wordt nog steeds gevangen.
+
+Tests: `test_v5151_leerronde.py` (12).
+

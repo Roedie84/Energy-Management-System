@@ -868,6 +868,7 @@ from .const import (
     DECISION_REASON_LABELS,
     SOLAR_CAPTURE_FULL_MARGIN_KWH,
     SUN_AZIMUTH_TOLERANCE_DEGREES,
+    SUN_AZIMUTH_MAX_READING_AGE_MIN,
     WHY_MAX_REASONS,
     WHY_QUESTIONS,
     AGING_HIGH_TEMPERATURE_C,
@@ -11865,27 +11866,74 @@ class EnergyManagementSystemCoordinator:
             return uitkomst
 
         az_berekend, hoogte_berekend = berekend
-        # Het verschil over de kortste weg: 359 en 1 graad schelen twee
-        # graden, geen 358.
-        verschil = abs((gemeten - az_berekend + 180) % 360 - 180)
         uitkomst["berekend_azimut"] = round(az_berekend, 1)
         uitkomst["berekende_hoogte"] = round(hoogte_berekend, 1)
+
+        # v5.151.0 (L-EMS-049): vergelijk met de zonstand op het moment
+        # dat de sensor zijn waarde kreeg, niet met die van nu. De
+        # zonnesensor ververst 's nachts maar elke 20 minuten terwijl de
+        # azimut rond middernacht 6-8 graden per 20 minuten draait; met
+        # 'nu' gaf dat elke nacht ~85 minuten een valse "Stand van de zon
+        # klopt niet". `berekend_azimut` hierboven blijft 'nu' (de
+        # pv-modelsamples gebruiken die).
+        meetmoment = self._sun_azimuth_reading_time()
+        az_vergelijk = az_berekend
+        if meetmoment is not None:
+            leeftijd_min = (nu - meetmoment).total_seconds() / 60.0
+            if 0.0 < leeftijd_min <= SUN_AZIMUTH_MAX_READING_AGE_MIN:
+                op_meetmoment = self._bereken_zonstand(meetmoment)
+                if op_meetmoment is not None:
+                    az_vergelijk = op_meetmoment[0]
+                    uitkomst["gemeten_om"] = meetmoment.isoformat()
+                    uitkomst["leeftijd_meting_min"] = round(leeftijd_min, 1)
+                    uitkomst["berekend_azimut_op_meetmoment"] = round(
+                        az_vergelijk, 1
+                    )
+
+        # Het verschil over de kortste weg: 359 en 1 graad schelen twee
+        # graden, geen 358.
+        verschil = abs((gemeten - az_vergelijk + 180) % 360 - 180)
         uitkomst["verschil_graden"] = round(verschil, 1)
 
         if verschil <= SUN_AZIMUTH_TOLERANCE_DEGREES:
             uitkomst["status"] = RELIABILITY_RELIABLE
             uitkomst["reden"] = (
-                f"Gemeten {gemeten:.1f}°, berekend {az_berekend:.1f}° voor "
+                f"Gemeten {gemeten:.1f}°, berekend {az_vergelijk:.1f}° voor "
                 f"deze plaats en tijd - {verschil:.1f}° verschil."
             )
         else:
             uitkomst["status"] = RELIABILITY_UNRELIABLE
             uitkomst["reden"] = (
-                f"Gemeten {gemeten:.1f}° tegen {az_berekend:.1f}° berekend: "
+                f"Gemeten {gemeten:.1f}° tegen {az_vergelijk:.1f}° berekend: "
                 f"{verschil:.1f}° verschil. Controleer of deze sensor "
                 "werkelijk de azimut van de zon geeft."
             )
         return uitkomst
+
+    def _sun_azimuth_reading_time(self) -> datetime | None:
+        """Wanneer kreeg de gelezen azimut zijn waarde? (v5.151.0)
+
+        Zelfde volgorde als `get_sun_azimuth_degrees`: eerst de eigen
+        sensor, dan `sun.sun`. `last_updated` van de state; zonder state
+        of tijd None (dan rekent de toets met 'nu', zoals voorheen).
+        """
+        eigen = self.config.get(CONF_SUN_AZIMUTH_SENSOR)
+        kandidaten = []
+        if eigen:
+            kandidaten.append((eigen, False))
+        kandidaten.append((SUN_FALLBACK_ENTITY, True))
+        for entity_id, is_sun in kandidaten:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            if is_sun:
+                if state.attributes.get("azimuth") is None:
+                    continue
+            elif self._read_sensor_float(entity_id) is None:
+                continue
+            moment = getattr(state, "last_updated", None)
+            return moment if isinstance(moment, datetime) else None
+        return None
 
     def _bereken_zonstand(
         self, now: datetime
@@ -12152,7 +12200,8 @@ class EnergyManagementSystemCoordinator:
                     "naam": kandidaat["naam"],
                     "niveau": kandidaat.get("status"),
                     "label": None,
-                    "wat_ontbreekt": kandidaat.get("betrouwbaarheid", ""),
+                    "wat_ontbreekt": self._proefstand_wat_ontbreekt(kandidaat),
+                    "toelichting": kandidaat.get("betrouwbaarheid", ""),
                 }
             )
 
@@ -12167,6 +12216,30 @@ class EnergyManagementSystemCoordinator:
                 "instelling, en wachten helpt niet."
             ),
         }
+
+    @staticmethod
+    def _proefstand_wat_ontbreekt(kandidaat: dict) -> str:
+        """Wat een wachtende proefstandkandidaat nog mist (v5.151.0).
+
+        L-EMS-048: *Nog niet bepaald* toonde de omschrijving van de
+        kandidaat ("Verwachte kosten over drie zonscenario's ... Stuurt
+        niets.") in plaats van hoe ver hij is ("7 van 14 dagen gemeten").
+        Nog niet te becijferen: de reden uit `zou_hebben_opgeleverd`.
+        Al uitgerekend maar niet betrouwbaar: de uitkomst met die reden,
+        zodat 'klaar, niet beter' te herkennen is. Geen van beide: de
+        omschrijving, zoals voorheen.
+        """
+        opbrengst = kandidaat.get("zou_hebben_opgeleverd") or {}
+        reden = str(opbrengst.get("reden") or "").strip()
+        omschrijving = str(kandidaat.get("betrouwbaarheid") or "")
+        if not isinstance(opbrengst, dict) or not reden:
+            return omschrijving
+        if not opbrengst.get("te_becijferen"):
+            return reden
+        waarde = kandidaat.get("waarde")
+        if waarde:
+            return f"Uitgerekend: {waarde} - nog niet betrouwbaar genoeg om te gebruiken. {reden}"
+        return reden
 
     def _boek_proefstand_dag(self, dag) -> None:
         """Boekt per dag wat een kandidaat zou hebben opgeleverd
@@ -51826,6 +51899,15 @@ class EnergyManagementSystemCoordinator:
             ruw = self._dagarchief_kwartierdagen(vandaag)
             if ruw:
                 nieuw = await self.hass.async_add_executor_job(_reken_dagarchief, D, ruw)
+                # v5.151.0 (L-EMS-047): een dag met ontbrekende kwartieren
+                # (herstart, ongeldig kwartier) aanvullen uit de uurstatistiek.
+                for datum in ruw:
+                    regel = nieuw.get(datum)
+                    if regel is not None and regel.get("q", 0) >= D.verwachte_kwartieren(datum):
+                        continue
+                    aangevuld = await self._dagarchief_aanvullen(D, datum, ruw[datum])
+                    if aangevuld is not None:
+                        nieuw[datum] = aangevuld
                 # v5.119.0 (L-EMS-024): met het verschil in accu-inhoud.
                 rendement = self._twin_laadfactor() ** 2
                 for datum, regel in nieuw.items():
@@ -51859,6 +51941,62 @@ class EnergyManagementSystemCoordinator:
         finally:
             self._dagarchief_bezig = False
 
+    def _dagarchief_tellers(self) -> dict:
+        """De energietellers van de meetlaag (v5.103.1), anders uit de configuratie."""
+        laag = getattr(self, "_meetlaag", None)
+        return laag._tellers() if laag is not None else {
+            "grid_import": self.config.get(CONF_GRID_IMPORT_ENERGY_SENSOR),
+            "grid_export": self.config.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
+            "pv": self.config.get(CONF_PV_ENERGY_SENSOR),
+            "battery_out": self.config.get(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR),
+            "battery_in": self.config.get(CONF_BATTERY_CHARGE_ENERGY_SENSOR),
+        }
+
+    async def _haal_uurstatistiek(self, tellers: dict, begin: datetime, eind: datetime) -> tuple[dict, dict]:
+        """Uurwaarden (verandering) van de tellers en het uurgemiddelde van de
+        prijssensor uit de langetermijnstatistiek."""
+        from homeassistant.components.recorder import get_instance
+        from homeassistant.components.recorder.statistics import statistics_during_period
+
+        ids = {e for e in tellers.values() if e}
+        recorder = get_instance(self.hass)
+        energie = await recorder.async_add_executor_job(
+            statistics_during_period, self.hass, begin, eind, ids, "hour", {"energy": "kWh"}, {"change"}
+        )
+        prijzen: dict = {}
+        prijssensor = self.config.get(CONF_PRICE_SENSOR)
+        if prijssensor:
+            ruw = await recorder.async_add_executor_job(
+                statistics_during_period, self.hass, begin, eind, {prijssensor}, "hour", None, {"mean"}
+            )
+            prijzen = {_stat_moment(r): r.get("mean") for r in (ruw or {}).get(prijssensor) or []
+                       if r.get("mean") is not None}
+        uren = {
+            naam: {_stat_moment(r): r.get("change") for r in (energie or {}).get(e) or []
+                   if r.get("change") is not None}
+            for naam, e in tellers.items() if e
+        }
+        return uren, prijzen
+
+    async def _dagarchief_aanvullen(self, D, datum: str, regels: list) -> dict | None:
+        """Een onvolledige meetlogdag met de uurstatistiek aangevuld (v5.151.0,
+        L-EMS-047). None als dat niet lukt; dan blijft de meetlogdag zoals hij was."""
+        tellers = self._dagarchief_tellers()
+        if not tellers.get("grid_import") or not tellers.get("pv"):
+            return None
+        try:
+            begin = dt_util.start_of_local_day(date.fromisoformat(datum)).astimezone(timezone.utc)
+            eind = dt_util.start_of_local_day(
+                date.fromisoformat(datum) + timedelta(days=1)
+            ).astimezone(timezone.utc)
+            uren, prijzen = await self._haal_uurstatistiek(tellers, begin, eind)
+            return await self.hass.async_add_executor_job(
+                _reken_dagarchief_aangevuld, D, regels, uren, prijzen, datum
+            )
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Dagarchief %s niet aangevuld", datum, exc_info=True)
+            return None
+
     async def _zaai_dagarchief(self, vandaag: str) -> bool:
         """Eenmalig: de dagen van vóór de meetlog uit de langetermijnstatistiek
         (uurwaarden van de energietellers en de prijssensor, tot drie jaar terug)."""
@@ -51868,40 +52006,13 @@ class EnergyManagementSystemCoordinator:
         # die de meetlaag afleidt uit de naam van de ontlaadteller. Zonder die
         # telde het zaaien het ontladen wel en het laden niet (verbruik in juni
         # 2026 508 in plaats van 329 kWh).
-        laag = getattr(self, "_meetlaag", None)
-        tellers = laag._tellers() if laag is not None else {
-            "grid_import": self.config.get(CONF_GRID_IMPORT_ENERGY_SENSOR),
-            "grid_export": self.config.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
-            "pv": self.config.get(CONF_PV_ENERGY_SENSOR),
-            "battery_out": self.config.get(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR),
-            "battery_in": self.config.get(CONF_BATTERY_CHARGE_ENERGY_SENSOR),
-        }
+        tellers = self._dagarchief_tellers()
         if not tellers["grid_import"] or not tellers["pv"]:
             return True   # zonder netafname- en zonteller valt er niets te zaaien
         try:
-            from homeassistant.components.recorder import get_instance
-            from homeassistant.components.recorder.statistics import statistics_during_period
-
             eind = dt_util.start_of_local_day(date.fromisoformat(vandaag)).astimezone(timezone.utc)
             begin = eind - timedelta(days=3 * 365)
-            ids = {e for e in tellers.values() if e}
-            recorder = get_instance(self.hass)
-            energie = await recorder.async_add_executor_job(
-                statistics_during_period, self.hass, begin, eind, ids, "hour", {"energy": "kWh"}, {"change"}
-            )
-            prijzen: dict = {}
-            prijssensor = self.config.get(CONF_PRICE_SENSOR)
-            if prijssensor:
-                ruw = await recorder.async_add_executor_job(
-                    statistics_during_period, self.hass, begin, eind, {prijssensor}, "hour", None, {"mean"}
-                )
-                prijzen = {_stat_moment(r): r.get("mean") for r in (ruw or {}).get(prijssensor) or []
-                           if r.get("mean") is not None}
-            uren = {
-                naam: {_stat_moment(r): r.get("change") for r in (energie or {}).get(e) or []
-                       if r.get("change") is not None}
-                for naam, e in tellers.items() if e
-            }
+            uren, prijzen = await self._haal_uurstatistiek(tellers, begin, eind)
             dagen = await self.hass.async_add_executor_job(D.dagen_uit_statistiek, uren, prijzen)
             for datum, regel in dagen.items():
                 if datum < vandaag:
@@ -53607,6 +53718,19 @@ def _reken_dagarchief(D, ruw: dict) -> dict:
         if regel is not None:
             uit[datum] = regel
     return uit
+
+
+def _reken_dagarchief_aangevuld(D, regels: list, uren: dict, prijzen: dict, datum: str) -> dict | None:
+    """Eén meetlogdag met de uurstatistiek aangevuld, buiten de event loop (v5.151.0)."""
+    from . import kwartierenergie
+
+    kwartieren = []
+    for kort in regels:
+        try:
+            kwartieren.append(kwartierenergie.uitpakken(kort))
+        except Exception:  # noqa: BLE001
+            continue
+    return D.dag_uit_kwartieren_en_statistiek(kwartieren, uren, prijzen, datum)
 
 
 def _stat_moment(rij: dict) -> datetime:

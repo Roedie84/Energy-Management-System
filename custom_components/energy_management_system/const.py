@@ -2418,6 +2418,10 @@ SOLAR_CAPTURE_FULL_MARGIN_KWH = 0.3
 # 252,9 berekend voor Lochem - 4,9 graden, precies wat een aflezing van
 # een paar minuten eerder oplevert.
 SUN_AZIMUTH_TOLERANCE_DEGREES = 5.0
+# v5.151.0 (L-EMS-049): tot deze leeftijd rekent de zonstandtoets met de
+# zonstand op het moment van de meting; een oudere waarde telt als 'nu'
+# (een vastgelopen sensor blijft zo te vangen).
+SUN_AZIMUTH_MAX_READING_AGE_MIN = 60.0
 
 # --- Gepland witgoed in de planning (v1.61.0) ------------------------
 # Gevraagd: "Nu weet ik zelf dat er morgen 2 wasmachines en een
