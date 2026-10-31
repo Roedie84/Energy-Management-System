@@ -1046,3 +1046,11 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-31 19:40,TUSSEN,ems_proefstand_met_teller,4,4,"L-EMS-048 na installatie: 4/4 proefstandregels in Nog niet bepaald met teller/uitkomst (was 0/4) -> geverifieerd"
 2026-10-31 19:40,TUSSEN,ems_reservesprongen_avond,24,24,"15:45-19:40 alleen_behoefte (live_correctie 0<->1.5); reserve 10.37 afgekapt -> geen effect"
 2026-10-31 19:40,TUSSEN,ems_stilstand_functies,0,8,"8 wachten, 0 doen (zonstand 0 doen, zon onder); airco besluit 'niets', knop uit"
+2026-10-31 23:40,TUSSEN,ems_verkoop_onder_reserve,0,1,verkoopkwartieren leeg; regeloverschot 31-10 0.082 kWh; draait v5.154.1 (HA-start 21:32; v5.155.0 op GitHub)
+2026-10-31 23:40,TUSSEN,ems_besparing_tot_nu_eur,-0.27,1,"sensor; ongecorrigeerd +1.19, soc_correctie -1.46 (werkelijk 2.58 / zonder accu 3.77)"
+2026-10-31 23:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,100.0,1000,"22:00-stand 100 % (beschikbaar 1.382); blok 01-11 13:00 -> andere horizon (niet in Brier); det tot blok 4.81, verwacht economisch tekort 3.55; accu houdt 1.38 vast voor > 47 ct"
+2026-10-31 23:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.874,59,"19:40 0.906 (n=55); 20:15 0.85, 21:15/22:15/23:15 0.15/0.50/0.22"
+2026-10-31 23:40,TUSSEN,ems_netimport_avond_19_23_kwh,1.761,4,uurstatistiek 19-23 u 0.177/0.544/0.641/0.396; export 0.019; SoC 27.7 -> 21.9 %
+2026-10-31 23:40,TUSSEN,ems_pv_dag_kwh,4.944,1,"Modbus i1_ac_energy, geen productie na 17 u; day-ahead 3.82 (+29 %)"
+2026-10-31 23:40,TUSSEN,ems_zonstand_vals_doen,0,2,L-EMS-049: aantal_doen 0 om 19:40 en 23:40 (na herstart 21:32 ook)
+2026-10-31 23:40,TUSSEN,ems_stilstand_functies,0,9,"9 wachten, 0 doen; airco besluit 'verwarmen' (18.8 < 19.0), knop uit"

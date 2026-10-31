@@ -750,3 +750,16 @@ laatste ronde: 31-10 15:41, gemeten t/m 31-10 15:45
 - Hypotheses: H-EMS-2 (PV te hoog; 2e tegenvoorbeeld), H-EMS-14 (plan avond/nacht; avond vandaag goed), H-EMS-11 (piek vastgehouden; vandaag benut).
 
 laatste ronde: 31-10 19:42, gemeten t/m 31-10 19:45
+
+## 31-10 23:40 · tussenronde
+- **HA-herstart 21:32 → draait v5.154.1** (16:30 v5.153.0). v5.155.0 (andere sessie 22:06, sluimerverbruik bij vasthouden) staat op GitHub, nog niet in HA. Na 21:32 alleen opstartwaarschuwingen. Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 31-10 0,082 kWh). Besparing dag −€ 0,27 (ongecorrigeerd +1,19, SoC-correctie −1,46).
+- **H-EMS-14 toets 23:40:** MC tot blok blijft **100 %** (22:00-stand 100 %, beschikbaar 1,38 kWh; det. tekort tot blok 4,81, verwacht 3,55 kWh "economisch: bijladen loonde niet"). Anders dan 30-10 (accu hield 4,26, blok 10:30 → 0 %): nu is de accu na de avondpiek leeg tot 22 % en ligt het blok pas om 13:00. Plan houdt 1,38 kWh vast voor kwartieren > 47 ct (`battery_saved_for_peak`), net 42,6 ct. Consistent, geen bug.
+- **Kalibratie-inzicht:** blok 13:00 > 12:00 → deze avond telt als *andere horizon*, niet in de Brier (L-EMS-029). Netafname met accu boven de vloer = vasthouden, geen tekortnacht → verwachting morgen: tekortnacht **nee** bij kans 100 %. Toets in de dagafsluiting 02-11 (record 01-11).
+- **Twin** `kwartierplan` n=59 MAE **0,874** (19:40 0,906): 20:15 0,85, 21:15-23:15 0,15/0,50/0,22 → avond/nacht nu < 1 kWh (H-EMS-14 avonddeel tweede goede avond na herstart).
+- Net 19-23 u 0,18/0,54/0,64/0,40 kWh, export ~0; SoC 27,7 → 21,9 %, sinds 21:15 vlak.
+- **L-EMS-049:** `aantal_doen` 0 om 19:40 en 23:40 (vroeger 's nachts ~85 min vals "zon klopt niet") → 07:40 laatste toets, dan geverifieerd.
+- Stilstand: **geen echte** (9 wachten, 0 doen; "Accugezondheid" staat op Niet-melden). Airco besluit "verwarmen" (18,8 < aanzet 19,0), knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog; dag 31-10 4,94 tegen 3,82 = +29 %), H-EMS-14 (avond nu goed; nacht morgen), H-EMS-11 (piek vandaag benut).
+
+laatste ronde: 31-10 23:45, gemeten t/m 31-10 23:45
