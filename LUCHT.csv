@@ -1686,3 +1686,23 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-31 16:20,filtergebruik_pct,0,1,
 2026-10-31 16:20,automation_traces_fout,0,5,alle 5 na 15:50 failed_conditions (uit blijft uit)
 2026-10-31 16:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.8-3.4
+2026-10-31 20:20,pm25_gem,3.91,48,5-min statistiek 16:20-20:20; luchtreiniger hele periode uit
+2026-10-31 20:20,pm25_mediaan,4.22,48,
+2026-10-31 20:20,pm25_p95,5.02,48,
+2026-10-31 20:20,pm25_max,5.51,48,momentaan 18:50 en 20:15; vlak 4-5 na oven
+2026-10-31 20:20,pm25_uren_gt15,0.00,48,
+2026-10-31 20:20,pm25_uren_gt25,0.00,48,
+2026-10-31 20:20,stand_uit_min,236,48,gem pm25 3.91; uit sinds 15:50 handmatig; 4 min unavailable (herstarts)
+2026-10-31 20:20,kookmoment_oven_stijging,2.1,1,oven run 16:44-17:09 ramen dicht stand uit: 1.8 -> 3.9 (17:10); daarna geen daling, 4-5.5 tot 20:20
+2026-10-31 20:20,pm25_aanwezig,3.89,44,stand uit
+2026-10-31 20:20,pm25_afwezig,4.17,4,stand uit; te weinig data
+2026-10-31 20:20,co2_gem,1399,48,5-min; 1077 -> 1477 (17:35) -> 1344 -> 1737 (20:20); 20:23 1849; ramen dicht
+2026-10-31 20:20,co2_uren_gt1200,3.58,48,
+2026-10-31 20:20,vocht_max,67.4,48,55.0 -> 67.4 (oven 16:55) -> 58-60 bij 19.8-21.9 C
+2026-10-31 20:20,schimmel_indicator,86,48,72 -> 86 (17:00) -> 77-80; buiten 99% / 11.4-12.6 C
+2026-10-31 20:20,ha_herstarts,2,1,16:29-16:31 en 18:46; stand ~4 min unavailable
+2026-10-31 20:20,lokaal_mislukt,67,167594,+2 (TimeoutError bij herstarts); uitval 0; 243 verbindingen
+2026-10-31 20:20,sturen_bevestigd,399,400,geen nieuwe opdrachten
+2026-10-31 20:20,filtergebruik_pct,0,1,
+2026-10-31 20:20,automation_traces_fout,0,5,alle 5 failed_conditions (uit blijft uit)
+2026-10-31 20:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 1.8-5.5 (apparaat uit)

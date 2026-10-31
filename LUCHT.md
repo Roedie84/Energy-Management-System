@@ -523,4 +523,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 757 → 712 → 889 → 1.041 (16:15), nu 1.098 en stijgend, gem 826, 0 u > 1.200: straks luchten. Verwarming aan vanaf ~14:00: 16,6 → 21,2 °C, vocht 66 → 56%, schimmelindicator 84 → 72: verwarmen werkt.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=14). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid: auto houdt het hoog, halveert pas in ~40-60 min, na vertrek sneller (n=8) - kandidaat high bij > 10. Geen nieuwe piek, geen toets.
 
-laatste ronde: 31-10 16:25, gemeten t/m 16:20
+## 31-10 20:25 (ronde 72)
+- PM2.5 16:20-20:20: gem 3,91, mediaan 4,22, P95 5,02, max 5,5 (18:50 en 20:15) (n=48); 0 uur > 15. Dag t/m nu ~2,3; 7d (24-30/10) 3,00 (nulmeting okt 2025 9,1).
+- KOOKMOMENT oven 16:44-17:09 (kookplaat uit, ramen dicht, luchtreiniger UIT, aanwezig): 1,8 → 3,9 (17:10), vocht 55 → 67,4%. Geen piek > 25. Daarna geen daling: 3,3-5,5 de hele avond, licht stijgend bij aanwezigheid.
+- Stand: hele periode uit (236 min, handmatig sinds 15:50, 4 min unavailable). Aanwezig 3,89 (n=44) vs afwezig 4,17 (n=4): te weinig data. Eerste avond uit: niveau gelijk aan auto-avonden met aanwezigheid (29-10 ~4, 30-10 0-uur 3,1) - bij lage achtergrond weinig verschil; zonder reiniger zakt het niet na de bron (n=1).
+- Werking: automation laat uit uit (5/5 traces failed_conditions, geen fout). 2 HA-herstarts (16:29-16:31, 18:46). Lokaal 67 mislukt op 167.594 (+2 = timeouts bij herstarts), uitval 0, sturen 399/400 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 (apparaat uit).
+- CO₂ 1.077 → 1.737 (gem 1.399), 3,6 u > 1.200, om 20:23 1.849, ramen dicht, aanwezig. Vocht 55-67% bij ~21 °C (verwarming aan), schimmelindicator 72 → 86 (oven) → 77-80, buiten 99% / 11-12 °C. Nu luchten; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15; oven vanavond dicht zonder piek - gerecht bepaalt de bron). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid houdt 3-8: op auto én vanavond uit ~4-5 (n=9) - de bron domineert bij lage niveaus, de reiniger telt bij pieken.
+
+laatste ronde: 31-10 20:25, gemeten t/m 20:20
