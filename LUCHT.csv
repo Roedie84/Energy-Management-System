@@ -1706,3 +1706,30 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-31 20:20,filtergebruik_pct,0,1,
 2026-10-31 20:20,automation_traces_fout,0,5,alle 5 failed_conditions (uit blijft uit)
 2026-10-31 20:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 1.8-5.5 (apparaat uit)
+2026-10-31,pm25_gem,2.89,288,dag 31-10 UltimateSensor 5-min; luchtreiniger uit sinds 15:50
+2026-10-31,pm25_mediaan,2.05,288,
+2026-10-31,pm25_p95,6.67,288,
+2026-10-31,pm25_max,8.22,288,momentaan 10:35; luchtwissel zonder raamsensor
+2026-10-31,pm25_uren_gt15,0.00,288,
+2026-10-31,pm25_uren_gt25,0.00,288,
+2026-10-31,pm25_7d_gem,3.32,7,25-31/10 HA-dagstatistiek; mediaan dag 2.15; incl 26-10 piek 1147
+2026-10-31,co2_gem,1096,288,dag; max 2184 (22:15)
+2026-10-31,co2_uren_gt1200,7.25,288,dag 5-min
+2026-11-01 00:20,pm25_gem,6.00,48,5-min statistiek 20:20-00:20; luchtreiniger hele periode uit
+2026-11-01 00:20,pm25_mediaan,6.12,48,
+2026-11-01 00:20,pm25_p95,7.09,48,
+2026-11-01 00:20,pm25_max,7.71,48,momentaan 22:50; stijging 4.5 -> 7.2 bij aanwezigheid/tv
+2026-11-01 00:20,pm25_uren_gt15,0.00,48,
+2026-11-01 00:20,pm25_uren_gt25,0.00,48,
+2026-11-01 00:20,stand_uit_min,239,48,gem pm25 6.00; uit sinds 31-10 15:50 handmatig; ~1 min unavailable (herstart 21:31)
+2026-11-01 00:20,pm25_na_vertrek,6.42,22,22:30-00:20 niemand (mmWave off sinds 22:28) stand uit: geen daling (7.2 -> 6.2)
+2026-11-01 00:20,co2_gem,2024,48,5-min; 1798 -> 2146 (21:35) -> 1939 (00:05); max momentaan 2184 22:15; ramen dicht
+2026-11-01 00:20,co2_uren_gt1200,4.00,48,hele ronde
+2026-11-01 00:20,vocht_max,66.5,48,59.2 -> 66.5 bij 21.5 -> 18.5 C (verwarming uit ~21:30)
+2026-11-01 00:20,schimmel_indicator,83,48,81-83; buiten 99% / 11.3 C
+2026-11-01 00:20,ha_herstarts,1,1,21:31; stand ~1 min unavailable
+2026-11-01 00:20,lokaal_mislukt,67,169020,geen nieuwe; uitval 0; 244 verbindingen (+1)
+2026-11-01 00:20,sturen_bevestigd,399,400,geen nieuwe opdrachten
+2026-11-01 00:20,filtergebruik_pct,0,1,
+2026-11-01 00:20,automation_traces_fout,0,5,alle 5 failed_conditions (uit blijft uit / nachtvenster)
+2026-11-01 00:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 4.5-7.7 (apparaat uit)
