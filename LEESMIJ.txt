@@ -1,3 +1,13 @@
+EMS v5.153.0 - kwartierplan klopt in een goedkoop blok dat nog komt
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het kwartierplan liet de accu in het goedkope blok van morgen leeglopen
+  (1-11: 13:00-14:15, ~39 ct) en daarna de dure avond (44-50 ct) van het
+  net halen. De sturing spaart in zo'n blok als de lading later meer
+  waard is; het plan rekent nu voor een komend blok met dezelfde regel.
+  Sturing ongewijzigd.
+
 EMS v5.152.0 - minder valse 'mogelijk defect', rustiger weerbronoordeel
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

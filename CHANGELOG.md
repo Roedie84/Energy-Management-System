@@ -34191,3 +34191,11 @@ Akkoord Ruud 31-10 op beide punten.
 **2. L-EMS-046: weerbronnen per kwartier.** De reeks per bron kreeg elke ronde (60 s) een waarneming; 200 plaatsen = ruim drie uur. OpenWeatherMap ging zo op één dag van 48,5 % naar 79 %. Nu `_weerbron_kwartier_bij`: één waarneming per kwartier (meerderheid van de minuten), met de datum erbij (`weather_source_agreement_dagen`, bewaard). 200 plaatsen is daarmee ongeveer vijf daglichtdagen. Weren vraagt nu ook kwartieren van minstens twee verschillende dagen (`WEERBRON_WEREN_MIN_DAGEN`). Een oude reeks per minuut begint opnieuw. Rapport: `aantal_dagen` en "x kwartieren (n dag(en))".
 
 Tests: `test_v5152_marge_en_weerbron.py` (9); aangepast aan de kwartieren: `test_weather_source_reliability.py`, `test_weerbron_afkeuren.py` (+1), `test_weerbron_opsluiting.py`.
+
+## v5.153.0 — het kwartierplan spaart ook in een goedkoop blok dat nog komt
+
+Akkoord Ruud 31-10. Gemeld 31-10 15:08: het plan voor 1-11 liet de accu in het blok 13:00-14:15 (38,7-40,4 ct) van 17 naar 10 % ontladen; daarna kwam 15:15-23:45 alles van het net tegen 44-50 ct. De sturing spaart in zo'n blok (`sparen_in_blok`, v5.73: niet vol met zon en de lading is na het blok meer waard dan de stroom nu + 2 ct), maar die regel rekent alleen als het blok loopt. Het plan nam de spaarkwartieren pas over als het blok liep en rekende voor een komend blok "smart".
+
+Nu `_plan_sparen_in_komend_blok`: dezelfde regel per kwartier van een blok dat nog niet begonnen is, met de geplande laadstand. `_waarde_na_blok` is opgesplitst in `_tekort_na_blok` (een keer per blok) en `_duurste_ongedekt`; de rekensom van de sturing is ongewijzigd. Alleen het plan verandert; de sturing niet.
+
+Tests: `test_v5153_plan_sparen_komend_blok.py` (10).

@@ -26210,7 +26210,9 @@ class EnergyManagementSystemCoordinator:
                 soc, net = self._plan_laadkwartier(
                     soc, bruikbaar, geladen, laad_kwh, netregels, min_soc, verbruik, zon
                 )
-            elif start in netregels["gespaard"]:
+            elif start in netregels["gespaard"] or self._plan_sparen_in_komend_blok(
+                netregels, now, start, prijs, soc, bruikbaar, entries
+            ):
                 modus = "smart_charging (sparen)"
                 # v5.73: de zon wordt wel opgevangen.
                 soc, net = self._plan_sparen(soc, verbruik, zon, bruikbaar, laad_kwh)
@@ -49542,6 +49544,19 @@ class EnergyManagementSystemCoordinator:
         duurste dat overblijft, is wat een extra kWh waard is. None als alles
         gedekt is of het verbruik onbekend.
         """
+        kwartieren = self._tekort_na_blok(now, entries, blok_eind)
+        if kwartieren is None:
+            return None, None
+        return self._duurste_ongedekt(kwartieren, lading_kwh)
+
+    def _tekort_na_blok(
+        self, now: datetime, entries, blok_eind: datetime
+    ) -> list[tuple[float, datetime, float]] | None:
+        """De kwartieren na het blok met een tekort, (prijs, begin, tekort) (v5.153.0).
+
+        Het eerste deel van `_waarde_na_blok`, los zodat het plan het per
+        blok een keer uitrekent en per kwartier alleen de lading verandert.
+        """
         kwartieren = []
         zon_over = 0.0
         for begin, eind, prijs in entries or []:
@@ -49549,7 +49564,7 @@ class EnergyManagementSystemCoordinator:
                 continue
             segmenten = self._segmenten_verbruik_zon(begin, eind, veilig=True)
             if segmenten is None:
-                return None, None
+                return None
             saldo = sum(v - z for v, z in segmenten)
             zon_over += max(0.0, -saldo)
             tekort = max(0.0, saldo)
@@ -49558,6 +49573,13 @@ class EnergyManagementSystemCoordinator:
             tekort -= gedekt
             if tekort > 0:
                 kwartieren.append((prijs / PRICE_SCALE_FACTOR, begin, tekort))
+        return kwartieren
+
+    @staticmethod
+    def _duurste_ongedekt(
+        kwartieren: list, lading_kwh: float
+    ) -> tuple[float | None, datetime | None]:
+        """Het duurste kwartier dat `lading_kwh` niet meer dekt (v5.153.0)."""
         rest = lading_kwh
         for prijs, begin, tekort in sorted(kwartieren, key=lambda k: k[0], reverse=True):
             if rest >= tekort:
@@ -49565,6 +49587,58 @@ class EnergyManagementSystemCoordinator:
                 continue
             return prijs, begin
         return None, None
+
+    def _plan_sparen_in_komend_blok(
+        self, netregels: dict, now: datetime, start: datetime, prijs: float,
+        soc: float, bruikbaar: float, entries,
+    ) -> bool:
+        """Spaart de sturing straks in dit kwartier van het KOMENDE blok? (v5.153.0)
+
+        Gemeld 31-10 15:08 (akkoord Ruud): het plan voor 1-11 liet de accu
+        in het goedkope blok 13:00-14:15 (38,7-40,4 ct) van 17 naar 10 %
+        ontladen en daarna 15:15-23:45 alles van het net halen tegen
+        44-50 ct. `sparen_in_blok` (v5.73) rekent alleen IN het blok; het
+        plan nam zijn kwartieren pas over als het blok liep. Voor een blok
+        dat nog komt rekende het plan "smart" - iets wat de sturing daar
+        niet doet.
+
+        Hier dezelfde regel als `_sparen_in_blok_v573`, per kwartier, met de
+        geplande laadstand: sparen als de accu met alleen zon niet vol raakt
+        voor het blokeinde EN de lading na het blok meer waard is dan de
+        prijs nu plus `SPAREN_IN_BLOK_MIN_WINST_EUR`. Alleen voor een blok
+        dat nog niet begonnen is (een lopend blok komt uit
+        `last_sparen_in_blok`). Het plan mag nooit omvallen: bij twijfel
+        False (dan blijft het "smart", zoals voorheen).
+        """
+        blok_start, blok_eind = netregels.get("blok") or (None, None)
+        if (
+            blok_start is None or blok_eind is None or blok_start <= now
+            or not blok_start <= start < blok_eind
+        ):
+            return False
+        cache = netregels.setdefault("_sparen_komend_blok", {})
+        try:
+            if "tekort" not in cache:
+                cache["tekort"] = (
+                    self._tekort_na_blok(blok_start, entries, blok_eind)
+                    if self.smart_charging_supported() else None
+                )
+            kwartieren = cache["tekort"]
+            if kwartieren is None or not bruikbaar:
+                return False
+            in_blok = self._segmenten_verbruik_zon(start, blok_eind, veilig=False)
+            if in_blok is None:
+                return False
+            opgevangen = sum(max(0.0, zon - verbruik) for verbruik, zon in in_blok)
+            if soc + opgevangen >= bruikbaar - SPAREN_IN_BLOK_VOL_MARGE_KWH:
+                return False
+            eind_smart = soc
+            for verbruik, zon in in_blok:
+                eind_smart = min(bruikbaar, max(0.0, eind_smart + zon - verbruik))
+            waarde, _om = self._duurste_ongedekt(kwartieren, eind_smart)
+        except Exception:  # noqa: BLE001 - het plan mag nooit omvallen
+            return False
+        return waarde is not None and waarde > prijs + SPAREN_IN_BLOK_MIN_WINST_EUR
 
     async def _spaar_in_blok_als_het_loont(
         self, now: datetime, entries, cheap_block_start: datetime | None
