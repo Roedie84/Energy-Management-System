@@ -1016,3 +1016,8 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-31 03:40,DAG,ems_digital_twin_kwartierplan_mae_kwh,1.016,39,"tussenstand dag 3 (sluit 06:40); voor_bouw n=21 2.158; totaal 1.416 (n=60), status bijna_klaar"
 2026-10-31 03:40,DAG,ems_stilstand_functies,0,13,"13 wachten, 0 doen (zonstand om 03:4x binnen tolerantie); proefstandregels zonder teller -> L-EMS-048 gebouwd"
 2026-10-31 03:40,DAG,ems_meetbaarheid_dagarchief_kwartieren,95,96,"30-10 1 kwartier mist (herstart 13:03); zon gelijk aan SolarEdge (5.31, middagkwartier zonder zon-verschil); L-EMS-047 gebouwd v5.151.0"
+2026-10-31 07:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.924,43,"eindstand L-EMS-044 (3 d sinds 29-10 06:40): doel < 1.2 gehaald; voor_bouw n=17 2.134; totaal 1.267 (n=60); avond 30-10 16:15-22:15 alle |fout| > 2 (avonddoel < 1 niet gehaald, H-EMS-14)"
+2026-10-31 07:40,TUSSEN,ems_verkoop_onder_reserve,0,1,"verkoopkwartieren leeg; regeloverschot 31-10 0.005 kWh"
+2026-10-31 07:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,0.0,1000,"horizon 31-10 10:30; nodig tot blok 0.44, det 0.44, p90 1.10; lange horizon 100 % (na blok 6.59 nodig)"
+2026-10-31 07:40,TUSSEN,ems_nacht_import_22_07_kwh,1.751,9,"30/31-10 22-07 u import bij 40-44 ct terwijl accu 4.26 kWh vasthield (twin 22:15-07:15 werkelijk 4.262 constant); bewaard voor ochtendpiek 07:15-09:15 (44-46 ct): 07:4x ontladen 195 W, P1 -5 W. Opgeslagen kWh ~46 ct waard (laden 39 ct / 85 %) > 41.5 ct nachtimport -> economisch consistent"
+2026-10-31 07:40,TUSSEN,ems_stilstand_functies,0,13,"13 wachten, 0 doen (zonstand 's nachts nu 0 doen, ook zonder v5.151.0)"

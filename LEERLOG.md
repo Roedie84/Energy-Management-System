@@ -701,3 +701,13 @@ laatste ronde: 30-10 23:40, gemeten t/m 30-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (plan avond/nacht te hoog, dagtotaal juist te laag), H-EMS-11 (piek vastgehouden).
 
 laatste ronde: 31-10 03:40, gemeten t/m 31-10 03:45
+
+## 31-10 07:40 · tussenronde
+- **v5.150.0 actief; v5.151.0 staat klaar in HACS (nog niet geïnstalleerd)** → effect L-EMS-047/048/049 nog niet meetbaar. Geen commits op main na 03:55. Geen EMS-fouten na 03:45 (alleen Zendure-time-outs 07:31, buiten EMS). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 31-10 0,005 kWh). Besparing tot nu −€ 0,01.
+- **L-EMS-044 afgerekend (3 d sinds 29-10 06:40):** groep `kwartierplan` n=43 MAE **0,92** (vóór de bouw 2,13, n=17) → hoofddoel < 1,2 gehaald → **geverifieerd**. Avonddoel (|fout| < 1) niet gehaald: 30-10 16:15-22:15 alle > 2 kWh, 23:15 voorspeld 0 (plan van 17:17 trok de accu leeg, daarna sparen). Restfout zit in het plan, niet in de twin → H-EMS-14.
+- **Nacht 30→31:** accu hield 4,26 kWh vast van 22:15 tot 07:15 (twin werkelijk constant), net 1,75 kWh à 40-44 ct. Bewaard voor de ochtendpiek (07:4x ontladen 195 W bij 44,5 ct, P1 −5 W). Opgeslagen kWh is ~46 ct waard (bijladen 39 ct / 85 %) → consistent, geen bug. Tekortnacht-uitslag volgt na 09:00 (MC tot blok 0 %).
+- Stilstand: **geen echte** (13 wachten, 0 doen). Airco besluit "verwarmen", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (plan avond/nacht te hoog, dagtotaal te laag; per dagdeel meten in de dagafsluiting), H-EMS-11 (piek vastgehouden; vannacht weer: 4,26 kWh door de nacht).
+
+laatste ronde: 31-10 07:42, gemeten t/m 31-10 07:45
