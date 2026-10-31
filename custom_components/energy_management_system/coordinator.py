@@ -392,6 +392,7 @@ from .const import (
     CUSUM_BASELINE_HISTORY_DAYS,
     COOLING_DEVICE_NAME_HINTS,
     COOLING_DRIFT_PERCENT_PER_DEGREE,
+    NILM_CUSUM_MARGE_MAX,
     COOLING_TEMP_MIN_DAYS,
     CUSUM_DROPOUT_FRACTION_OF_ACTIVE,
     CUSUM_MIN_HISTORY_FOR_REFERENCE,
@@ -471,6 +472,7 @@ from .const import (
     WEERBRON_INSTELLINGEN,
     WEERBRON_WEREN_MIN_VOORSPRONG_PP,
     WEERBRON_WEREN_MIN_WAARNEMINGEN,
+    WEERBRON_WEREN_MIN_DAGEN,
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
     DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH,
     DIGITAL_TWIN_ACCURACY_HORIZON_HOURS,
@@ -38742,6 +38744,8 @@ class EnergyManagementSystemCoordinator:
             if (
                 percentage is None
                 or waarnemingen < WEERBRON_WEREN_MIN_WAARNEMINGEN
+                # v5.152.0 (L-EMS-046): pas weren na twee verschillende dagen.
+                or (g.get("aantal_dagen") or 0) < WEERBRON_WEREN_MIN_DAGEN
                 or percentage >= WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT
             ):
                 gebruikt.append(bron)
@@ -39004,7 +39008,7 @@ class EnergyManagementSystemCoordinator:
         # Solcast-verwachting) al zijn afgevinkt - een tweede,
         # zelfstandige berekening zou uit de pas kunnen gaan lopen met de
         # onenigheids-signalering hieronder.
-        self._record_weather_ensemble_agreement(avg_cloud_pct, ratio)
+        self._record_weather_ensemble_agreement(avg_cloud_pct, ratio, now)
 
         if (
             ratio < WEATHER_ENSEMBLE_UNDERPERFORM_RATIO
@@ -39026,7 +39030,7 @@ class EnergyManagementSystemCoordinator:
             )
 
     def _record_weather_ensemble_agreement(
-        self, avg_cloud_pct: float, ratio: float
+        self, avg_cloud_pct: float, ratio: float, nu: datetime | None = None
     ) -> None:
         """Legt vast of de ensemble het eens is met de werkelijke
         PV-prestatie (v1.0.2).
@@ -39079,11 +39083,60 @@ class EnergyManagementSystemCoordinator:
                 ratio > WEATHER_ENSEMBLE_OVERPERFORM_RATIO
                 and eigen_pct > WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT
             )
-            reeks = self.weather_source_agreement.setdefault(entity_id, [])
-            reeks.append(not bron_oneens)
-            self.weather_source_agreement[entity_id] = reeks[
-                -WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH:
-            ]
+            # v5.152.0 (L-EMS-046): per kwartier, niet per minuut.
+            self._weerbron_kwartier_bij(entity_id, not bron_oneens, nu or dt_util.now())
+
+    # v5.152.0 (L-EMS-046): klasse-attributen, zie `_nachtrust_onderbroken_sinds`.
+    weather_source_agreement_dagen: dict = {}
+    _weerbron_lopend_kwartier: dict = {}
+
+    def _weerbron_kwartier_bij(self, entity_id: str, eens: bool, nu: datetime) -> None:
+        """Telt een waarneming bij het lopende kwartier van een bron
+        (v5.152.0, L-EMS-046, akkoord 31-10).
+
+        De reeks per bron kreeg elke ronde (60 s) een waarneming, met 200
+        plaatsen: een oordeel over de laatste ruim drie uur. Zo ging
+        OpenWeatherMap op één dag van 48,5 % naar 79 % en kon hij binnen
+        een middag geweerd en weer toegelaten worden. Nu telt elk
+        kwartier één keer (de meerderheid van de minuten erin), dus 200
+        plaatsen is ongeveer vijf daglichtdagen, en bij elke plaats
+        hoort de datum, zodat weren pas kan na twee verschillende dagen.
+
+        Een oude reeks per minuut past daar niet bij en begint opnieuw.
+        """
+        lokaal = dt_util.as_local(nu)
+        sleutel = lokaal.strftime("%Y-%m-%d %H:") + str(lokaal.minute // 15)
+        if not isinstance(self._weerbron_lopend_kwartier, dict) or (
+            self._weerbron_lopend_kwartier is type(self)._weerbron_lopend_kwartier
+        ):
+            self._weerbron_lopend_kwartier = {}
+        if self.weather_source_agreement_dagen is type(self).weather_source_agreement_dagen:
+            self.weather_source_agreement_dagen = {}
+        lopend = self._weerbron_lopend_kwartier.get(entity_id)
+        if lopend and lopend[0] != sleutel:
+            self._weerbron_kwartier_af(entity_id, lopend)
+            lopend = None
+        if not lopend:
+            lopend = [sleutel, 0, 0]
+            self._weerbron_lopend_kwartier[entity_id] = lopend
+        lopend[1] += 1 if eens else 0
+        lopend[2] += 1
+
+    def _weerbron_kwartier_af(self, entity_id: str, lopend: list) -> None:
+        """Zet een afgerond kwartier in de reeks van de bron."""
+        dagen = self.weather_source_agreement_dagen.get(entity_id)
+        reeks = self.weather_source_agreement.get(entity_id) or []
+        if dagen is None or len(dagen) != len(reeks):
+            # Oude reeks per minuut: opnieuw beginnen.
+            reeks, dagen = [], []
+        reeks.append(lopend[1] * 2 >= lopend[2])
+        dagen.append(lopend[0][:10])
+        self.weather_source_agreement[entity_id] = reeks[
+            -WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH:
+        ]
+        self.weather_source_agreement_dagen[entity_id] = dagen[
+            -WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH:
+        ]
 
     @property
     def weather_ensemble_agreement_percent(self) -> float | None:
@@ -39141,6 +39194,9 @@ class EnergyManagementSystemCoordinator:
                 }
                 continue
             percentage = round(100 * sum(1 for e in reeks if e) / aantal, 1)
+            aantal_dagen = len(set(
+                (self.weather_source_agreement_dagen or {}).get(entity_id) or []
+            ))
             if percentage >= WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT:
                 status = RELIABILITY_RELIABLE
             elif percentage >= WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT:
@@ -39150,11 +39206,12 @@ class EnergyManagementSystemCoordinator:
             rapport[entity_id] = {
                 "status": status,
                 "reden": (
-                    f"Komt in {percentage}% van {aantal} waarnemingen overeen "
-                    "met wat de panelen deden."
+                    f"Komt in {percentage}% van {aantal} kwartieren "
+                    f"({aantal_dagen} dag(en)) overeen met wat de panelen deden."
                 ),
                 "overeenstemming_percent": percentage,
                 "aantal_waarnemingen": aantal,
+                "aantal_dagen": aantal_dagen,
             }
 
         # Alleen vergelijken als beide bronnen genoeg gemeten hebben -
@@ -42478,6 +42535,8 @@ class EnergyManagementSystemCoordinator:
             # v1.50.0: het opgebouwde alarm van een koelapparaat kan op
             # uitvaldagen rusten. Eenmalig herrekenen zonder die dagen.
             self._herijk_koelapparaten_na_meetuitval()
+            # v5.152.0: en eenmalig met de eigen marge per apparaat.
+            self._herijk_nilm_marges()
         rejected = stored.get("nilm_rejected_entities")
         if isinstance(rejected, list):
             self.nilm_rejected_entities = rejected
@@ -44096,6 +44155,94 @@ class EnergyManagementSystemCoordinator:
                 cusum,
             )
 
+    @staticmethod
+    def _nilm_marge_uit(waarden: list[float]) -> float:
+        """De normale schommeling boven de mediaan, als fractie
+        (v5.152.0). Minstens de vaste marge, hoogstens 50 %."""
+        echt = [w for w in waarden if w is not None and w > 0]
+        if len(echt) < 4:
+            return NILM_CUSUM_SLACK_FRACTION
+        mediaan = statistics.median(echt)
+        if mediaan <= 0:
+            return NILM_CUSUM_SLACK_FRACTION
+        bovenkwartiel = statistics.quantiles(echt, n=4)[2]
+        return min(
+            NILM_CUSUM_MARGE_MAX,
+            max(NILM_CUSUM_SLACK_FRACTION, (bovenkwartiel - mediaan) / mediaan),
+        )
+
+    def _nilm_marge(self, device: dict, reference_samples: list[float]) -> float:
+        """Hoeveel boven de referentie nog gewoon is voor dit apparaat
+        (v5.152.0, akkoord 31-10).
+
+        Gevonden bij de CV-ketel: die verbruikt om de dag 8,2 of 9,9 W.
+        Met een vaste marge van 10 % telde elke 9,9-dag (+17 %) mee in de
+        optelling, die stond daardoor op 3,5 terwijl het alarm bij 1
+        afgaat. Elke dag die toevallig 5 W hoger lag gaf dan meteen
+        "mogelijk defect". En de reset (vijf dagen op rij op of onder de
+        mediaan) kwam bij zo'n afwisselend patroon nooit.
+
+        De marge is nu het bovenkwartiel van de referentiedagen ten
+        opzichte van de mediaan: wat een kwart van de normale dagen al
+        haalt, is geen afwijking.
+
+        Niet bijleren tijdens een afwijking: staat het alarm aan, of is de
+        optelling al halverwege, dan blijft de laatst geleerde marge staan.
+        Anders schuiven de afwijkende dagen het bovenkwartiel op en heet
+        het defect na een week vanzelf normaal.
+        """
+        opgeslagen = device.get("normale_marge")
+        if opgeslagen is not None and (
+            device.get("anomaly_detected")
+            or (device.get("cusum_accumulator") or 0)
+            >= NILM_CUSUM_ALARM_THRESHOLD / 2
+        ):
+            return opgeslagen
+        marge = self._nilm_marge_uit(reference_samples)
+        device["normale_marge"] = round(marge, 4)
+        device["normale_marge_procent"] = round(marge * 100, 1)
+        return marge
+
+    def _herijk_nilm_marges(self) -> None:
+        """Eenmalig: de optelling opnieuw afspelen met de eigen marge
+        van elk apparaat (v5.152.0). Een alarm blijft alleen staan als
+        het ook met die marge nog boven de drempel uitkomt."""
+        for entity_id, device in self.nilm_confirmed_devices.items():
+            if device.get("_marge_herijkt"):
+                continue
+            reeks = self._zonder_meetuitval(device.get("daily_avg_history") or [])
+            if len(reeks) < CUSUM_MIN_HISTORY_FOR_REFERENCE:
+                continue
+            referentie_reeks = reeks[:-CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS] or reeks
+            referentie = statistics.median(referentie_reeks)
+            if referentie <= 0:
+                continue
+            marge = self._nilm_marge_uit(referentie_reeks)
+            cusum = 0.0
+            for dag in reeks:
+                cusum = max(
+                    0.0,
+                    cusum
+                    + min(
+                        (dag - referentie) / referentie - marge,
+                        NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
+                    ),
+                )
+            oud = device.get("cusum_accumulator")
+            if oud is not None and abs(cusum - oud) < 0.05:
+                continue
+            device["_marge_herijkt"] = True
+            device["normale_marge"] = round(marge, 4)
+            device["normale_marge_procent"] = round(marge * 100, 1)
+            device["cusum_accumulator"] = cusum
+            if cusum < NILM_CUSUM_ALARM_THRESHOLD:
+                device["anomaly_detected"] = False
+                device["estimated_drift_percent"] = None
+            _LOGGER.info(
+                "%s: optelling herrekend met eigen marge %.0f%% (%s -> %.2f)",
+                entity_id, marge * 100, oud, cusum,
+            )
+
     def _finalize_nilm_device_day(
         self, entity_id: str, device: dict, daily_avg_w: float
     ) -> None:
@@ -44203,7 +44350,9 @@ class EnergyManagementSystemCoordinator:
         # t.o.v. de referentie, niet de al-geplafonneerde bijdrage) -
         # "normaal" betekent hier echt op of onder de referentie, niet
         # slechts "iets minder ver boven de marge".
-        if daily_avg_w <= reference_avg_w:
+        # v5.152.0: "normaal" is binnen de eigen schommeling van het
+        # apparaat, niet strikt op of onder de mediaan - zie `_nilm_marge`.
+        if daily_avg_w <= reference_avg_w * (1 + self._nilm_marge(device, reference_samples)):
             device["_normal_streak_days"] = device.get("_normal_streak_days", 0) + 1
         else:
             device["_normal_streak_days"] = 0
@@ -44226,7 +44375,7 @@ class EnergyManagementSystemCoordinator:
 
         deviation_fraction = (
             (daily_avg_w - reference_avg_w) / reference_avg_w
-            - NILM_CUSUM_SLACK_FRACTION
+            - self._nilm_marge(device, reference_samples)
         )
         # v0.63.99: begrens de bijdrage van één enkele dag, zodat een
         # geïsoleerde uitschieter (zie de constante's docstring) het

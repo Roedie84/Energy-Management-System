@@ -33,6 +33,12 @@ def _bron(c, entity_id, percentage, waarnemingen=200):
         True if i < round(waarnemingen * percentage / 100) else False
         for i in range(waarnemingen)
     ]
+    # v5.152.0 (L-EMS-046): kwartieren van twee verschillende dagen.
+    c.weather_source_agreement_dagen = dict(c.weather_source_agreement_dagen or {})
+    c.weather_source_agreement_dagen[entity_id] = [
+        "2026-10-30" if i < waarnemingen // 2 else "2026-10-31"
+        for i in range(waarnemingen)
+    ]
 
 
 def test_een_slechte_bron_valt_uit_het_ensemble(make_coordinator, hass):
@@ -187,3 +193,15 @@ def test_het_oordeel_noemt_de_voorsprong(make_coordinator, hass):
     uit = c.weerbronnen_voor_het_ensemble(["weather.a", "weather.b"])
 
     assert "58" in uit["reden"] or "60" in uit["reden"] or "voorsprong" in uit["reden"]
+
+
+def test_een_slechte_bron_van_een_dag_valt_niet_uit(make_coordinator, hass):
+    """v5.152.0 (L-EMS-046): kwartieren van maar één dag weren niemand."""
+    c = make_coordinator({})
+    _bron(c, "weather.goed", 85.0)
+    _bron(c, "weather.slecht", 40.0)
+    c.weather_source_agreement_dagen["weather.slecht"] = ["2026-10-31"] * 200
+
+    uit = c.weerbronnen_voor_het_ensemble(["weather.goed", "weather.slecht"])
+
+    assert uit["geweerd"] == []

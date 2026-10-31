@@ -26,7 +26,7 @@ mij, uit v5.3:
 De `weerbron_levering` van v5.12 was dus nuttig, alleen niet om de reden
 die ik noemde: hij liet zien dat de bron wél leverde.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -41,6 +41,14 @@ def _twee_bronnen(c, hass, knmi=40.0, owm=45.0):
     hass.states.set("weather.openweathermap", "cloudy", {"cloud_coverage": owm})
 
 
+def _dagen(c):
+    """v5.152.0 (L-EMS-046): bij elke kwartierwaarneming een datum, twee dagen."""
+    c.weather_source_agreement_dagen = {
+        b: ["2026-09-20"] * (len(r) // 2) + ["2026-09-21"] * (len(r) - len(r) // 2)
+        for b, r in c.weather_source_agreement.items()
+    }
+
+
 def test_de_export_toont_de_echte_weerbeslissing(make_coordinator, hass):
     """Het gemeten geval: een bron geweerd, en de export zei "geweerd: []"."""
     c = make_coordinator({})
@@ -48,6 +56,7 @@ def test_de_export_toont_de_echte_weerbeslissing(make_coordinator, hass):
         "weather.forecast_thuis": [True] * 58 + [False] * 142,
         "weather.openweathermap": [True] * 170 + [False] * 30,
     }
+    _dagen(c)
 
     c._weer_de_slechte_bronnen(
         ["weather.forecast_thuis", "weather.openweathermap"], [40.0, 45.0]
@@ -65,6 +74,7 @@ def test_een_geweerde_bron_wordt_nog_steeds_gemeten(make_coordinator, hass):
         "weather.forecast_thuis": [True] * 58 + [False] * 142,
         "weather.openweathermap": [True] * 170 + [False] * 30,
     }
+    _dagen(c)
 
     c._update_weather_ensemble_check(NU)
 
@@ -92,7 +102,12 @@ def test_de_overeenstemming_leert_door_voor_een_geweerde_bron(make_coordinator, 
         "weather.openweathermap": 45.0,
     }
 
-    c._record_weather_ensemble_agreement(avg_cloud_pct=45.0, ratio=1.0)
+    _dagen(c)
+    # v5.152.0 (L-EMS-046): het kwartier telt zodra het volgende begint.
+    c._record_weather_ensemble_agreement(avg_cloud_pct=45.0, ratio=1.0, nu=NU)
+    c._record_weather_ensemble_agreement(
+        avg_cloud_pct=45.0, ratio=1.0, nu=NU + timedelta(minutes=15)
+    )
 
     assert len(c.weather_source_agreement["weather.forecast_thuis"]) == 59
 

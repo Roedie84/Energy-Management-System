@@ -1297,6 +1297,9 @@ LEARNED_THRESHOLD_MARGIN_W = 5.0
 # verschillen te veel tussen apparaten voor een vaste Watt-drempel).
 NILM_CUSUM_SLACK_FRACTION = 0.10
 NILM_CUSUM_ALARM_THRESHOLD = 1.0
+# v5.152.0: de marge per apparaat (bovenkwartiel tegen mediaan) gaat niet
+# boven de 50 %, anders verbergt een wispelturig apparaat alles.
+NILM_CUSUM_MARGE_MAX = 0.5
 
 # Maximale bijdrage die ÉÉN dag aan de CUSUM-accumulator mag leveren
 # (v0.63.99, gevraagd tijdens een diagnostiek-review: CV-ketel en 5
@@ -3546,6 +3549,9 @@ WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT = 60.0
 # worden (v5.3). Een bron met tien waarnemingen op 40% is geen slechte
 # bron maar een bron die nog niets heeft bewezen.
 WEERBRON_WEREN_MIN_WAARNEMINGEN = 50
+# v5.152.0 (L-EMS-046): een bron weren vraagt kwartieren van minstens twee
+# verschillende dagen; één middag zegt niets.
+WEERBRON_WEREN_MIN_DAGEN = 2
 
 # Hoeveel procentpunt beter de overblijvende bronnen moeten zijn voordat
 # er een geweerd wordt (v5.6).
@@ -3753,6 +3759,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "kalman_divergence_history": {"type": "plain"},
     "backyard_sun_exposure_azimuths": {"type": "plain"},
     "weather_source_agreement": {"type": "plain"},
+    # v5.152.0 (L-EMS-046): de datum bij elke kwartierwaarneming per bron.
+    "weather_source_agreement_dagen": {"type": "plain"},
     "pv_peak_azimuth_history": {"type": "plain"},
     "daily_cost_history": {"type": "plain"},
     "daily_report_history": {"type": "plain"},

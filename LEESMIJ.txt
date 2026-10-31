@@ -1,3 +1,14 @@
+EMS v5.152.0 - minder valse 'mogelijk defect', rustiger weerbronoordeel
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De defectdetectie van de apparaten rekent met de eigen schommeling van
+  elk apparaat. De CV-ketel (om de dag 8 of 10 W) gaf daardoor bij elke
+  iets hogere dag "mogelijk defect"; dat is weg. Een echt stijgend
+  verbruik wordt nog steeds gemeld.
+- Een weerbron wordt per kwartier beoordeeld in plaats van per minuut, en
+  pas geweerd na gegevens van twee dagen.
+
 EMS v5.151.0 - dagarchief compleet op herstartdagen, minder valse meldingen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

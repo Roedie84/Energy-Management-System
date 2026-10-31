@@ -34182,3 +34182,12 @@ Dagafsluiting van de leerronde (L-EMS-047, L-EMS-048, L-EMS-049). Alleen meting 
 
 Tests: `test_v5151_leerronde.py` (12).
 
+## v5.152.0 — eigen marge per apparaat in de defectdetectie; weerbronnen per kwartier (L-EMS-046)
+
+Akkoord Ruud 31-10 op beide punten.
+
+**1. Eigen marge per NILM-apparaat.** De CV-ketel verbruikt om de dag 8,2 of 9,9 W. Met de vaste marge van 10 % telde elke 9,9-dag (+17 %) mee: de optelling (CUSUM) stond op 3,5 terwijl het alarm bij 1 afgaat, zodat elke dag met 5 W extra meteen "mogelijk defect" gaf. De reset (vijf dagen op rij op of onder de mediaan) kwam bij dit patroon nooit. Nu `_nilm_marge`: het bovenkwartiel van de referentiedagen tegen de mediaan, minstens 10 %, hoogstens 50 % (`NILM_CUSUM_MARGE_MAX`). Zowel de optelling als de reset ('normaal' = binnen die marge) gebruiken hem. Tijdens een alarm, of vanaf een halve drempel, leert de marge niet bij (anders heet een defect na een week normaal). Eenmalig bij het laden: `_herijk_nilm_marges` speelt de reeks opnieuw af met de eigen marge; een alarm vervalt alleen als de optelling dan onder 1 blijft. CV-ketel: 3,47 → 0,23 (marge 16 %). Zichtbaar per apparaat: `normale_marge_procent`. `_finalize_nilm_device_day` groeit niet (ratel).
+
+**2. L-EMS-046: weerbronnen per kwartier.** De reeks per bron kreeg elke ronde (60 s) een waarneming; 200 plaatsen = ruim drie uur. OpenWeatherMap ging zo op één dag van 48,5 % naar 79 %. Nu `_weerbron_kwartier_bij`: één waarneming per kwartier (meerderheid van de minuten), met de datum erbij (`weather_source_agreement_dagen`, bewaard). 200 plaatsen is daarmee ongeveer vijf daglichtdagen. Weren vraagt nu ook kwartieren van minstens twee verschillende dagen (`WEERBRON_WEREN_MIN_DAGEN`). Een oude reeks per minuut begint opnieuw. Rapport: `aantal_dagen` en "x kwartieren (n dag(en))".
+
+Tests: `test_v5152_marge_en_weerbron.py` (9); aangepast aan de kwartieren: `test_weather_source_reliability.py`, `test_weerbron_afkeuren.py` (+1), `test_weerbron_opsluiting.py`.

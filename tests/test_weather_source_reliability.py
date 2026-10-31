@@ -11,7 +11,7 @@ Gevraagd bij het bouwen: "Ik neem aan dat je het meeneemt in je
 diagnostiek file? Gezien het nu op 1 dag natuurlijk niet betrouwbaar
 is." Dus: meten, en pas oordelen als er genoeg is.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from custom_components.energy_management_system.const import (
     CONF_KNMI_WEATHER_ENTITY,
@@ -43,8 +43,11 @@ def _waarneming(c, hass, metno_pct, owm_pct, ratio):
     _weer(hass, METNO, metno_pct)
     _weer(hass, OWM, owm_pct)
     c._update_weather_ensemble_check(NOW)
+    # v5.152.0 (L-EMS-046): één waarneming per kwartier; elk meetmoment
+    # hier is een volgend kwartier.
+    c._t_kwartier = getattr(c, "_t_kwartier", 0) + 1
     c._record_weather_ensemble_agreement(
-        (metno_pct + owm_pct) / 2, ratio
+        (metno_pct + owm_pct) / 2, ratio, NOW + timedelta(minutes=15 * c._t_kwartier)
     )
 
 
