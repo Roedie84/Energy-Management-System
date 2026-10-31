@@ -737,3 +737,16 @@ laatste ronde: 31-10 11:43, gemeten t/m 31-10 11:45
 - Hypotheses: H-EMS-2 (PV te hoog; vandaag tegenvoorbeeld), H-EMS-14 (plan avond/nacht/middag te veel ontladen), H-EMS-11 (piek vastgehouden).
 
 laatste ronde: 31-10 15:41, gemeten t/m 31-10 15:45
+
+## 31-10 19:40 · tussenronde
+- **HA-herstart 16:30 → draait v5.153.0** (L-EMS-046..049 nu actief). v5.154.0/5.154.1 (andere sessie 16:49/17:04) zijn geïnstalleerd maar nog niet actief (herstart staat op de controlekaart). Na 16:30 alleen opstartwaarschuwingen (Solcast/Zonneplan tijdelijk onbeschikbaar, laatste waarde aangehouden). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 31-10 0,077 kWh, 15:40 0,01). Besparing tot nu −€ 0,20 (ongecorrigeerd +1,10, SoC-correctie −1,30).
+- **Avondpiek benut (tegenvoorbeeld H-EMS-11):** accu 52 → 26 % (≈ 3,0 kWh) tussen 15:45 en 19:35 bij 47-50 ct; netimport 15-19 u samen 0,61 kWh. Vandaag niet vastgehouden.
+- **PV-dag (H-EMS-2):** 4,94 kWh (Modbus) tegen EMS day-ahead 3,82 (**+29 %**), Solcast intraday ~6,4 (−23 %). Tweede tegenvoorbeeld voor "PV te hoog"; telt mee in de dagafsluiting.
+- **Twin** `kwartierplan` n=55 MAE **0,906** (15:40 0,895): 16:15 fout 3,47 (plan van vóór de herstart verwachtte ontladen tot 1,14 kWh, accu hield 4,61); 17:15-19:15 fouten 0,38 / 0,02 / 0,35 → avondplan na de herstart klopt (30-10 nog alle > 2) → H-EMS-14 avonddeel ziet er beter uit; om 23:40 toetsen of de MC-kans weer naar ~0 zakt (nu 100 %, det. tekort 6,58, p90 8,11, blok 01-11 13:00).
+- **Effecttoets na installatie:** L-EMS-048 geverifieerd (4/4 proefstandregels in *Nog niet bepaald* tonen teller of uitkomst, was 0/4). L-EMS-049 eerste meting 19:40 `aantal_doen` 0 (zon onder) → 23:40 nogmaals. L-EMS-047 pas meetbaar bij de dagafsluiting (31-10 = herstartdag). L-EMS-046: weer 1/1, geweerd 0 → per week tellen.
+- Reservesprongen 15:45-19:40: 24× alleen behoefte (live correctie 0 ↔ 1,5 kWh), reserve 10,37 afgekapt → geen effect (bekend, L-EMS-031).
+- Stilstand: **geen echte** (8 wachten, 0 doen). Airco besluit "niets", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog; 2e tegenvoorbeeld), H-EMS-14 (plan avond/nacht; avond vandaag goed), H-EMS-11 (piek vastgehouden; vandaag benut).
+
+laatste ronde: 31-10 19:42, gemeten t/m 31-10 19:45
