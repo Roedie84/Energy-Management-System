@@ -711,3 +711,17 @@ laatste ronde: 31-10 03:40, gemeten t/m 31-10 03:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (plan avond/nacht te hoog, dagtotaal te laag; per dagdeel meten in de dagafsluiting), H-EMS-11 (piek vastgehouden; vannacht weer: 4,26 kWh door de nacht).
 
 laatste ronde: 31-10 07:42, gemeten t/m 31-10 07:45
+
+## 31-10 11:41 · tussenronde
+- **Draait nog v5.150.0** (Diagnose gezondheid; HA-start 30-10 13:03). HACS heeft **v5.152.0** klaarstaan (5.151.0 + 5.152.0/L-EMS-046 van een andere sessie 08:12) → effecten L-EMS-046..049 nog niet meetbaar; herstart staat al op de controlekaart. Geen EMS-fouten na 07:45. Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; regeloverschot 31-10 0,01 kWh). Besparing tot nu −€ 0,05.
+- **Nacht 30→31: geen tekortnacht** (accu hield 3,9-4,3 kWh tot het blok 10:30, nu 46 %). MC 22:00 gaf 0 % → klopt; nacht nog niet in `kalibratie_22u.per_nacht` (Brier n=5, 0,214).
+- **PV (H-EMS-2):** 1,19 kWh t/m 11:45 (Modbus) tegen Solcast ~1,50 t/m nu (dag 4,09) → −21 %, bewolking 100 %.
+- **Twin** groep `kwartierplan` n=47 MAE **0,85** (07:40 0,92); laatste 11:15 fout 0,30 (meer zon dan verwacht).
+- **MC tot blok 100 %** (blok 01-11 09:00, plan laadt +0,00 in dit blok, det. tekort 6,58, p90 7,78) — zelfde beeld als 30-10 11:41 (toen 100 %, om 23:40 0 % omdat de avond minder verbruikte). Herhalingstoets H-EMS-14 vanavond.
+- Reservesprongen vanochtend 7 (08:24-09:40), 09:21→09:22 +1,33/−1,42 kWh binnen een minuut, steeds `lange_horizon_extra`; vóór/binnen het blok, geen verkoop geraakt → alleen noteren (bekend patroon, L-EMS-020/031).
+- **Meetbaarheid (nieuw):** temperatuur-verbruik-regressie (voedt `temperatuur_extra_kwh` in de reserve) krijgt alleen een paar uit een ontlaadvenster ≥ 2 u; 10 d: 1 nieuw paar, status sinds 29-10 14:54 "Venster van 0,3 uur is te kort". 7 paren (9-21 °C) → model werkt, maar leert in de stookperiode traag. Dagafsluiting: bekijken of de nacht 22-09 als venster kan (raakt de reserve → voorstel).
+- Stilstand: **geen echte** (9 wachten, 0 doen; was 13). Airco besluit "verwarmen", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (plan avond/nacht te hoog; vanavond herhaling van 30-10), H-EMS-11 (piek vastgehouden).
+
+laatste ronde: 31-10 11:43, gemeten t/m 31-10 11:45

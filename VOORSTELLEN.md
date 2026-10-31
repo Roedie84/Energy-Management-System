@@ -339,7 +339,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: na installatie *Nog niet bepaald* 11 wachten, geen OWM-regel.
 
 ## L-EMS-046 · weerbron-overeenstemming telt minuten, geen onafhankelijke waarnemingen (meetbaarheid)
-- Status: **open** (raakt welke bron in het ensemble meeweegt → Ruud beslist).
+- Status: **gebouwd v5.152.0** (andere sessie 31-10 08:12; in HACS, nog niet actief: HA draait sinds 30-10 13:03 en de integratie meldt v5.150.0). Was: open (raakt welke bron in het ensemble meeweegt → Ruud beslist).
 - Onderbouwing (29-10 15:45, code v5.146.1): `_record_weather_ensemble_agreement` loopt elke coordinator-tick (60 s) zodra Solcast ≥ de minimumverwachting geeft. `WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH` 200 ≈ 3,3 uur daglicht; `WEERBRON_WEREN_MIN_WAARNEMINGEN` 50 ≈ 50 minuten. Gevolg: OWM werd 10:14 geweerd op 48,5 % (in feite één ochtend), en stond enkele uren later op 79 %. Eerder (v5.13) zat forecast_thuis zo vast op 58 %.
 - Voorstel: één waarneming per kwartier (of per uur) en de reeks over ≥ 3 dagen laten lopen (bijv. 200 kwartieren ≈ 4-5 daglichtdagen); weren pas bij ≥ 2 dagen gegevens.
 - Verwacht effect: geen weren/terugnemen op één bui; stabielere ensemble-bewolking voor de PV-correctie.
