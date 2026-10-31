@@ -154,3 +154,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 31-10 06:50 | updates installeren ems 5.151.0, stormchase 0.60.3 (hacs)
 31-10 08:51 | ha herstarten om ems 5.151.0 en stormchase 0.60.3 te activeren
 31-10 15:51 | ems spaarregel ook na goedkoop blok (ontlaadt in goedkoopste blok, daarna leeg in dure kwartieren)
+31-10 18:51 | ha herstarten om ems 5.154.1 te activeren (pendeldemping p1)
