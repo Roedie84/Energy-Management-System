@@ -498,4 +498,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - Werking: nachtvenster houdt mid vast; 5/5 traces failed_conditions (00-06, verwacht), geen fout. 0 HA-herstarts. Lokaal 65 mislukt op 161.869 (geen nieuwe), uitval 0, sturen 388/389 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 1,4-2,4.
 - CO₂ daalt 915 → 775 (gem 833), 0 u > 1.200. Vocht 65,8 → 65,1% bij 16,9 → 16,6 °C, schimmelindicator 81-82 (hoog), buiten 99% / 9,6 °C. Overdag verwarmen; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=14). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid: auto houdt het hoog, halveert pas in ~40-60 min, na vertrek sneller (n=8) - kandidaat high bij > 10. Geen nieuwe piek, geen toets.
-laatste ronde: 31-10 04:25, gemeten t/m 04:20
+
+## 31-10 08:25 (ronde 69)
+- PM2.5 04:20-08:20: gem 1,45, mediaan 1,44, P95 1,95, max 2,33 (07:45 en 08:15) (n=48); 0 uur > 15. Nacht vlak 1,0-1,6 (blijft boven schone nachten 0,3-0,5, zonder zichtbare bron), vanaf 07:45 ochtendactiviteit naar ~2,2. Dag t/m nu ~1,5; 7d (24-30/10) 3,00 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit.
+- Stand: mid 202 min (gem 1,40, afwezig, n=40), auto 38 min (sinds 07:41:56, gem 1,72, aanwezig, n=8): bron (mensen), geen standeffect.
+- Werking: auto direct bij eerste aanwezigheid (07:41:56); korte afwezigheden < 15 min gaven terecht geen mid. 0 HA-herstarts. 5/5 traces zonder fout. Lokaal 65 mislukt op 163.305 (geen nieuwe), uitval 0, sturen 389/390 (1/1 nieuw), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 1,0-2,3.
+- CO₂ 771 → 715 → 763 (gem 741), 0 u > 1.200. Vocht 65,1 → 64,2 → 64,7% bij 16,6 → 16,5 °C (verwarming uit), schimmelindicator 81-82 (hoog), buiten 99% / 9,1-9,6 °C: koude ruimte, vocht hoog; verwarmen helpt meer dan luchten.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=14). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid: auto houdt het hoog, halveert pas in ~40-60 min, na vertrek sneller (n=8) - kandidaat high bij > 10. Geen nieuwe piek, geen toets.
+laatste ronde: 31-10 08:25, gemeten t/m 08:20

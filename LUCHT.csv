@@ -1624,3 +1624,23 @@ datumtijd,kpi,waarde,n,opmerking
 2026-10-31 04:20,filtergebruik_pct,0,1,
 2026-10-31 04:20,automation_traces_fout,0,5,5x failed_conditions nachtvenster (verwacht)
 2026-10-31 04:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 1.4-2.4
+2026-10-31 08:20,pm25_gem,1.45,48,5-min statistiek 04:20-08:20
+2026-10-31 08:20,pm25_mediaan,1.44,48,
+2026-10-31 08:20,pm25_p95,1.95,48,
+2026-10-31 08:20,pm25_max,2.33,48,momentaan 07:45 en 08:15; ochtendactiviteit
+2026-10-31 08:20,pm25_uren_gt15,0.00,48,
+2026-10-31 08:20,pm25_uren_gt25,0.00,48,
+2026-10-31 08:20,stand_mid_min,202,40,gem pm25 1.40
+2026-10-31 08:20,stand_auto_min,38,8,gem pm25 1.72 (sinds 07:41:56)
+2026-10-31 08:20,pm25_aanwezig,1.72,8,vanaf 07:41
+2026-10-31 08:20,pm25_afwezig,1.40,40,
+2026-10-31 08:20,co2_gem,741,48,5-min; 771 -> 715 -> 763; ramen dicht
+2026-10-31 08:20,co2_uren_gt1200,0.00,48,
+2026-10-31 08:20,vocht_max,65.2,48,65.1 -> 64.2 -> 64.7 bij 16.6 -> 16.5 C
+2026-10-31 08:20,schimmel_indicator,82,48,81-82; buiten 99% / 9.1-9.6 C
+2026-10-31 08:20,ha_herstarts,0,1,
+2026-10-31 08:20,lokaal_mislukt,65,163305,geen nieuwe; uitval 0; 240 verbindingen
+2026-10-31 08:20,sturen_bevestigd,389,390,1/1 nieuw (auto 07:41)
+2026-10-31 08:20,filtergebruik_pct,0,1,
+2026-10-31 08:20,automation_traces_fout,0,5,auto direct bij aanwezigheid 07:41:56
+2026-10-31 08:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 1.0-2.3
