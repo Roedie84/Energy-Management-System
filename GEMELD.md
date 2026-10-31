@@ -153,3 +153,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 30-10 23:51 | L-EMS-049 ems zonstand-toets 's nachts vals op doen (azimut ververst per 20 min)
 31-10 06:50 | updates installeren ems 5.151.0, stormchase 0.60.3 (hacs)
 31-10 08:51 | ha herstarten om ems 5.151.0 en stormchase 0.60.3 te activeren
+31-10 15:51 | ems spaarregel ook na goedkoop blok (ontlaadt in goedkoopste blok, daarna leeg in dure kwartieren)
