@@ -688,3 +688,16 @@ laatste ronde: 30-10 19:40, gemeten t/m 30-10 19:45
 - Hypotheses: H-EMS-2 (PV te hoog; −28 % vandaag), H-EMS-14 (plan rekent te veel verbruik; vanavond bevestigd: tekortkans 77 → 0 %), H-EMS-11 (avondpiek vastgehouden).
 
 laatste ronde: 30-10 23:40, gemeten t/m 30-10 23:45
+
+## 31-10 03:40 · dagafsluiting 30-10
+- **v5.150.0 actief**, geen purge/repack, geen EMS-fouten (alleen Zonneplan/Solcast-onbeschikbaar, afgevangen; niet melden). **Release v5.151.0** (L-EMS-047/048/049, zie onder).
+- Dag 30-10: PV **5,31 kWh** (tracker day-ahead 5,86 → **−9,4 %**; dagarchief-ochtend 6,89 → −23 %; Solcast 7,34 → −28 %), import 1,17, export 0,57, accu 3,40 in / 4,03 uit, huis **6,54** (verwacht 8,59 → −24 %). **Harde regel: 0× onder de reserve** (0 kWh verkocht). Geen tekortnacht 29→30; nacht 30→31 loopt (03:42 beschikbaar 4,26, MC tot blok 0 %, accu spaart voor de ochtendpiek).
+- **H-EMS-2:** 7 d MAE/bias 17,1/−16,2 %, 14 d 19,3/−17,6, 30 d 15,0/−13,3 (26/30 negatief); ≤ 50 % bewolking −17,2 (n=11). Blijft; correctie is Ruuds keuze (L-EMS-025 afgewezen).
+- **H-EMS-14 bijgesteld:** op dagniveau is de verbruiksverwachting juist te **laag**: 24..30-10 werkelijk − verwacht +1,25 kWh/dag (5/7 hoger; alleen 29/30-10 lager, niemand thuis). Het te hoge plan zit in het avond-/nachtdeel van het kwartierplan, niet in het dagtotaal → toets: verbruik per dagdeel werkelijk tegen kwartierplan (meetbaarheid, volgende dagafsluiting).
+- **Nabeschouwing 24..30-10: 85,5 %** (€ 11,34 / 13,27); 30-10 89 %. Avondpiek 7 d +€ 9,41 en ochtendpiek +€ 8,42 vastgehouden (H-EMS-11; deels de 10 ct-regel).
+- MC 22:00 Brier **0,214** (n=5; 30-10 kans 0 %, geen tekort). Twin groep `kwartierplan` n=39 MAE **1,02** (< 1,2; dag 3 sluit 06:40).
+- **Gebouwd v5.151.0:** (1) **L-EMS-047** dagarchief vult onvolledige uren aan uit de uurstatistiek (`aangevulde_kwartieren`, `uren_uit_statistiek`); (2) **L-EMS-048** proefstandregels tonen de reden/uitkomst in *wat_ontbreekt*; (3) **L-EMS-049** zonstandtoets rekent met het meetmoment van de sensor (≤ 60 min). Suite **6426 groen** (+12 tests `test_v5151_leerronde.py`), workflow, HACS ververst. Sturing ongewijzigd.
+- Stilstand: **geen echte** (13 wachten, 0 doen). Airco besluit "niets", knop uit.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (plan avond/nacht te hoog, dagtotaal juist te laag), H-EMS-11 (piek vastgehouden).
+
+laatste ronde: 31-10 03:40, gemeten t/m 31-10 03:45
