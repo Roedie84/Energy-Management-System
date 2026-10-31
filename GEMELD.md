@@ -151,3 +151,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 30-10 17:51 | ems accu pendelt ±2 kW tegen pulserende last, pendeldetectie p1-regeling (gemiddelde ~60 s, quooker-filter exportkant)
 30-10 20:51 | luchtreiniger high zolang pm2.5 > 10 bij aanwezigheid (ook zonder kookplaatsignaal)
 30-10 23:51 | L-EMS-049 ems zonstand-toets 's nachts vals op doen (azimut ververst per 20 min)
+31-10 06:50 | updates installeren ems 5.151.0, stormchase 0.60.3 (hacs)
