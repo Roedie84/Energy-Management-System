@@ -799,3 +799,14 @@ laatste ronde: 01-11 07:42, gemeten t/m 01-11 07:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon/halfbewolkt), H-EMS-14 (dagtotaal weekend te laag), H-EMS-11 (piek vastgehouden; neemt af).
 
 laatste ronde: 01-11 11:45, gemeten t/m 01-11 11:45
+
+## 01-11 15:40 · tussenronde
+- **Draait v5.155.1**, geen nieuwe release op GitHub. Log: DNS-storing ~11:50-13:30 (extern); EMS hield de laatste Zonneplan-waarden aan (afgevangen). Geen EMS-fouten. Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; `reserve_sprongen_aantal` 0). Besparing vandaag −€ 0,05.
+- **Blok 13:00-14:30** (`sparen_in_blok`): prijs 38,7-40,4 ct tegen avond ~45 ct → spreiding onder het rendementsverlies (83 %), geen netladen, SoC 22-24 % vlak. Consistent, geen bug. Nieuw blok **02-11 14:00**; MC 100 % (beschikbaar 1,61 tegen spaarplan 9,30) → netafname vannacht verwacht met accu boven de vloer (geen tekortnacht in de zin van L-EMS-029).
+- **H-EMS-2 (PV te hoog):** SolarEdge t/m 15:42 **1,75 kWh** tegen Solcast nu 2,34 (−25 %) en 11:40 2,86 (−39 %); bewolking 53 → 100 %. Vierde dag op rij te hoog; dagafsluiting rekent tegen day-ahead af.
+- Twin `kwartierplan` MAE **0,717** (11:40 0,722).
+- Stilstand: **geen echte** (10 wachten, 0 doen; plan 3 scenario's 9/14 dagen loopt). Airco besluit "niets" (zelf bediend), knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog bij zon/halfbewolkt, vandaag ook bij 100 %), H-EMS-14 (dagtotaal weekend te laag; zondag in dagafsluiting), H-EMS-11 (piek vastgehouden; neemt af).
+
+laatste ronde: 01-11 15:40, gemeten t/m 01-11 15:45
