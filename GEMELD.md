@@ -161,3 +161,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 01-11 07:51 | ems kostprijsmodel boekt verlies bij soc-sprong 1% zonder accuvermogen (hysterese/aggr-tellers)
 01-11 07:51 | ha http-blok ip_ban_enabled + login_attempts_threshold (inlogpogingen 198.23.215.190)
 01-11 08:51 | updates installeren ems 5.155.1 (hacs, fix kostprijsmodel soc-sprong)
+01-11 09:51 | gold scalper _unrecorded_attributes grote attributen (db-groei ~350 mb/dag) + daarna recorder.purge repack
+01-11 09:51 | ems/eufy lokaal alleen state schrijven bij statewijziging (vluchtige tijdstempels uit attributen, db-rijen)
