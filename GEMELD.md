@@ -172,3 +172,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 01-11 14:51 | ems system status klappert op celspanningsverschil module 4 (hysterese 0,10/0,08 v, vlak midden vanaf 25-30%)
 01-11 15:50 | L-SC-028 stormchase windcorrectie na locatiewissel/modelsprong relatief of laten vallen (akkoord)
 01-11 18:51 | ems pendeldemping houdt pendelen zelf in stand (wissel alleen tellen bij huisverbruiksprong >1 kw)
+01-11 23:51 | L-SC-029 stormchase motregen van station binnen 10 km als 'regent nu' tellen (akkoord)
