@@ -158,3 +158,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 31-10 21:51 | ems sluimerverbruik aftrekken bij lang vasthouden accu (winst negatief -> nu gebruiken)
 01-11 06:51 | updates installeren ems 5.155.0 (hacs ziet release nog niet, verversen) en gold scalper 2.27.1 (hacs)
 01-11 06:51 | L-EMS-050 temperatuurmodel koude-nachtreserve leert uit vast nachtvenster 22-07 (akkoord)
+01-11 07:51 | ems kostprijsmodel boekt verlies bij soc-sprong 1% zonder accuvermogen (hysterese/aggr-tellers)
+01-11 07:51 | ha http-blok ip_ban_enabled + login_attempts_threshold (inlogpogingen 198.23.215.190)
