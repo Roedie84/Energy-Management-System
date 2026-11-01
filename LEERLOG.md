@@ -822,3 +822,15 @@ laatste ronde: 01-11 15:40, gemeten t/m 01-11 15:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (dagtotaal weekend te laag; zondag in dagafsluiting), H-EMS-11 (piek vastgehouden; neemt af).
 
 laatste ronde: 01-11 19:40, gemeten t/m 01-11 19:40
+
+## 01-11 23:40 · tussenronde
+- **HA-herstart 21:20 → draait v5.156.0** (andere sessie 21:16: kwartierplan rekent een lege accu niet als sparen). Log na 19:40: alleen extern (forecast_solar, Zonneplan-prijzen even leeg 21:20 → laatst bekende 107 kwartieren gebruikt; Solcast-limiet). Geen EMS-fouten. Geen release.
+- **v5.156.0 effect gemeten:** plan 23:30 → morgen 10:30 `smart` met `tekort` (71/98 kwartieren, SoC 10 %, net ~270-300 W); vanaf 10:45 weer `sparen` zodra de zon de accu vult. Vóór de fix klapte de tekortmelding 17:36-21:02 vier keer. Werkt; definitief in de dagafsluiting (aantal klappen na 21:20).
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg; `reserve_sprongen_aantal` 0, alleen_behoefte 47, na_herstart 1).
+- **Accu leeg sinds ~21:00** (SoC 9-10 %, beschikbaar 0,00); MC tot blok **100 %**, det. tekort tot blok 3,36 kWh, soort **economisch** ("bijladen uit het net loonde niet", laadbesluit sinds 9 u `loont_niet`). Vannacht wordt een tekortnacht (> 0,5 kWh met lege accu) verwacht → eerste kalibratiepunt met kans 100 % (Brier 5 nachten 0,014). Dagafsluiting toetst of de nachtprijs (40-41 ct) tegen de laadprijs van gisteren klopt met "loonde niet".
+- Besparing vandaag eind **−€ 0,57** = ongecorrigeerd +0,16, SoC-correctie −0,72 (voorraad −1,38 kWh × 0,5225). Voorraadwaardering, geen verlies (zie 19:40).
+- PV dag eind **1,83 kWh** (SolarEdge statistiek) tegen Solcast 2,34 (−22 %) → H-EMS-2 vijfde dag in de dagafsluiting.
+- Stilstand: **geen echte** (10 wachten, 0 doen; ongewijzigd). Airco besluit "verwarmen", knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (dagtotaal weekend te laag; zondag in dagafsluiting), H-EMS-11 (piek vastgehouden; neemt af).
+
+laatste ronde: 01-11 23:40, gemeten t/m 01-11 23:43
