@@ -571,4 +571,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 1.429 → 1.035 → 1.278 (gem 1.230), 2,1 u > 1.200, ramen dicht. Vocht 68,5 → 56,9 → 58,3% (opwarming), schimmelindicator 82 → 74 → 77, buiten 99% / 11,4 °C. Luchten; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bevestigd (n=12): met uit blijft PM2.5 na een bron hangen op 6-8 (deze middag 3 u zonder daling), op auto/mid zakt het binnen ~1 u naar 1-2. Eerste dag sinds start boven 5 µg/m³.
 
-laatste ronde: 01-11 16:25, gemeten t/m 16:20
+## 01-11 20:25 (ronde 78)
+- PM2.5 16:20-20:20: gem 5,73, mediaan 5,65, P95 6,69, max 7,6 (17:55) (n=48); 0 uur > 15. Dag t/m nu ~5,4 (boven WHO-jaarnorm 5); 7d (25-31/10) 3,32 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat 4 s 'ready' 19:10, oven inactive), ramen dicht. Hele avond aanwezig, tv vanaf 18:57. VOC-index 33 → 294 (18:15-19:05) en vocht 58 → 71% zonder PM-stijging: geurbron/koken zonder kookplaatsignaal, geen fijnstof.
+- Stand: uit 230 min (gem 5,74), totaal ~28,3 u uit sinds 31-10 15:50. Om 20:10:30 handmatig weer AAN op auto (sturen bleef 399/400 = niet via EMS); auto 10 min (gem 5,43, n=2): te weinig voor een conclusie. Volgende ronde toetst of het op auto met aanwezigheid naar 1-4 zakt.
+- Werking: 5/5 traces zonder fout; automation zal weer wisselen nu de stand niet meer uit is. 0 HA-herstarts (aanwezigheidssensor 2x ~2 s unavailable 17:16/17:19). Lokaal 67 mislukt op 176.199 (geen nieuwe), uitval 0, filter 0%. Apparaat-PM2.5 2 bij Ultimate ~5: onderschat.
+- CO₂ hele ronde > 1.200 (gem 2.017, max 2.439 om 19:55), ramen dicht, aanwezig. Vocht tot 70,6%, schimmelindicator 77 → 97 → 91 bij ~21 °C, buiten 99% / 10,7 °C. Nu luchten (CO₂ > 2.000); luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=13): met uit bleef PM2.5 ~28 u op 3-10 (dagen 01-11 ~5,4 tegen 1-3 op auto/mid); toets nu andersom: zakt het op auto weer naar 1-4?
+
+laatste ronde: 01-11 20:25, gemeten t/m 20:20

@@ -1804,3 +1804,23 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-01 16:20,filtergebruik_pct,0,1,
 2026-11-01 16:20,automation_traces_fout,0,5,alle 5 failed_conditions (uit blijft uit)
 2026-11-01 16:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 4.2-8.4 (apparaat uit)
+2026-11-01 20:20,pm25_gem,5.73,48,5-min statistiek 16:20-20:20; uit tot 20:10:30 handmatig; daarna auto
+2026-11-01 20:20,pm25_mediaan,5.65,48,
+2026-11-01 20:20,pm25_p95,6.69,48,
+2026-11-01 20:20,pm25_max,7.58,48,momentaan 17:55; geen kookmoment (kookplaat 4 s ready 19:10)
+2026-11-01 20:20,pm25_uren_gt15,0.00,48,
+2026-11-01 20:20,pm25_uren_gt25,0.00,48,
+2026-11-01 20:20,stand_uit_min,230,46,gem pm25 5.74; uit van 31-10 15:50 tot 01-11 20:10:30 (~28,3 u)
+2026-11-01 20:20,stand_auto_min,10,2,gem pm25 5.43; handmatig aan 20:10:30 (sturen ongewijzigd 399/400), 1 s uit om 20:12
+2026-11-01 20:20,pm25_dag_tm_nu,5.41,240,00:00-20:20 gemiddelde van 5 rondes
+2026-11-01 20:20,co2_gem,2017,48,5-min; 1276 -> 2429 (19:55); ramen dicht; aanwezig
+2026-11-01 20:20,co2_uren_gt1200,4.00,48,hele ronde
+2026-11-01 20:20,vocht_max,70.6,48,58.5 -> 70.6 (19:05) -> 65.9 bij 20.3-21.1 C
+2026-11-01 20:20,schimmel_indicator,97,48,77 -> 97 (19:05) -> 91; buiten 99% / 10.7 C
+2026-11-01 20:20,voc_index_max,294,48,33 (18:15) -> 294 (19:05) zonder PM-piek
+2026-11-01 20:20,ha_herstarts,0,1,
+2026-11-01 20:20,lokaal_mislukt,67,176199,geen nieuwe; uitval 0; 245 verbindingen
+2026-11-01 20:20,sturen_bevestigd,399,400,geen nieuwe opdrachten
+2026-11-01 20:20,filtergebruik_pct,0,1,
+2026-11-01 20:20,automation_traces_fout,0,5,
+2026-11-01 20:20,apparaat_pm25_bereik,2,1,apparaat 2 bij Ultimate 4.9-5.6 (na aanzetten)
