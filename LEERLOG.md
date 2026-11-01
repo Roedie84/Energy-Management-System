@@ -810,3 +810,15 @@ laatste ronde: 01-11 11:45, gemeten t/m 01-11 11:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon/halfbewolkt, vandaag ook bij 100 %), H-EMS-14 (dagtotaal weekend te laag; zondag in dagafsluiting), H-EMS-11 (piek vastgehouden; neemt af).
 
 laatste ronde: 01-11 15:40, gemeten t/m 01-11 15:45
+
+## 01-11 19:40 · tussenronde
+- **Draait v5.155.1**, geen nieuwe release op GitHub. Log na 15:40: alleen SolarEdge-Modbus 17:44 en HomeWizard (extern). Geen EMS-fouten. Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg). Planvolging vandaag **93,5 %** (n=77; 31-10 70,5 %).
+- **Avondpiek:** ontladen alleen in de kwartieren 15:45, 17:00, 18:00, 19:00 (550-900 W, ~0,75 kWh), daartussen vlak; SoC 22 → 13 %, beschikbaar 0,35. Met weinig voorraad de duurste kwartieren per uur kiezen = ontwerp (`battery_saved_for_peak`), geen bug.
+- **Besparing −€ 0,32** = ongecorrigeerd +0,21 en SoC-correctie −0,52 (voorraad −1,04 kWh × 0,505). Rekenkundig consistent; het minteken is de voorraadwaardering, niet verlies.
+- **H-EMS-2:** PV dag **1,83 kWh** tegen Solcast nu 2,34 (−22 %), 11:40 2,86 (−36 %). Vierde dag te hoog; dagafsluiting rekent tegen day-ahead af.
+- Reserve-sprongen 18:24-19:39 (n=23): allemaal `live_correctie` 0 ↔ 1,5 kWh per minuut, reserve 10,37 afgekapt (boven capaciteit) → zonder effect (bekend, H-EMS-14/L-EMS-031). Twin MAE **0,724** (15:40 0,717).
+- Stilstand: **geen echte** (10 wachten, 0 doen). Airco besluit "niets", knop uit → rekent. Celspanning module 4 al gemeld (GEMELD 14:51).
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (dagtotaal weekend te laag; zondag in dagafsluiting), H-EMS-11 (piek vastgehouden; neemt af).
+
+laatste ronde: 01-11 19:40, gemeten t/m 01-11 19:40
