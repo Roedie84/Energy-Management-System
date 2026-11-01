@@ -539,4 +539,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ hele ronde > 1.200 (gem 2.024, max 2.184 om 22:15), ramen dicht; dag 31-10 7,25 u > 1.200. Vocht 59 → 66,5% bij 21,5 → 18,5 °C (verwarming uit), schimmelindicator 81-83, buiten 99%. Ventileren (CO₂ > 2.000); luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 aanhoudende bron bij aanwezigheid houdt 3-8 (n=10); nieuw: met uit blijft het ná vertrek hangen op ~6, met mid daalt het naar 1-2 - de reiniger telt juist na de bron.
 
-laatste ronde: 01-11 00:25, gemeten t/m 00:20
+## 01-11 04:25 (ronde 74)
+- PM2.5 00:20-04:20: gem 4,73, mediaan 4,53, P95 6,11, max 6,75 (00:35) (n=48); 0 uur > 15. Dag t/m nu ~4,7; 7d (25-31/10) 3,32 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment, ramen dicht. Tv uit 00:58, laatste aanwezigheid 01:01.
+- Stand: hele periode uit (handmatig sinds 31-10 15:50). Zonder bron en zonder reiniger zakte PM2.5 traag 6,0 → 4,0: halvering ~5,5 u (fit, n=48). Op mid zakte het na vertrek steeds binnen ~1 u naar 1-2 (n>10): de reiniger ruimt ~5x sneller op dan vanzelf (n=1 nacht uit).
+- Werking: automation laat uit uit (5/5 traces failed_conditions, geen fout). 0 HA-herstarts (HA-MCP gaf om ~04:25 even Bad Gateway). Lokaal 67 mislukt op 170.478 (geen nieuwe), uitval 0, sturen 399/400, filter 0%. Apparaat-PM2.5 vast op 2 (apparaat uit).
+- CO₂ 1.933 → 1.360 (gem 1.643), hele ronde > 1.200, ramen dicht, niemand. Vocht 66-67% bij 18,5 → 17,6 °C, schimmelindicator 83 → 81, buiten 99% / 10,9 °C. Ochtend luchten; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bron bij aanwezigheid houdt 3-8 (n=10); bevestigd: met uit halveert het na vertrek pas in ~5,5 u, met mid binnen ~1 u naar 1-2.
+
+laatste ronde: 01-11 04:25, gemeten t/m 04:20

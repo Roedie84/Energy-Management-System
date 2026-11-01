@@ -1733,3 +1733,21 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-01 00:20,filtergebruik_pct,0,1,
 2026-11-01 00:20,automation_traces_fout,0,5,alle 5 failed_conditions (uit blijft uit / nachtvenster)
 2026-11-01 00:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 4.5-7.7 (apparaat uit)
+2026-11-01 04:20,pm25_gem,4.73,48,5-min statistiek 00:20-04:20; luchtreiniger hele periode uit
+2026-11-01 04:20,pm25_mediaan,4.53,48,
+2026-11-01 04:20,pm25_p95,6.11,48,
+2026-11-01 04:20,pm25_max,6.75,48,momentaan 00:35
+2026-11-01 04:20,pm25_uren_gt15,0.00,48,
+2026-11-01 04:20,pm25_uren_gt25,0.00,48,
+2026-11-01 04:20,stand_uit_min,240,48,gem pm25 4.73; uit sinds 31-10 15:50 handmatig
+2026-11-01 04:20,pm25_halvering_uit_min,333,48,log-lineaire fit 6.0 -> 4.0 zonder bron (niemand na 01:01; ramen dicht; stand uit)
+2026-11-01 04:20,co2_gem,1643,48,5-min; 1933 -> 1360; ramen dicht; niemand
+2026-11-01 04:20,co2_uren_gt1200,4.00,48,hele ronde
+2026-11-01 04:20,vocht_max,66.8,48,66.5 -> 65.7 bij 18.5 -> 17.6 C
+2026-11-01 04:20,schimmel_indicator,83,48,83 -> 81; buiten 99% / 10.9 C
+2026-11-01 04:20,ha_herstarts,0,1,
+2026-11-01 04:20,lokaal_mislukt,67,170478,geen nieuwe; uitval 0; 244 verbindingen
+2026-11-01 04:20,sturen_bevestigd,399,400,geen nieuwe opdrachten
+2026-11-01 04:20,filtergebruik_pct,0,1,
+2026-11-01 04:20,automation_traces_fout,0,5,alle 5 failed_conditions (uit blijft uit / nachtvenster)
+2026-11-01 04:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 3.6-6.8 (apparaat uit)
