@@ -1054,3 +1054,25 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-31 23:40,TUSSEN,ems_pv_dag_kwh,4.944,1,"Modbus i1_ac_energy, geen productie na 17 u; day-ahead 3.82 (+29 %)"
 2026-10-31 23:40,TUSSEN,ems_zonstand_vals_doen,0,2,L-EMS-049: aantal_doen 0 om 19:40 en 23:40 (na herstart 21:32 ook)
 2026-10-31 23:40,TUSSEN,ems_stilstand_functies,0,9,"9 wachten, 0 doen; airco besluit 'verwarmen' (18.8 < 19.0), knop uit"
+2026-10-31,DAG,ems_pv_kwh,4.944,1,"solaredge_i1_ac_energy statistics; dagarchief 4.94 (93 blokken + 2 aangevuld, 1 uur uit statistiek)"
+2026-10-31,DAG,ems_pv_afwijking_pct,29.3,1,"tracker day-ahead 3.82; dagarchief zon_verwacht 4.20 -> +17.6 %; Solcast intraday ~6.4 -> -23 %; bewolking 100 %"
+2026-10-31,DAG,ems_net_import_kwh,6.427,1,p1_meter_total_power_import statistics
+2026-10-31,DAG,ems_net_export_kwh,0.381,1,p1_meter_total_power_export statistics
+2026-10-31,DAG,ems_accu_laden_kwh,1.680,1,solarflow aggr_charge statistics
+2026-10-31,DAG,ems_accu_ontladen_kwh,3.855,1,solarflow aggr_discharge statistics
+2026-10-31,DAG,ems_huisverbruik_kwh,13.17,1,"balans statistiek; dagarchief 13.09; ochtendverwachting 9.17 -> +43 % (+3.92 kWh); zaterdag, graaddagen 8.5"
+2026-10-31,DAG,ems_tekort_nacht_kwh,0.0,1,"nacht 30->31 geen tekort (accu hield 3.9-4.3 kWh tot het blok)"
+2026-10-31,DAG,ems_verkoop_onder_reserve,0,1,"verkoopkwartieren leeg; verkocht 0 kWh; regeloverschot 0.082; kwartieren_onder_verkoopreserve 0"
+2026-10-31,DAG,ems_nabeschouwing_leverde_eur,0.58,96,"had 1.27 (46 %); gemist 0.68 (voorspelling 0.64, reserve 0.05); avondpiek vastgehouden 2.39 kWh (25..30-10 4.5-6.9), te veel ontladen middag 1.41"
+2026-10-31,DAG,ems_besparing_eur,-0.41,1,"dagarchief accu_opbrengst (kz 3.22 - k 2.51 = 0.71, voorraad -1.12); sensor 23:40 -0.27"
+2026-11-01 03:40,DAG,ems_pv_mae_7d_pct,20.7,7,"bias -11.4; mediaan -12.9; 5/7 negatief (31-10 +29.3)"
+2026-11-01 03:40,DAG,ems_pv_mae_14d_pct,18.5,14,"bias -12.6; mediaan -9.5; 11/14 negatief"
+2026-11-01 03:40,DAG,ems_pv_mae_30d_pct,15.7,30,"bias -12.2; mediaan -8.1; 25/30 negatief"
+2026-11-01 03:40,DAG,ems_pv_bias_helder_30d_pct,-17.2,11,"bewolking <=50 %; 50-90 % -16.1 (n=6); >90 % -6.1 (n=13)"
+2026-11-01 03:40,DAG,ems_nabeschouwing_realisatie_7d_pct,82.0,7,"25..31-10 leverde 11.45 / had 13.97; 31-10 46 % (gemist door voorspelling 0.64)"
+2026-11-01 03:40,DAG,ems_verbruik_dag_bias_kwh,1.88,7,"25..31-10 werkelijk - ochtendverwachting: +5.96/+1.94/+2.91/+1.27/-0.73/-2.10/+3.92; 5/7 hoger; weekend (25/31) +4.94 gem, werkdagen +0.66 (n=5)"
+2026-11-01 03:40,DAG,ems_mc_brier_22u,0.014,5,"per_nacht 25/27/28/30/31-10 (kans 0/26.7/0.3/0/0, 0 tekort); 24-10 (kans 100, geen tekort) uit het venster -> 0.214 was vooral die nacht; 22:00 31-10 kans 100 %, horizon 13:00"
+2026-11-01 03:40,DAG,ems_digital_twin_kwartierplan_mae_kwh,0.851,60,"venster vol (60), status klaar; nacht 31->01 accu vlak 1.38 kWh, twin 0.73-1.61 (fout <= 0.65)"
+2026-11-01 03:40,DAG,ems_stilstand_functies,0,9,"9 wachten, 0 doen; temperatuurregressie 7 paren, 1 nieuw in 10 d (venster < 2 u) -> L-EMS-050 open"
+2026-11-01 03:40,DAG,ems_meetbaarheid_dagarchief_zon_pct,-0.1,1,"31-10 dagarchief 4.94 tegen SolarEdge 4.944 op een herstartdag (16:30/21:32), 2 kwartieren aangevuld -> L-EMS-047 geverifieerd"
+2026-11-01 03:40,DAG,ems_mc_tekortkans_tot_blok_pct,97.2,1000,"blok 01-11 13:00; beschikbaar 1.38; det tot blok 3.52, p90 5.07; laadbesluit loont_niet; vasthouden voor >47 ct"

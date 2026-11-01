@@ -763,3 +763,17 @@ laatste ronde: 31-10 19:42, gemeten t/m 31-10 19:45
 - Hypotheses: H-EMS-2 (PV te hoog; dag 31-10 4,94 tegen 3,82 = +29 %), H-EMS-14 (avond nu goed; nacht morgen), H-EMS-11 (piek vandaag benut).
 
 laatste ronde: 31-10 23:45, gemeten t/m 31-10 23:45
+
+## 01-11 03:40 · dagafsluiting 31-10
+- **Draait v5.154.1** (herstarts 31-10 16:30/21:32); v5.155.0 staat op GitHub, nog niet in HA → niet stapelen, **geen release**. Geen EMS-fouten na 23:45 (alleen Solcast/Zonneplan-onbeschikbaar, afgevangen); geen purge/repack.
+- Dag 31-10: PV **4,94 kWh** (day-ahead 3,82 → **+29,3 %**; dagarchief-ochtend 4,20 → +17,6 %), import 6,43, export 0,38, accu 1,68 in / 3,86 uit, huis **13,17** (verwacht 9,17 → **+3,92 kWh**). **Harde regel: 0× onder de reserve** (0 kWh verkocht). Geen tekortnacht 30→31.
+- **L-EMS-047 geverifieerd:** dagarchief zon 4,94 tegen SolarEdge 4,944 op een herstartdag (2 kwartieren aangevuld, 1 uur uit statistiek); verbruik 13,09 tegen balans 13,17 (−0,6 %).
+- **H-EMS-2:** 7 d MAE/bias 20,7/−11,4 %, 14 d 18,5/−12,6, 30 d 15,7/−12,2 (25/30 negatief). Per bewolking (30 d): ≤ 50 % **−17,2** (n=11), 50-90 % −16,1 (n=6), > 90 % **−6,1** (n=13) → te hoog vooral bij zon; bij volle bewolking bijna zuiver (31-10 +29 % bij 100 %).
+- **H-EMS-14 (dagtotaal te laag):** 7 d +1,88 kWh/dag, 5/7 hoger; weekend 25/31-10 +5,96/+3,92, werkdagen gem. +0,66 (n=5). Dagtypeprofiel bestaat sinds v5.135.0 (≥ 4 waarnemingen per uur) → toets of het weekendverschil blijft na nog 2 weekenden (n te klein).
+- **Nabeschouwing 25..31-10: 82,0 %** (€ 11,45 / 13,97); 31-10 46 % (gemist € 0,64 door de verbruiksvoorspelling). Avondpiek vastgehouden 31-10 2,39 kWh (25..30-10 4,5-6,9) → H-EMS-11 neemt af.
+- MC 22:00 Brier **0,014** (n=5; 24-10 met kans 100 % zonder tekort viel uit het venster). Hoge kansen nu niet getoetst: avond 31-10 (100 %, blok 13:00) wordt 'andere horizon'. Twin `kwartierplan` n=60 MAE **0,851** (venster vol).
+- **Meetbaarheid → L-EMS-050 (open):** temperatuurregressie (voedt `temperatuur_extra_kwh` in de reserve) kreeg in 10 d 1 nieuw paar (7 totaal); ontlaadvensters zijn in de stookperiode vaak < 2 u. Voorstel: daarnaast één paar per nacht uit het vaste venster 22-07.
+- Stilstand: **geen echte** (9 wachten, 0 doen). Airco besluit "niets", knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (dagtotaal te laag, weekend?), H-EMS-11 (piek vastgehouden; neemt af).
+
+laatste ronde: 01-11 03:40, gemeten t/m 01-11 04:15

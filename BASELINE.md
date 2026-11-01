@@ -109,3 +109,9 @@
 | Nabeschouwing realisatie 7 d | 85,5 % (€ 11,34 / 13,27) | 24..30-10 | 31-10 03:40 |
 | Verbruik dag, werkelijk − ochtendverwachting | +1,25 kWh/dag (5/7 hoger) | 24..30-10 | 31-10 03:40 |
 | MC 22:00 Brier (tot blok) | 0,214 (n=5) | 24..30-10 | 31-10 03:40 |
+| PV-voorspelling MAE (dag, day-ahead tracker) | 15,7 % (30 d) · 18,5 % (14 d) · 20,7 % (7 d); bias −12,2 / −12,6 / −11,4; 25/30 negatief | 02..31-10 | 01-11 03:40 |
+| PV-bias per bewolking (30 d) | ≤ 50 % −17,2 % (n=11) · 50-90 % −16,1 (n=6) · > 90 % −6,1 (n=13) | 02..31-10 | 01-11 03:40 |
+| Nabeschouwing realisatie 7 d | 82,0 % (€ 11,45 / 13,97) | 25..31-10 | 01-11 03:40 |
+| Verbruik dag, werkelijk − ochtendverwachting | +1,88 kWh/dag (5/7 hoger; weekend +4,94, werkdag +0,66) | 25..31-10 | 01-11 03:40 |
+| MC 22:00 Brier (tot blok) | 0,014 (n=5; geen nacht met hoge kans meer in het venster) | 25..31-10 | 01-11 03:40 |
+| Digital twin MAE groep 'kwartierplan' | 0,851 kWh (n=60, venster vol) | 29..01-11 | 01-11 03:40 |
