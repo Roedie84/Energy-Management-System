@@ -780,6 +780,8 @@ from .const import (
     MEASUREMENT_QUALITY_GOOD_THRESHOLD,
     MEASUREMENT_QUALITY_DEGRADED_THRESHOLD,
     MIN_COST_BASIS_DELTA_KWH,
+    ACCU_STAP_ZONDER_STROOM_FRACTIE,
+    ACCU_STAP_ZONDER_STROOM_MAX_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
     BIJKOOP_HISTORY_LENGTH,
     BIJKOOP_KRAPPE_MARGE_PROCENT,
@@ -37015,6 +37017,9 @@ class EnergyManagementSystemCoordinator:
             # WERKELIJKE interval wordt gerekend.
             return
 
+        if self._stap_zonder_accustroom(delta_kwh, now):
+            return
+
         elapsed_hours = 0.0
         if self._last_cost_basis_calc_time is not None:
             elapsed_hours = max(
@@ -37116,6 +37121,36 @@ class EnergyManagementSystemCoordinator:
                 self.total_battery_savings_eur += savings_eur
                 self.total_feedin_premium_eur += feedin_premium_eur
                 self.discharge_export_kwh_total += export_kwh
+
+    def _stap_zonder_accustroom(self, delta_kwh: float, now: datetime) -> bool:
+        """Is deze voorraadsprong een afrondingsstap zonder accustroom? (v5.155.1)
+
+        Gemeld 01-11 (plan tegen werkelijkheid): sinds 31-10 ~20:40 sprong
+        de beschikbare energie elke ~8 min tussen 1,267 en 1,382 kWh (SoC
+        21/22 %) bij een accuvermogen van 0 W. Elke daling werd als ontlading
+        geboekt (opbrengst x ontlaadrendement min de kostprijs), elke stijging
+        als lading (kosten / laadrendement): ~EUR 0,08 verlies per uur dat er
+        niet was.
+
+        Alleen met een werkende accuvermogenssensor: de gemeten AC-energie
+        sinds de vorige boeking (beide richtingen) is minder dan
+        `ACCU_STAP_ZONDER_STROOM_FRACTIE` van de sprong, en de sprong is
+        hooguit `ACCU_STAP_ZONDER_STROOM_MAX_KWH`. Zonder vermogenssensor,
+        of bij een grotere sprong, wordt geboekt zoals voorheen. Bij True
+        blijft het voorraad-ijkpunt staan en schuift alleen de tijd door: in
+        dit interval ging er aantoonbaar niets in of uit.
+        """
+        if abs(delta_kwh) > ACCU_STAP_ZONDER_STROOM_MAX_KWH:
+            return False
+        if self._accu_ac_laatst is None:
+            return False
+        if self._read_corrected_battery_power() is None:
+            return False
+        gemeten = self._accu_ac_in + self._accu_ac_uit
+        if gemeten >= ACCU_STAP_ZONDER_STROOM_FRACTIE * abs(delta_kwh):
+            return False
+        self._last_cost_basis_calc_time = now
+        return True
 
     def _werk_kasprijs_bij(
         self, kosten_eur: float, opgeslagen_kwh: float, available_kwh: float

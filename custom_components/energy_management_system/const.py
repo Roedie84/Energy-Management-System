@@ -1939,6 +1939,18 @@ SMART_MAX_DISCHARGE_W = 2000.0
 # weighted-average cost basis isn't updated and no savings are realised.
 MIN_COST_BASIS_DELTA_KWH = 0.01
 
+# v5.155.1: een kleine sprong van de beschikbare energie zonder gemeten
+# accustroom is een afrondingsstap van de laadstand (SoC 21 <-> 22 %), geen
+# laden of ontladen. 31-10/01-11: de voorraad sprong de hele nacht elke
+# ~8 min 1,267 <-> 1,382 kWh bij 0 W, en elke heen-en-terug boekte een
+# rondreisverlies (~EUR 0,5 per nacht) dat er niet was. Zo'n sprong wordt
+# niet geboekt zolang de gemeten AC-energie sinds de vorige boeking onder
+# deze fractie van de sprong blijft; het ijkpunt van de voorraad blijft
+# staan, zodat echte zelfontlading bij de volgende echte beweging (of een
+# sprong groter dan de grens hieronder) alsnog wordt geboekt.
+ACCU_STAP_ZONDER_STROOM_FRACTIE = 0.1
+ACCU_STAP_ZONDER_STROOM_MAX_KWH = 0.25
+
 # Zonneplan's "Zonnebonus" (v0.63.25, confirmed via web search - not
 # assumed): a fixed EUR/kWh premium on top of the day-ahead market price
 # for every kWh genuinely fed back to the grid, on top of/outside your

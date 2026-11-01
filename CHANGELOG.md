@@ -34225,3 +34225,11 @@ Gemeld 31-10 21:10: het spaarplan (v5.25, `battery_saved_for_peak`) hield 1,38 k
 Nu `_sluimer_bij_sparen` in `spaarplan`: winst = netkosten bij ontladen op de klok ("smart") min die van het spaarplan; verlies = (sluimer sparen − sluimer leeg) × uren tot het eerste gedekte kwartier × grensprijs. Verlies > winst: `sparen_nu` False en `gespaard` leeg (het kwartierplan rekent dan "smart"). Alleen met een betrouwbare meting (≥ 6 u sparen); bij een fout of zonder meting zoals voorheen. Uitzetten: `SPAREN_SLUIMER_MEETELLEN`. Zichtbaar als `sluimer` in het spaarplan. Sparen in het blok (v5.73) en laden in een dip ongewijzigd.
 
 Tests: `test_v5155_sluimer_bij_sparen.py` (6).
+
+## v5.155.1 — kostprijsmodel: afrondingsstap van de laadstand zonder accustroom boekt niets
+
+Gemeld 01-11 (plan tegen werkelijkheid): sinds 31-10 ~20:40 sprong `beschikbare_energie` elke ~8 min 1,3824 ↔ 1,2672 kWh (SoC 22/21 %) bij 0 W accuvermogen. `_update_battery_cost_basis_and_savings` boekte elke daling als ontlading (AC-opbrengst = daling × ontlaadrendement, min de kostprijs) en elke stijging als lading (kosten = stijging / laadrendement): `battery_savings_cost_basis_model` zakte ~€ 0,008 per heen-en-terug, € 0,64 tussen 31-10 21:30 en 01-11 08:05, terwijl er niets in of uit de accu ging.
+
+Nu `_stap_zonder_accustroom`: met een werkende accuvermogenssensor wordt een sprong van hooguit `ACCU_STAP_ZONDER_STROOM_MAX_KWH` (0,25 kWh) niet geboekt zolang de gemeten AC-energie sinds de vorige boeking onder `ACCU_STAP_ZONDER_STROOM_FRACTIE` (10 %) van de sprong blijft. Het voorraad-ijkpunt blijft staan (de tellers lopen door), alleen de tijd schuift op. Echte zelfontlading wordt dus nog steeds geboekt, bij de volgende echte beweging of zodra de daling groter is dan 0,25 kWh. Zonder vermogenssensor ongewijzigd. De al geboekte ~€ 0,64 wordt niet teruggedraaid.
+
+Tests: `test_v51551_soc_stap_zonder_stroom.py` (5).

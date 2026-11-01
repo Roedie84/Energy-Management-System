@@ -1,3 +1,13 @@
+EMS v5.155.1 - kostprijsmodel boekt geen nepverlies meer bij stilstand
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Staat de accu stil op een grens (bijv. 21/22 %), dan springt de
+  laadstand soms heen en weer zonder dat er stroom loopt. Het
+  kostprijsmodel boekte elke sprong als laden en ontladen, met verlies
+  (31-10/01-11: ~5 ct per uur). Zo'n sprong zonder accustroom telt nu niet.
+- Echte zelfontlading telt nog wel mee, bij de volgende echte beweging.
+
 EMS v5.155.0 - de accu houdt zijn lading niet meer te lang vast
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
