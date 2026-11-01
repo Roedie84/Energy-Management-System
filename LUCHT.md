@@ -547,4 +547,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 1.933 → 1.360 (gem 1.643), hele ronde > 1.200, ramen dicht, niemand. Vocht 66-67% bij 18,5 → 17,6 °C, schimmelindicator 83 → 81, buiten 99% / 10,9 °C. Ochtend luchten; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bron bij aanwezigheid houdt 3-8 (n=10); bevestigd: met uit halveert het na vertrek pas in ~5,5 u, met mid binnen ~1 u naar 1-2.
 
-laatste ronde: 01-11 04:25, gemeten t/m 04:20
+## 01-11 08:25 (ronde 75)
+- PM2.5 04:20-08:20: gem 3,55, mediaan 3,55, P95 3,99, max 4,4 (05:10) (n=48); 0 uur > 15. Dag t/m nu ~4,2; 7d (25-31/10) 3,32 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment, ramen dicht, tv uit, niemand aanwezig.
+- Stand: hele periode uit (handmatig sinds 31-10 15:50). Daling vlakt af: 4,2 → 3,4 (fit-halvering ~16 u); hele nacht zonder reiniger 6,0 → 3,4 in 8 u. Schone nachten op mid: 0,3-0,5 (n>10). Zonder reiniger blijft de ochtend ~7x hoger.
+- Werking: automation laat uit uit (5/5 traces failed_conditions, geen fout). 0 HA-herstarts. Lokaal 67 mislukt op 171.902 (geen nieuwe), uitval 0, sturen 399/400, filter 0%. Apparaat-PM2.5 vast op 2 (apparaat uit).
+- CO₂ 1.353 → 1.043 (gem 1.184), 1,75 u > 1.200, ramen dicht, niemand. Vocht 65-66% bij 17,6 → 17,3 °C, schimmelindicator 81 → 80, buiten 99% / 10,6 °C. Luchten en verwarmen; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bron bij aanwezigheid houdt 3-8 (n=10); bevestigd 2e periode: met uit zakt het na vertrek niet onder ~3,3, met mid binnen ~1 u naar 1-2 (en 's nachts 0,3-0,5).
+
+laatste ronde: 01-11 08:25, gemeten t/m 08:20
