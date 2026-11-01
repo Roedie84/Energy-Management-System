@@ -163,3 +163,9 @@ Regel: <dd-mm HH:MM> | <sleutel>
 01-11 08:51 | updates installeren ems 5.155.1 (hacs, fix kostprijsmodel soc-sprong)
 01-11 09:51 | gold scalper _unrecorded_attributes grote attributen (db-groei ~350 mb/dag) + daarna recorder.purge repack
 01-11 09:51 | ems/eufy lokaal alleen state schrijven bij statewijziging (vluchtige tijdstempels uit attributen, db-rijen)
+01-11 12:52 | labels 7 automations (zigbee offline rookmelders, iptv, sonos luchtbevochtiger, homewizard cloud, vakantie, sonos jill, voorstel schimmelrisico)
+01-11 12:52 | binary_sensor.quooker_verwarmt ruimte toewijzen
+01-11 12:52 | hernoemen sensor.knmi_weercode_2 -> knmi_weercode (+ tablet-dashboard)
+01-11 12:52 | hernoemen hue bridge 'woonkamer' + vermogen/energie-sensoren
+01-11 12:52 | hernoemen sonos beam woonkamer_power/energy -> sonos_beam_*
+01-11 12:52 | hernoemen media_player.woonkamer_2 (music assistant)
