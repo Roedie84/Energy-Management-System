@@ -787,3 +787,15 @@ laatste ronde: 01-11 03:40, gemeten t/m 01-11 04:15
 - Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (nacht/avond nu goed; dagtotaal weekend te laag → vandaag zondag toetsen), H-EMS-11 (piek vastgehouden; neemt af).
 
 laatste ronde: 01-11 07:42, gemeten t/m 01-11 07:45
+
+## 01-11 11:40 · tussenronde
+- **HA-herstart 09:15 → draait v5.155.1** (v5.155.0 sluimerverbruik + v5.155.1 kostprijsmodel, andere sessie 08:21). Na 09:15 alleen opstartwaarschuwingen (Zonneplan/SolarEdge-cloud even onbeschikbaar, afgevangen). Geen release.
+- **v5.155.1 effect gemeten:** `battery_savings_cost_basis_model` 07:45-09:09 elke 8 min −€ 0,007..0,011 bij de SoC-flap 1,3824 ↔ 1,2672 kWh zonder accustroom (12 boekingen, −€ 0,086); sinds 09:15 **0 boekingen** bij ~37 flaps (vlak 66,901). Fix werkt.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg). Besparing tot nu −€ 0,02 (SoC-correctie 0).
+- **H-EMS-2 (PV te hoog):** Modbus t/m 11:42 ~0,54 kWh tegen Solcast t/m nu 1,03 (dag 2,86 − rest 1,83) → **−48 %** bij ensemble-bewolking 53 %. Derde dag op rij te hoog bij gedeeltelijke bewolking; dagafsluiting rekent af.
+- **MC tot blok 16 %** (07:40 70,1 %): det. tekort tot blok 1,15 = beschikbaar 1,38, blok 13:00. Accu vlak (vasthouden, `battery_saved_for_peak`). Twin `kwartierplan` MAE **0,722** (07:40 0,773), alle uurfouten 0,11 (SoC-resolutie 0,115 kWh).
+- H-EMS-14 (weekend): dagtotaal zondag pas in de dagafsluiting toetsbaar.
+- Stilstand: **geen echte** (10 wachten, 0 doen; lijst pendelt 8-14 door meetfrequentie-items). Airco besluit "verwarmen", knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog bij zon/halfbewolkt), H-EMS-14 (dagtotaal weekend te laag), H-EMS-11 (piek vastgehouden; neemt af).
+
+laatste ronde: 01-11 11:45, gemeten t/m 01-11 11:45
