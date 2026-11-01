@@ -777,3 +777,13 @@ laatste ronde: 31-10 23:45, gemeten t/m 31-10 23:45
 - Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (dagtotaal te laag, weekend?), H-EMS-11 (piek vastgehouden; neemt af).
 
 laatste ronde: 01-11 03:40, gemeten t/m 01-11 04:15
+
+## 01-11 07:40 · tussenronde
+- **Draait v5.154.1**; v5.155.0 (31-10 22:06) stond na 10 u nog niet in HACS → `update_information` gedaan (release-stap van die sessie). Geen EMS-fouten na 04:15 (alleen DNS-hapering 04:23 en SolarEdge-Modbus 04:54, extern). Geen release.
+- **Harde regel: 0× onder de reserve** (`verkoopkwartieren` leeg). Besparing tot nu −€ 0,06 (alleen SoC-correctie).
+- **Nacht 31→01 (H-EMS-14):** accu hield ~1,3 kWh vast (SoC vlak 19 %), net 22-07 **2,22 kWh** (177-396 W). Geen tekortnacht, zoals 23:40 verwacht (kans 100 % maar 'andere horizon', blok 13:00). Twin `kwartierplan` MAE **0,773** (03:40 0,851) → nachtplan klopt.
+- **MC tot blok 70,1 %** (03:40 97,2 %): det. tekort tot blok 2,54 = spaarplan nodig 2,54, beschikbaar 1,27 → net in de ochtend bewust (vasthouden voor > 47 ct). Geen bug.
+- Stilstand: **geen echte** (9 wachten, 0 doen). Airco besluit "verwarmen", knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog bij zon), H-EMS-14 (nacht/avond nu goed; dagtotaal weekend te laag → vandaag zondag toetsen), H-EMS-11 (piek vastgehouden; neemt af).
+
+laatste ronde: 01-11 07:42, gemeten t/m 01-11 07:45
