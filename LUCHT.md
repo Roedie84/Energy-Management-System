@@ -555,4 +555,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 1.353 → 1.043 (gem 1.184), 1,75 u > 1.200, ramen dicht, niemand. Vocht 65-66% bij 17,6 → 17,3 °C, schimmelindicator 81 → 80, buiten 99% / 10,6 °C. Luchten en verwarmen; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bron bij aanwezigheid houdt 3-8 (n=10); bevestigd 2e periode: met uit zakt het na vertrek niet onder ~3,3, met mid binnen ~1 u naar 1-2 (en 's nachts 0,3-0,5).
 
-laatste ronde: 01-11 08:25, gemeten t/m 08:20
+## 01-11 12:25 (ronde 76)
+- PM2.5 08:20-12:20: gem 6,49, mediaan 7,01, P95 9,03, max 9,74 (11:30) (n=48); 0 uur > 15. Dag t/m nu ~4,9; 7d (25-31/10) 3,32 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht. Aanwezig vanaf 08:32 (tv 08:41-10:01, daarna wisselend tot 11:36).
+- Stand: hele periode uit (handmatig sinds 31-10 15:50, nu ~20,5 u; 1 min unavailable bij herstart 09:14). PM2.5 steeg gestaag 3,3 → 9,7 met aanwezigheid en daalde niet. Zelfde ochtend 31-10 op auto/mid: gem 3,18, terug naar ~1,7 na de bult. Hoogste rustige ochtend sinds 11-10.
+- Werking: automation laat uit uit (5/5 traces failed_conditions, geen fout). 1 HA-herstart (09:14-09:16). Lokaal 67 mislukt op 173.324 (geen nieuwe), uitval 0, sturen 399/400 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 (apparaat uit).
+- CO₂ 1.040 → 1.644 (11:35), gem 1.348, 3,0 u > 1.200, ramen dicht, aanwezig. Vocht 65,2 → 70,4% bij 17,3-17,5 °C (verwarming uit), schimmelindicator 80-85, buiten 99% / 11,6 °C. Luchten en verwarmen; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bron bij aanwezigheid: met uit stapelt het op (vandaag 3,3 → 9,7, gisteravond 4,5 → 7,7) en zakt na vertrek niet onder ~3,3; op auto/mid blijft het 1-4 en zakt binnen ~1 u naar 1-2 (n=11) - bevestigd.
+
+laatste ronde: 01-11 12:25, gemeten t/m 12:20
