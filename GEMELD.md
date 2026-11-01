@@ -156,3 +156,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 31-10 15:51 | ems spaarregel ook na goedkoop blok (ontlaadt in goedkoopste blok, daarna leeg in dure kwartieren)
 31-10 18:51 | ha herstarten om ems 5.154.1 te activeren (pendeldemping p1)
 31-10 21:51 | ems sluimerverbruik aftrekken bij lang vasthouden accu (winst negatief -> nu gebruiken)
+01-11 06:51 | updates installeren ems 5.155.0 (hacs ziet release nog niet, verversen) en gold scalper 2.27.1 (hacs)
+01-11 06:51 | L-EMS-050 temperatuurmodel koude-nachtreserve leert uit vast nachtvenster 22-07 (akkoord)
