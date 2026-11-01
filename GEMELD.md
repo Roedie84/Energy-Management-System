@@ -170,3 +170,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 01-11 12:52 | hernoemen sonos beam woonkamer_power/energy -> sonos_beam_*
 01-11 12:52 | hernoemen media_player.woonkamer_2 (music assistant)
 01-11 14:51 | ems system status klappert op celspanningsverschil module 4 (hysterese 0,10/0,08 v, vlak midden vanaf 25-30%)
+01-11 15:50 | L-SC-028 stormchase windcorrectie na locatiewissel/modelsprong relatief of laten vallen (akkoord)
