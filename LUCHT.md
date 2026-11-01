@@ -563,4 +563,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 1.040 → 1.644 (11:35), gem 1.348, 3,0 u > 1.200, ramen dicht, aanwezig. Vocht 65,2 → 70,4% bij 17,3-17,5 °C (verwarming uit), schimmelindicator 80-85, buiten 99% / 11,6 °C. Luchten en verwarmen; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bron bij aanwezigheid: met uit stapelt het op (vandaag 3,3 → 9,7, gisteravond 4,5 → 7,7) en zakt na vertrek niet onder ~3,3; op auto/mid blijft het 1-4 en zakt binnen ~1 u naar 1-2 (n=11) - bevestigd.
 
-laatste ronde: 01-11 12:25, gemeten t/m 12:20
+## 01-11 16:25 (ronde 77)
+- PM2.5 12:20-16:20: gem 6,55, mediaan 6,73, P95 8,19, max 9,0 (13:05) (n=48); 0 uur > 15. Dag t/m nu ~5,3 (boven WHO-jaarnorm 5); 7d (25-31/10) 3,32 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit. Aanwezig kort 15:08-15:11 en 15:48-16:21.
+- Stand: hele periode uit (handmatig sinds 31-10 15:50, nu ~24,5 u). Zonder reiniger en zonder bron bleef het 12:20-15:10 op 6-8 hangen (geen halvering in 3 u). Rond 15:10 verwarming aan (17,2 → 20,3 °C, vocht 67 → 57%): PM2.5 6,6 → 4,2, daarna bij aanwezigheid weer 6,5. Oorzaak van die daling onzeker (n=1).
+- Werking: automation laat uit uit (5/5 traces failed_conditions, geen fout). 0 HA-herstarts. Lokaal 67 mislukt op 174.760 (geen nieuwe), uitval 0, sturen 399/400 (geen nieuwe opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 (apparaat uit).
+- CO₂ 1.429 → 1.035 → 1.278 (gem 1.230), 2,1 u > 1.200, ramen dicht. Vocht 68,5 → 56,9 → 58,3% (opwarming), schimmelindicator 82 → 74 → 77, buiten 99% / 11,4 °C. Luchten; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bevestigd (n=12): met uit blijft PM2.5 na een bron hangen op 6-8 (deze middag 3 u zonder daling), op auto/mid zakt het binnen ~1 u naar 1-2. Eerste dag sinds start boven 5 µg/m³.
+
+laatste ronde: 01-11 16:25, gemeten t/m 16:20
