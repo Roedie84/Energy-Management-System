@@ -826,6 +826,7 @@ from .const import (
     # v5.73
     SPAREN_IN_BLOK_VOL_MARGE_KWH,
     SPAREN_IN_BLOK_MIN_WINST_EUR,
+    PLAN_SPAREN_LEEG_KWH,
     SPAREN_SLUIMER_MEETELLEN,
     VERKOOP_NA_BLOK_MIN_WINST_EUR,
     CONF_VERKOOP_MIN_WINST_CT,
@@ -26296,8 +26297,13 @@ class EnergyManagementSystemCoordinator:
                 soc, net = self._plan_laadkwartier(
                     soc, bruikbaar, geladen, laad_kwh, netregels, min_soc, verbruik, zon
                 )
-            elif start in netregels["gespaard"] or self._plan_sparen_in_komend_blok(
-                netregels, now, start, prijs, soc, bruikbaar, entries
+            elif soc > PLAN_SPAREN_LEEG_KWH and (
+                # v5.156.0: een lege accu spaart niets - dan "smart", zodat
+                # een netafname als tekort telt (zie PLAN_SPAREN_LEEG_KWH).
+                start in netregels["gespaard"]
+                or self._plan_sparen_in_komend_blok(
+                    netregels, now, start, prijs, soc, bruikbaar, entries
+                )
             ):
                 modus = "smart_charging (sparen)"
                 # v5.73: de zon wordt wel opgevangen.

@@ -1,3 +1,15 @@
+EMS v5.156.0 - melding 'accu komt niet meer tekort' klopt weer bij een lege accu
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Stond de accu al op zijn ondergrens, dan zette het plan de kwartieren
+  tot het goedkope blok op 'sparen'. Die telden niet als tekort, dus kwam
+  'geen kwartieren meer aan het net' terwijl het huis de hele avond van
+  het net draaide (01-11 21:02). Een lege accu spaart niets: het plan
+  rekent zo'n kwartier nu als 'smart' en de netafname telt als tekort.
+- Daarmee stopt ook het heen-en-weer tekort/hersteld (17:36, 18:41,
+  18:58, 21:02). De sturing van de accu verandert niet.
+
 EMS v5.155.1 - kostprijsmodel boekt geen nepverlies meer bij stilstand
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

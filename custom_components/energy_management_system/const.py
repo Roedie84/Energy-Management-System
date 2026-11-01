@@ -7726,6 +7726,15 @@ SPAREN_IN_BLOK_VOL_MARGE_KWH = 0.10
 # Dezelfde marge als de vergelijking net tegen accu (GRID_CHEAPER_MARGIN_EUR).
 SPAREN_IN_BLOK_MIN_WINST_EUR = 0.02
 
+# v5.156.0 (gemeld Ruud 01-11 21:02): een lege accu spaart niets. Het
+# kwartierplan zette alle kwartieren tot het blok op "sparen" terwijl de accu
+# al op zijn ondergrens stond (0,00 kWh); die kwartieren telden niet als
+# tekort, dus kwam "geen kwartieren meer aan het net" terwijl het huis de hele
+# avond van het net draaide. Onder deze bruikbare inhoud rekent het plan het
+# kwartier als "smart": natuurkundig gelijk (zon gaat de accu in, er komt
+# niets uit), maar een netafname telt dan als tekort.
+PLAN_SPAREN_LEEG_KWH = 0.01
+
 # v5.155.0 (akkoord Ruud 31-10): het sluimerverbruik van de accu tijdens het
 # sparen telt mee. Kost het vasthouden tot het eerste gedekte kwartier meer
 # dan het verschuiven oplevert, dan wordt de lading nu gebruikt.

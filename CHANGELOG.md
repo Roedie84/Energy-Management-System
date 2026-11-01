@@ -34233,3 +34233,11 @@ Gemeld 01-11 (plan tegen werkelijkheid): sinds 31-10 ~20:40 sprong `beschikbare_
 Nu `_stap_zonder_accustroom`: met een werkende accuvermogenssensor wordt een sprong van hooguit `ACCU_STAP_ZONDER_STROOM_MAX_KWH` (0,25 kWh) niet geboekt zolang de gemeten AC-energie sinds de vorige boeking onder `ACCU_STAP_ZONDER_STROOM_FRACTIE` (10 %) van de sprong blijft. Het voorraad-ijkpunt blijft staan (de tellers lopen door), alleen de tijd schuift op. Echte zelfontlading wordt dus nog steeds geboekt, bij de volgende echte beweging of zodra de daling groter is dan 0,25 kWh. Zonder vermogenssensor ongewijzigd. De al geboekte ~€ 0,64 wordt niet teruggedraaid.
 
 Tests: `test_v51551_soc_stap_zonder_stroom.py` (5).
+
+## v5.156.0 — kwartierplan: een lege accu spaart niets
+
+Gemeld 01-11 21:02: "De planning voorziet al een half uur geen kwartieren meer waarin 't huus aan het net hunk", terwijl de accu op 10 % stond (0,00 kWh bruikbaar) en de P1 ~630 W afname mat. `_bouw_kwartierplan` zette alle kwartieren tot morgen 16:00 op `smart_charging (sparen)` (spaarplan `gespaard`); de spaartak zette `tekort` nooit, alleen de tak `smart` en `smart_discharging` deden dat. Elke wissel tussen `smart` en `sparen` liet de tekortmelding dus klappen (17:36 tekort, 18:41 hersteld, 18:58 tekort, 21:02 hersteld).
+
+Nu spaart het plan alleen met een bruikbare inhoud boven `PLAN_SPAREN_LEEG_KWH` (0,01 kWh). Daaronder rekent het het kwartier als `smart`: natuurkundig gelijk (zonoverschot gaat de accu in, er komt niets uit), maar een netafname telt als tekort. Vult de zon de accu, dan spaart het plan de kwartieren daarna weer zoals voorheen. De live sturing (spaarplan, `sparen_in_blok`) is ongewijzigd.
+
+Tests: `test_v51560_lege_accu_spaart_niet.py` (4).
