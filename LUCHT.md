@@ -579,4 +579,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ hele ronde > 1.200 (gem 2.017, max 2.439 om 19:55), ramen dicht, aanwezig. Vocht tot 70,6%, schimmelindicator 77 → 97 → 91 bij ~21 °C, buiten 99% / 10,7 °C. Nu luchten (CO₂ > 2.000); luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=13): met uit bleef PM2.5 ~28 u op 3-10 (dagen 01-11 ~5,4 tegen 1-3 op auto/mid); toets nu andersom: zakt het op auto weer naar 1-4?
 
-laatste ronde: 01-11 20:25, gemeten t/m 20:20
+## 02-11 00:25 (ronde 79, eerste na middernacht)
+- DAG 01-11: PM2.5 gem 5,08 (max 9,7; 0 u > 15) - eerste dag sinds start boven WHO-jaarnorm 5; reiniger uit 00:00-20:10. 7d (26/10-01/11) 3,87 (incl. 26-10 met 10,9 door piek 1.147; nulmeting okt 2025 9,1). CO₂ 01-11 ~19 van 24 u > 1.200.
+- Ronde 20:20-00:20: PM2.5 gem 3,12, mediaan 3,06, P95 4,58, max 5,4 (20:20) (n=48); 0 uur > 15. Geen piek > 25, geen kookmoment, ramen dicht.
+- Stand: hele ronde auto (tv aan = aanwezig; 1,5 min unavailable bij HA-herstart 21:18). Na aanzetten 20:10 zakte PM2.5 5,2 → 3,2 in 50 min en → 2,3 om middernacht: boven de achtergrond (~2,3) halvering ~20 min; met uit eerder 3 u zonder daling.
+- Werking: traces 5/5 zonder fout (3 failed_conditions, 2 finished; stand bleef auto). 1 HA-herstart (21:18-21:20). Lokaal 67 mislukt op 177.615 (geen nieuwe), uitval 0, sturen 399/400, filter 0%. Apparaat-PM2.5 2 bij Ultimate 2-5, sprong 21:10 kort naar 7 die Ultimate niet zag.
+- CO₂ hele ronde > 1.200 (gem 2.279, max 2.387), ramen dicht, aanwezig. Vocht 65,6 → 70,4% bij 21,1 → 18,5 °C, schimmelindicator 88-91, buiten 99% / 10,6 °C. Luchten (CO₂ > 2.000); luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bevestigd andersom (n=14): weer op auto zakte PM2.5 binnen ~1 u van 5 naar 3 en tegen middernacht 2,3; met uit 28 u op 3-10.
+
+laatste ronde: 02-11 00:25, gemeten t/m 00:20
