@@ -891,7 +891,7 @@ laatste ronde: 02-11 15:40, gemeten t/m 02-11 15:50
 ## 02-11 19:40 · tussenronde
 - **Draait v5.164.0** (herstarts 17:05, 18:34, 19:28, updates door Ruud). Log schoon op Solcast-limiet en sensoren bij de herstart na. Geen release: niets acuts. `net_w` lopend kwartier in de plantabel (19:30: 1.939 W bij huis 572 W) is al gemeld (18:55), alleen weergave.
 - **Harde regel: 0× onder de reserve.** Regeloverschot vandaag 0,034 kWh (01-11: 0,342). Demping niet echt getoetst: de accu ontlaadde pas vanaf 18:35, dus geen pendelen rond 18:00.
-- **Eerste lading waardeplan bijna op:** in 14:00-14:45 1,63 kWh à 36,2 ct, uit 18:35-19:44 0,903 kWh AC bij ~51 ct. Bruto +€ 0,11, vóór slijtage. Gemeten rendement ~94 % (n=1, inhoud in stappen van 0,115 kWh) tegen geleerd 83 %. Scheelt per kWh zo'n 6 ct in de plankeuze; eerst meer laadrondes meten.
+- **Eerste lading waardeplan bijna op:** in 14:00-14:45 1,63 kWh à 36,2 ct, uit 18:35-19:44 0,903 kWh AC bij ~51 ct. Bruto +€ 0,11, vóór slijtage. Gemeten rendement ~94 % (n=1, inhoud in stappen van 0,115 kWh) tegen geleerd 83 %. Scheelt bij 37,7 ct laden zo'n 5 ct per kWh in de plankeuze; eerst meer laadrondes meten.
 - **Inzet kwam 50 min later dan het plan van 15:40** (17:45 → 18:35): v5.162.x hield de accu vast voor de balanceerlading tot v5.163.0 die grens op 22 ct zette. Geen fout, verklaard.
 - **Balanceren** staat zonder uiterste termijn (besluit Ruud, v5.163.0). 4 dagen sinds vol; prijzen deze dagen 35-52 ct, dus hij wacht op zon. cel_delta 0,13 V bij 16 % (lage SoC, geen zuivere balansmaat). KPI bijhouden.
 - **L-EMS-054 gebouwd v5.164.0** (status bijgewerkt). Eerste toets nacht 02→03: verwacht tekort tot blok 1,38 kWh, soort nu `onbekend` want `laadbesluit_sinds_9u` blijft leeg onder het waardeplan.
