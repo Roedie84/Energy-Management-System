@@ -26211,14 +26211,24 @@ class EnergyManagementSystemCoordinator:
         Het waardeplan rekent elke stap als een heel kwartier. Bij de eerste
         rij zijn zon en verbruik al de rest van het kwartier en is alleen de
         accustap heel; een oudere rij van het lopende kwartier is helemaal heel.
+
+        v5.165.0 (akkoord Ruud 02-11): gemeld "10.511 W net terwijl het huis
+        559 W gebruikte". Het waardeplan rekent één keer per kwartier; de
+        eerste rij van die berekening gold voor de rest van het kwartier OP
+        DAT MOMENT (vaak het hele kwartier), terwijl de planregel een paar
+        minuten later nog maar een minuut telt. Verbruik min zon van een
+        heel kwartier, gedeeld door één minuut, gaf 10 kW. Nu schaalt het
+        deel verbruik - zon met de duur waarover de waardeplanrij rekende
+        (`uren` in de rij), en de accustap met het deel van een kwartier.
+        Rijen zonder `uren` (van vóór v5.165.0) houden de oude aanname.
         """
         net = rij.get("net_kwh")
         if net is None or not uren or uren >= 0.25:
             return net
-        deel = uren / 0.25
-        if eerste:
-            return round(net - (rij.get("accu_kwh") or 0.0) * (1 - deel), 3)
-        return round(net * deel, 3)
+        accu = rij.get("accu_kwh") or 0.0
+        rij_uren = rij.get("uren") or (uren if eerste else 0.25)
+        huis_min_zon = (net - accu) * min(1.0, uren / rij_uren) if rij_uren > 0 else 0.0
+        return round(huis_min_zon + accu * uren / 0.25, 3)
 
     def _volg_laadplan(self, plan: list[dict], moment: datetime) -> None:
         """Onthoud wanneer de laadplanning het laatst veranderde (v5.88).
@@ -34501,7 +34511,10 @@ class EnergyManagementSystemCoordinator:
            het net op, dan had die zon de accu in gekund - planning.
         """
         besluit = self.last_laadbesluit or {}
-        if isinstance(besluit, dict):
+        # v5.165.0: stuurt het waardeplan, dan volgt de stand het plan.
+        if (stand := self._waardeplan_laadbesluit_stand()) is not None:
+            self._laadbesluit_stand = stand
+        elif isinstance(besluit, dict):
             if besluit.get("verdringt_zon") and not besluit.get("laden"):
                 # v5.86: niet geladen omdat de zon de accu vult - `zon`.
                 self._laadbesluit_stand = "zon"
@@ -35138,11 +35151,16 @@ class EnergyManagementSystemCoordinator:
         tot, na = self._nodig_tot_en_na_blok_kwh()
         if tot is None or na < 0.01:
             return ""
+        # v5.165.0: stuurt het waardeplan, dan zegt het plan wat er geladen wordt.
+        zin = self._waardeplan_lading_zin()
         return (
             f" Opgesplitst, zonder marge: tot het goedkope blok is {tot:.2f} "
             "kWh nodig - dat telt nu; na het blok nog "
-            f"{na:.2f} kWh (lange horizon), die in het laadblok wordt "
-            "bijgeladen."
+            + (
+                f"{na:.2f} kWh (lange horizon); {zin}."
+                if zin else
+                f"{na:.2f} kWh (lange horizon), die in het laadblok wordt bijgeladen."
+            )
         )
 
     def _tot_en_na_blok_velden(self) -> dict:
@@ -36961,7 +36979,8 @@ class EnergyManagementSystemCoordinator:
                 return None
             vloer = self._planning_verkoopreserve_kwh(begin, reserve_cache, entries, inkoop)
             uit.append(waardeplan_mod.Kwartier(
-                begin, max(0.0, verbruik), max(0.0, zon), inkoop, teruglever, max(0.0, vloer or 0.0)
+                begin, max(0.0, verbruik), max(0.0, zon), inkoop, teruglever, max(0.0, vloer or 0.0),
+                uren=(eind - van).total_seconds() / 3600,
             ))
         return uit or None
 
@@ -36973,7 +36992,8 @@ class EnergyManagementSystemCoordinator:
         rendement = self.learned_battery_efficiency_percent or float(
             self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
         )
-        # slijtage per kWh uit de accu (zoals bij verkopen; geen datacorrectie)
+        # slijtage per kWh uit de accu (zoals bij verkopen); de datacorrectie
+        # op netladen komt er sinds v5.165.0 apart bij (`_waardeplan_rendementen`)
         slijt_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
         if beschikbaar is None or not capaciteit or not rendement or slijt_ct is None:
             uit["reden"] = "accu-inhoud, capaciteit, rendement of slijtage onbekend"
@@ -36997,6 +37017,7 @@ class EnergyManagementSystemCoordinator:
             verkoopmarge_eur=self._verkoop_min_winst_eur(),
             netladen=True,
             verkopen=True,
+            **self._waardeplan_rendementen(now),
         )
         balans = self._waardeplan_balanceren(now, kwartieren, accu)
         accu.vol_na_kwartier = balans.get("kwartier")
@@ -37018,6 +37039,13 @@ class EnergyManagementSystemCoordinator:
             ),
             "eindwaarde_eur_per_kwh": res.eindwaarde_eur_per_kwh,
             "verkoopmarge_eur": accu.verkoopmarge_eur,
+            # v5.165.0: de datacorrectie op netladen en de rendementen.
+            "netlaadmarge_eur": accu.netlaadmarge_eur,
+            "laadrendement_procent": round(waardeplan_mod.rendementen(accu)[0] * 100, 1),
+            "ontlaadbanden": [
+                {"tot_w": None if g == math.inf else g, "rendement_procent": None if e is None else round(e * 100, 1)}
+                for g, e in accu.ontlaadbanden
+            ],
             "nu": {**nu, "begin": nu["begin"].isoformat() if hasattr(nu["begin"], "isoformat") else nu["begin"]},
             "vooruit": [
                 {**r, "begin": r["begin"].isoformat() if hasattr(r["begin"], "isoformat") else r["begin"]}
@@ -37026,6 +37054,48 @@ class EnergyManagementSystemCoordinator:
             "verwachte_inhoud_kwh": nu["inhoud_kwh"],
             "balanceren": balans or None,
         })
+        return uit
+
+    def _waardeplan_rendementen(self, now: datetime) -> dict:
+        """De datacorrectie en de rendementen voor het waardeplan (v5.165.0).
+
+        Akkoord Ruud 02-11, twee punten:
+
+        1. Datacorrectie op netladen. Het oude laadbesluit eist dat een kWh
+           uit het net de slijtage plus de datacorrectie goedmaakt
+           (`_laadkosten_ct`): gemeten netladingen leverden minder op dan
+           voorspeld. Het waardeplan negeerde die; op 02-11 laadde het om
+           14:00-14:45 voor 34,6/37,3/36,9 ct voor een avond van 50-51 ct.
+           Nu kost elke kWh die boven het zonoverschot uit het net de accu
+           in gaat dezelfde correctie (`laadcorrectie_ct`, max. 5 ct).
+        2. Rendement per vermogensband. Het huis dekken met 500 W haalt
+           gemeten veel minder (69 %) dan verkopen met 2,4 kW. Per stap het
+           ontlaadrendement van die band als die betrouwbaar is gemeten
+           (`get_rendement_per_band`), anders het ene getal. Laden: het
+           gemeten laadrendement, anders de wortel van de rondrit.
+        """
+        from . import accukosten as A
+
+        uit: dict = {}
+        try:
+            uit["netlaadmarge_eur"] = max(0.0, float(self.laadcorrectie_ct() or 0.0)) / 100
+        except Exception:  # noqa: BLE001 - zonder correctie rekent het plan door
+            _LOGGER.debug("Datacorrectie voor het waardeplan niet beschikbaar", exc_info=True)
+        laden = self.learned_charge_efficiency_percent
+        if laden:
+            uit["rendement_laden"] = laden / 100
+        try:
+            banden = (self.get_rendement_per_band(now) or {}).get("ontladen") or {}
+        except Exception:  # noqa: BLE001
+            banden = {}
+        grenzen = tuple(A.BANDEN_W) + (math.inf,)
+        rijen = []
+        for grens, naam in zip(grenzen, A.BAND_NAMEN):
+            b = banden.get(naam) or {}
+            eta = b["rendement_procent"] / 100 if b.get("betrouwbaar") and b.get("rendement_procent") else None
+            rijen.append((grens, eta))
+        if any(eta for _g, eta in rijen):
+            uit["ontlaadbanden"] = tuple(rijen)
         return uit
 
     #: v5.162.0: het moment waarop de lopende balanceerlading klaar moet zijn.
@@ -37208,7 +37278,90 @@ class EnergyManagementSystemCoordinator:
             regels.append("verkopen tegengehouden: " + p["verkoop_tegengehouden"])
         if (p.get("balanceren") or {}).get("reden"):
             regels.append("balanceerlading: " + p["balanceren"]["reden"])
+        # v5.165.0: wanneer en hoeveel het plan uit het net laadt.
+        if zin := self._waardeplan_lading_zin():
+            regels.append(zin)
         return regels or ["het waardeplan rekent elk kwartier de goedkoopste inzet uit"]
+
+    # --- v5.165.0: de uitleg volgt het waardeplan ---------------------------
+    #
+    # Akkoord Ruud 02-11. De uitleg kwam nog uit de oude regels terwijl het
+    # waardeplan stuurde: "laadblok 23:30" terwijl het plan om 23:45 laadde,
+    # "bijladen uit het net loont niet" naast een geplande netlading, en
+    # "wordt in het laadblok bijgeladen 5,58 kWh" terwijl het plan ~1,2 kWh
+    # laadt. Zolang het waardeplan stuurt, komen tijden en hoeveelheden van
+    # de volgende lading uit het plan.
+
+    def _waardeplan_stuurt_nu(self) -> bool:
+        """Stuurt het waardeplan deze ronde, met een plan? (v5.165.0)"""
+        p = self.last_waardeplan or {}
+        return bool(
+            WAARDEPLAN_STUURT and p.get("beschikbaar")
+            and str(self.last_reason or "").startswith("waardeplan_")
+        )
+
+    def _waardeplan_volgende_lading(self, now: datetime | None = None) -> dict | None:
+        """De eerstvolgende lading uit het net volgens het waardeplan (v5.165.0).
+
+        None als het waardeplan niet stuurt. {"geen": True, "uren": ...} als
+        het plan over zijn horizon niet uit het net laadt. Anders het eerste
+        aaneengesloten blok laadkwartieren: van, tot, kWh uit het net.
+        """
+        if not self._waardeplan_stuurt_nu():
+            return None
+        now = now or dt_util.now()
+        rijen = getattr(self, "_waardeplan_rijen", None) or (self.last_waardeplan or {}).get("vooruit") or []
+        kwartier = timedelta(minutes=15)
+        blok: list = []
+        tel = 0
+        for r in rijen:
+            begin = r.get("begin")
+            if isinstance(begin, str):
+                begin = dt_util.parse_datetime(begin)
+            if begin is None or begin + kwartier <= now:
+                continue
+            tel += 1
+            if r.get("actie") == "laden_net" and (not blok or begin == blok[-1][0] + kwartier):
+                blok.append((begin, r))
+            elif blok:
+                break
+        if not blok:
+            return {"geen": True, "uren": tel / 4}
+        return {
+            "van": blok[0][0],
+            "tot": blok[-1][0] + kwartier,
+            "kwh": round(sum(float(r.get("kwh") or 0.0) for _b, r in blok), 2),
+            "kwartieren": len(blok),
+        }
+
+    def _waardeplan_lading_zin(self, now: datetime | None = None) -> str | None:
+        """De volgende netlading van het waardeplan als halve zin (v5.165.0)."""
+        lading = self._waardeplan_volgende_lading(now)
+        if lading is None:
+            return None
+        if lading.get("geen"):
+            return f"het waardeplan laadt de komende {lading['uren']:.0f} uur niet uit het net"
+        return (
+            f"het waardeplan laadt {periode_met_dag(lading['van'], lading['tot'], now)} "
+            f"{_nl(lading['kwh'])} kWh uit het net"
+        )
+
+    def _waardeplan_laadbesluit_stand(self) -> str | None:
+        """De stand van het laadbesluit volgens het waardeplan (v5.165.0).
+
+        Het oude laadbesluit draait niet meer zolang het waardeplan stuurt;
+        zijn laatste stand bleef staan en gaf "bijladen uit het net loont
+        niet" naast een geplande netlading. Een geplande (of al gedane)
+        netlading is `loont`; een plan zonder netlading `loont_niet`, behalve
+        als de zon de accu zou vullen (`zon` blijft staan). None = de oude
+        regels.
+        """
+        lading = self._waardeplan_volgende_lading()
+        if lading is None:
+            return None
+        if not lading.get("geen") or self._laadbesluit_stand == "loont":
+            return "loont"
+        return "zon" if self._laadbesluit_stand == "zon" else "loont_niet"
 
     def _meld_lage_celspanning(self) -> None:
         """Meldt een cel die meerdere dagen te laag staat (v3.52.0).
@@ -47803,17 +47956,28 @@ class EnergyManagementSystemCoordinator:
         }
 
     @staticmethod
-    def _tabelregels_tot_en_na_blok(b: dict) -> list[tuple[str, str]]:
-        """De tekortregels van de uitlegtabel, rond het blok (v5.56)."""
+    def _tabelregels_tot_en_na_blok(b: dict, plan_zin: str | None = None) -> list[tuple[str, str]]:
+        """De tekortregels van de uitlegtabel, rond het blok (v5.56).
+
+        v5.165.0: stuurt het waardeplan (`plan_zin`), dan zegt de tabel niet
+        dat het deel na het blok "in het laadblok wordt bijgeladen", maar
+        wat het plan werkelijk laadt.
+        """
         tot = b.get("diepste_tekort_tot_blok_kwh")
         na = b.get("diepste_tekort_na_blok_kwh")
         totaal = b.get("diepste_tekort_kwh", "?")
+        plan = [("Laden uit het net (waardeplan)", plan_zin[0].upper() + plan_zin[1:])] if plan_zin else []
         if tot is None or not na:
-            return [("Diepste tekort onderweg", f"{totaal} kWh")]
+            return [("Diepste tekort onderweg", f"{totaal} kWh"), *plan]
         return [
             ("Diepste tekort tot het blok (telt nu)", f"{tot} kWh"),
-            ("Na het blok nog nodig (wordt in het laadblok bijgeladen)", f"{na} kWh"),
+            (
+                "Na het blok nog nodig" if plan_zin
+                else "Na het blok nog nodig (wordt in het laadblok bijgeladen)",
+                f"{na} kWh",
+            ),
             ("Samen, waar de reserve op rust", f"{totaal} kWh"),
+            *plan,
         ]
 
     def _build_needed_kwh_breakdown_table(self) -> str:
@@ -47858,7 +48022,7 @@ class EnergyManagementSystemCoordinator:
             # apart wat er na het blok nodig is. De lange horizon (v3.99.18)
             # stond in hetzelfde getal, terwijl Basisverbruik en Zon
             # hierboven alleen tot het blok lopen.
-            *self._tabelregels_tot_en_na_blok(b),
+            *self._tabelregels_tot_en_na_blok(b, self._waardeplan_lading_zin()),
             # v5.54: `.get(..., '?')` vangt alleen een ONTBREKENDE sleutel;
             # de sleutel staat er altijd, met None. Gemeld als "+None%".
             ("Veiligheidsmarge", (
@@ -50634,7 +50798,11 @@ class EnergyManagementSystemCoordinator:
         """De uitleg uit REASON_REGISTRY, met getallen waar die er zijn (v5.73)."""
         if reden == "sparen_in_blok":
             return self._sparen_in_blok_zin()
-        return (REASON_REGISTRY.get(reden) or {}).get("uitleg") or f"Onbekende reden: {reden}."
+        uitleg = (REASON_REGISTRY.get(reden) or {}).get("uitleg") or f"Onbekende reden: {reden}."
+        # v5.165.0: bij het waardeplan de volgende netlading uit het plan.
+        if str(reden or "").startswith("waardeplan_") and (zin := self._waardeplan_lading_zin()):
+            uitleg += " " + zin[0].upper() + zin[1:] + "."
+        return uitleg
 
     @staticmethod
     def _plan_sparen(

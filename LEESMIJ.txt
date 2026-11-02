@@ -1,3 +1,15 @@
+EMS v5.165.0 - waardeplan rekent met de gemeten verliezen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Laden uit het net moet in het waardeplan nu ook de datacorrectie goedmaken
+  (zoals het oude laadbesluit): minder laden tegen net-niet-goedkope prijzen.
+- Het waardeplan rekent per vermogen met het gemeten ontlaadrendement: het
+  huis dekken met weinig watt verliest meer dan verkopen op vol vermogen.
+- De uitleg noemt de tijd en hoeveelheid van de volgende lading uit het
+  waardeplan, niet meer uit de oude regels.
+- Het netvermogen van het lopende kwartier in de plantabel klopt weer.
+
 EMS v5.164.2 - bedragen als geldbedrag herkend
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

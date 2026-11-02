@@ -27,6 +27,10 @@ Per kwartier t, bij inhoud e (kWh boven de ondergrens):
                   g * terugleverwaarde als g < 0
                   + slijtage per kWh uit de accu
                   + verkoopmarge per kWh die uit de accu het net op gaat
+                  + netlaadmarge per kWh die boven het zonoverschot uit
+                    het net de accu in gaat (v5.165.0, de datacorrectie)
+Het ontlaadrendement hangt af van het vermogen (v5.165.0): per stap het
+gemeten rendement van die vermogensband, anders het ene getal.
 Wat er aan het eind van de horizon in de accu zit, is de mediaan van de
 inkoopprijs waard (maal rendement, min slijtage): niet alles op de laatste
 dag weggeven, en ook niet eindeloos vasthouden.
@@ -52,6 +56,9 @@ class Kwartier:
     #: v5.160.0: onder deze inhoud (kWh) gaat er in dit kwartier niets uit de
     #: accu het net op; het huis dekken mag wel.
     verkoop_vloer_kwh: float = 0.0
+    #: v5.165.0: zoveel uur telt dit kwartier (het lopende kwartier minder
+    #: dan 0,25). Verbruik en zon gelden voor die duur; voor de weergave.
+    uren: float = 0.25
 
 
 @dataclass
@@ -70,6 +77,17 @@ class Accu:
     #: voor de balanceerlading. Het plan kiest zelf de goedkoopste kwartieren
     #: ervoor. None = geen eis.
     vol_na_kwartier: int | None = None
+    #: v5.165.0 (akkoord Ruud 02-11): wat een kWh die uit het net de accu
+    #: in gaat extra moet opleveren - de datacorrectie van het laadbesluit
+    #: (gemeten netladingen leverden minder op dan voorspeld). Geldt voor
+    #: het deel van de lading boven het zonoverschot.
+    netlaadmarge_eur: float = 0.0
+    #: v5.165.0: het gemeten laadrendement; None = wortel van de rondrit.
+    rendement_laden: float | None = None
+    #: v5.165.0: ontlaadrendement per vermogensband aan de netkant, als
+    #: ((bovengrens_w, rendement of None), ...) oplopend. Leeg of None in
+    #: een band = het ene getal (rondrit / laadrendement).
+    ontlaadbanden: tuple = ()
 
 
 @dataclass
@@ -91,7 +109,55 @@ def _kosten_stap(verbruik, zon, inkoop, teruglever, b, accu: Accu):
     if accu.verkoopmarge_eur:
         naar_net = np.minimum(np.maximum(-g, 0.0), uit)
         kosten = kosten + naar_net * accu.verkoopmarge_eur
+    if accu.netlaadmarge_eur:
+        # v5.165.0: alleen wat boven het zonoverschot uit het net komt.
+        netlading = np.maximum(b - max(zon - verbruik, 0.0), 0.0)
+        kosten = kosten + netlading * accu.netlaadmarge_eur
     return kosten
+
+
+def rendementen(accu: Accu) -> tuple[float, float]:
+    """(laden, ontladen) als vaste getallen (v5.165.0).
+
+    Laden: het gemeten laadrendement, anders de wortel van de rondrit.
+    Ontladen: rondrit / laden (zoals de nacalculatie in accukosten.py).
+    """
+    rondrit = max(0.5, min(1.0, accu.rendement))
+    if accu.rendement_laden:
+        eta_l = max(0.5, min(1.0, accu.rendement_laden))
+        return eta_l, max(0.5, min(1.0, rondrit / eta_l))
+    return rondrit ** 0.5, rondrit ** 0.5
+
+
+def ontlaadrendement(vermogen_w: float, accu: Accu, terugval: float) -> float:
+    """Het ontlaadrendement bij dit vermogen (aan de netkant, v5.165.0)."""
+    for grens, eta in accu.ontlaadbanden or ():
+        if vermogen_w < grens:
+            return max(0.5, min(1.0, eta)) if eta else terugval
+    return terugval
+
+
+def _ontlaadstappen(accu: Accu, eta_o: float) -> tuple[np.ndarray, np.ndarray]:
+    """De ontlaadstappen (negatief, in STAP_KWH) en hun AC-stroom (v5.165.0).
+
+    Per stap het rendement van de band waarin het vermogen valt. De band
+    volgt uit het vermogen aan de netkant, dat zelf van het rendement
+    afhangt: twee keer bijstellen is genoeg (drie banden).
+    """
+    grens_kwh = accu.ontladen_kw * accu.duur_h
+    ruim = int(grens_kwh / 0.5 / STAP_KWH) + 1
+    s = np.arange(-ruim, 0)
+    dc = -s * STAP_KWH
+    if accu.ontlaadbanden:
+        eta = np.full(len(s), eta_o)
+        for _ in range(2):
+            vermogen = dc * eta / accu.duur_h * 1000
+            eta = np.array([ontlaadrendement(v, accu, eta_o) for v in vermogen])
+    else:
+        eta = np.full(len(s), eta_o)
+    ac = dc * eta
+    houden = ac <= grens_kwh + 1e-9
+    return s[houden], -ac[houden]
 
 
 def actie_van(b: float, verbruik: float, zon: float) -> tuple[str, float]:
@@ -160,18 +226,25 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
         return Uitkomst(False, "geen prijzen vooruit")
     if accu.bruikbaar_kwh <= STAP_KWH:
         return Uitkomst(False, "geen bruikbare accu-inhoud")
-    eta_l = eta_o = max(0.5, min(1.0, accu.rendement)) ** 0.5
+    eta_l, eta_o = rendementen(accu)
     niveaus = int(accu.bruikbaar_kwh / STAP_KWH) + 1
     e = np.arange(niveaus) * STAP_KWH
     max_op = int(accu.laden_kw * accu.duur_h * eta_l / STAP_KWH + 1e-9)
-    max_af = int(accu.ontladen_kw * accu.duur_h / eta_o / STAP_KWH + 1e-9)
-    stappen = np.arange(-max_af, max_op + 1)
+    # v5.165.0: ontladen per vermogensband; laden en stilstaan zoals voorheen.
+    af_s, af_b = _ontlaadstappen(accu, eta_o)
+    op_s = np.arange(0, max_op + 1)
+    stappen = np.concatenate([af_s, op_s])
     # AC-stroom per stap (kWh)
-    delta = stappen * STAP_KWH
-    b_stap = np.where(delta > 0, delta / eta_l, delta * eta_o)
+    b_stap = np.concatenate([af_b, op_s * STAP_KWH / eta_l])
+    index = {int(st): j for j, st in enumerate(stappen)}
 
     inkoop = [k.inkoop_eur for k in kwartieren]
-    eind = max(0.0, median(inkoop) * eta_o - accu.slijtage_eur)
+    # v5.165.0: wat er aan het eind in zit, gaat meestal naar het huis; dus
+    # het rendement van de band van het gewone huisverbruik. Met het ene
+    # (hogere) getal hield het plan de lading vast die het huis met 69 %
+    # zou dekken.
+    huis_w = median(k.verbruik_kwh / (getattr(k, "uren", 0.25) or 0.25) for k in kwartieren) * 1000
+    eind = max(0.0, median(inkoop) * ontlaadrendement(huis_w, accu, eta_o) - accu.slijtage_eur)
     waarde = -e * eind                 # kosten-to-go aan het eind (negatief = waard)
     # vooruit, vanaf de huidige inhoud
     i = int(round(min(max(accu.inhoud_kwh, 0.0), accu.bruikbaar_kwh) / STAP_KWH))
@@ -190,7 +263,7 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     kosten_zonder = 0.0
     for t, k in enumerate(kwartieren):
         s = int(keuze[t, i])
-        b = float(b_stap[list(stappen).index(s)])
+        b = float(b_stap[index[s]])
         actie, kwh = actie_van(b, k.verbruik_kwh, k.zon_kwh)
         g = k.verbruik_kwh - k.zon_kwh + b
         kosten_plan += float(_kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
@@ -211,6 +284,8 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
             # 0,1 kWh rondt af: bij 2,4 kW zou er 2.196 W op de accu staan.
             "vol_vermogen": s == max_op,
             "prijs_eur": round(k.inkoop_eur, 4),
+            # v5.165.0: de duur waarover verbruik en zon gelden.
+            "uren": round(getattr(k, "uren", 0.25) or 0.25, 4),
         })
     # verschil in inhoud tegen de eindwaarde verrekenen (begin en eind)
     kosten_plan -= (i - i_start) * STAP_KWH * eind
