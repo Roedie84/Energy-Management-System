@@ -402,7 +402,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: test met lege accu + `waardeplan_houden` = tekort; eerste nacht met lege accu onder het waardeplan telt > 0. Tot de bouw meet de leerronde die nachten zelf uit P1 en SoC.
 
 ## L-EMS-055 · balanceerlading komt niet meer aan bod onder het waardeplan (sturing)
-- Status: **open** (02-11 15:40; verandert laden uit het net → Ruud beslist).
+- Status: **gebouwd** in v5.162.0 (akkoord Ruud 02-11 16:45).
 - Onderbouwing (code v5.161.3 + statistiek SoC): `_balanceer_laadbesluit` zit in `laadbesluit_uit_het_net`, dat alleen de oude regels toepassen. `_celbescherming_als_nodig` roept eerst `_waardeplan_als_nodig` aan; zolang het plan beschikbaar is, keert die True terug en bereikt de sturing de oude regels niet. `waardeplan.py` kent balanceren niet en `_met_waardeplan` vervangt ook de plantabel. Daily max SoC: laatst 100 % op 29-10, daarna 66, 53, 24, 24 %. De grens van 7 dagen valt op 05-11 (eerder bij celverschil > 0,10 V). Bij deze prijzen vult het plan de accu niet vol (plan vannacht tot 23 %). In oktober bleef een module 8 dagen ongebalanceerd en remde dat het laden (v5.117.0).
 - Voorstel: als `balanceerlading().nodig` en de zon de accu niet vult, in de goedkoopste kwartieren van de bekende prijzen tot vol laden, en dat in `_met_waardeplan` tonen. De verkoopreserve en celbescherming blijven gelden.
 - Verwacht effect: de cellen worden weer om de ≤ 7 dagen gelijkgetrokken. Kosten per keer klein: de lading wordt daarna weer gebruikt; indicatie € 0,10-0,50 bij de huidige spreiding (schatting, niet gemeten).
