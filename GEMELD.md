@@ -174,3 +174,8 @@ Regel: <dd-mm HH:MM> | <sleutel>
 01-11 18:51 | ems pendeldemping houdt pendelen zelf in stand (wissel alleen tellen bij huisverbruiksprong >1 kw)
 01-11 23:51 | L-SC-029 stormchase motregen van station binnen 10 km als 'regent nu' tellen (akkoord)
 02-11 06:51 | L-GS-037 gold scalper mandclusters per markt tellen i.p.v. over hele mand (akkoord)
+02-11 07:57 | updates installeren ems 5.158.1 (hacs) + ha herstarten
+02-11 07:57 | L-EMS-053 ems overschotdagen tellen onder waardeplan (akkoord)
+02-11 07:57 | ems uitleg 'wordt bijgeladen' klopt niet met kwartierplan/laadbesluit
+02-11 07:57 | ems zelfcontrole vals bij negatieve zendure beschikbare energie (als 0 vergelijken)
+02-11 07:57 | ems regeloverschot_kwh meetellen in kpi 'huis gaat voor'
