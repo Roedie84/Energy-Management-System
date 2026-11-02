@@ -630,4 +630,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ hele ronde > 1.200 (gem 1.676, max 1.893, nu 1.760), ramen dicht, aanwezig. Vocht 60,8-63,7% bij 20,0-21,2 °C, schimmelindicator 81-87, buiten 99% / 10,4-11,7 °C. Luchten; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 16). H2 auto bij koken 5x: 61, 22,6, 7,2, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=19): reiniger aan houdt het laag. Herstartvoorstel afgezwakt: 13:12 gaf 5 wissels, maar 17:05 en 18:34 (ook afwezig) geen enkele; oorzaak nog niet zeker.
 
-laatste ronde: 02-11 20:25, gemeten t/m 20:20
+## 03-11 00:25 (ronde 85, eerste na middernacht)
+- DAG 02-11: PM2.5 gem 1,49 (max 5,4; 0 u > 15), reiniger de hele dag aan; dag ervoor met reiniger uit 5,08. 7d (27/10-02/11) 2,54 (nulmeting okt 2025 9,1). CO₂ 02-11 17 van 24 u > 1.200. 15 HA-herstarts.
+- Ronde 20:20-00:20: PM2.5 gem 1,16, mediaan 1,19, P95 1,96, max 2,35 (20:35) (n=48); 0 uur > 15. Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht.
+- Stand: auto 190 min (gem 1,28), mid 44 min (gem 0,65), 6,1 min unavailable. Tv aan 1,37 (n=33) vs tv uit 0,70 (n=15); occupancy maar 18 min (bij tv ziet de sensor bijna niets), dus aanwezig/afwezig per blok niet bruikbaar. Op auto met tv 2,2 → 1,4 (20:35-21:05, halvering ~26 min), daarna vlak 1,0-1,5; na tv uit (23:00) naar 0,5.
+- Werking: tv uit 23:00:34, mid pas 23:20:29: herstart 23:05 zette tv op unknown tot 23:05:29, 15 min telde daarvandaan (~4 min later, onschadelijk). Auto 23:56:04 direct, mid precies 15 min na 23:56:42. 5 HA-herstarts, geen extra wissels, ook die van 23:05 met niemand aanwezig. 5/5 traces zonder fout. Lokaal 68 mislukt op 185.680 (+1: 21:10:29 ConnectionReset, 51 s na herstart, stand 5 s unavailable), uitval 0, 261 verbindingen, sturen 422/423 (3/3 nieuw), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,45-2,35.
+- CO₂ hele ronde > 1.200 (gem 1.772, max 1.907, nu 1.533), ramen dicht. Vocht 59,7-65,5% terwijl temperatuur 21,6 → 18,4 °C zakt, schimmelindicator 85-87, buiten 99% / 9,7 °C. Morgen vroeg luchten; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 16). H2 auto bij koken 5x: 61, 22,6, 7,2, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=20): reiniger aan houdt het laag (dag 1,49 tegen 5,08 uit). Herstartvoorstel ingetrokken: 13:12 bleef de enige van 3 afwezige herstarts met extra wissels, n=1, geen patroon.
+
+laatste ronde: 03-11 00:25, gemeten t/m 00:20
