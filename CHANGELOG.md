@@ -34338,3 +34338,9 @@ Akkoord Ruud 02-11 ("oplossen").
 Nu tellen alleen dagen waarop minstens een van beide gemiddeld `NILM_DUPLICATE_MIN_ACTIVE_W` (0,1 W) of meer gebruikte, en daarvan moeten er minstens `NILM_DUPLICATE_MIN_SHARED_DAYS` zijn.
 
 Tests: `test_nilm_duplicate_detection.py` (+2).
+
+## v5.161.2 — kwartierplan viel om bij een accu net onder de bodem
+
+Gemeld 02-11 15:00 ('Storing' in de cockpit, interne fout 14:00 en 15:01). Liep de gesimuleerde of gemeten accu-inhoud net onder de bodem (beschikbaar tussen -1 kwartierlading en 0), dan werd in `_laadregel` `k = int(beschikbaar // per_kwartier) + 1` gelijk aan 0, was `later[:0]` leeg en viel `min()` om. Kwartierplan, cockpit, planvolging, bijkopen en planningsmeldingen rekenden dan niet. Een negatieve inhoud telt nu als 0 (beide plekken in `_laadregel`).
+
+Tests: `test_v51612_laadregel_negatief.py` (4).

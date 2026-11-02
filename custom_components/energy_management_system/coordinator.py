@@ -23327,7 +23327,7 @@ class EnergyManagementSystemCoordinator:
                 key=lambda paar: paar[0],
             )
             voor_vol = [(p, moment) for p, moment in later if moment < vol_om]
-            k = int(beschikbaar // per_kwartier) + 1
+            k = int(max(beschikbaar, 0.0) // per_kwartier) + 1  # v5.161.2: negatief (accu onder de bodem) = 0
             if k > len(voor_vol):
                 exportprijs = tot_vol[-1][1] if tot_vol else None
                 uit = {
@@ -23359,7 +23359,7 @@ class EnergyManagementSystemCoordinator:
             later = voor_vol
         # Het kwartier waarin de VOLGENDE kWh terechtkomt: na de kwartieren
         # die de lading van nu al vult.
-        k = int(beschikbaar // per_kwartier) + 1
+        k = int(max(beschikbaar, 0.0) // per_kwartier) + 1  # v5.161.2: zie boven
         if k > len(later):
             return {"laden": False, "reden": "de lading van nu dekt alle latere kwartieren al"}
         zon_tot = min(moment for _p, moment in later[:k])
