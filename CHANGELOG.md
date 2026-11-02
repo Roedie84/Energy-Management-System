@@ -34263,3 +34263,26 @@ Nu `celbeschermingsbesluit`, toegepast door `_celbescherming_als_nodig` vóór v
 Uitzetten: `CELBESCHERMING_AAN`. Beide redenen staan in `REASON_REGISTRY`, `REDENEN_BEWUSTE_NETAFNAME` en `NACHT_BEWUST_NIET_ONTLADEN_REDENEN`; `celbescherming_laden` telt als laden in de richtingcontrole en de laadkosten. Het advies bij "kritiek" zegt nu wat de sturing doet in plaats van "nu bijladen, ongeacht de prijs". Het kwartierplan rekent de buffer nog niet mee.
 
 Tests: `test_v51570_celbescherming.py` (8), `test_celspanning.py` aangepast.
+
+## v5.158.0 — het waardeplan stuurt de accu
+
+Akkoord Ruud 02-11 ("Optimaal aanpassen, jij bent slimmer dan ik, nieuwe versie maken"), na een doorrekening van 23-10 t/m 01-11 per kwartier (gemeten verbruik, zon, net en accu; de kwartierprijzen van het EMS; rendement 83 %, slijtage 5,3 ct/kWh, salderen):
+
+| | kosten | besparing |
+|---|---|---|
+| zonder accu | € 22,36 | – |
+| werkelijk | € 20,07 | € 2,28 |
+| perfect achteraf | € 15,79 | € 6,57 |
+| rollende planner (verbruik uit 7-dagenprofiel, zon van gisteren) | € 16,02-17,03 | € 5,3-6,3 |
+
+De accu haalde 35 % van het haalbare. Netladen was in orde (48 kWh voor 25,3 ct; optimaal 62 kWh voor 24,5 ct); de winst lekte weg bij het ontladen: 9,8 kWh onder 25 ct (optimaal 3,0), en in de 8 duurste kwartieren per dag alleen het huistekort (~1,5 kWh; optimaal 3,5-4,8 kWh). Zonder salderen (2027): 52 % van het haalbare.
+
+**Nieuw: `waardeplan.py`.** Dynamisch programmeren over de accu-inhoud (stap 0,1 kWh) per kwartier over alle bekende prijzen (hooguit 36 uur): per kwartier laden uit het net, zon opvangen, bewaren, het huis voeden of verkopen, met verwacht verbruik (`_segmenten_verbruik_zon`), de gewone zonverwachting, inkoopprijs, terugleverwaarde (salderen: inkoop + premie; daarna kaal + premie + zonnebonus via `terugleverwaarde_2027`), rendement, slijtage en de verkoopmarge (`verkoop_min_winst_ct`) op wat uit de accu het net op gaat. Restinhoud aan het eind telt tegen de mediane inkoopprijs × rendement − slijtage. Getoetst tegen een LP-optimum: € 16,06 tegen € 15,79 (salderen) en € 19,27 tegen € 18,73 (2027); 36 uur rekenen kost ~0,05 s.
+
+**Sturing.** `_waardeplan_als_nodig` beslist na de veiligheidsregels (kalibratie, handbediening, negatieve prijs, celbescherming; bij 'bijna leeg' de noodregel) en vóór de oude regels (verkopen, laden uit het net, sparen, slim). Eén keer per kwartier rekenen (`_waardeplan_nu`), opnieuw als de inhoud meer dan 0,5 kWh van het plan afwijkt. Standen: `waardeplan_laden` (handmatig laden, vermogen naar het plan), `waardeplan_verkopen` (handmatig ontladen; **alleen wat boven de verkoopreserve zit** - het huis gaat voor; zonder bekende reserve geen verkoop), `waardeplan_huis` (smart) en `waardeplan_houden` (smart_charging: huis van het net, zon in de accu). Kan het plan niet rekenen (verbruik, prijzen of accu-inhoud onbekend), dan gelden de oude regels zoals voorheen. Uit te zetten met `WAARDEPLAN_STUURT`.
+
+**Zichtbaar.** Het kwartierplan (Vooruitblik, kwartierplanning) toont per kwartier de stand, inhoud en het net van het waardeplan (`_met_waardeplan`, veld `bron: waardeplan`). Attribuut `waardeplan` op de regelsensor en in de diagnostiek: dit kwartier, 6 uur vooruit, kosten van het plan tegen zonder accu. Waarom-regels: prijs nu, inhoud, waar de lading heen gaat, en wat het plan scheelt.
+
+Aangehaakt in `_celbescherming_als_nodig` zodat `_async_update_locked` (ratel) niet groeit.
+
+Tests: `test_v5158_waardeplan.py` (21).

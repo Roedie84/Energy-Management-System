@@ -622,6 +622,8 @@ async def async_get_config_entry_diagnostics(
         "ontlaadgrens": dict(getattr(coordinator, "last_ontlaadgrens", None) or {}),
         # v5.73: de afweging voor sparen in het goedkope blok.
         "sparen_in_blok": dict(getattr(coordinator, "last_sparen_in_blok", None) or {}),
+        # v5.158.0
+        "waardeplan": dict(getattr(coordinator, "last_waardeplan", None) or {}),
         # v5.15.1: de trage keren van de GACS-sensor, met de verdeling over
         # de onderdelen. Werden wel bewaard maar niet geexporteerd.
         "gacs_traagheid": _veilig(

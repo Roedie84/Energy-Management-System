@@ -979,6 +979,8 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
             # v5.73: sparen in het goedkope blok - vol_voor_blokeinde,
             # waarde_na_blok_eur, prijs_nu_eur, besluit en reden.
             "sparen_in_blok": dict(self._coordinator.last_sparen_in_blok or {}),
+            # v5.158.0: het waardeplan (plan van dit kwartier en 6 uur vooruit).
+            "waardeplan": dict(self._coordinator.last_waardeplan or {}),
         }
 
 

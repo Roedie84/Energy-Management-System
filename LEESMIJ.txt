@@ -1,3 +1,17 @@
+EMS v5.158.0 - het waardeplan stuurt de accu
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Elk kwartier rekent het EMS de goedkoopste inzet van de accu uit over
+  alle bekende prijzen: wanneer laden uit het net, wanneer bewaren,
+  wanneer het huis voeden en wanneer verkopen - met verbruik, zon,
+  rendement en slijtage. Over 23-10 t/m 01-11 had dat ongeveer EUR 0,35
+  per dag meer opgeleverd dan de oude regels (en in 2027 ongeveer EUR 0,20).
+- Veiligheidsregels blijven voorgaan (celbescherming, bijna leeg,
+  negatieve prijs, handbediening). Verkopen alleen boven de verkoopreserve:
+  het huis gaat voor.
+- De Vooruitblik toont wat het waardeplan van plan is.
+
 EMS v5.157.0 - een te lege cel wordt nu echt beschermd
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

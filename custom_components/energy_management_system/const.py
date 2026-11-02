@@ -706,6 +706,9 @@ NACHT_BEWUST_NIET_ONTLADEN_REDENEN = frozenset(
         "emergency_low_battery",
         "celbescherming_laden",
         "celbescherming_houden",
+        # v5.158.0: het waardeplan houdt bewust vast of laadt uit het net.
+        "waardeplan_laden",
+        "waardeplan_houden",
     }
 )
 
@@ -1923,6 +1926,9 @@ REDENEN_BEWUSTE_NETAFNAME = (
     # v5.157.0: celbescherming.
     "celbescherming_laden",
     "celbescherming_houden",
+    # v5.158.0: het waardeplan.
+    "waardeplan_laden",
+    "waardeplan_houden",
 )
 
 # Hoe ver de accu onder zijn ontlaadgrens mag zitten en toch als "op de
@@ -2642,6 +2648,68 @@ REASON_REGISTRY: dict[str, dict] = {
         "waarom_vraag": "Waarom gebruik je de accu nu niet?",
         "korte_naam": "celbescherming",
         "emoji": "🔋🛡️",
+    },
+    # v5.158.0 (akkoord Ruud 02-11): het waardeplan - zie waardeplan.py.
+    "waardeplan_laden": {
+        "mode": OPTION_MANUAL,
+        "titel": "Laden uit het net (waardeplan)",
+        "uitleg": (
+            "Het waardeplan rekent elk kwartier de goedkoopste inzet van de "
+            "accu uit over alle bekende prijzen, met het verwachte verbruik, "
+            "de zon, het rendement en de slijtage. Dit kwartier is goedkoop "
+            "genoeg om bij te laden voor een duurder moment."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "laden uit het net (waardeplan)",
+        "waarom_vraag": "Waarom laad je nu uit het net?",
+        "korte_naam": "waardeplan laden",
+        "emoji": "🧮🔌",
+    },
+    "waardeplan_verkopen": {
+        "mode": OPTION_MANUAL,
+        "titel": "Verkopen (waardeplan)",
+        "uitleg": (
+            "Het waardeplan ziet dat deze kWh nu meer opbrengt dan hij later "
+            "kost om terug te laden, na rendement, slijtage en de "
+            "verkoopmarge. Alleen wat boven de verkoopreserve zit, gaat het "
+            "net op; het huis gaat voor."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "verkopen (waardeplan)",
+        "waarom_vraag": "Waarom verkoop je nu?",
+        "korte_naam": "waardeplan verkopen",
+        "emoji": "🧮💶",
+    },
+    "waardeplan_huis": {
+        "mode": OPTION_SMART,
+        "titel": "De accu voedt het huis (waardeplan)",
+        "uitleg": (
+            "Volgens het waardeplan is dit een van de kwartieren waarin de "
+            "lading het meest waard is: de accu houdt de meter op nul."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "huis voeden (waardeplan)",
+        "waarom_vraag": "Waarom gebruik je de accu nu?",
+        "korte_naam": "waardeplan huis",
+        "emoji": "🧮🏠",
+    },
+    "waardeplan_houden": {
+        "mode": OPTION_SMART_CHARGING,
+        "titel": "Accu bewaren voor later (waardeplan)",
+        "uitleg": (
+            "Volgens het waardeplan is de lading later meer waard dan de "
+            "stroom nu kost. Het huis draait dit kwartier op het net; de zon "
+            "mag de accu wel vullen."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "bewaren (waardeplan)",
+        "waarom_vraag": "Waarom gebruik je de accu nu niet?",
+        "korte_naam": "waardeplan bewaren",
+        "emoji": "🧮⏸️",
     },
     "emergency_low_battery": {
         "mode": OPTION_MANUAL,
@@ -7348,6 +7416,20 @@ CELSPANNING_VENSTER_UREN = 6
 # Onder 3,00 V grijpt de BMS in (CELSPANNING_KRITIEK_V); de startgrens ligt
 # daar bewust onder, zodat een gewone avond rond 3,0 V niets kost.
 CELBESCHERMING_AAN = True
+
+# v5.158.0 (akkoord Ruud 02-11): het waardeplan STUURT - zie waardeplan.py.
+# Elk kwartier de goedkoopste inzet van de accu over de bekende prijzen
+# (hooguit WAARDEPLAN_HORIZON_UUR vooruit). Gaat na de veiligheidsregels
+# (kalibratie, handbediening, negatieve prijs, bijna leeg, celbescherming)
+# en vóór de oude regels (verkopen, laden uit het net, sparen, slim). Kan het
+# plan niet rekenen (geen verbruik, prijzen of accu-inhoud), dan gelden de
+# oude regels zoals voorheen.
+WAARDEPLAN_STUURT = True
+WAARDEPLAN_HORIZON_UUR = 36
+# Wijkt de inhoud meer af van het plan, dan binnen het kwartier opnieuw rekenen.
+WAARDEPLAN_HERREKEN_AFWIJKING_KWH = 0.5
+# Onder dit vermogen geen handmatige opdracht (laden of verkopen).
+WAARDEPLAN_MIN_VERMOGEN_W = 150
 CELBESCHERMING_START_V = 2.90
 CELBESCHERMING_BUFFER_KWH = 0.5
 CELBESCHERMING_VRIJ_KWH = 2.0
