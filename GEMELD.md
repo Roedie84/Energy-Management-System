@@ -189,3 +189,15 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 11:51 | L-EMS-054 ems lege accu onder 'houden' als tekort tellen (akkoord)
 02-11 11:51 | ems waardeplan zonder datacorrectie netladen (5 ct), laadblok 14:00 marge 1-2 ct
 02-11 11:51 | ems plan één rendement 83% i.p.v. per vermogensband, smart 400 w volgt huis (voorraad eerder op)
+02-11 12:55 | recorder-exclude gold scalper pepperstone/bitvavo (evaluaties, latency_p99, status)
+02-11 12:55 | gold scalper mandclusters ketenen nog (nr. 4 344 trades, 7,8 dagen), kiezen welke t telt
+02-11 12:55 | overloop spot 1-3 naar ruimte overloop (staan in gang)
+02-11 12:55 | houten lamp zithoek uit energiedashboard, tablet_schakelbron en homewizard cloud-automation
+02-11 12:55 | hernoemen switch.koffiezetapparaat -> meetstekker_homebase
+02-11 12:55 | hernoemen beweging_schuur -> beweging_looppad_schuur en beweging -> beweging_schuur
+02-11 12:55 | hernoemen sensor.vaatwasser_program_* -> nederlandse id's
+02-11 12:55 | apparaatnamen spatie aan eind (melkopschuimer, lamp zolder speelkamer)
+02-11 12:55 | tts google_translate uit configuration.yaml
+02-11 12:55 | cpu speed-integratie verwijderen
+02-11 12:55 | hacs cheapest energy hours verwijderen
+02-11 12:55 | lege apparaten upnp extender/internetbox en browser mod 44657ac7/f611bb68
