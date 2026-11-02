@@ -1,3 +1,11 @@
+EMS v5.158.1 - verkoop door het waardeplan telt mee in de meting
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De meting "nooit onder de reserve verkocht" ziet nu ook wat het waardeplan
+  verkoopt. In v5.158.0 telde dat als regeloverschot, dus de meting bleef 0.
+- Sturing ongewijzigd ten opzichte van v5.158.0.
+
 EMS v5.158.0 - het waardeplan stuurt de accu
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

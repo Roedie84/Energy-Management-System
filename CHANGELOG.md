@@ -34286,3 +34286,11 @@ De accu haalde 35 % van het haalbare. Netladen was in orde (48 kWh voor 25,3 ct;
 Aangehaakt in `_celbescherming_als_nodig` zodat `_async_update_locked` (ratel) niet groeit.
 
 Tests: `test_v5158_waardeplan.py` (21).
+
+## v5.158.1 — verkoop door het waardeplan telt mee in de meting van de harde regel (L-EMS-052)
+
+Leerronde 02-11 07:40: bij het nalopen van v5.158.0 bleek `waardeplan_verkopen` niet in `_VERKOOPREDENEN` te staan. `_dagverloop_exportvelden` zou elke verkoop van het waardeplan dan als regeloverschot tellen (`verkocht` False): leeg in `verkoopkwartieren`, 0 in de dagarchiefvelden `vk`/`vkm`/`vko`. De meting "nooit onder de reserve verkocht" zou dus altijd 0 geven, juist nu het waardeplan het verkopen overneemt.
+
+Nu staat de reden in de lijst. Alleen meten, sturing ongewijzigd: de verkoop zelf bleef al begrensd op de verkoopreserve.
+
+Tests: `test_v51581_verkoopmeting.py` (6), met een vangnet voor nieuwe handmatige verkoopredenen.

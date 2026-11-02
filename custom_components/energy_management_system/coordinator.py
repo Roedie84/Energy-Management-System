@@ -27590,7 +27590,14 @@ class EnergyManagementSystemCoordinator:
         }
 
     #: v5.94: redenen waarin het EMS zelf uit de accu verkoopt.
-    _VERKOOPREDENEN = ("expensive_quarter", "expensive_quarter_peak", "expensive_quarter_no_own_load")
+    #: v5.158.1 (L-EMS-052): ook het waardeplan, anders meet de harde regel
+    #: zijn verkoop niet (telt dan als regeloverschot).
+    _VERKOOPREDENEN = (
+        "expensive_quarter",
+        "expensive_quarter_peak",
+        "expensive_quarter_no_own_load",
+        "waardeplan_verkopen",
+    )
 
     def _is_verkoopreden(self, reden) -> bool:
         reden = str(reden or "")
