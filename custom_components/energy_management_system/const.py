@@ -1049,6 +1049,12 @@ MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION = 5
 TEMP_CONSUMPTION_MIN_HOURS = 2.0
 
 TEMP_CONSUMPTION_MIN_SAMPLES = 4
+# v5.159.0 (L-EMS-050): het temperatuurmodel leert ook uit een vaste nacht.
+VASTE_NACHT_VAN_UUR = 22
+VASTE_NACHT_TOT_UUR = 7
+# v5.159.0: regeloverschot (export uit de accu zonder verkoopbesluit) boven
+# deze hoeveelheid per dag telt als schending van 'huis gaat voor'.
+HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH = 0.1
 
 # Hoeveel graden de gemeten punten uit elkaar moeten liggen voordat een
 # helling iets betekent (v3.39.0).

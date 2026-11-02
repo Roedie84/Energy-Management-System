@@ -1,3 +1,15 @@
+EMS v5.159.0 - rustigere P1-regeling, beter leren voor koude nachten
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De pendeldemping grijpt alleen nog in als een apparaat in het huis
+  pulseert, niet als de accu zelf slingert (dat hield het slingeren juist
+  in stand).
+- Het verbruik bij kou wordt elke nacht (22-07) gemeten, niet alleen als
+  de accu 's nachts ontlaadt.
+- Geen vals 'Der klopt wat neet' meer bij een lege accu.
+- 'Huis gaat voor' telt nu ook export uit de accu zonder verkoopbesluit.
+
 EMS v5.158.1 - verkoop door het waardeplan telt mee in de meting
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

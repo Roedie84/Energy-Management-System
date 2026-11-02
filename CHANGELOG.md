@@ -34294,3 +34294,17 @@ Leerronde 02-11 07:40: bij het nalopen van v5.158.0 bleek `waardeplan_verkopen` 
 Nu staat de reden in de lijst. Alleen meten, sturing ongewijzigd: de verkoop zelf bleef al begrensd op de verkoopreserve.
 
 Tests: `test_v51581_verkoopmeting.py` (6), met een vangnet voor nieuwe handmatige verkoopredenen.
+
+## v5.159.0 — pendeldemping alleen bij een last; temperatuurmodel uit een vaste nacht (L-EMS-050); zelfcontrole bij een lege accu; KPI 'huis gaat voor'
+
+Akkoord Ruud 02-11 op alle punten.
+
+**1. Pendeldemping alleen bij een pulserende last.** 01-11 18:00-18:13: het huis vroeg ~600 W, maar de accu slingerde elke ~75 s tussen 0 en 2 kW (P1 +560/−1.400 W). De demping (60-s gemiddelde) bleef aan omdat de accu zelf de wissels maakte, en hield het slingeren zo in stand. Nu telt een tekenwissel alleen als het huisverbruik (P1 + accu + zon, `_read_corrected_consumption_power`) binnen het venster zelf meer dan `PENDEL_SPRONG_W` varieert (20e-80e percentiel; `_pendel_door_last`). Niet getelde wissels: `niet_geteld_accu`. Zonder huismeting: zoals voorheen.
+
+**2. L-EMS-050.** Het temperatuurmodel achter de reserve voor koude nachten leerde alleen uit het ontlaadvenster (1 meting in 10 dagen). `_update_vaste_nacht_temp` meet ook over een vaste nacht (`VASTE_NACHT_VAN_UUR`-`VASTE_NACHT_TOT_UUR`, 22-07) en voegt die toe met dezelfde validatie, tenzij het ontlaadvenster in de laatste 12 uur al een meting gaf. Een gat van meer dan 30 min (herstart) telt niet mee.
+
+**3. Zelfcontrole.** Een negatieve beschikbare energie van de Zendure (onder de bodem, 01-11 20:47: −0,576 kWh) wordt als 0 vergeleken; geen vals "Der klopt wat neet" meer bij een lege accu.
+
+**4. KPI 'huis gaat voor'.** `sturing_meetattributen()["huis_gaat_voor"]`: per dag verkoopkwartieren onder de reserve en het regeloverschot (export uit de accu zonder verkoopbesluit); `geschonden` als er onder de reserve verkocht is of meer dan `HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH` (0,1 kWh) regeloverschot was. Zo tellen dagcontrole en leerronde hetzelfde.
+
+Tests: `test_v5159_akkoordpunten.py` (8).

@@ -678,6 +678,9 @@ from .const import (
     WAARDEPLAN_HORIZON_UUR,
     WAARDEPLAN_HERREKEN_AFWIJKING_KWH,
     WAARDEPLAN_MIN_VERMOGEN_W,
+    VASTE_NACHT_VAN_UUR,
+    VASTE_NACHT_TOT_UUR,
+    HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH,
     CONF_BATTERY_MAX_SOC_NUMBER,
     CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
     CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
@@ -19005,10 +19008,18 @@ class EnergyManagementSystemCoordinator:
         # 2. De beschikbare energie tegen zijn eigen sensor.
         beschikbaar_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if beschikbaar_entity:
+            # v5.159.0 (akkoord Ruud 02-11): een negatieve meting als 0
+            # vergelijken. Onder de bodem meldt de Zendure een negatieve
+            # beschikbare energie (01-11 20:47: -0,576 kWh) terwijl het EMS
+            # met 0,0 rekent; het verschil lag net boven de marge en gaf een
+            # vals "Der klopt wat neet" bij elke lege accu.
+            _gemeten_beschikbaar = self._read_sensor_float(beschikbaar_entity)
+            if _gemeten_beschikbaar is not None and _gemeten_beschikbaar < 0:
+                _gemeten_beschikbaar = 0.0
             _voeg_toe(
                 "Beschikbare energie",
                 self.last_available_kwh,
-                self._read_sensor_float(beschikbaar_entity),
+                _gemeten_beschikbaar,
                 "kWh",
                 SPIEGEL_MARGE_ENERGIE_KWH,
                 beschikbaar_entity,
@@ -21594,11 +21605,57 @@ class EnergyManagementSystemCoordinator:
                 "uren": round(duur_uren, 1),
             }
         )
+        # v5.159.0: wanneer de laatste nachtmeting erbij kwam (L-EMS-050).
+        self._temp_monster_om = dt_util.now()
         self.temp_consumption_history = self.temp_consumption_history[
             -LEARNING_HISTORY_DAYS:
         ]
 
 
+
+    # --- v5.159.0 (L-EMS-050): het temperatuurmodel uit een vaste nacht ---
+
+    _vaste_nacht: dict | None = None
+    _temp_monster_om: datetime | None = None
+
+    def _update_vaste_nacht_temp(self, now: datetime) -> None:
+        """Meet het verbruik en de buitentemperatuur over een vaste nacht,
+        VASTE_NACHT_VAN_UUR tot VASTE_NACHT_TOT_UUR (v5.159.0, akkoord Ruud 02-11).
+
+        Het temperatuurmodel achter de reserve voor koude nachten leerde
+        alleen uit het ontlaadvenster (van het begin van ontladen tot het
+        goedkope blok). Met een accu die vaak leeg of gespaard is, kwam daar 1
+        meting in 10 dagen uit (7 in totaal). De vaste nacht geeft er elke
+        nacht een, met dezelfde validatie (`_finalize_temp_consumption_regression`).
+        Kwam er in de laatste 12 uur al een meting uit het ontlaadvenster,
+        dan niet nog een voor dezelfde nacht.
+        """
+        lokaal = dt_util.as_local(now)
+        in_nacht = lokaal.hour >= VASTE_NACHT_VAN_UUR or lokaal.hour < VASTE_NACHT_TOT_UUR
+        st = self._vaste_nacht
+        if in_nacht:
+            if st is None:
+                st = self._vaste_nacht = {"energie": 0.0, "uren": 0.0, "temps": [], "laatst": now}
+                return
+            uren = max(0.0, (now - st["laatst"]).total_seconds() / 3600)
+            st["laatst"] = now
+            if uren <= 0 or uren > 0.5:
+                return  # gat (herstart): dit stuk niet meetellen
+            vermogen = self._read_corrected_consumption_power()
+            if vermogen is not None:
+                st["energie"] += max(0.0, vermogen) / 1000 * uren
+                st["uren"] += uren
+            temp = self._get_live_outdoor_temp_c(now)
+            if temp is not None:
+                st["temps"].append(temp)
+            return
+        if st is None:
+            return
+        self._vaste_nacht = None
+        vorige = self._temp_monster_om
+        if vorige is not None and (now - vorige) < timedelta(hours=12):
+            return
+        self._finalize_temp_consumption_regression(st["temps"], st["energie"], st["uren"])
 
     # -- Full-day hourly consumption profile ------------------------------
 
@@ -24963,10 +25020,37 @@ class EnergyManagementSystemCoordinator:
             "verkoopkwartieren": verkoop[-48:],
             # v5.94: teruglevering uit de accu die geen verkoop was (kWh per dag).
             "regeloverschot_kwh": {d: round(v, 3) for d, v in regeloverschot.items()},
+            # v5.159.0 (akkoord Ruud 02-11): de KPI "huis gaat voor" per dag
+            # in één veld, met het regeloverschot erbij. De dagcontrole telde
+            # 01-11 een schending (0,38 kWh export uit de accu zonder
+            # verkoopvrijgave), de leerronde 0x, omdat alleen verkoop onder
+            # de reserve telde. Nu: verkoop onder de reserve EN regeloverschot.
+            "huis_gaat_voor": self._huis_gaat_voor_kpi(verkoop, regeloverschot),
             "spaarplan_behoefte_bron": plan.get("behoefte_bron"),
             "spaarplan_eigen_tot_blok_kwh": plan.get("spaarplan_eigen_tot_blok_kwh"),
             "spaarplan_nodig_tot_blok_kwh": plan.get("nodig_tot_blok_kwh"),
         }
+
+    @staticmethod
+    def _huis_gaat_voor_kpi(verkoop: list, regeloverschot: dict) -> dict:
+        """Per dag: verkoopkwartieren onder de reserve en het regeloverschot
+        (v5.159.0). `geschonden` als er onder de reserve verkocht is of meer
+        dan HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH regeloverschot was."""
+        dagen: dict = {}
+        for r in verkoop:
+            d = dagen.setdefault(r.get("dag"), {"onder_reserve_kwartieren": 0, "regeloverschot_kwh": 0.0})
+            marge = r.get("marge_bij_export_min_kwh")
+            if marge is not None and marge < 0:
+                d["onder_reserve_kwartieren"] += 1
+        for dag, kwh in regeloverschot.items():
+            d = dagen.setdefault(dag, {"onder_reserve_kwartieren": 0, "regeloverschot_kwh": 0.0})
+            d["regeloverschot_kwh"] = round(float(kwh), 3)
+        for d in dagen.values():
+            d["geschonden"] = bool(
+                d["onder_reserve_kwartieren"]
+                or d["regeloverschot_kwh"] > HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH
+            )
+        return dict(sorted(dagen.items()))
 
     # v5.125.0 (L-EMS-033): de reservesprongen gaan mee in de opslag.
     # Leerronde 23-10: twee keer per dag na een herstart leeg, en de
@@ -48893,6 +48977,8 @@ class EnergyManagementSystemCoordinator:
             ("verbruiksmeting", lambda: self._track_recent_consumption_reading(now)),
             ("airco-voorspelling", lambda: self._update_living_room_airco_prediction(now)),
             ("klimaatleren", lambda: self._update_climate_rate_learning(now)),
+            # v5.159.0 (L-EMS-050): het temperatuurmodel ook uit een vaste nacht.
+            ("vaste nacht", lambda: self._update_vaste_nacht_temp(now)),
         ):
             self._voer_staartstap_uit(naam, stap)
 
@@ -54320,12 +54406,18 @@ class EnergyManagementSystemCoordinator:
                 "monsters": [], "wissels": [], "teken": 0, "top": 0.0,
                 "vorige_top": 0.0, "geteld": True, "actief_sinds": None,
                 "vandaag": None, "keren_vandaag": 0, "seconden_vandaag": 0.0,
-                "laatst": None,
+                "laatst": None, "huis": [], "niet_geteld_accu": 0,
             }
         dag = now.date().isoformat()
         if st["vandaag"] != dag:
             st.update(vandaag=dag, keren_vandaag=0, seconden_vandaag=0.0)
         venster = timedelta(seconds=PENDEL_VENSTER_S)
+        # v5.159.0: het huisverbruik (P1 + accu + zon) erbij, om te zien of
+        # een wissel van een last komt of van de accu zelf.
+        huis_w = self._read_corrected_consumption_power()
+        if huis_w is not None:
+            st.setdefault("huis", []).append((now, float(huis_w)))
+        st["huis"] = [m for m in st.get("huis", []) if m[0] > now - venster]
         if regel_w is not None:
             st["monsters"].append((now, float(regel_w)))
             if abs(regel_w) > PENDEL_RUIS_W:
@@ -54336,8 +54428,11 @@ class EnergyManagementSystemCoordinator:
                 else:
                     st["top"] = max(st["top"], abs(regel_w))
                 if not st["geteld"] and st["vorige_top"] + st["top"] > PENDEL_SPRONG_W:
-                    st["wissels"].append(now)
                     st["geteld"] = True
+                    if self._pendel_door_last(st["huis"]):
+                        st["wissels"].append(now)
+                    else:
+                        st["niet_geteld_accu"] = st.get("niet_geteld_accu", 0) + 1
         # Eén monster vóór het venster blijft staan: het geldt tot het volgende.
         monsters = st["monsters"]
         while len(monsters) > 1 and monsters[1][0] <= now - venster:
@@ -54364,7 +54459,30 @@ class EnergyManagementSystemCoordinator:
             "actief_sinds": st["actief_sinds"].isoformat() if actief else None,
             "keren_vandaag": st["keren_vandaag"],
             "minuten_vandaag": round(st["seconden_vandaag"] / 60, 1),
+            # v5.159.0: wissels die niet telden omdat het huis gelijk bleef.
+            "niet_geteld_accu": st.get("niet_geteld_accu", 0),
         }
+
+    @staticmethod
+    def _pendel_door_last(huis: list) -> bool:
+        """Komt een wissel van een last in het huis? (v5.159.0, akkoord Ruud 02-11)
+
+        Gezien 01-11 18:00-18:13: het huis vroeg vrij constant ~600 W, maar de
+        accu slingerde elke ~75 s tussen 0 en 2 kW en P1 tussen +560 en
+        -1.400 W. De demping (60-s gemiddelde) bleef aan omdat de accu zelf de
+        wissels maakte, en regelde dan op een achterlopend gemiddelde - wat het
+        slingeren in stand hield. Nu telt een wissel alleen als het
+        huisverbruik (P1 + accu + zon) binnen het venster zelf meer dan
+        `PENDEL_SPRONG_W` varieert. Het 20e-80e percentiel, zodat een korte
+        scheefheid tussen de P1- en de accumeting niet als sprong telt.
+        Zonder huismeting: tellen zoals voorheen.
+        """
+        waarden = sorted(w for _t, w in huis)
+        if len(waarden) < 3:
+            return True
+        laag = waarden[int(0.2 * (len(waarden) - 1))]
+        hoog = waarden[int(round(0.8 * (len(waarden) - 1)))]
+        return hoog - laag > PENDEL_SPRONG_W
 
     @staticmethod
     def _tijdgewogen_gemiddelde(monsters: list, van: datetime, tot: datetime) -> float | None:
