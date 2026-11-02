@@ -1867,3 +1867,26 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-02 04:20,filtergebruik_pct,0,1,
 2026-11-02 04:20,automation_traces_fout,0,5,alle failed_conditions (nachtvenster)
 2026-11-02 04:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.5-2.2
+2026-11-02 08:20,pm25_gem,2.46,48,5-min statistiek 04:20-08:20; mid tot 06:01:50 daarna auto tot 08:19:23
+2026-11-02 08:20,pm25_mediaan,2.91,48,
+2026-11-02 08:20,pm25_p95,4.45,48,
+2026-11-02 08:20,pm25_max,5.38,48,momentaan 06:55-07:00; geen kookmoment
+2026-11-02 08:20,pm25_uren_gt15,0.00,48,
+2026-11-02 08:20,pm25_uren_gt25,0.00,48,
+2026-11-02 08:20,stand_mid_min,103,21,gem pm25 0.74 (04:20-06:00; n=20) plus 3 min 07:10-07:13
+2026-11-02 08:20,stand_auto_min,134,26,gem pm25 3.75; aanwezig; 1.5 min unavailable 06:34-06:36 eraf
+2026-11-02 08:20,pm25_gem_aanwezig,3.75,26,06:05-08:15 op auto
+2026-11-02 08:20,pm25_gem_afwezig,0.74,20,04:20-06:00 op mid
+2026-11-02 08:20,halvering_na_wissel_mid_min,16,4,4.7 -> 2.8 in ~15 min boven achtergrond ~0.7; 5-min gemiddelden; 15 min auto ervoor zonder daling
+2026-11-02 08:20,pm25_dag_tm_nu,1.7,1,dagstatistiek t/m 08:32
+2026-11-02 08:20,co2_gem,1279,48,5-min; 1480 -> 1085 (keukenraam open 06:02-06:48) -> 1280
+2026-11-02 08:20,co2_uren_gt1200,3.00,48,
+2026-11-02 08:20,vocht_max,68.8,48,68.8 -> 66.3 -> 68.0 bij 17.4-17.6 C
+2026-11-02 08:20,schimmel_indicator,87,48,84-87; buiten 99% / 10.1 C
+2026-11-02 08:20,stand_unavailable_min,1.5,1,06:34:34-06:36:01 HA-herstart
+2026-11-02 08:20,ha_herstarts,1,1,06:34-06:36
+2026-11-02 08:20,lokaal_mislukt,67,180517,geen nieuwe; uitval 0; 247 verbindingen
+2026-11-02 08:20,sturen_bevestigd,404,405,4/4 nieuw
+2026-11-02 08:20,filtergebruik_pct,0,1,
+2026-11-02 08:20,automation_traces_fout,0,5,alle finished
+2026-11-02 08:20,apparaat_pm25_bereik,2,1,apparaat 2 (kort 3-4 rond 06:50) bij Ultimate 0.6-5.4

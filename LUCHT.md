@@ -595,4 +595,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 2.151 → 1.480 (gem 1.825), hele ronde > 1.200, ramen dicht, niemand. Vocht 70,4 → 68,8% bij 18,5 → 17,7 °C (verwarming uit), schimmelindicator 90 → 87, buiten 99% / 10,0-10,6 °C. Ochtend luchten en verwarmen; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=15): reiniger aan houdt het laag; nieuw: in de 15 min wachttijd na vertrek zakt het op auto niet, op mid wel - mid of high direct na vertrek kan de rest sneller opruimen.
 
-laatste ronde: 02-11 04:25, gemeten t/m 04:20
+## 02-11 08:25 (ronde 81)
+- PM2.5 04:20-08:20: gem 2,46, mediaan 2,91, P95 4,45, max 5,38 (06:55-07:00) (n=48); 0 uur > 15. Dag t/m nu ~1,7; 7d (26/10-01/11) 3,87 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive). Keukenraam open 06:02-06:48, andere ramen dicht. Aanwezig 06:01-08:04 met onderbrekingen, tv uit.
+- Stand: mid tot 06:01:50 (gem 0,74, n=20), auto tot 08:19:23 (gem 3,75, n=26), 3 min mid 07:10-07:13, ~1,5 min unavailable 06:34-06:36. PM2.5 steeg vanaf aanwezigheid 0,8 → 3-5 en bleef op auto ~4 (met raam open gem 3,1; dicht 4,1).
+- Na vertrek 08:04 op auto 15 min 3,9 → 4,7 zonder daling; na wissel naar mid 08:19: 4,7 → 3,5 (08:25-08:30) → 2,8 (08:32), halvering ~16 min (achtergrond ~0,7; alleen 5-min gemiddelden, ruwe history gaf Bad Gateway).
+- Werking: mid precies 15 min na laatste aanwezigheid (06:55:26 → 07:10:26, 08:04:23 → 08:19:23); auto bij 06:01:50 direct, 07:11:39 pas 07:13:35 (~2 min). 5/5 traces zonder fout. 1 HA-herstart (06:34-06:36). Lokaal 67 mislukt op 180.517 (geen nieuwe), uitval 0, 247 verbindingen, sturen 404/405 (4/4 nieuw), filter 0%. Apparaat-PM2.5 2 (kort 3-4 om 06:50) bij Ultimate 0,6-5,4: onderschat.
+- CO₂ 1.480 → 1.085 (raam open) → 1.280 (raam dicht), gem 1.279, 3,0 u > 1.200. Vocht 68,8 → 66,3 → 68,0%, schimmelindicator 84-87 bij 17,4-17,6 °C, buiten 99% / 10,1 °C. Luchten hielp CO₂; verwarmen helpt vocht. Luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=16): op auto bij aanwezigheid blijft het ~4 hangen; in de wachttijd na vertrek zakt het niet, op mid wel met ~16 min halvering (n=2 na elkaar, 1,8 → 0,9 en 4,7 → 2,8). Nog geen voorstel, te weinig data.
+
+laatste ronde: 02-11 08:25, gemeten t/m 08:20
