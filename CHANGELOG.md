@@ -34318,3 +34318,13 @@ Plan en sturing liepen uiteen: het waardeplan kende de verkoopreserve niet en ze
 Nu krijgt elk kwartier van het waardeplan zijn verkoopreserve mee (`Kwartier.verkoop_vloer_kwh`, via `_planning_verkoopreserve_kwh`: dezelfde regel als het oude kwartierplan). De optimalisatie laat geen export uit de accu toe die onder die vloer eindigt; het huis dekken mag er wel onder. De toets bij het uitvoeren blijft staan als laatste grens.
 
 Tests: `test_v5160_verkoopvloer.py`.
+
+## v5.161.0 — overschotdagen tellen weer onder het waardeplan (L-EMS-053)
+
+Akkoord Ruud 02-11.
+
+De overschotmeting in `_update_shortfall_detection` liep alleen bij stand `smart_discharging` en de dure-kwartierredenen. Onder het waardeplan heet de reden `waardeplan_huis` (stand smart) of `waardeplan_verkopen` (stand manual), dus sinds v5.158.0 telde geen enkele dag meer als overschotdag. De reservemarge kon daardoor alleen nog stijgen (tekortdagen tellen via de gekoppelde nachtmeting wel door).
+
+Nu tellen `waardeplan_huis` en `waardeplan_verkopen` als zelfvoorzienend, net als de oude ontlaadredenen. `waardeplan_houden` en `waardeplan_laden` niet: dan voedt de accu het huis bewust niet.
+
+Tests: `test_v5161_overschot_waardeplan.py` (6).

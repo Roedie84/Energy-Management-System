@@ -30207,12 +30207,18 @@ class EnergyManagementSystemCoordinator:
         # zeven dagen tekort" waren vijf avondmaaltijden.
         #
         # Zelfvoorzienend is: de accu ontlaadt (slim of handmatig).
+        # v5.161.0 (L-EMS-053, akkoord Ruud 02-11): ook onder het waardeplan.
+        # 'waardeplan_huis' heeft stand smart en 'waardeplan_verkopen' stand
+        # manual, dus sinds v5.158.0 telde geen enkele dag meer als
+        # overschotdag en kon de reservemarge alleen nog stijgen.
         zelfvoorzienend = (
             REASON_TO_MODE.get(reason) == OPTION_SMART_DISCHARGING
             or reason in (
                 "expensive_quarter",
                 "expensive_quarter_soc_protected",
                 "expensive_quarter_peak",
+                "waardeplan_huis",
+                "waardeplan_verkopen",
             )
         )
         if not zelfvoorzienend:
