@@ -179,3 +179,7 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 07:57 | ems uitleg 'wordt bijgeladen' klopt niet met kwartierplan/laadbesluit
 02-11 07:57 | ems zelfcontrole vals bij negatieve zendure beschikbare energie (als 0 vergelijken)
 02-11 07:57 | ems regeloverschot_kwh meetellen in kpi 'huis gaat voor'
+02-11 08:53 | database repack na herstart 02-11 (back-up morgen boven ~4,8 gb-grens, cloudkopie)
+02-11 08:53 | L-SC-030 stormchase regencorrectie nakijken met motregen als regent (L-SC-029)
+02-11 08:53 | ems nilm 3 dubbele paren (looppad 2/3, ontvochtiger zolder met salon en shelly)
+02-11 08:53 | opschonen device_class/eenheden en zware templates tablet-packages
