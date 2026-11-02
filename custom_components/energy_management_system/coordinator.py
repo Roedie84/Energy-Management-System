@@ -34839,7 +34839,11 @@ class EnergyManagementSystemCoordinator:
                 f"betaald tegen {_nl(tekortprijs)} ct (waard {_nl(waarde)} ct na "
                 "rendement en slijtage)"
             )
-        if any(str(r.get("reden") or "").startswith("grid_charging") for r in rijen):
+        # v5.162.1: ook het waardeplan laadt uit het net, onder een eigen reden.
+        if any(
+            str(r.get("reden") or "").startswith(("grid_charging", "waardeplan_laden"))
+            for r in rijen
+        ):
             return None, None
         return TEKORTSOORT_PLANNING, (
             f"laden tegen {_nl(goedkoopst)} ct had geloond tegen het tekort van "

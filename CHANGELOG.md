@@ -34364,3 +34364,11 @@ Akkoord Ruud 02-11 ("Alles oplossen").
 - **Plantabel.** Bij laden toonde de cockpit wat er na het rendement in de cellen komt (2,0 kW). Dat is nu het vermogen aan het net (`laden_w`), zoals de meting; de planvolging vergelijkt daarmee ook gelijke grootheden.
 
 Tests: `test_v51620_balanceren_waardeplan.py`.
+
+## v5.162.1 — tekortuitleg: het waardeplan laadt ook
+
+Gevonden door de controleronde van 02-11.
+
+- **Tekortsoort uit het dagverloop.** `_deel_nacht_in_met_reden` herkende alleen redenen die met `grid_charging` beginnen. Onder het waardeplan heet netladen `waardeplan_laden`, dus op 02-11 stond er 'laden tegen 34,6 ct had geloond ..., en er werd niet geladen', terwijl de accu 14:00-14:45 uit het net laadde. Zo'n dag heette onterecht `planning`. Nu blijft de soort onbepaald, net als bij de oude netlaadregels. Alleen uitleg en telling; de sturing verandert niet.
+
+Tests: `test_v541_tekort_economisch.py`.

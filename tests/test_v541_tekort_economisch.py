@@ -308,6 +308,17 @@ def test_oude_nacht_waarin_geladen_werd_blijft_onbekend(make_coordinator, hass):
     assert any("zonder soort" in p for p in samenvatting["informatief"])
 
 
+def test_oude_nacht_waarin_het_waardeplan_laadde_blijft_onbekend(make_coordinator, hass):
+    # v5.162.1: 'er werd niet geladen' klopte niet; het plan laadde wel.
+    c = _c(make_coordinator, hass)
+    _oud(c, _verloop(55, prijs=20.0, piek=44.0, nachtprijs=40.0,
+                     reden="waardeplan_laden"))
+
+    assert c._herleid_onbekende_tekortnachten() == 0
+    assert "tekort_soort" not in c.reserve_daily_records[0]
+    assert c.get_tekortsoorten()["tekortnachten_planning"] == 0
+
+
 def test_oude_nacht_zonder_dagverloop_blijft_onbekend(make_coordinator, hass):
     c = _c(make_coordinator, hass)
     _oud(c, {})

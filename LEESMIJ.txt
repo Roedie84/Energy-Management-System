@@ -1,3 +1,10 @@
+EMS v5.162.1 - tekortuitleg klopt weer onder het waardeplan
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De uitleg zei 'er werd niet geladen' terwijl het waardeplan die dag wel uit
+  het net had geladen. Zo'n dag telt nu niet meer als planningsfout.
+
 EMS v5.162.0 - balanceerlading terug, laden op vol vermogen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
