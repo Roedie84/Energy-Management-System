@@ -1890,3 +1890,27 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-02 08:20,filtergebruik_pct,0,1,
 2026-11-02 08:20,automation_traces_fout,0,5,alle finished
 2026-11-02 08:20,apparaat_pm25_bereik,2,1,apparaat 2 (kort 3-4 rond 06:50) bij Ultimate 0.6-5.4
+2026-11-02 12:20,pm25_gem,1.18,48,5-min statistiek 08:20-12:20; mid en auto
+2026-11-02 12:20,pm25_mediaan,0.81,48,
+2026-11-02 12:20,pm25_p95,2.83,48,
+2026-11-02 12:20,pm25_max,4.43,48,momentaan 08:20-08:25; rest van vertrek 08:04; geen kookmoment
+2026-11-02 12:20,pm25_uren_gt15,0.00,48,
+2026-11-02 12:20,pm25_uren_gt25,0.00,48,
+2026-11-02 12:20,stand_mid_min,182,36,gem pm25 1.33; 2.5 min unavailable eraf niet gecorrigeerd
+2026-11-02 12:20,stand_auto_min,58,12,gem pm25 0.71; 10:27:49-11:08:51 en 12:02:25-12:19:29
+2026-11-02 12:20,pm25_gem_aanwezig,0.68,4,13 min aanwezig (10:27-10:39 met pauzes en 12:02-12:04)
+2026-11-02 12:20,pm25_gem_afwezig,1.22,44,incl. wegzakken na vertrek 08:04
+2026-11-02 12:20,halvering_na_wissel_mid_min,24,11,4.7 -> 0.7 in ~80 min; fit 08:20-09:10 boven achtergrond 0.6-0.7; 23-26 afhankelijk van venster; eerste 15 min gaf 16
+2026-11-02 12:20,pm25_dag_tm_nu,1.5,12,uurstatistiek 00:00-12:00
+2026-11-02 12:20,co2_gem,1128,48,5-min; 1244 -> 1038; ramen dicht; vrijwel niemand
+2026-11-02 12:20,co2_uren_gt1200,0.67,48,tot ~09:00
+2026-11-02 12:20,vocht_max,68.5,48,67.9-68.4 bij 17.2-17.5 C
+2026-11-02 12:20,schimmel_indicator,86,48,86 -> 83; buiten 99% / 10.0-11.0 C
+2026-11-02 12:20,stand_unavailable_min,3.7,3,08:33:02-08:34:19; 10:45:32-10:46:50; 10:52:33-10:53:46
+2026-11-02 12:20,ha_herstarts,3,1,08:33 10:45 10:52
+2026-11-02 12:20,stand_auto_zonder_aanwezigheid_n,1,1,10:39:04 -> 11:08:51 auto (30 min) want 2 herstarts resetten de 15 min
+2026-11-02 12:20,lokaal_mislukt,67,181808,geen nieuwe; uitval 0; 249 verbindingen
+2026-11-02 12:20,sturen_bevestigd,408,409,4/4 nieuw
+2026-11-02 12:20,filtergebruik_pct,0,1,
+2026-11-02 12:20,automation_traces_fout,0,5,alle finished
+2026-11-02 12:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.5-4.7
