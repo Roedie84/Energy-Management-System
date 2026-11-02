@@ -372,3 +372,11 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: daarnaast elke nacht één paar uit het vaste venster 22:00-07:00 (huisverbruik uit de meetlaag, gemiddelde buitentemperatuur), onafhankelijk van het ontladen; ontlaadvensterparen blijven. Eerst eerlijk valideren (voorspellen vóór toevoegen), zoals nu.
 - Verwacht effect: ~1 paar per nacht → in 2-3 weken een model over 0-15 °C vóór de eerste vorst; reserve op koude nachten op gemeten basis i.p.v. 7 oude paren.
 - Meten: aantal paren per week (nu ~0,7), temperatuurbereik, `temperatuur_regressie_nauwkeurigheid` per nacht; reserve-extra op nachten < 5 °C tegen werkelijk nachtverbruik.
+
+## L-EMS-051 · nabeschouwing: bodemstraf op een dag die onder de bodem begint (meetfout)
+- Status: **gebouwd v5.156.1** (02-11 03:58, dagafsluiting; zelf gebouwd: meetfout in rapportage, sturing ongewijzigd; suite 6484 groen, `test_v5161_leerronde.py` (6); workflow groen, HACS ververst). Wacht op installatie door Ruud.
+- Onderbouwing (01-11, n=1 + code): `get_nabeschouwing` geeft begin/eind als kWh boven min_soc en de bodem `_reserve_bodem_kwh` (15 % van de capaciteit). `beste_planning` kapt een beginstand onder de bodem af op de bodem; `nabeschouwing` waardeert de werkelijke eindstand als `(eind − bodem) × dagprijs × √η` (negatief). Niets doen met begin = eind < bodem gaf daardoor gemist > 0 (proef: begin 0,1, bodem 0,3 → leverde −0,08). 01-11: nabeschouwing −0,64 / 0,00 tegen dagarchief −0,04.
+- Gebouwd: in `nabeschouwing()` `bodem = min(bodem, begin)` voor meetlat én werkelijkheid; velden `bodem_meetlat_kwh`, `bodem_gebruikt_kwh`. `beste_planning` ongewijzigd; boven de bodem verandert niets.
+- Verwacht effect: op dagen die leeg beginnen (02-11: 9 %) geen ~€ 0,60 vals "gemist door voorspelling"; realisatie 7 d niet meer naar beneden getrokken door lage-SoC-dagen.
+- Meten (na installatie): `bodem_gebruikt_kwh` < `bodem_meetlat_kwh` op dagen die onder de bodem beginnen; daar `gemist_eur` ≈ verschil tussen dagarchief-opbrengst en best mogelijk, niet ≈ bodem × prijs.
+

@@ -834,3 +834,16 @@ laatste ronde: 01-11 19:40, gemeten t/m 01-11 19:40
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (dagtotaal weekend te laag; zondag in dagafsluiting), H-EMS-11 (piek vastgehouden; neemt af).
 
 laatste ronde: 01-11 23:40, gemeten t/m 01-11 23:43
+
+## 02-11 03:40 · dagafsluiting 01-11
+- **Draait v5.156.0**; geen purge/repack, geen EMS-fouten na 23:43 (alleen Zonneplan/forecast onbeschikbaar om 00:00, afgevangen). **Gebouwd v5.156.1** (L-EMS-051, zie onder).
+- Dag 01-11 (zo): PV **1,83 kWh** (day-ahead 2,68 → **−31,8 %** bij 100 % bewolking), import 8,86, export 0,54, accu 0,92 in / 1,04 uit, huis **10,27** (verwacht 9,64 → **+0,6**). **Harde regel: 0× onder de reserve.** Geen tekortnacht 31→01. Besluit klapt niet meer sinds v5.156.0 (0 wissels na 21:20; daarvoor 4×).
+- **H-EMS-2 (PV te hoog):** 7 d MAE/bias 21,5/−12,2 %, 14 d 18,0/−12,0, 30 d 16,6/−13,0 (25/30 negatief). Per bewolking: ≤ 50 % −18,3, 50-90 % −16,1, > 90 % **−8,0** (was −6,1): 01-11 ook bij volle bewolking 32 % te hoog → niet alleen een zonnedag-effect.
+- **H-EMS-14 (dagtotaal te laag):** zondag 01-11 **+0,55** (zaterdag +3,92, 25-10 +5,96). Weekend n=3 gem. +3,48, werkdagen +0,66 → verschil blijft, maar 01-11 past er niet in; nog 1 weekend.
+- **Nabeschouwing 7 d: 73,9 %** (9,41 / 12,74). 01-11: leverde −0,64, best 0,00, "gemist door voorspelling" 0,64 terwijl het dagarchief −0,04 zag. Nagerekend in de code: de dag begon (22 %) onder de meetlatbodem (15 % van de capaciteit); `beste_planning` begint stil op de bodem en de werkelijkheid wordt tegen de bodem gewaardeerd → niets doen gaf al (bodem − begin) × dagprijs "gemist". Rekenfout → **gebouwd v5.156.1** (`bodem = min(bodem, begin)`, 6 tests, suite 6484 groen, workflow groen, HACS ververst). Rest van 01-11 is echt: voorraad 1,5 kWh DC (22 → 9 %) leverde ~0,12 € AC op (sluimer/rendement).
+- **Tekortnacht 01→02 loopt** (eerste in ~8 nachten): 1,51 kWh net met lege accu om 03:45, MC 22:00 **100 %** (soort economisch). Laadbesluit "loont niet" klopt: goedkoopste kwartier 38,7 ct / 0,83 = 46,6 ct > nacht 40-41 ct. Eerste kalibratiepunt met hoge kans; MC Brier n=4 **0,018**.
+- Twin `kwartierplan` MAE **0,723**. Stilstand: **geen echte** (11 wachten, 0 doen). Airco besluit "niets", knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog, nu ook bij volle bewolking), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-11 (piek vastgehouden; 01-11 0 kWh → neemt af).
+
+laatste ronde: 02-11 03:40, gemeten t/m 02-11 03:45
+
