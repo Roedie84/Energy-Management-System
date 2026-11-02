@@ -1914,3 +1914,28 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-02 12:20,filtergebruik_pct,0,1,
 2026-11-02 12:20,automation_traces_fout,0,5,alle finished
 2026-11-02 12:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.5-4.7
+2026-11-02 16:45,pm25_gem,1.09,53,5-min statistiek 12:20-16:45; auto en mid
+2026-11-02 16:45,pm25_mediaan,1.01,53,
+2026-11-02 16:45,pm25_p95,1.92,53,
+2026-11-02 16:45,pm25_max,2.54,53,momentaan 14:00-14:10; 5-min max 2.32; aanwezigheid; geen kookmoment
+2026-11-02 16:45,pm25_uren_gt15,0.00,53,
+2026-11-02 16:45,pm25_uren_gt25,0.00,53,
+2026-11-02 16:45,stand_auto_min,212,43,gem pm25 1.16
+2026-11-02 16:45,stand_mid_min,51,10,gem pm25 0.79; 5 wissels door herstart 13:11
+2026-11-02 16:45,stand_unavailable_min,2.5,2,13:11:32-13:12:47; 15:25:31-15:26:45
+2026-11-02 16:45,pm25_gem_aanwezig,1.13,26,136 min occupancy; 5-min blokken met >= 2.5 min aanwezig
+2026-11-02 16:45,pm25_gem_afwezig,1.05,27,
+2026-11-02 16:45,halvering_auto_aanwezig_min,41,19,1.76 -> 0.70 14:30-16:00 boven achtergrond 0.5; 34-50 bij achtergrond 0.6-0.4; 11 min mid inbegrepen; 5-min gemiddelden
+2026-11-02 16:45,pm25_dag_tm_nu,1.44,17,uurstatistiek 00:00-16:00 plus 5-min 16:00-16:45
+2026-11-02 16:45,co2_gem,1170,53,5-min; ramen dicht; aanwezig
+2026-11-02 16:45,co2_max,1692,53,16:40-16:45 (5-min)
+2026-11-02 16:45,co2_uren_gt1200,1.50,53,vanaf 15:15
+2026-11-02 16:45,vocht_max,70.6,53,15:20-15:25; daarna 61.3 om 16:45 (verwarming aan; 17.1 -> 20.9 C)
+2026-11-02 16:45,schimmel_indicator,83,53,83 -> 79 -> 82; buiten 99% / 11.6 C
+2026-11-02 16:45,ha_herstarts,2,1,13:12 15:26 (sensor.uptime)
+2026-11-02 16:45,stand_wissels_na_herstart_n,5,1,13:15 mid 13:21 auto 13:24 mid 13:27 auto 13:36 mid; 13:27:56 zonder zichtbare aanwezigheid
+2026-11-02 16:45,lokaal_mislukt,67,183311,geen nieuwe; uitval 0; 251 verbindingen
+2026-11-02 16:45,sturen_bevestigd,417,418,9/9 nieuw
+2026-11-02 16:45,filtergebruik_pct,0,1,
+2026-11-02 16:45,automation_traces_fout,0,5,alle finished
+2026-11-02 16:45,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.4-2.5
