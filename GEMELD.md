@@ -204,3 +204,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 15:29 | ems storingsvlag ronde:* blijft hangen tot herstart, oorzaak niet in cockpit
 02-11 15:29 | ems planvolging lopend kwartier niet geschaald, afgeronde inhoud (valse afwijking accu)
 02-11 15:29 | ems melding kosten wijkt af van zonneplan vals door achterlopende teller
+02-11 16:40 | updates installeren ems 5.161.3 (hacs ziet release nog niet, verversen) + ha herstarten
+02-11 16:40 | L-EMS-055 ems balanceerlading onder waardeplan (akkoord)
