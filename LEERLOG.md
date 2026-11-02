@@ -872,3 +872,17 @@ laatste ronde: 02-11 07:40, gemeten t/m 02-11 07:50
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-11 (piek vastgehouden; onder het waardeplan opnieuw meten).
 
 laatste ronde: 02-11 11:40, gemeten t/m 02-11 11:45
+
+
+## 02-11 15:40 · tussenronde
+- **Draait v5.161.2** (herstarts 13:12, 15:26). **v5.161.3** is 15:40 door de EMS-ronde gepusht; workflow groen, HACS toont hem nog niet. Interne fouten 14:00/15:01 kwamen door de `_laadregel`-fout (v5.161.2). Rest log: Solcast-limiet en Zonneplan bij de herstart.
+- **Eerste netlading onder het waardeplan:** 14:00-14:45, 1,63 kWh AC tegen gem. 36,2 ct; accu 0,0 → 1,61 kWh. Plan zet die in vanaf 17:45 bij 50-51 ct. Marge na rendement en slijtage is klein; de volgende ronde meet de werkelijke opbrengst. Verkoop: 0 kwartieren. Planvolging vandaag 92,1 % (n=63).
+- **Nieuw: L-EMS-055 (open).** Balanceerlading is onbereikbaar onder het waardeplan. `_balanceer_laadbesluit` zit in `laadbesluit_uit_het_net` (oude regels); `_waardeplan_als_nodig` beslist eerder en keert terug. `waardeplan.py` kent balanceren niet en `_met_waardeplan` overschrijft de plantabel. Laatst vol: 29-10 (daily max SoC). Grens 7 dagen = 05-11; bij celverschil > 0,10 V eerder. Raakt de sturing → Ruud beslist.
+- **Laadplan klapte 15:27** van "23:45-03:00, 03:15-04:15, 05:00-05:45" naar "01:45-02:15". Nachtprijs 37,7 ct kost in de accu met rendement en slijtage ~50 ct, tegen ochtendpiek 49-52 ct: bijna indifferent. Plan-besparing over de horizon € 0,14. Geen fout gevonden; aantal wissels per dag is nu niet uit de history te halen (attributen niet in de recorder).
+- **SoC module 00996** zaagde 12:18-13:00 tussen 5 en 9 % met vermogen 0 W; meetartefact van de module die retour gaat, niet verder gemeld.
+- **Harde regel: 0× onder de reserve.** Geen regeloverschot vandaag. Demping-toets van 18:00 loopt nog; L-EMS-053 status bijgewerkt (gebouwd v5.161.0).
+- PV tot 15:45 **1,89 kWh**. Twin `kwartierplan` MAE **0,329** (plan is vlak bij lege accu, geen echte winst). MC tot blok 100 %, verwacht tekort 4,54 kWh economisch; L-EMS-054 wacht op akkoord.
+- Stilstand: **geen echte** (11 wachten, 0 doen). Airco besluit "niets" (19,4 °C), knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-11 (piek vastgehouden; onder het waardeplan opnieuw meten).
+
+laatste ronde: 02-11 15:40, gemeten t/m 02-11 15:50

@@ -1145,3 +1145,12 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-02 11:40,TUSSEN,ems_waardeplan_stuurt,1,1,"sinds herstart 08:34 (reden waardeplan_houden vanaf 08:37); v5.160.0 sinds 10:53; 0 verkoop, 0 laden tot nu"
 2026-11-02 11:40,TUSSEN,ems_meetgat_tekortnacht_waardeplan,1,1,waardeplan_houden in REDENEN_BEWUSTE_NETAFNAME en actie 'houden' bij lege accu -> tekortnacht onder waardeplan 0; L-EMS-054
 2026-11-02 11:40,TUSSEN,ems_stilstand_functies,0,10,"10 wachten, 0 doen; scenario-plan 10/14; airco besluit 'niets', knop uit -> rekent"
+2026-11-02 15:40,TUSSEN,ems_verkoop_onder_reserve,0,1,"verkoopkwartieren leeg; regeloverschot 02-11 geen; reserve_sprongen 6 (alleen_behoefte 38, na_herstart 4)"
+2026-11-02 15:40,TUSSEN,ems_waardeplan_laadblok_kwh_ac,1.63,3,"eerste netlading onder het waardeplan 14:00-14:45, 34.6/37.3/36.9 ct, gem. 36.2 ct; aggr_grid_input 2071.73->2073.36; accu 0.0->1.61 kWh (9->24 %)"
+2026-11-02 15:40,TUSSEN,ems_waardeplan_verkoop_kwartieren,0,0,"tot 15:50 geen; plan ontlaadt vanaf 17:45 bij 50-51 ct"
+2026-11-02 15:40,TUSSEN,ems_planvolging_pct,92.1,63,"vandaag t/m 15:30; 4 kwartieren accu, 1 verbruik"
+2026-11-02 15:40,TUSSEN,ems_pv_dag_tot_nu_kwh,1.89,1,"i1_ac_energy 00:00 23578.066 -> 15:45 23579.956; dag nog niet af"
+2026-11-02 15:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,100,1000,"blok 23:30; det. 6.00, beschikbaar 1.61; verwacht tekort 4.54 economisch"
+2026-11-02 15:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.329,60,"11:40 0.391; lege accu = vlak plan"
+2026-11-02 15:40,TUSSEN,ems_balanceerlading_onbereikbaar,1,1,"code v5.161.3: _waardeplan_als_nodig gaat voor laadbesluit_uit_het_net; laatst vol 29-10 (daily max SoC), nodig uiterlijk 05-11; L-EMS-055"
+2026-11-02 15:40,TUSSEN,ems_stilstand_functies,0,11,"11 wachten, 0 doen; scenario-plan 10/14; airco 'niets' (19.4 C), knop uit -> rekent"

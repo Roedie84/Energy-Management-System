@@ -388,7 +388,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten (na installatie): dagen met `waardeplan_verkopen` hebben `verkoopkwartieren` > 0 en `regeloverschot_kwh` ≈ klein; marge ≥ 0 (harde regel).
 
 ## L-EMS-053 · overschotdagen tellen niet meer onder het waardeplan (leerregressie)
-- Status: **open** (02-11 07:40; raakt via `excess_reduction_percent` de reserve → Ruud beslist).
+- Status: **gebouwd v5.161.0** (akkoord Ruud 02-11; actief sinds de herstart van 13:12). Effect nog niet meetbaar: er was sindsdien geen dag met overschot.
 - Onderbouwing (code, v5.158.0): `_update_shortfall_detection` keert terug als de reden niet "zelfvoorzienend" is (`REASON_TO_MODE` = smart_discharging of `expensive_quarter*`); de overschottelling staat daarachter. Het waardeplan neemt de sturing over vóór `discharging_window`, en `waardeplan_huis`/`waardeplan_verkopen` tellen niet als zelfvoorzienend. Gevolg: `excess` blijft False, `reserve_excess_days` staat vast op 0 en de marge kan niet meer omlaag; `tekortvlag` (logboek) idem. Nu nog geen schade: `reserve_excess_days` is 0, marge vast +25 %.
 - Voorstel: `waardeplan_huis` en `waardeplan_verkopen` als zelfvoorzienend meetellen.
 - Verwacht effect: overschotleren werkt als vóór v5.158.0.
@@ -400,3 +400,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: `waardeplan_houden` alleen als bewuste netafname tellen als er echt iets vastgehouden wordt (inhoud > ~0,1 kWh). Bij een lege accu is het een tekort, net als onder `default_smart`. `_tekortnacht_uit_verloop` kent de inhoud niet, maar `soc > vloer` staat daar al vóór de redencontrole: de reden hoeft daar alleen bij `houden` te vervallen.
 - Verwacht effect: tekortnachtmeting en MC-kalibratie werken als vóór v5.158.0. Economische nachten verhogen de marge nog steeds niet.
 - Meten: test met lege accu + `waardeplan_houden` = tekort; eerste nacht met lege accu onder het waardeplan telt > 0. Tot de bouw meet de leerronde die nachten zelf uit P1 en SoC.
+
+## L-EMS-055 · balanceerlading komt niet meer aan bod onder het waardeplan (sturing)
+- Status: **open** (02-11 15:40; verandert laden uit het net → Ruud beslist).
+- Onderbouwing (code v5.161.3 + statistiek SoC): `_balanceer_laadbesluit` zit in `laadbesluit_uit_het_net`, dat alleen de oude regels toepassen. `_celbescherming_als_nodig` roept eerst `_waardeplan_als_nodig` aan; zolang het plan beschikbaar is, keert die True terug en bereikt de sturing de oude regels niet. `waardeplan.py` kent balanceren niet en `_met_waardeplan` vervangt ook de plantabel. Daily max SoC: laatst 100 % op 29-10, daarna 66, 53, 24, 24 %. De grens van 7 dagen valt op 05-11 (eerder bij celverschil > 0,10 V). Bij deze prijzen vult het plan de accu niet vol (plan vannacht tot 23 %). In oktober bleef een module 8 dagen ongebalanceerd en remde dat het laden (v5.117.0).
+- Voorstel: als `balanceerlading().nodig` en de zon de accu niet vult, in de goedkoopste kwartieren van de bekende prijzen tot vol laden, en dat in `_met_waardeplan` tonen. De verkoopreserve en celbescherming blijven gelden.
+- Verwacht effect: de cellen worden weer om de ≤ 7 dagen gelijkgetrokken. Kosten per keer klein: de lading wordt daarna weer gebruikt; indicatie € 0,10-0,50 bij de huidige spreiding (schatting, niet gemeten).
+- Meten: test met nodig=True en waardeplan actief = laden tot vol; daarna `balanceer_laatst_vol` wordt bijgewerkt en max SoC ≥ 99 % binnen 7 dagen. Kosten per balanceerlading uit `nabeschouwing_7d`.
