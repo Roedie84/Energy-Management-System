@@ -622,4 +622,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 1.042 → 1.692 (gem 1.170), 1,5 u > 1.200 (vanaf 15:15), ramen dicht, aanwezig. Vocht 68,3 → 70,6 (15:25) → 61,3% na verwarming aan (17,1 → 20,9 °C), schimmelindicator 83 → 79 → 82, buiten 99% / 11,6 °C. Luchten; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=18): reiniger aan houdt het laag; bijgesteld: op auto zakt het ook bij aanwezigheid als de bron weg is (n=1, ~41 min). Voorstel: geen mid in de eerste 15 min na herstart.
 
-laatste ronde: 02-11 16:50, gemeten t/m 16:45
+## 02-11 20:25 (ronde 84)
+- PM2.5 16:45-20:20: gem 2,00, mediaan 2,10, P95 2,68, max 3,49 (18:05-18:10) (n=43); 0 uur > 15. Dag t/m nu ~1,5; 7d (26/10-01/11) 3,87 (nulmeting okt 2025 9,1).
+- Geen piek > 25. Kookplaat 17:27-17:45, ramen dicht, auto, aanwezig: 1,4 → max 2,4 (17:45-17:50), geen piek. Bult 3,5 om 18:05-18:10 tegelijk met CO₂-daling 1.730 → 1.545, ramen dicht: oorzaak niet te zien.
+- Stand: auto 207 min (gem 2,03), mid 3 min (gem 1,33, n=2), 5,1 min unavailable. Aanwezig 2,02 (n=17) vs afwezig 1,98 (n=26): geen verschil. Vóór koken op auto 1,6 → 1,0 (16:45-17:10).
+- Werking: mid precies 15 min na laatste aanwezigheid (16:37:27 → 16:52:27), auto 16:55:27 (~2 min na aanwezigheid 16:53:37). 4 HA-herstarts (17:05, 18:34, 19:28, 20:14), stand steeds ~1,3 min unavailable, geen extra wissels. 5/5 traces zonder fout. Lokaal 67 mislukt op 184.425 (geen nieuwe), uitval 0, 255 verbindingen, sturen 419/420 (2/2 nieuw), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 1,0-3,5.
+- CO₂ hele ronde > 1.200 (gem 1.676, max 1.893, nu 1.760), ramen dicht, aanwezig. Vocht 60,8-63,7% bij 20,0-21,2 °C, schimmelindicator 81-87, buiten 99% / 10,4-11,7 °C. Luchten; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 16). H2 auto bij koken 5x: 61, 22,6, 7,2, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=19): reiniger aan houdt het laag. Herstartvoorstel afgezwakt: 13:12 gaf 5 wissels, maar 17:05 en 18:34 (ook afwezig) geen enkele; oorzaak nog niet zeker.
+
+laatste ronde: 02-11 20:25, gemeten t/m 20:20

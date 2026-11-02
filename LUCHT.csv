@@ -1939,3 +1939,27 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-02 16:45,filtergebruik_pct,0,1,
 2026-11-02 16:45,automation_traces_fout,0,5,alle finished
 2026-11-02 16:45,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.4-2.5
+2026-11-02 20:20,pm25_gem,2.00,43,5-min statistiek 16:45-20:20; vrijwel alleen auto
+2026-11-02 20:20,pm25_mediaan,2.10,43,
+2026-11-02 20:20,pm25_p95,2.68,43,
+2026-11-02 20:20,pm25_max,3.49,43,momentaan 18:05-18:10; 20 min na koken; samen met CO2-daling 1730->1545; oorzaak niet te zien; ramen dicht
+2026-11-02 20:20,pm25_uren_gt15,0.00,43,
+2026-11-02 20:20,pm25_uren_gt25,0.00,43,
+2026-11-02 20:20,kookmoment_pm25_max,2.42,5,kookplaat run 17:27-17:45; ramen dicht; auto; aanwezig; geen piek (voor 1.4)
+2026-11-02 20:20,stand_auto_min,207,41,gem pm25 2.03
+2026-11-02 20:20,stand_mid_min,3,2,gem pm25 1.33; 16:52:27-16:55:27
+2026-11-02 20:20,stand_unavailable_min,5.1,4,17:04-17:05 18:33-18:34 19:27-19:28 20:13-20:14
+2026-11-02 20:20,pm25_gem_aanwezig,2.02,17,87 min occupancy; 5-min blokken met >= 2.5 min aanwezig; tv aan vanaf 19:10
+2026-11-02 20:20,pm25_gem_afwezig,1.98,26,
+2026-11-02 20:20,pm25_dag_tm_nu,1.54,20,gewogen: 1.44 t/m 16:45 plus 5-min 16:45-20:20
+2026-11-02 20:20,co2_gem,1676,43,5-min; ramen dicht; aanwezig
+2026-11-02 20:20,co2_max,1893,43,momentaan 19:20-19:25
+2026-11-02 20:20,co2_uren_gt1200,3.58,43,hele ronde
+2026-11-02 20:20,vocht_max,63.7,43,19:30-19:35; min 60.8; 20.0-21.2 C
+2026-11-02 20:20,schimmel_indicator,87,43,81-87; buiten 99% / 10.4-11.7 C
+2026-11-02 20:20,ha_herstarts,4,1,17:05 18:34 19:28 20:14 (sensor.uptime)
+2026-11-02 20:20,lokaal_mislukt,67,184425,geen nieuwe; uitval 0; 255 verbindingen
+2026-11-02 20:20,sturen_bevestigd,419,420,2/2 nieuw
+2026-11-02 20:20,filtergebruik_pct,0,1,
+2026-11-02 20:20,automation_traces_fout,0,5,4 finished 1 failed_conditions
+2026-11-02 20:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 1.0-3.5
