@@ -183,3 +183,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 08:53 | L-SC-030 stormchase regencorrectie nakijken met motregen als regent (L-SC-029)
 02-11 08:53 | ems nilm 3 dubbele paren (looppad 2/3, ontvochtiger zolder met salon en shelly)
 02-11 08:53 | opschonen device_class/eenheden en zware templates tablet-packages
+02-11 09:51 | ems kwartierplan toont verkopen onder verkoopreserve (avond 18:00-18:45, plan vs uitvoering)
+02-11 09:51 | gold scalper oordeeltekst mand t -2,31 'toeval' vs 'aantoonbaar verliesgevend', 0.000 USD/oz
+02-11 09:51 | gold scalper mandclusters gelijktijdige starts niet onafhankelijk, over hele mand clusteren (na L-GS-037)
