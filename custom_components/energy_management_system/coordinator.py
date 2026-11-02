@@ -667,6 +667,11 @@ from .const import (
     CELSPANNING_KRITIEK_V,
     CELSPANNING_DAGEN_VOOR_PATROON,
     CELSPANNING_VENSTER_UREN,
+    # v5.157.0
+    CELBESCHERMING_AAN,
+    CELBESCHERMING_START_V,
+    CELBESCHERMING_BUFFER_KWH,
+    CELBESCHERMING_VRIJ_KWH,
     CONF_BATTERY_MAX_SOC_NUMBER,
     CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
     CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
@@ -11670,6 +11675,10 @@ class EnergyManagementSystemCoordinator:
             )
             return regels
 
+        if reden in ("celbescherming_laden", "celbescherming_houden"):
+            # v5.157.0
+            return self._waarom_celbescherming(reden)
+
         if reden == "emergency_low_battery":
             return gemeenschappelijk + [
                 "de accu is te ver gezakt; laden gaat nu voor alles"
@@ -13330,6 +13339,7 @@ class EnergyManagementSystemCoordinator:
         "grid_charging_profitable",
         "grid_charging_dip",
         "emergency_low_battery",
+        "celbescherming_laden",
     )
     _REDENEN_ONTLADEN = ("expensive_quarter", "expensive_quarter_peak")
 
@@ -18622,8 +18632,17 @@ class EnergyManagementSystemCoordinator:
             uit["advies"] = (
                 f"Module {module} staat op {laagste:.2f} V. Onder "
                 f"{CELSPANNING_KRITIEK_V:.2f} V grijpt de BMS in op deze "
-                "ene cel terwijl de rest nog ruimte heeft. Nu bijladen, "
-                "ongeacht de prijs."
+                "ene cel terwijl de rest nog ruimte heeft. "
+                + (
+                    # v5.157.0: de sturing doet het nu zelf.
+                    "Het EMS laadt in het goedkoopste kwartier van de "
+                    f"komende {CELSPANNING_VENSTER_UREN} uur "
+                    f"{CELBESCHERMING_BUFFER_KWH:.1f} kWh bij en ontlaadt tot "
+                    "dan niet verder."
+                    if CELBESCHERMING_AAN and laagste < CELBESCHERMING_START_V
+                    else "Het EMS laadt pas zelf bij onder "
+                    f"{CELBESCHERMING_START_V:.2f} V."
+                )
             )
         elif laagste < CELSPANNING_AANDACHT_V:
             uit["oordeel"] = "aandacht"
@@ -36477,6 +36496,137 @@ class EnergyManagementSystemCoordinator:
             cusum["drift"] = True
         cusum["accumulator"] = round(cusum["accumulator"], 4)
 
+    _celbescherming: dict | None = None
+    last_celbescherming: dict | None = None
+
+    def celbeschermingsbesluit(self, now: datetime) -> dict:
+        """Moet de accu nu bijladen of vasthouden voor een lage cel? (v5.157.0)
+
+        Gemeld 01-11 (akkoord Ruud 02-11): de melding "n Cel steet te lege"
+        zei "Nu bijladen, ongeacht de prijs", maar niets in de sturing deed
+        dat; de accu bleef de hele nacht op zijn ondergrens met module 4 op
+        2,80 V.
+
+        Zakt de laagste cel onder CELBESCHERMING_START_V, dan:
+          - tot het goedkoopste kwartier binnen CELSPANNING_VENSTER_UREN:
+            "houden" (niet ontladen, de zon mag erin);
+          - vanaf dat kwartier: "laden" tot CELBESCHERMING_BUFFER_KWH;
+          - daarna "houden" zolang de accu op die buffer staat.
+        Boven de buffer geldt de gewone sturing (die mag tot de buffer
+        ontladen). Zodra de accu CELBESCHERMING_VRIJ_KWH bevat, vervalt de
+        bescherming. Het tijdstip ligt vast bij de start, zodat het niet
+        eindeloos naar een nog goedkoper kwartier kan schuiven.
+
+        Geeft {"actie": None | "laden" | "houden", ...}.
+        """
+        uit: dict = {"actie": None, "aan": CELBESCHERMING_AAN}
+        if not CELBESCHERMING_AAN:
+            return uit
+        beschikbaar = self.beschikbare_energie_kwh()
+        if beschikbaar is None:
+            uit["reden"] = "accu-inhoud onbekend"
+            return uit
+        beschikbaar = max(0.0, beschikbaar)
+        stand = self._celbescherming
+        if stand and beschikbaar >= CELBESCHERMING_VRIJ_KWH:
+            self._celbescherming = stand = None
+        if not stand:
+            oordeel = self.get_celspanning_oordeel()
+            laagste = oordeel.get("laagste_cel_v")
+            if (
+                laagste is None
+                or laagste >= CELBESCHERMING_START_V
+                or beschikbaar >= CELBESCHERMING_VRIJ_KWH
+            ):
+                uit["reden"] = "geen cel onder de startgrens"
+                return uit
+            stand = self._celbescherming = {
+                "sinds": now.isoformat(),
+                "module": oordeel.get("module"),
+                "laagste_cel_v": laagste,
+                "laden_om": self._celbescherming_laadmoment(now).isoformat(),
+                "buffer_gevuld": False,
+            }
+        if beschikbaar >= CELBESCHERMING_BUFFER_KWH:
+            stand["buffer_gevuld"] = True
+        laden_om = dt_util.parse_datetime(stand["laden_om"]) or now
+        if not stand["buffer_gevuld"] and now >= laden_om:
+            actie = "laden"
+        elif beschikbaar <= CELBESCHERMING_BUFFER_KWH or not stand["buffer_gevuld"]:
+            actie = "houden"
+        else:
+            actie = None
+        uit.update(
+            {
+                "actie": actie,
+                "beschikbaar_kwh": round(beschikbaar, 3),
+                "buffer_kwh": CELBESCHERMING_BUFFER_KWH,
+                "vrij_kwh": CELBESCHERMING_VRIJ_KWH,
+                **stand,
+            }
+        )
+        return uit
+
+    def _celbescherming_laadmoment(self, now: datetime) -> datetime:
+        """Het goedkoopste kwartier binnen het venster, of nu (v5.157.0)."""
+        huidig = now.replace(minute=now.minute // 15 * 15, second=0, microsecond=0)
+        try:
+            venster = [
+                (prijs, start)
+                for start, _einde, prijs in (self._get_forecast_entries() or [])
+                if huidig <= start <= now + timedelta(hours=CELSPANNING_VENSTER_UREN)
+            ]
+        except Exception:  # noqa: BLE001 - zonder prijzen: nu
+            venster = []
+        if not venster:
+            return huidig
+        return min(venster, key=lambda x: (x[0], x[1]))[1]
+
+    async def _celbescherming_als_nodig(self, now: datetime, entries) -> bool:
+        """Past `celbeschermingsbesluit` toe. True als de beslissing klaar is."""
+        besluit = self.last_celbescherming = self.celbeschermingsbesluit(now)
+        if besluit.get("actie") == "laden":
+            charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
+            await self._async_apply_manual(charge_power)
+            self.last_reason = "celbescherming_laden"
+            self.last_charge_power_applied = charge_power
+        elif besluit.get("actie") == "houden":
+            await self._async_apply_operation(OPTION_SMART_CHARGING)
+            self.last_reason = "celbescherming_houden"
+            charge_power = None
+        else:
+            return False
+        self._update_financial_tracking(now, entries, self.last_reason, None, charge_power)
+        self._update_shortfall_detection(
+            now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge
+        )
+        self._finish_decision_tick(now)
+        return True
+
+    def _waarom_celbescherming(self, reden: str) -> list[str]:
+        """Waarom-regels bij de celbescherming (v5.157.0)."""
+        b = self.last_celbescherming or {}
+        regels = []
+        if b.get("laagste_cel_v") is not None:
+            regels.append(
+                f"module {b.get('module')} stond op {b['laagste_cel_v']:.2f} V, "
+                f"onder {CELBESCHERMING_START_V:.2f} V; onder "
+                f"{CELSPANNING_KRITIEK_V:.2f} V grijpt het accubeheer in"
+            )
+        laden_om = dt_util.parse_datetime(b.get("laden_om") or "")
+        if reden == "celbescherming_laden":
+            regels.append(
+                f"er wordt {CELBESCHERMING_BUFFER_KWH:.1f} kWh bijgeladen, ook als dat niet loont"
+            )
+        elif laden_om is not None and not b.get("buffer_gevuld"):
+            regels.append(f"bijladen in het goedkoopste kwartier: {dt_util.as_local(laden_om):%H:%M}")
+        else:
+            regels.append(f"de accu houdt een buffer van {CELBESCHERMING_BUFFER_KWH:.1f} kWh vast")
+        regels.append(
+            f"vanaf {CELBESCHERMING_VRIJ_KWH:.1f} kWh in de accu geldt de gewone sturing weer"
+        )
+        return regels
+
     def _meld_lage_celspanning(self) -> None:
         """Meldt een cel die meerdere dagen te laag staat (v3.52.0).
 
@@ -36924,6 +37074,7 @@ class EnergyManagementSystemCoordinator:
                 "grid_charging_profitable",
                 "grid_charging_dip",
                 "emergency_low_battery",
+                "celbescherming_laden",
             )
             and charge_power_w
         ):
@@ -48778,6 +48929,10 @@ class EnergyManagementSystemCoordinator:
                         expensive_tier = "secondary"
 
         self.last_expensive_tier = expensive_tier
+
+        # v5.157.0: een cel onder de startgrens gaat voor verkopen en sparen.
+        if await self._celbescherming_als_nodig(now, entries):
+            return
 
         if is_expensive:
             # v1.1.0, WIJZIGING 1 - alleen actief na saldering. Is er op

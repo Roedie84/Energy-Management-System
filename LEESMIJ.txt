@@ -1,3 +1,17 @@
+EMS v5.157.0 - een te lege cel wordt nu echt beschermd
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Zakt een cel onder 2,90 V, dan laadt het EMS zelf 0,5 kWh bij in het
+  goedkoopste kwartier van de komende 6 uur, ook als dat niet loont. Tot
+  dat kwartier ontlaadt de accu niet verder; de zon mag hem wel vullen.
+- Daarna houdt de accu die 0,5 kWh vast. Pas als hij weer 2 kWh bevat
+  (zon of goedkoop laden) geldt de gewone sturing weer.
+- Tot nu toe zei de melding "Nu bijladen, ongeacht de prijs", maar deed
+  de sturing niets (01-11: module 4 op 2,80 V, de hele nacht leeg).
+- Nieuwe redenen: "Bijladen om een lage cel te beschermen" en "Lage cel:
+  de accu ontlaadt niet verder".
+
 EMS v5.156.1 - nabeschouwing straft een dag die leeg begint niet meer af
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

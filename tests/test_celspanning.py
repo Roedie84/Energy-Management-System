@@ -93,7 +93,11 @@ def test_below_the_bms_threshold_is_critical(make_coordinator, hass):
     oordeel = c.get_celspanning_oordeel()
 
     assert oordeel["oordeel"] == "kritiek"
-    assert "ongeacht de prijs" in oordeel["advies"]
+    # v5.157.0: geen los advies meer "nu bijladen"; de sturing laadt zelf
+    # onder CELBESCHERMING_START_V (2,90 V), hierboven nog niet.
+    assert "pas zelf bij onder 2.90 V" in oordeel["advies"]
+    laag = _modules(make_coordinator({}), [2.80, 3.21, 3.21]).get_celspanning_oordeel()
+    assert "Het EMS laadt in het goedkoopste kwartier" in laag["advies"]
 
 
 def test_the_lowest_cell_decides_not_the_average(make_coordinator, hass):

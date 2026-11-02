@@ -704,6 +704,8 @@ NACHT_BEWUST_NIET_ONTLADEN_REDENEN = frozenset(
         "grid_charging_low_solar_extra_dip",
         "negative_price",
         "emergency_low_battery",
+        "celbescherming_laden",
+        "celbescherming_houden",
     }
 )
 
@@ -1918,6 +1920,9 @@ REDENEN_BEWUSTE_NETAFNAME = (
     "emergency_low_battery",
     # v5.73: in het goedkope blok bewust van het net, de accu spaart.
     "sparen_in_blok",
+    # v5.157.0: celbescherming.
+    "celbescherming_laden",
+    "celbescherming_houden",
 )
 
 # Hoe ver de accu onder zijn ontlaadgrens mag zitten en toch als "op de
@@ -2606,6 +2611,37 @@ REASON_REGISTRY: dict[str, dict] = {
         "getallen": True,
         "label": "zon opvangen na saldering",
         "waarom_vraag": "Waarom laad je nu?",
+    },
+    # v5.157.0: celbescherming - zie CELBESCHERMING_START_V.
+    "celbescherming_laden": {
+        "mode": OPTION_MANUAL,
+        "titel": "Bijladen om een lage cel te beschermen",
+        "uitleg": (
+            "Een cel staat zo laag dat het accubeheer (BMS) bijna ingrijpt. "
+            "Het EMS laadt in het goedkoopste kwartier van de komende uren "
+            "een kleine buffer bij, ook als dat niet loont."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "bijladen voor een lage cel",
+        "waarom_vraag": "Waarom laad je nu, terwijl het niet loont?",
+        "korte_naam": "celbescherming",
+        "emoji": "🔋🛡️",
+    },
+    "celbescherming_houden": {
+        "mode": OPTION_SMART_CHARGING,
+        "titel": "Lage cel: de accu ontlaadt niet verder",
+        "uitleg": (
+            "Een cel staat zo laag dat het accubeheer (BMS) bijna ingrijpt. "
+            "Tot het geplande laadkwartier, en daarna zolang de accu op de "
+            "kleine buffer staat, ontlaadt hij niet; de zon mag hem wel vullen."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "lage cel: niet ontladen",
+        "waarom_vraag": "Waarom gebruik je de accu nu niet?",
+        "korte_naam": "celbescherming",
+        "emoji": "🔋🛡️",
     },
     "emergency_low_battery": {
         "mode": OPTION_MANUAL,
@@ -7294,6 +7330,27 @@ CELSPANNING_DAGEN_VOOR_PATROON = 2
 # genoeg om een goedkoop blok te vinden en kort genoeg om niet te lang
 # onder de grens te blijven.
 CELSPANNING_VENSTER_UREN = 6
+
+# v5.157.0 (akkoord Ruud 02-11): celbescherming STUURT nu.
+#
+# Gemeld 01-11: om 19:32 stond module 4 op 2,80 V en de melding zei "Nu
+# bijladen, ongeacht de prijs", maar de sturing deed niets (de melding was
+# alleen advies, v3.52.0) en de accu bleef de hele nacht op zijn ondergrens.
+#
+# Nu: zakt de laagste cel onder CELBESCHERMING_START_V, dan laadt het EMS in
+# het goedkoopste kwartier binnen CELSPANNING_VENSTER_UREN een kleine buffer
+# (CELBESCHERMING_BUFFER_KWH) uit het net, ook als dat niet loont. Tot dat
+# kwartier, en daarna zolang de accu op de buffer staat, ontlaadt hij niet
+# ("houden", smart_charging: de zon mag erin). Zodra de accu weer minstens
+# CELBESCHERMING_VRIJ_KWH bevat (zon of goedkoop laden), vervalt de
+# bescherming en geldt de gewone sturing weer.
+#
+# Onder 3,00 V grijpt de BMS in (CELSPANNING_KRITIEK_V); de startgrens ligt
+# daar bewust onder, zodat een gewone avond rond 3,0 V niets kost.
+CELBESCHERMING_AAN = True
+CELBESCHERMING_START_V = 2.90
+CELBESCHERMING_BUFFER_KWH = 0.5
+CELBESCHERMING_VRIJ_KWH = 2.0
 
 # Hoeveel een instelling in het apparaat mag afwijken van waar de
 # berekening mee rekent (v3.53.0).

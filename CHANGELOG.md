@@ -34250,3 +34250,16 @@ Nu rekent `nabeschouwing` met `bodem = min(bodem, begin)`: dezelfde beginstand e
 
 Tests: `test_v5161_leerronde.py` (6).
 
+## v5.157.0 — celbescherming stuurt: kleine buffer bij een cel onder 2,90 V
+
+Gemeld 01-11, akkoord Ruud 02-11 (optie 1): om 19:32 kwam "n Cel steet te lege" (module 4 op 2,80 V) met "Nu bijladen, ongeacht de prijs … goedkoopste moment binnen 6 uur is 23:45", maar `get_celspanning_oordeel` stuurt niets (v3.52.0, "de keuze blijft handmatig"). Er werd niet geladen en de accu bleef de hele nacht op 9-10 %.
+
+Nu `celbeschermingsbesluit`, toegepast door `_celbescherming_als_nodig` vóór verkopen en sparen in `_async_update_locked`:
+- start bij laagste cel < `CELBESCHERMING_START_V` (2,90 V) en minder dan `CELBESCHERMING_VRIJ_KWH` (2,0 kWh) in de accu; het laadkwartier wordt dan één keer vastgelegd: het goedkoopste binnen `CELSPANNING_VENSTER_UREN` (6 u), zonder prijzen meteen;
+- tot dat kwartier `celbescherming_houden` (smart_charging: niet ontladen, zon mag erin); vanaf dat kwartier `celbescherming_laden` (manual, ingesteld laadvermogen) tot `CELBESCHERMING_BUFFER_KWH` (0,5 kWh), ook als het niet loont;
+- daarna `houden` zolang de accu op of onder de buffer staat; erboven de gewone sturing;
+- vervalt zodra de accu `CELBESCHERMING_VRIJ_KWH` bevat. Niet bewaard over een herstart: na een herstart start hij opnieuw op de celspanning.
+
+Uitzetten: `CELBESCHERMING_AAN`. Beide redenen staan in `REASON_REGISTRY`, `REDENEN_BEWUSTE_NETAFNAME` en `NACHT_BEWUST_NIET_ONTLADEN_REDENEN`; `celbescherming_laden` telt als laden in de richtingcontrole en de laadkosten. Het advies bij "kritiek" zegt nu wat de sturing doet in plaats van "nu bijladen, ongeacht de prijs". Het kwartierplan rekent de buffer nog niet mee.
+
+Tests: `test_v51570_celbescherming.py` (8), `test_celspanning.py` aangepast.
