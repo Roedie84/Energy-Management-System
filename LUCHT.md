@@ -587,4 +587,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ hele ronde > 1.200 (gem 2.279, max 2.387), ramen dicht, aanwezig. Vocht 65,6 → 70,4% bij 21,1 → 18,5 °C, schimmelindicator 88-91, buiten 99% / 10,6 °C. Luchten (CO₂ > 2.000); luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 bevestigd andersom (n=14): weer op auto zakte PM2.5 binnen ~1 u van 5 naar 3 en tegen middernacht 2,3; met uit 28 u op 3-10.
 
-laatste ronde: 02-11 00:25, gemeten t/m 00:20
+## 02-11 04:25 (ronde 80)
+- PM2.5 00:20-04:20: gem 1,02, mediaan 0,76, P95 2,09, max 2,22 (00:20) (n=48); 0 uur > 15. Dag t/m nu ~1,1; 7d (26/10-01/11) 3,87 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht. Tv uit 00:50, laatste aanwezigheid 00:51:28.
+- Stand: auto tot 01:06:28 (46 min, gem 1,95, n=10), daarna mid (194 min, gem 0,77, n=38). Na vertrek bleef het op auto 15 min op 1,7-1,8; na de wissel naar mid 1,75 → 0,93 in 20 min (halvering ~16 min, fit), vanaf 02:10 vlak 0,5-0,9. Auto draait bij lage PM kennelijk zacht, mid ruimt de rest op (n=1).
+- Werking: mid precies 15 min na laatste aanwezigheid (00:51:28 → 01:06:28, via EMS: sturen 400/401, 1/1 nieuw). 5/5 traces failed_conditions (nachtvenster, verwacht), geen fout. 0 HA-herstarts. Lokaal 67 mislukt op 179.055 (geen nieuwe), uitval 0, filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,5-2,2.
+- CO₂ 2.151 → 1.480 (gem 1.825), hele ronde > 1.200, ramen dicht, niemand. Vocht 70,4 → 68,8% bij 18,5 → 17,7 °C (verwarming uit), schimmelindicator 90 → 87, buiten 99% / 10,0-10,6 °C. Ochtend luchten en verwarmen; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (n=15). H2 auto bij koken 4x: 61, 22,6, 7,2, 5,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=15): reiniger aan houdt het laag; nieuw: in de 15 min wachttijd na vertrek zakt het op auto niet, op mid wel - mid of high direct na vertrek kan de rest sneller opruimen.
+
+laatste ronde: 02-11 04:25, gemeten t/m 04:20
