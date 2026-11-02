@@ -34344,3 +34344,13 @@ Tests: `test_nilm_duplicate_detection.py` (+2).
 Gemeld 02-11 15:00 ('Storing' in de cockpit, interne fout 14:00 en 15:01). Liep de gesimuleerde of gemeten accu-inhoud net onder de bodem (beschikbaar tussen -1 kwartierlading en 0), dan werd in `_laadregel` `k = int(beschikbaar // per_kwartier) + 1` gelijk aan 0, was `later[:0]` leeg en viel `min()` om. Kwartierplan, cockpit, planvolging, bijkopen en planningsmeldingen rekenden dan niet. Een negatieve inhoud telt nu als 0 (beide plekken in `_laadregel`).
 
 Tests: `test_v51612_laadregel_negatief.py` (4).
+
+## v5.161.3 — storing die bleef hangen, planvolging in het lopende kwartier, valse kostenmelding
+
+Gevonden door de EMS-ronde van 02-11, akkoord Ruud ("Alles oplossen").
+
+- **Storingsvlag.** `ronde:*` ging nooit uit `internal_failures`: na één omgevallen staartstap bleef de cockpit op STORING tot een herstart. De vlag gaat er nu af zodra de stap weer lukt, en de cockpit noemt welk onderdeel faalt. De fout zelf blijft in het logboek staan.
+- **Planvolging en plantabel.** Het waardeplan rekent elke stap als een heel kwartier, terwijl het lopende kwartier maar de rest telt, en de inhoud staat op 0,1 kWh afgerond. Het geplande accuvermogen komt nu uit de stap zelf (`inhoud_delta_kwh`) en niet meer uit inhoud min startstand; `net_kwh` van het lopende kwartier telt alleen de rest. Dit verklaart de onterechte 'afwijking accu' van 14:15 (−3.900 W) en 14:45 (+2.451 W) op 02-11. Alleen meten en tonen: de sturing verandert niet.
+- **Melding 'Kostenberekening wijkt af van Zonneplan'.** De Zonneplan-teller loopt soms een uur achter. De melding komt nu pas als het verschil over 3 verschillende Zonneplan-standen blijft staan (`ZONNEPLAN_COST_MISMATCH_MIN_STANDEN`). De diagnose toont het verschil nog wel direct.
+
+Tests: `test_v51613_storing_planvolging_kosten.py`.

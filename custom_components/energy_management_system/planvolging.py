@@ -41,6 +41,25 @@ def _handmatig(modus: str | None) -> bool:
     return str(modus or "").startswith("manual")
 
 
+def _accu_w(rij: dict, start_kwh: float | None) -> float | None:
+    """Gepland accuvermogen (+ ontladen, - laden) van een planregel.
+
+    v5.161.3: het waardeplan geeft zijn stap per kwartier mee
+    (`inhoud_delta_kwh`). Die geldt voor een heel kwartier en hangt niet af
+    van de startstand. Inhoud min startstand gaf in het lopende kwartier
+    onzin: de inhoud staat op 0,1 kWh afgerond (0,013 kWh verschil over
+    4 min = 179 W) en een plan van een kwartier geleden telde twee stappen.
+    """
+    delta = rij.get("inhoud_delta_kwh")
+    if delta is not None:
+        return -delta * 4000
+    soc = rij.get("soc_kwh")
+    if soc is None or start_kwh is None:
+        return None
+    uren = rij.get("uren") or 0.25
+    return -(soc - start_kwh) * (1000 / uren if uren > 0 else 4000)
+
+
 def gepland_uit_plan(rij: dict, start_kwh: float) -> dict:
     """Het plan voor dit kwartier, in watt.
 
@@ -48,7 +67,6 @@ def gepland_uit_plan(rij: dict, start_kwh: float) -> dict:
     het begin ervan. De stand na het kwartier min die aan het begin is wat
     het plan de accu in (of uit) laat gaan.
     """
-    delta = (rij.get("soc_kwh") or 0.0) - start_kwh
     # v5.105.1: het lopende kwartier telt in het plan alleen voor de rest
     # (`uren`); het vermogen is energie gedeeld door DIE tijd.
     uren = rij.get("uren") or 0.25
@@ -57,7 +75,7 @@ def gepland_uit_plan(rij: dict, start_kwh: float) -> dict:
         "kwartier": rij.get("start"),
         "van": rij.get("van"),
         "modus": rij.get("modus"),
-        "accu_w": round(-delta * per_uur),
+        "accu_w": round(_accu_w({**rij, "soc_kwh": rij.get("soc_kwh") or 0.0}, start_kwh)),
         "zon_w": round((rij.get("zon_kwh") or 0.0) * per_uur),
         "huis_w": round((rij.get("verbruik_kwh") or 0.0) * per_uur),
     }
@@ -77,9 +95,8 @@ def vermogens_per_kwartier(rijen: list[dict], start_kwh: float | None) -> list[d
         uren = rij.get("uren") or 0.25
         per_uur = 1000 / uren if uren > 0 else 4000
         soc = rij.get("soc_kwh")
-        accu = None
-        if soc is not None and vorige is not None:
-            accu = round(-(soc - vorige) * per_uur)
+        accu = _accu_w(rij, vorige)
+        accu = None if accu is None else round(accu)
         net = rij.get("net_kwh")
         uit.append({
             "accu_w": accu,

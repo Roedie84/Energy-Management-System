@@ -547,6 +547,7 @@ VLUCHTIG_MET_REDEN = {
     "bestandscontrole": "de uitkomst van de hashvergelijking bij het opstarten; na een herstart hoort die opnieuw berekend te worden",
     "meting_tijdstippen": "wanneer elk gespiegeld veld voor het laatst uit zijn sensor kwam; na een herstart hoort dat leeg te zijn",
     "last_plan_shortfall": "elke tick herrekend uit de kwartierplanning",
+    "_kostenverschil_standen": "alleen om een melding uit te stellen; begint na een herstart opnieuw",
     # Elke tick opnieuw berekend; terugzetten zou een oud getal tonen
     # alsof het actueel is.
     "last_solar_defer_plan": "elke tick herrekend",

@@ -5475,6 +5475,9 @@ ZONNEPLAN_COST_CANDIDATES = {
 # het verschil is normaal.
 ZONNEPLAN_COST_MISMATCH_EUR = 0.50
 ZONNEPLAN_COST_MISMATCH_FRACTION = 0.15
+# v5.161.3: pas melden bij dit aantal verschillende Zonneplan-standen op rij
+# met een verschil (de teller ververst ongeveer eens per uur).
+ZONNEPLAN_COST_MISMATCH_MIN_STANDEN = 3
 
 # --- Herstelmeldingen (v1.6.2) ---------------------------------------
 # Gerapporteerd: "Er is nu een melding verstuurd dat een sensor niet

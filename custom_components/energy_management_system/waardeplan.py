@@ -181,6 +181,7 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
                                           k.teruglever_eur, np.array([b]), accu)[0])
         g0 = k.verbruik_kwh - k.zon_kwh
         kosten_zonder += g0 * (k.inkoop_eur if g0 >= 0 else k.teruglever_eur)
+        i_voor = i
         i = min(max(i + s, 0), niveaus - 1)
         rijen.append({
             "begin": k.begin,
@@ -189,6 +190,7 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
             "accu_kwh": round(b, 3),
             "net_kwh": round(g, 3),
             "inhoud_kwh": round(i * STAP_KWH, 2),
+            "inhoud_delta_kwh": round((i - i_voor) * STAP_KWH, 2),
             "prijs_eur": round(k.inkoop_eur, 4),
         })
     # verschil in inhoud tegen de eindwaarde verrekenen (begin en eind)

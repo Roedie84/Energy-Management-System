@@ -658,6 +658,7 @@ from .const import (
     ZONNEPLAN_COST_MISMATCH_EUR,
     ZONNEPLAN_ROLLOVER_GRACE_MINUTES,
     ZONNEPLAN_COST_MISMATCH_FRACTION,
+    ZONNEPLAN_COST_MISMATCH_MIN_STANDEN,
     PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES,
     SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
     SOLAR_DAG_GOED_PERCENT,
@@ -1390,6 +1391,7 @@ class EnergyManagementSystemCoordinator:
         # "ik had nu ook ergens een melding verwacht dat het systeem niet
         # correct functioneert."
         self.internal_failures: dict[str, str] = {}
+        self._kostenverschil_standen: list = []
         # v1.20.0: wanneer de slaapsensor als laatste bewoog.
         self.bedtime_history: list[str] = []
         # v1.20.1: welke sensor wanneer als laatste bewoog.
@@ -5554,7 +5556,7 @@ class EnergyManagementSystemCoordinator:
 
         # --- geld: klopt onze berekening met de afrekening? ---
         kosten = self.get_zonneplan_cost_comparison()
-        if kosten["status"] == RELIABILITY_UNRELIABLE:
+        if self._kostenverschil_bevestigd(kosten):
             stuur(
                 "cost_mismatch",
                 "💶 Kostenberekening wijkt af van Zonneplan",
@@ -7090,6 +7092,21 @@ class EnergyManagementSystemCoordinator:
                 "prijsattribuut en de terugleverinstellingen."
             )
         return resultaat
+
+    def _kostenverschil_bevestigd(self, kosten: dict) -> bool:
+        """Blijft het verschil staan over meerdere Zonneplan-standen? (v5.161.3)
+
+        De Zonneplan-teller loopt soms een uur achter. 02-11 14:11: melding om
+        € 1,77 tegen € 1,27, om 15:10 was het € 2,30 tegen € 2,27. Melden
+        alleen als het verschil blijft staan terwijl de teller doorloopt.
+        """
+        if kosten.get("status") != RELIABILITY_UNRELIABLE:
+            self._kostenverschil_standen = []
+            return False
+        stand = kosten.get("zonneplan_netto_eur")
+        if stand not in self._kostenverschil_standen:
+            self._kostenverschil_standen.append(stand)
+        return len(self._kostenverschil_standen) >= ZONNEPLAN_COST_MISMATCH_MIN_STANDEN
 
     def _update_daily_cost_history(self, now: datetime) -> None:
         """Sluit de vorige dag af zodra er een nieuwe begint (v1.8.0).
@@ -17345,6 +17362,15 @@ class EnergyManagementSystemCoordinator:
         _LOGGER.exception("Onderdeel %s van de ronde viel om", naam)
         self.internal_failures[f"ronde:{naam}"] = "viel om in de laatste ronde"
 
+    def _wis_staartfout(self, naam: str) -> None:
+        """Het onderdeel rekent weer: de vlag eraf (v5.161.3).
+
+        De vlag bleef staan tot een herstart, ook als het onderdeel de ronde
+        erna gewoon weer rekende (02-11: cockpit STORING van 14:00 tot de
+        herstart, om een fout van één ronde). De fout zelf staat in het logboek.
+        """
+        self.internal_failures.pop(f"ronde:{naam}", None)
+
     def _voer_staartstap_uit(self, naam: str, stap) -> None:
         """Voert een staartonderdeel uit en vangt een fout af (v3.8.0).
 
@@ -17355,6 +17381,17 @@ class EnergyManagementSystemCoordinator:
             stap()
         except Exception:  # noqa: BLE001 - één stap mag de ronde niet breken
             self._noteer_staartfout(naam)
+        else:
+            self._wis_staartfout(naam)
+
+    async def _voer_staartstap_async_uit(self, naam: str, stap) -> None:
+        """Als `_voer_staartstap_uit`, voor een coroutine (v5.161.3)."""
+        try:
+            await stap
+        except Exception:  # noqa: BLE001 - één stap mag de ronde niet breken
+            self._noteer_staartfout(naam)
+        else:
+            self._wis_staartfout(naam)
 
     def _start_logopvang(self) -> None:
         """Vangt de eigen waarschuwingen op (v3.4.0).
@@ -17845,7 +17882,9 @@ class EnergyManagementSystemCoordinator:
         ):
             return "STORING", "de laatste ronde is te lang geleden gelukt"
         if self.internal_failures:
-            return "STORING", regel
+            # v5.161.3: de oorzaak vooraan; er stond alleen "koppelingen 73/73".
+            namen = sorted(n.removeprefix("ronde:") for n in self.internal_failures)
+            return "STORING", met_reden("onderdeel faalt: " + ", ".join(namen[:3]))
         if kapot_noodzakelijk:
             # v5.114.1: met de naam van de entiteit, niet de instellingssleutel
             # ("price_sensor_entity"). En valt alleen de prijsbron weg terwijl
@@ -26073,6 +26112,7 @@ class EnergyManagementSystemCoordinator:
         min_soc = self.effective_min_soc_percent()
         bruikbaar = capaciteit * (100 - min_soc) / 100 if capaciteit else None
         uit = []
+        eerste = rijen[0]
         for regel in plan:
             start = dt_util.parse_datetime(regel.get("start") or "")
             r = per_begin.get(start.astimezone(timezone.utc)) if start is not None else None
@@ -26082,7 +26122,10 @@ class EnergyManagementSystemCoordinator:
             nieuw = dict(regel)
             nieuw["modus"] = self._WAARDEPLAN_MODUS.get(r.get("actie"), regel.get("modus"))
             nieuw["soc_kwh"] = r.get("inhoud_kwh")
-            nieuw["net_kwh"] = r.get("net_kwh")
+            nieuw["net_kwh"] = self._waardeplan_net_kwh(r, regel.get("uren"), r is eerste)
+            # v5.161.3: wat het plan in dit kwartier in de accu doet, los van
+            # de startstand. Voor het vermogen; zie planvolging._accu_w.
+            nieuw["inhoud_delta_kwh"] = r.get("inhoud_delta_kwh")
             nieuw["tekort"] = False
             nieuw["bron"] = "waardeplan"
             if bruikbaar:
@@ -26090,6 +26133,22 @@ class EnergyManagementSystemCoordinator:
                 nieuw["soc_bruikbaar_procent"] = round(100 * r["inhoud_kwh"] / bruikbaar)
             uit.append(nieuw)
         return uit
+
+    @staticmethod
+    def _waardeplan_net_kwh(rij: dict, uren: float | None, eerste: bool) -> float | None:
+        """Het net van een waardeplanregel over de rest van het kwartier (v5.161.3).
+
+        Het waardeplan rekent elke stap als een heel kwartier. Bij de eerste
+        rij zijn zon en verbruik al de rest van het kwartier en is alleen de
+        accustap heel; een oudere rij van het lopende kwartier is helemaal heel.
+        """
+        net = rij.get("net_kwh")
+        if net is None or not uren or uren >= 0.25:
+            return net
+        deel = uren / 0.25
+        if eerste:
+            return round(net - (rij.get("accu_kwh") or 0.0) * (1 - deel), 3)
+        return round(net * deel, 3)
 
     def _volg_laadplan(self, plan: list[dict], moment: datetime) -> None:
         """Onthoud wanneer de laadplanning het laatst veranderde (v5.88).
@@ -48926,15 +48985,11 @@ class EnergyManagementSystemCoordinator:
         ):
             self._voer_staartstap_uit(naam, stap)
 
-        try:
-            await self._async_apply_battery_cooling()
-        except Exception:  # noqa: BLE001
-            self._noteer_staartfout("accukoeling")
+        await self._voer_staartstap_async_uit("accukoeling", self._async_apply_battery_cooling())
         # v5.72: lege laadstanden in het dagverloop uit de recorder.
-        try:
-            await self.async_vul_dagverloop_aan_uit_recorder(now)
-        except Exception:  # noqa: BLE001
-            self._noteer_staartfout("dagverloop uit recorder")
+        await self._voer_staartstap_async_uit(
+            "dagverloop uit recorder", self.async_vul_dagverloop_aan_uit_recorder(now)
+        )
 
         for naam, stap in (
             # v5.43: de lange reserve wordt gemeten vóór de beslissing,
@@ -49003,10 +49058,9 @@ class EnergyManagementSystemCoordinator:
         ):
             self._voer_staartstap_uit(naam, stap)
 
-        try:
-            await self._async_update_climate_forecast(now)
-        except Exception:  # noqa: BLE001
-            self._noteer_staartfout("klimaatvoorspelling")
+        await self._voer_staartstap_async_uit(
+            "klimaatvoorspelling", self._async_update_climate_forecast(now)
+        )
 
         is_currently_cheapest_block = (
             cheap_block_start is not None
@@ -49038,6 +49092,8 @@ class EnergyManagementSystemCoordinator:
             )
         except Exception:  # noqa: BLE001
             self._noteer_staartfout("gepland apparaat")
+        else:
+            self._wis_staartfout("gepland apparaat")
         # v5.121.0 (punt 1): in 2027 ook op zonoverschot; tot dan alleen gemeten.
         await self._async_update_scheduled_charge_appliance(
             now,
@@ -49096,6 +49152,8 @@ class EnergyManagementSystemCoordinator:
             )
         except Exception:  # noqa: BLE001 - een lader mag de ronde niet meenemen
             self._noteer_staartfout("batterijlader")
+        else:
+            self._wis_staartfout("batterijlader")
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count
