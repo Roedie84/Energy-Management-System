@@ -66,6 +66,7 @@ from . import thuiskomst as thuiskomst_mod
 from . import witgoedplanning
 from . import waterkosten
 from . import waardeplan as waardeplan_mod
+from . import salderingspositie as salderingspositie_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .const import (
     ACCU_MEETREEKS_DAGEN,
@@ -681,6 +682,8 @@ from .const import (
     CELBESCHERMING_VRIJ_KWH,
     # v5.158.0
     WAARDEPLAN_STUURT,
+    SALDERING_BELASTINGDEEL_MAX_EUR,
+    SALDERING_BELASTINGDEEL_MIN_EUR,
     WAARDEPLAN_HORIZON_UUR,
     WAARDEPLAN_HERREKEN_AFWIJKING_KWH,
     WAARDEPLAN_MIN_VERMOGEN_W,
@@ -22856,7 +22859,12 @@ class EnergyManagementSystemCoordinator:
             ]
         regels = []
         if besluit.get("prijs_nu_eur") is not None:
-            regels.append(f"stroom kost nu {besluit['prijs_nu_eur'] * 100:.1f} ct")
+            incl = besluit.get("prijs_nu_incl_eur")
+            regels.append(
+                f"stroom kost nu {incl * 100:.1f} ct (zonder belastingdeel {besluit['prijs_nu_eur'] * 100:.1f} ct)"
+                if incl is not None and abs(incl - besluit["prijs_nu_eur"]) > 1e-6
+                else f"stroom kost nu {besluit['prijs_nu_eur'] * 100:.1f} ct"
+            )
         if besluit.get("waarde_eur") is not None:
             regels.append(
                 f"een kWh in de accu is straks {besluit['waarde_eur'] * 100:.1f} ct "
@@ -22869,6 +22877,9 @@ class EnergyManagementSystemCoordinator:
                 f"de zon vult nog {besluit['zonoverschot_kwh']:.1f} kWh, "
                 f"er blijft {besluit['gat_kwh']:.1f} kWh over om bij te laden"
             )
+        # v5.168.0: de prijzen hierboven zijn dan zonder belastingdeel.
+        if zin := self._saldering_uitlegzin():
+            regels.append(zin)
         return regels
 
     def _verwacht_zonoverschot_kwh(
@@ -23006,6 +23017,10 @@ class EnergyManagementSystemCoordinator:
         if None in (prijs_nu, ruimte, slijtage_ct, duurste):
             uit["reden"] = "prijs, laadruimte, slijtage of ongedekt kwartier onbekend"
             return uit
+        # v5.168.0: beide kanten met de marginale prijs (zie `_marginale_prijs`).
+        prijs_incl = prijs_nu
+        prijs_nu = self._marginale_prijs(prijs_nu, now)
+        duurste = self._marginale_prijs(duurste, dt_util.parse_datetime(str(plan.get("duurste_ongedekt_om") or "")) or now)
         waarde = duurste * rendement / 100 - slijtage_ct / 100
         gat = min(ruimte, plan["nodig_kwh"] - plan["beschikbaar_kwh"])
         # v5.25.1: niet op het EERSTE moment dat het loont, maar op de
@@ -23013,7 +23028,7 @@ class EnergyManagementSystemCoordinator:
         # moment te laden". Om 20:45 tegen 31 ct loonde het voor een
         # ochtendpiek van 52 ct - terwijl om 02:00 de stroom 24 ct kostte.
         goedkoopst = self._goedkoopste_laadmomenten(
-            now, prijs_nu, plan.get("duurste_ongedekt_om"), gat
+            now, prijs_incl, plan.get("duurste_ongedekt_om"), gat
         )
         laden = waarde > prijs_nu and gat > 0 and goedkoopst
         uit.update(
@@ -23159,9 +23174,14 @@ class EnergyManagementSystemCoordinator:
             return self._verwacht_zonoverschot_kwh(now, moment, veilig=salderen)
 
         beschikbaar = self.beschikbare_energie_kwh() or 0.0
+        # v5.168.0: de afweging met de marginale prijs (bij een verwacht
+        # salderingsoverschot zonder belastingdeel); het kiezen van de
+        # goedkoopste kwartieren blijft op de prijsreeks zelf.
+        later = sorted(((self._marginale_prijs(p, t), t) for p, t in later), key=lambda paar: paar[0], reverse=True)
+        uit["prijs_nu_incl_eur"] = round(prijs_nu, 4)
         uit.update(
             self._laadregel(
-                prijs_nu=prijs_nu,
+                prijs_nu=self._marginale_prijs(prijs_nu, now),
                 beschikbaar=beschikbaar,
                 ruimte=ruimte,
                 later=later,
@@ -23427,7 +23447,7 @@ class EnergyManagementSystemCoordinator:
         if regel.get("lonend_kwh") is not None:
             nodig_kwh = min(nodig_kwh, regel["lonend_kwh"])
         goedkoopst = self._goedkoopste_laadmomenten(
-            moment, regel["prijs_nu_eur"], regel.get("nodig_vanaf"), nodig_kwh
+            moment, regel.get("prijs_nu_incl_eur", regel["prijs_nu_eur"]), regel.get("nodig_vanaf"), nodig_kwh
         )
         uit = {**regel, "nu_bij_de_goedkoopste": goedkoopst}
         if not goedkoopst:
@@ -27806,6 +27826,9 @@ class EnergyManagementSystemCoordinator:
             # v5.115.0: wat het laadbesluit verwachtte dat een kWh uit het net
             # waard wordt, zodat de nacalculatie (accukosten.py) het kan toetsen.
             "laad_waarde_ct": self._laad_waarde_ct(),
+            # v5.168.0: het belastingdeel dat de beslissingen van de prijs
+            # aftrokken (salderingsoverschot); de nacalculatie rekent ermee.
+            "korting_ct": round(k * 100, 2) if (k := self._salderingskorting_eur(now)) else None,
         }
         # v5.167.0 (audit 02-11): de AC-energie van de accu over dit kwartier,
         # uit het accuvermogen (dat op het uur gelijk loopt met de kWh-meter).
@@ -32059,6 +32082,108 @@ class EnergyManagementSystemCoordinator:
         from . import overschotwaarde as OW
 
         return OW.terugleverwaarde_2027(market_price, feedin_cost)
+
+    # --- v5.168.0: saldering per contractjaar, marginale prijs ------------
+    #
+    # Ruud 02-11 22:40: Zonneplan saldeert per contractjaar. Staat dat jaar op
+    # het einde van de saldering naar verwachting in de plus (meer terug dan
+    # afgenomen), dan wordt een extra afgenomen kWh weggestreept tegen het
+    # overschot en levert een extra teruggeleverde kWh geen energiebelasting
+    # op. De BESLISSINGEN rekenen dan met de prijs zonder belastingdeel; wat
+    # Ruud werkelijk betaalt (kosten, energiedashboard) blijft ongewijzigd.
+
+    _salderingspositie_cache: tuple | None = None
+
+    def salderingspositie(self, now: datetime | None = None) -> dict:
+        """Balans, verwachting en stand van het salderingsjaar (eens per uur)."""
+        lokaal = dt_util.as_local(now or dt_util.now())
+        sleutel = lokaal.strftime("%Y-%m-%d %H")
+        bewaard = self._salderingspositie_cache
+        if bewaard and bewaard[0] == sleutel:
+            return bewaard[1]
+        raw = self.instelling(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
+        try:
+            tot = date.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            tot = None
+        try:
+            uit = salderingspositie_mod.bepaal(
+                list(self.energy_daily_history or []), lokaal.date(), self._contract_start(), tot,
+                vandaag_import_kwh=float(self.grid_import_today_kwh or 0.0),
+                vandaag_export_kwh=float(self.pv_export_today_kwh or 0.0),
+                dagdeel_verstreken=(lokaal.hour * 60 + lokaal.minute) / 1440,
+            )
+        except Exception as fout:  # noqa: BLE001 - dan het bestaande gedrag
+            uit = {"modus": salderingspositie_mod.ONZEKER, "reden": f"{type(fout).__name__}: {fout}"}
+        deel = self._belastingdeel_voor_saldering()
+        uit["belastingdeel_eur_per_kwh"] = round(deel, 4) if deel else None
+        uit["salderen_tot"] = str(raw)
+        uit["rekent_marginaal"] = uit.get("modus") == salderingspositie_mod.OVERSCHOT and deel > 0
+        if uit.get("modus") == salderingspositie_mod.OVERSCHOT and not deel:
+            uit["reden"] = (uit.get("reden") or "") + "; belastingdeel onbekend, dus de volle prijs"
+        self._salderingspositie_cache = (sleutel, uit)
+        return uit
+
+    def _belastingdeel_voor_saldering(self) -> float:
+        """Het gemeten belastingdeel, of 0 als het onbekend of onaannemelijk is."""
+        # Het lezen van de kale reeks zet `prijsreeks_bevindingen` op die
+        # reeks; die horen bij de belaste reeks (zie `_heel_lage_prijs_grens_eur`).
+        bevindingen = getattr(self, "prijsreeks_bevindingen", None)
+        try:
+            deel = float(self._gemeten_belastingdeel_eur_per_kwh() or 0.0)
+        except Exception:  # noqa: BLE001 - zonder belastingdeel de volle prijs
+            return 0.0
+        finally:
+            self.prijsreeks_bevindingen = bevindingen
+        if not (SALDERING_BELASTINGDEEL_MIN_EUR <= deel <= SALDERING_BELASTINGDEEL_MAX_EUR):
+            return 0.0
+        return deel
+
+    def _salderingskorting_eur(self, moment: datetime) -> float:
+        """Zoveel ligt de marginale prijs van dit moment onder de prijs incl.
+        belasting: het belastingdeel bij een verwacht overschot, anders 0."""
+        try:
+            if not self._is_salderen_active(moment):
+                return 0.0
+            pos = self.salderingspositie()
+            if not pos.get("rekent_marginaal"):
+                return 0.0
+            eind = pos.get("eind")
+            if eind and dt_util.as_local(moment).date().isoformat() > eind:
+                return 0.0
+            return float(pos.get("belastingdeel_eur_per_kwh") or 0.0)
+        except Exception:  # noqa: BLE001 - een korting mag een besluit nooit breken
+            return 0.0
+
+    def _marginale_prijs(self, prijs: float | None, moment: datetime) -> float | None:
+        """De prijs waarmee een accubesluit rekent (v5.168.0)."""
+        if prijs is None:
+            return None
+        return prijs - self._salderingskorting_eur(moment)
+
+    def salderingspositie_weergave(self) -> dict:
+        """De stand voor de uitleg, de cockpit en de diagnostiek."""
+        pos = self.salderingspositie()
+        velden = ("modus", "rekent_marginaal", "balans_kwh", "verwacht_rest_kwh", "eindstand_kwh",
+                  "marge_kwh", "overschot_kwh", "belastingdeel_eur_per_kwh", "eind",
+                  "contractjaar_begin", "salderen_tot", "verwachting_bron", "verwacht_per_dag_kwh",
+                  "schattingen", "dagen_gemeten", "resterende_dagen", "reden")
+        return {k: pos.get(k) for k in velden if k in pos}
+
+    def _saldering_uitlegzin(self) -> str | None:
+        """Eén zin voor de uitleg als het plan marginaal rekent."""
+        pos = self.salderingspositie()
+        if not pos.get("rekent_marginaal"):
+            return None
+        try:
+            eind = date.fromisoformat(pos["eind"]).strftime("%d-%m")
+        except (KeyError, TypeError, ValueError):
+            eind = "het einde van de saldering"
+        return (
+            f"tot {eind} rekent het plan met de prijs zonder energiebelasting "
+            f"({pos['belastingdeel_eur_per_kwh'] * 100:.1f} ct minder): je eindigt het "
+            f"salderingsjaar naar verwachting met ~{pos.get('overschot_kwh', 0):.0f} kWh overschot"
+        )
 
     def _split_discharge_export_vs_load(
         self, discharged_kwh: float, elapsed_hours: float
@@ -37085,16 +37210,22 @@ class EnergyManagementSystemCoordinator:
             verbruik = sum(v for v, _z in segmenten)
             zon = self._estimate_pv_kwh_for_period(van, eind, veilig=False)
             inkoop = prijs / PRICE_SCALE_FACTOR
+            incl = inkoop
             if self._is_salderen_active(begin):
-                teruglever = inkoop + FEEDIN_PREMIUM_EUR_PER_KWH
+                # v5.168.0: bij een verwacht overschot aan het eind van het
+                # salderingsjaar de marginale prijs (zonder belastingdeel).
+                inkoop, teruglever = salderingspositie_mod.marginale_prijzen(
+                    incl, self._salderingskorting_eur(begin), FEEDIN_PREMIUM_EUR_PER_KWH, True
+                )
             elif begin in kaal:
                 teruglever = OW.terugleverwaarde_2027(kaal[begin], feedin_cost)
             else:
                 return None
-            vloer = self._planning_verkoopreserve_kwh(begin, reserve_cache, entries, inkoop)
+            vloer = self._planning_verkoopreserve_kwh(begin, reserve_cache, entries, incl)
             uit.append(waardeplan_mod.Kwartier(
                 begin, max(0.0, verbruik), max(0.0, zon), inkoop, teruglever, max(0.0, vloer or 0.0),
                 uren=(eind - van).total_seconds() / 3600,
+                prijs_incl_eur=incl if inkoop != incl else None,
             ))
         return uit or None
 
@@ -37167,6 +37298,12 @@ class EnergyManagementSystemCoordinator:
             ],
             "verwachte_inhoud_kwh": nu["inhoud_kwh"],
             "balanceren": balans or None,
+            # v5.168.0: met welke prijs het plan rekent tijdens de saldering.
+            "rekenbasis": (
+                "marginaal: prijs zonder belastingdeel (verwacht salderingsoverschot)"
+                if any(k.prijs_incl_eur is not None for k in kwartieren) else "prijs incl. belasting"
+            ),
+            "salderingspositie": self.salderingspositie_weergave(),
         })
         return uit
 
@@ -37406,6 +37543,9 @@ class EnergyManagementSystemCoordinator:
             regels.append("balanceerlading: " + p["balanceren"]["reden"])
         # v5.165.0: wanneer en hoeveel het plan uit het net laadt.
         if zin := self._waardeplan_lading_zin():
+            regels.append(zin)
+        # v5.168.0: zegt erbij als het plan met de marginale prijs rekent.
+        if zin := self._saldering_uitlegzin():
             regels.append(zin)
         return regels or ["het waardeplan rekent elk kwartier de goedkoopste inzet uit"]
 

@@ -982,6 +982,8 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
             "sparen_in_blok": dict(self._coordinator.last_sparen_in_blok or {}),
             # v5.158.0: het waardeplan (plan van dit kwartier en 6 uur vooruit).
             "waardeplan": dict(self._coordinator.last_waardeplan or {}),
+            # v5.168.0: de saldering per contractjaar (stand, balans, verwachting).
+            "saldering": self._coordinator.salderingspositie_weergave(),
         }
 
 

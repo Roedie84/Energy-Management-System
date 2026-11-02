@@ -1,3 +1,24 @@
+EMS v5.168.0 - salderen: rekenen met de prijs zonder energiebelasting bij een overschot
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Zonneplan saldeert per contractjaar (bij jou vanaf 1 april). Dit jaar
+  leverde je tot nu toe ~1464 kWh terug tegen ~502 kWh afname. Ook met
+  november en december erbij (vorig jaar ~720 kWh) eindig je op 31-12
+  naar verwachting met een overschot van ~240 kWh.
+- Zolang dat zo is, kost een extra kWh uit het net je geen
+  energiebelasting (hij wordt weggestreept tegen het overschot), en levert
+  een extra kWh terugleveren ook geen belasting op. Het plan rekent dan met
+  de prijs zonder energiebelasting (nu 11,1 ct minder). Daardoor loont
+  's nachts goedkoop laden voor de ochtend- en avondpiek eerder.
+- Wat je betaalt en wat het EMS als kosten toont, verandert niet; alleen
+  de keuzes van het plan.
+- Is de verwachting onzeker (rond nul) of ontbreekt er iets, dan rekent het
+  plan zoals voorheen met de volle prijs.
+- De uitleg zegt het erbij ("tot 31-12 rekent het plan met de prijs zonder
+  energiebelasting ..."), en de stand staat bij de uitleg-sensor onder
+  "saldering".
+
 EMS v5.167.0 - accuberekeningen kloppen met de kWh-meter
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -59,6 +59,10 @@ class Kwartier:
     #: v5.165.0: zoveel uur telt dit kwartier (het lopende kwartier minder
     #: dan 0,25). Verbruik en zon gelden voor die duur; voor de weergave.
     uren: float = 0.25
+    #: v5.168.0: de prijs incl. belasting voor de weergave, als het plan met
+    #: een marginale prijs rekent (saldering met een verwacht overschot:
+    #: `inkoop_eur` is dan de prijs zonder belastingdeel). None = gelijk.
+    prijs_incl_eur: float | None = None
 
 
 @dataclass
@@ -291,7 +295,10 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
             # v5.162.0: de grootste laadstap = vol vermogen. De stap van
             # 0,1 kWh rondt af: bij 2,4 kW zou er 2.196 W op de accu staan.
             "vol_vermogen": s == max_op,
-            "prijs_eur": round(k.inkoop_eur, 4),
+            # v5.168.0: wat het kwartier kost (incl. belasting) en waarmee
+            # het plan rekende (de marginale prijs, bij een overschot lager).
+            "prijs_eur": round(k.inkoop_eur if k.prijs_incl_eur is None else k.prijs_incl_eur, 4),
+            "rekenprijs_eur": round(k.inkoop_eur, 4),
             # v5.165.0: de duur waarover verbruik en zon gelden.
             "uren": round(getattr(k, "uren", 0.25) or 0.25, 4),
         })

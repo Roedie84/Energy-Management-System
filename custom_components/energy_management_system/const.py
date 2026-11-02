@@ -2027,6 +2027,13 @@ CONF_SALDEREN_END_DATE = "salderen_end_date"
 # appels met de jaaropgave.
 CONF_CONTRACT_START_DATE = "contract_start_date"
 
+# --- v5.168.0: saldering per contractjaar ----------------------------
+# Het gemeten belastingdeel (energiebelasting + btw daarover, bij deze
+# aansluiting 11,1 ct) telt alleen als het binnen deze grenzen ligt; daarbuiten
+# is het een meetfout en rekent het plan met de volle prijs.
+SALDERING_BELASTINGDEEL_MIN_EUR = 0.03
+SALDERING_BELASTINGDEEL_MAX_EUR = 0.25
+
 # --- Dagreeks voor zelfconsumptie over langere perioden (v1.90.0) ----
 # Gevraagd: "Misschien zelfconsumptie per dag/week/maand/jaar?"
 #

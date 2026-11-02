@@ -63,6 +63,10 @@ class Partij:
     bron: str                   # "net", "zon" of "begin"
     dag: str
     verwacht_eur: float | None  # laadbesluit: waarde per kWh die erin ging
+    #: v5.168.0: het belastingdeel dat bij het laden van de prijs af ging
+    #: (salderingsoverschot); de vergelijking met `verwacht_eur` blijft op
+    #: dezelfde grondslag.
+    korting_eur: float = 0.0
 
 
 def _moment(dag: str, tijd: str) -> datetime | None:
@@ -85,6 +89,20 @@ def _getal(r: dict, sleutel: str) -> float | None:
         return None if v is None else float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _korting(r: dict) -> float:
+    """v5.168.0: het belastingdeel dat het EMS op dit kwartier van de prijs
+    aftrok (saldering met een verwacht overschot, zie salderingspositie.py).
+    Oude regels hebben het niet: 0, de prijs incl. belasting."""
+    return max(0.0, _getal(r, "korting_ct") or 0.0) / 100
+
+
+def _rekenprijs(r: dict) -> float | None:
+    """De prijs (EUR/kWh) waarmee het EMS dit kwartier rekende: de
+    kwartierprijs, min het belastingdeel bij een salderingsoverschot."""
+    prijs = _getal(r, "prijs_ct")
+    return None if prijs is None else prijs / 100 - _korting(r)
 
 
 def _aandeel_net(r: dict) -> float:
@@ -236,15 +254,15 @@ def _rust(partijen: list, tel, weg: float, eta_laad: float) -> None:
 def _verwerk_gemeten(partijen, tel, dag, r, stroom, eta_laad, eta_ontlaad, slijtage_eur) -> None:
     """Een gemeten kwartier: AC erin maal laadrendement erbij, AC eruit is de
     levering en haalt eruit / ontlaadrendement uit de oudste partijen."""
-    prijs = _getal(r, "prijs_ct")
+    prijs = _rekenprijs(r)
     if prijs is None:
         return
     erin, eruit, _bron = stroom
     if erin > 1e-6:
-        _boek_lading(partijen, tel, dag, r, erin * eta_laad, eta_laad, prijs / 100)
+        _boek_lading(partijen, tel, dag, r, erin * eta_laad, eta_laad, prijs)
     if eruit > 1e-6:
         _boek_levering(partijen, tel, dag, eruit / eta_ontlaad, eta_ontlaad, eta_laad,
-                       prijs / 100, slijtage_eur)
+                       prijs, slijtage_eur, _korting(r))
 
 
 #: Pas een kostprijs van de voorraad bij zoveel opgeslagen kWh met bekende inkoop.
@@ -266,7 +284,10 @@ def voorraad_kostprijs(partijen: list, eta_laad: float) -> dict:
            "onbekend_kwh": round(sum(p.kwh for p in partijen if p.bron == "begin"), 2),
            "eur_per_kwh": None}
     if kwh >= VOORRAAD_MIN_KWH and eta_laad > 0:
-        uit["eur_per_kwh"] = round(sum(p.kwh * p.inkoop_eur for p in bekend) / kwh / eta_laad, 4)
+        # v5.168.0: tegen de prijs incl. belasting (de korting erbij): de
+        # dagbesparing rekent met wat er werkelijk betaald is.
+        uit["eur_per_kwh"] = round(
+            sum(p.kwh * (p.inkoop_eur + p.korting_eur) for p in bekend) / kwh / eta_laad, 4)
     return uit
 
 
@@ -278,10 +299,9 @@ def _dagtel(tel, dag) -> dict:
 
 def _verwerk(partijen, tel, dag, r, delta, eta_laad, eta_ontlaad, slijtage_eur) -> None:
     """Een kwartier zonder meting: uit de verandering van de laadstand."""
-    prijs = _getal(r, "prijs_ct")
+    prijs = _rekenprijs(r)
     if prijs is None or abs(delta) < STAP_KWH:
         return
-    prijs /= 100
     if delta > 0:
         _boek_lading(partijen, tel, dag, r, delta, eta_laad, prijs)
         return
@@ -292,7 +312,7 @@ def _verwerk(partijen, tel, dag, r, delta, eta_laad, eta_ontlaad, slijtage_eur) 
     if not ontlaadt:
         _rust(partijen, tel, weg, eta_laad)
         return
-    _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijtage_eur)
+    _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijtage_eur, _korting(r))
 
 
 def _boek_lading(partijen, tel, dag, r, opgeslagen, eta_laad, prijs) -> None:
@@ -311,13 +331,20 @@ def _boek_lading(partijen, tel, dag, r, opgeslagen, eta_laad, prijs) -> None:
             dagtel["net_in_kwh"] += ac
             dagtel["net_inkoop_eur"] += ac * prijs
         partijen.append(Partij(kwh, prijs, bron, dag,
-                               verwacht / 100 if bron == "net" and verwacht is not None else None))
+                               verwacht / 100 if bron == "net" and verwacht is not None else None,
+                               _korting(r)))
 
 
-def _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijtage_eur) -> None:
+def _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijtage_eur, korting=0.0) -> None:
     """`weg` kWh uit de oudste partijen; elke kWh uit de cellen levert
     `eta_ontlaad` kWh aan het huis of het net. Slijtage per kWh door de
-    cellen (v5.167.0: niet meer per kWh die erin ging)."""
+    cellen (v5.167.0: niet meer per kWh die erin ging).
+
+    v5.168.0: `prijs` is de rekenprijs van dit kwartier (`korting` is het
+    belastingdeel dat eraf ging). De gerealiseerde marge per partij en de
+    vergelijking met wat het laadbesluit verwachtte, gaan op de grondslag
+    van die partij (de korting bij het laden): appels met appels, ook als de
+    stand van de saldering tussen laden en ontladen omsloeg."""
     dagtel = _dagtel(tel, dag)
     rest = weg
     while rest > 1e-9:
@@ -347,7 +374,7 @@ def _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijta
         t["opbrengst_eur"] += geleverd * prijs
         t["kosten_uit_eur"] += ac * p.inkoop_eur + x * slijtage_eur
         # per kWh die erin ging: zelfde maat als het laadbesluit
-        gerealiseerd = (geleverd * prijs - x * slijtage_eur) / ac
+        gerealiseerd = (geleverd * (prijs + korting - p.korting_eur) - x * slijtage_eur) / ac
         if p.bron == "net":
             dagtel["net_uit_ac_kwh"] += ac
             dagtel["net_marge_eur"] += ac * (gerealiseerd - p.inkoop_eur)

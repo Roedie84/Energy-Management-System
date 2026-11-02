@@ -624,6 +624,8 @@ async def async_get_config_entry_diagnostics(
         "sparen_in_blok": dict(getattr(coordinator, "last_sparen_in_blok", None) or {}),
         # v5.158.0
         "waardeplan": dict(getattr(coordinator, "last_waardeplan", None) or {}),
+        # v5.168.0: saldering per contractjaar.
+        "salderingspositie": _veilig("salderingspositie", coordinator.salderingspositie_weergave),
         # v5.15.1: de trage keren van de GACS-sensor, met de verdeling over
         # de onderdelen. Werden wel bewaard maar niet geexporteerd.
         "gacs_traagheid": _veilig(
