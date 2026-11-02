@@ -1947,7 +1947,10 @@ REDENEN_BEWUSTE_NETAFNAME = (
     "celbescherming_houden",
     # v5.158.0: het waardeplan.
     "waardeplan_laden",
-    "waardeplan_houden",
+    # v5.164.0 (L-EMS-054, akkoord Ruud 02-11): 'waardeplan_houden' hoort hier
+    # NIET meer bij. Een tekort telt alleen als de accu op de vloer staat; een
+    # lege accu onder 'houden' is dus geen bewust vasthouden maar een tekort,
+    # en anders leren marge en tekortkans onder het waardeplan niets meer.
 )
 
 # Hoe ver de accu onder zijn ontlaadgrens mag zitten en toch als "op de

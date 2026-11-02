@@ -34381,3 +34381,11 @@ Besluit Ruud 02-11, na de controle van de planning: een volle lading à ~39 ct k
 - De zon mag de accu altijd vol maken. Er is bewust geen uiterste termijn; de gewone waardeplanlogica laadt ongewijzigd als die dat loont.
 
 Tests: `test_v51630_balanceren_prijsgrens.py`.
+
+## v5.164.0 — lege accu onder 'houden' telt weer als tekort (L-EMS-054)
+
+Akkoord Ruud 02-11.
+
+`waardeplan_houden` stond sinds v5.158.0 in `REDENEN_BEWUSTE_NETAFNAME`. Een nacht met een lege accu onder het waardeplan (stand 'houden') mat daardoor ~0 kWh tekort, en de reservemarge en tekortkans leerden niets meer. Een tekort telt alleen als de accu op de vloer staat (`_netimport_is_tekort`, `TEKORT_LEEG_MARGE_PROCENT`), dus 'houden' boven de vloer blijft geen tekort; 'houden' met een lege accu wel. `waardeplan_laden` blijft bewuste netafname. De nachtcontrole (`NACHT_BEWUST_NIET_ONTLADEN_REDENEN`) is ongewijzigd.
+
+Tests: `test_v5164_tekort_houden.py` (3); `test_v5158_waardeplan.py` aangepast.

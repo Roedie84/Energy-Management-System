@@ -253,7 +253,8 @@ def test_kwartieren_met_salderen_en_daarna(make_coordinator, hass):
 def test_redenen_geregistreerd():
     for reden in ("waardeplan_laden", "waardeplan_verkopen", "waardeplan_huis", "waardeplan_houden"):
         assert reden in REASON_REGISTRY
-    assert "waardeplan_houden" in REDENEN_BEWUSTE_NETAFNAME
+    # v5.164.0 (L-EMS-054): houden met een lege accu telt weer als tekort
+    assert "waardeplan_houden" not in REDENEN_BEWUSTE_NETAFNAME
     assert "waardeplan_laden" in REDENEN_BEWUSTE_NETAFNAME
 
 
