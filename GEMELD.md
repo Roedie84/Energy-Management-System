@@ -207,3 +207,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 16:40 | updates installeren ems 5.161.3 (hacs ziet release nog niet, verversen) + ha herstarten
 02-11 16:40 | L-EMS-055 ems balanceerlading onder waardeplan (akkoord)
 02-11 17:46 | luchtreiniger aanwezig-herbeoordeling <15 min na herstart gaat naar mid (marge telt pas na 15 min uptime, 5 wissels)
+02-11 18:25 | updates installeren ems 5.162.1 (hacs) + ha herstarten
+02-11 18:25 | ems uitleg loopt achter op waardeplan (laadbesluit_sinds_9u leeg, blok 23:30 vs laadplan 23:45)
