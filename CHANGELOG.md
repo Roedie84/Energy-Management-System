@@ -34399,3 +34399,11 @@ Akkoord Ruud 02-11 (verbruikspiek); de andere twee zijn veilige fixes van valse 
 - **Zelfcontrole**: de spiegel "Beschikbare energie" vergeleek de door `_na_module_leeg` gecorrigeerde waarde (0,025 kWh) met de ruwe Zendure-sensor (0,576 kWh). De meting krijgt nu dezelfde correctie.
 
 Tests: `test_v51641_correctiebudget.py` (9).
+
+## v5.164.2 — sensoren in euro als geldbedrag (opschoonpunt 6)
+
+De 11 EMS-sensoren met eenheid € of EUR hadden geen `device_class`. HA zag ze daardoor niet als geldbedrag. Ze krijgen nu `SensorDeviceClass.MONETARY`; eenheid en `state_class` blijven gelijk (geen nieuwe statistiekreeks, geen reparatiemelding). Geen effect op de sturing.
+
+`digital_twin_nauwkeurigheid` (kWh, `state_class: measurement`) bewust zonder class: het is een afwijking, geen energietotaal, en `energy` mag niet samen met `measurement`.
+
+Tests: `test_v51642_monetary.py` (2).

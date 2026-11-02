@@ -1,3 +1,10 @@
+EMS v5.164.2 - bedragen als geldbedrag herkend
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De sensoren in euro worden door Home Assistant nu als geldbedrag herkend.
+  Geen effect op de sturing.
+
 EMS v5.164.1 - verbruikspiek, tekortmelding en zelfcontrole
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

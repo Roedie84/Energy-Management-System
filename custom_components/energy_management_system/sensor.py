@@ -787,6 +787,7 @@ class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:calendar-month-outline"
     _attr_native_unit_of_measurement = "EUR"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "monthly_summary")
@@ -1298,6 +1299,7 @@ class DischargeValueSensor(SensorEntity, RestoreEntity):
     _attr_name = "Discharge value (expensive quarters)"
     _attr_icon = "mdi:cash-plus"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = "total_increasing"
 
@@ -1334,6 +1336,7 @@ class ChargeCostSensor(SensorEntity, RestoreEntity):
     _attr_name = "Charge cost (grid charging)"
     _attr_icon = "mdi:cash-minus"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = "total_increasing"
 
@@ -1398,6 +1401,7 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
     _attr_name = "Battery savings (cost-basis model)"
     _attr_icon = "mdi:piggy-bank-outline"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = "total"
 
@@ -1968,6 +1972,7 @@ class MpcAdvisorySensor(SensorEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:chart-timeline-variant"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -2170,6 +2175,7 @@ class DigitalTwinAdvisorySensor(SensorEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:cube-outline"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -3107,6 +3113,7 @@ class CounterfactualSavingsTotalSensor(SensorEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:cash-plus"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_state_class = "total"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -3181,6 +3188,7 @@ class SavingsThisMonthSensor(SensorEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:calendar-month"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_state_class = "total"
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -3289,6 +3297,7 @@ class ZelfanalyseSensor(_V5100Sensor):
     _attr_name = "Zelfanalyse"
     _attr_icon = "mdi:magnify-scan"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _sleutel = "zelfanalyse"
 
     @property
@@ -3309,6 +3318,7 @@ class Repetitie2027Sensor(_V5100Sensor):
     _attr_name = "Generale repetitie 2027"
     _attr_icon = "mdi:calendar-sync"
     _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _sleutel = "repetitie_2027"
 
     @property
@@ -3441,6 +3451,7 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:cash-check"
     _attr_native_unit_of_measurement = "EUR"
+    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
