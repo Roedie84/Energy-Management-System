@@ -34372,3 +34372,12 @@ Gevonden door de controleronde van 02-11.
 - **Tekortsoort uit het dagverloop.** `_deel_nacht_in_met_reden` herkende alleen redenen die met `grid_charging` beginnen. Onder het waardeplan heet netladen `waardeplan_laden`, dus op 02-11 stond er 'laden tegen 34,6 ct had geloond ..., en er werd niet geladen', terwijl de accu 14:00-14:45 uit het net laadde. Zo'n dag heette onterecht `planning`. Nu blijft de soort onbepaald, net als bij de oude netlaadregels. Alleen uitleg en telling; de sturing verandert niet.
 
 Tests: `test_v541_tekort_economisch.py`.
+
+## v5.163.0 — balanceren uit het net alleen onder 22 ct
+
+Besluit Ruud 02-11, na de controle van de planning: een volle lading à ~39 ct kostte ~€ 0,50-1,40 netto.
+
+- `BALANCEER_MAX_PRIJS_EUR` (0,22 all-in). `_waardeplan_balanceren` stelt de eis `vol_na_kwartier` alleen als er vóór het doelmoment genoeg kwartieren onder de grens zijn; anders geen eis en reden "wacht op een prijs onder 22 ct". `_balanceer_laadbesluit` en `_plan_dip_laadt` volgen dezelfde grens.
+- De zon mag de accu altijd vol maken. Er is bewust geen uiterste termijn; de gewone waardeplanlogica laadt ongewijzigd als die dat loont.
+
+Tests: `test_v51630_balanceren_prijsgrens.py`.

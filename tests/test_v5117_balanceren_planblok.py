@@ -144,32 +144,32 @@ def _klaar_voor_balans(c, monkeypatch, zon_vol=None, goedkoopst=True):
 def test_balanceerlading_in_het_goedkoopste_kwartier(make_coordinator, monkeypatch):
     c = make_coordinator({})
     _klaar_voor_balans(c, monkeypatch)
-    uit = c._balanceer_laadbesluit(NU, NU + timedelta(hours=2), 0.22, 2.0)
+    uit = c._balanceer_laadbesluit(NU, NU + timedelta(hours=2), 0.21, 2.0)
     assert uit["laden"] is True and uit["soort"] == "balanceren"
 
 
 def test_geen_balanceerlading_als_de_zon_hem_vandaag_vol_maakt(make_coordinator, monkeypatch):
     c = make_coordinator({})
     _klaar_voor_balans(c, monkeypatch, zon_vol=NU + timedelta(hours=2))
-    assert c._balanceer_laadbesluit(NU, NU + timedelta(hours=2), 0.22, 2.0) is None
+    assert c._balanceer_laadbesluit(NU, NU + timedelta(hours=2), 0.21, 2.0) is None
 
 
 def test_geen_balanceerlading_als_er_goedkopere_kwartieren_komen(make_coordinator, monkeypatch):
     c = make_coordinator({})
     _klaar_voor_balans(c, monkeypatch, goedkoopst=False)
-    assert c._balanceer_laadbesluit(NU, NU + timedelta(hours=2), 0.22, 2.0) is None
+    assert c._balanceer_laadbesluit(NU, NU + timedelta(hours=2), 0.21, 2.0) is None
 
 
 def test_plan_balanceert_in_het_blok_zonder_hysterese(make_coordinator):
     c = make_coordinator({})
     blok = (_k(13), _k(15))
-    reeks = [(_k(13) + timedelta(minutes=15 * i), 0.22 + 0.001 * i) for i in range(8)]
+    reeks = [(_k(13) + timedelta(minutes=15 * i), 0.20 + 0.001 * i) for i in range(8)]
     netregels = {"slijtage_ct": 11.0, "rendement": 84.0, "laad_per_kwartier": 0.6,
                  "reeks": reeks, "blok": blok, "balanceren": True, "laadde_vorig": False,
                  "salderen": True}
     # 98 % vol (boven de hysterese van 97 %), 0,2 kWh ruimte; 14:45 is het
     # laatste kwartier van het blok, dus nu laden.
-    assert c._plan_laadt(netregels, _k(15), 0.229, 9.8, 10.0, 0.6, 0.4) > 0
+    assert c._plan_laadt(netregels, _k(15), 0.209, 9.8, 10.0, 0.6, 0.4) > 0
 
 
 # --- v5.117.1: het plan kijkt vanaf wanneer het nodig is -------------------
@@ -185,13 +185,13 @@ def test_vanaf_moment_in_balanceerlading(make_coordinator):
 def test_plan_balanceert_pas_vanaf_het_moment(make_coordinator):
     c = make_coordinator({})
     blok = (_k(13), _k(15))
-    reeks = [(_k(13) + timedelta(minutes=15 * i), 0.22 + 0.001 * i) for i in range(8)]
+    reeks = [(_k(13) + timedelta(minutes=15 * i), 0.20 + 0.001 * i) for i in range(8)]
     basis = {"slijtage_ct": 11.0, "rendement": 84.0, "laad_per_kwartier": 0.6,
              "reeks": reeks, "blok": blok, "laadde_vorig": False, "salderen": True}
     later = {**basis, "balanceren": _k(16)}
     eerder = {**basis, "balanceren": _k(12)}
-    assert c._plan_laadt(later, _k(15), 0.229, 9.8, 10.0, 0.6, 0.4) == 0.0
-    assert c._plan_laadt(eerder, _k(15), 0.229, 9.8, 10.0, 0.6, 0.4) > 0
+    assert c._plan_laadt(later, _k(15), 0.209, 9.8, 10.0, 0.6, 0.4) == 0.0
+    assert c._plan_laadt(eerder, _k(15), 0.209, 9.8, 10.0, 0.6, 0.4) > 0
 
 
 def test_plan_balanceren_geeft_het_moment(make_coordinator, monkeypatch):

@@ -358,6 +358,10 @@ BALANCEER_VOL_PERCENT = 99.0
 # vóór dit lokale uur: vóór de ochtendpiek, en een vast moment zodat de lading
 # niet bij elke nieuwe prijsreeks of herstart opschuift.
 BALANCEER_KLAAR_UUR = 8
+# v5.163.0 (besluit Ruud 02-11): alleen balanceren uit het net onder deze
+# all-in prijs. Een volle lading à 39 ct kostte ~€ 0,50-1,40 netto. De zon mag
+# de accu altijd vol maken; er is bewust geen uiterste termijn.
+BALANCEER_MAX_PRIJS_EUR = 0.22
 
 # Hoeveel dagen er minstens nodig zijn voordat de zonpersistentie een
 # richting noemt. Bij acht dagen was r=0,69 een aanwijzing en geen

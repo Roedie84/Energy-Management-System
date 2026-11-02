@@ -81,19 +81,19 @@ def test_zon_vult_geen_eis(make_coordinator):
 
 def test_vol_voor_acht_uur_en_blijft_vast(make_coordinator):
     c = _balans(make_coordinator)
-    kw = _kw([0.3] * 96)
+    kw = _kw([0.2] * 96)
     uit = c._waardeplan_balanceren(NU, kw, _accu())
     assert uit["kwartier"] == 47  # 20:00 + 12 uur = 08:00
     doel = c._balanceer_doel
     later = NU + timedelta(hours=1)
-    c._waardeplan_balanceren(later, _kw([0.3] * 92), _accu())
+    c._waardeplan_balanceren(later, _kw([0.2] * 92), _accu())
     assert c._balanceer_doel == doel
 
 
 def test_niet_haalbaar_de_dag_erna(make_coordinator):
     c = _balans(make_coordinator)
     laat = datetime(2026, 11, 2, 6, 30, tzinfo=TZ)
-    kw = [W.Kwartier(laat + timedelta(minutes=15 * i), 0.1, 0.0, 0.3, 0.3) for i in range(120)]
+    kw = [W.Kwartier(laat + timedelta(minutes=15 * i), 0.1, 0.0, 0.2, 0.2) for i in range(120)]
     uit = c._waardeplan_balanceren(laat, kw, _accu(0.0))
     assert c._balanceer_doel.day == 3
 

@@ -1,3 +1,11 @@
+EMS v5.163.0 - balanceren alleen onder 22 ct
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De accu laadt voor het balanceren alleen nog uit het net als de stroom
+  minder dan 22 ct kost. Zijn er niet genoeg kwartieren onder die prijs, dan
+  wacht hij; maakt de zon de accu vol, dan telt dat gewoon.
+
 EMS v5.162.1 - tekortuitleg klopt weer onder het waardeplan
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

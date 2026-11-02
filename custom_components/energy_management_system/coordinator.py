@@ -275,6 +275,7 @@ from .const import (
     BALANCEER_VROEG_CEL_DELTA_V,
     BALANCEER_VOL_PERCENT,
     BALANCEER_KLAAR_UUR,
+    BALANCEER_MAX_PRIJS_EUR,
     NABESCHOUWING_MIN_KWARTIEREN,
     NACHTLAST_MIN_NACHTEN,
     NACHTLAST_MIN_STIJGING_FRACTIE,
@@ -23248,6 +23249,8 @@ class EnergyManagementSystemCoordinator:
         bal = self.balanceerlading(now)
         if not bal.get("nodig") or ruimte <= 0.05:
             return None
+        if prijs_nu >= BALANCEER_MAX_PRIJS_EUR:
+            return None  # v5.163.0: alleen onder de prijsgrens
         if self._balanceer_zon_vult_vandaag(now, self.beschikbare_energie_kwh() or 0.0, ruimte):
             return None
         if not self._goedkoopste_laadmomenten(now, prijs_nu, blok_eind.isoformat(), ruimte):
@@ -25992,6 +25995,7 @@ class EnergyManagementSystemCoordinator:
             and blok_start is not None and blok_eind is not None
             and blok_start <= begin_kwartier < blok_eind
             and bruikbaar - soc > 0.05
+            and prijs < BALANCEER_MAX_PRIJS_EUR  # v5.163.0
         ):
             per = netregels.get("laad_per_kwartier") or 0.0
             nodig = max(1, math.ceil((bruikbaar - soc) / per)) if per > 0 else 1
@@ -36996,8 +37000,16 @@ class EnergyManagementSystemCoordinator:
         if doel > einde:
             self._balanceer_doel = None
             return {"reden": f"{bal['reden']}; wacht op de prijzen tot {doel:%d-%m %H:%M}"}
-        self._balanceer_doel = doel
         index = sum(1 for k in kwartieren if k.begin < doel) - 1
+        # v5.163.0: alleen als er vóór het doel genoeg kwartieren onder de
+        # prijsgrens zijn; anders geen eis, zodat het plan niet duurder bijkoopt.
+        nodig = math.ceil((accu.bruikbaar_kwh - accu.inhoud_kwh) / per_kwartier)
+        goedkoop = sum(1 for k in kwartieren[: index + 1] if k.inkoop_eur < BALANCEER_MAX_PRIJS_EUR)
+        if goedkoop < nodig:
+            self._balanceer_doel = None
+            grens = BALANCEER_MAX_PRIJS_EUR * 100
+            return {"reden": f"{bal['reden']}; wacht op een prijs onder {grens:.0f} ct"}
+        self._balanceer_doel = doel
         return {
             "kwartier": index,
             "vol_om": doel.isoformat(),
