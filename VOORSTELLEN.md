@@ -380,3 +380,16 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Verwacht effect: op dagen die leeg beginnen (02-11: 9 %) geen ~€ 0,60 vals "gemist door voorspelling"; realisatie 7 d niet meer naar beneden getrokken door lage-SoC-dagen.
 - Meten (na installatie): `bodem_gebruikt_kwh` < `bodem_meetlat_kwh` op dagen die onder de bodem beginnen; daar `gemist_eur` ≈ verschil tussen dagarchief-opbrengst en best mogelijk, niet ≈ bodem × prijs.
 
+
+## L-EMS-052 · verkoop door het waardeplan niet in de meting van de harde regel (meetfout)
+- Status: **gebouwd v5.158.1** (02-11 07:48, tussenronde: acuut, harde regel anders onmeetbaar; zelf gebouwd: meetfout, sturing ongewijzigd; suite 6521 groen, `test_v51581_verkoopmeting.py` (6)). Wacht op installatie door Ruud (vervangt v5.158.0).
+- Onderbouwing (code): v5.158.0 zette `waardeplan_verkopen` in `_REDENEN_ONTLADEN` en de financiën, niet in `_VERKOOPREDENEN`. `verkocht` bleef dan False, de export ging naar `regeloverschot_kwh`, en `verkoopkwartieren`/`vk`/`vkm`/`vko` bleven leeg.
+- Verwacht effect: elke verkoop van het waardeplan staat in `verkoopkwartieren` met marge.
+- Meten (na installatie): dagen met `waardeplan_verkopen` hebben `verkoopkwartieren` > 0 en `regeloverschot_kwh` ≈ klein; marge ≥ 0 (harde regel).
+
+## L-EMS-053 · overschotdagen tellen niet meer onder het waardeplan (leerregressie)
+- Status: **open** (02-11 07:40; raakt via `excess_reduction_percent` de reserve → Ruud beslist).
+- Onderbouwing (code, v5.158.0): `_update_shortfall_detection` keert terug als de reden niet "zelfvoorzienend" is (`REASON_TO_MODE` = smart_discharging of `expensive_quarter*`); de overschottelling staat daarachter. Het waardeplan neemt de sturing over vóór `discharging_window`, en `waardeplan_huis`/`waardeplan_verkopen` tellen niet als zelfvoorzienend. Gevolg: `excess` blijft False, `reserve_excess_days` staat vast op 0 en de marge kan niet meer omlaag; `tekortvlag` (logboek) idem. Nu nog geen schade: `reserve_excess_days` is 0, marge vast +25 %.
+- Voorstel: `waardeplan_huis` en `waardeplan_verkopen` als zelfvoorzienend meetellen.
+- Verwacht effect: overschotleren werkt als vóór v5.158.0.
+- Meten: `reserve_excess_days` komt weer los van 0 op dagen met beschikbaar ≥ ratio × nodig.

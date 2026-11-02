@@ -847,3 +847,15 @@ laatste ronde: 01-11 23:40, gemeten t/m 01-11 23:43
 
 laatste ronde: 02-11 03:40, gemeten t/m 02-11 03:45
 
+
+## 02-11 07:40 · tussenronde
+- **Draait v5.157.0** (HA-herstart 06:34-06:36, schoon; bevat v5.156.1). **v5.158.0** (waardeplan stuurt, akkoord Ruud in de chat, 07:40 gepusht) staat klaar in HACS, nog niet geïnstalleerd. Log: alleen Zendure/HomeWizard-time-outs 07:20 (kort) en Zonneplan bij de herstart. Geen EMS-fouten.
+- **Nagelopen v5.158.0 op meetbaarheid: gat in de harde regel.** `waardeplan_verkopen` stond niet in `_VERKOOPREDENEN` → `_dagverloop_exportvelden` zou elke verkoop als regeloverschot boeken; `verkoopkwartieren` en dagarchief `vk/vkm/vko` zouden altijd 0 geven, juist nu het plan verkoopt. Acuut (harde regel onmeetbaar zodra Ruud installeert) → **gebouwd v5.158.1** (L-EMS-052, 6 tests, eerst rood; suite 6521 groen). Sturing ongewijzigd; de verkoop zelf is wel goed begrensd (`vrij = inhoud − verkoopreserve`, reserve onbekend = geen verkoop).
+- Verder nagelopen, geen fout: redenen in `_REDENEN_LADEN/_ONTLADEN`, financiën, bewuste netafname, `_netimport_is_tekort`; `productie_categorie` loopt via stand/vermogen; tekortnachtmeting staat los van de reden.
+- **Wel een regressie, voorstel L-EMS-053 (open):** `_update_shortfall_detection` stopt vóór de overschottelling bij elke reden die niet "zelfvoorzienend" is. Onder het waardeplan (mode smart, geen `discharging_window` meer) wordt `excess` nooit meer gezet → de marge kan niet meer zakken. Raakt de reserve → Ruud beslist.
+- **Tekortnacht 01→02 loopt: 2,45 kWh** (03:45 1,51), net 22-07 2,08 kWh, accu 9 %. MC 97,5 %, det. tot blok 1,88. Sluit om 09:00; telt in de dagafsluiting als kalibratiepunt.
+- **Harde regel: 0× onder de reserve.** v5.156.1 toetst vanaf de nabeschouwing van vandaag. Celbescherming v5.157.0 nog niet aangesproken (laagste cel 3,20 V in rust).
+- Stilstand: **geen echte** (11 wachten, 0 doen). Airco besluit "verwarmen", knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-11 (piek vastgehouden; neemt af).
+
+laatste ronde: 02-11 07:40, gemeten t/m 02-11 07:50
