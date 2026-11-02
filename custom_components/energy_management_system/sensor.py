@@ -1301,7 +1301,9 @@ class DischargeValueSensor(SensorEntity, RestoreEntity):
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_state_class = "total_increasing"
+    # v5.166.1: monetary staat geen total_increasing toe (HA-waarschuwing);
+    # de som loopt alleen op en reset nooit, dus total telt hetzelfde.
+    _attr_state_class = "total"
 
     def __init__(self, coordinator, entry_id: str) -> None:
         self._coordinator = coordinator
@@ -1338,7 +1340,9 @@ class ChargeCostSensor(SensorEntity, RestoreEntity):
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_state_class = "total_increasing"
+    # v5.166.1: monetary staat geen total_increasing toe (HA-waarschuwing);
+    # de som loopt alleen op en reset nooit, dus total telt hetzelfde.
+    _attr_state_class = "total"
 
     def __init__(self, coordinator, entry_id: str) -> None:
         self._coordinator = coordinator

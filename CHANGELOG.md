@@ -34433,3 +34433,9 @@ Akkoord Ruud 02-11 21:49.
 - Overige gebruikers: `sluimerverbruik` (stilstandkwartieren, geen selectie op SoC-stap) en `doorreken`/`band_rendement`/`afweging_huis_of_verkopen` (lezen de banden) zijn ongewijzigd en krijgen de nieuwe getallen.
 
 Tests: `test_v5166_rendement_runs.py` (12: synthetische reeks met SoC-stappen van 0,1152 kWh; ontladen 240 W: oud 52 %, nieuw 100 %; 1000 W: 100 %; wisselend 150-400 W: oud < 85 %, nieuw ~100 %; laden 1400 W: 79,8 %; gat splitst, korte rondes tellen niet, omdraaien voegt niet samen, structuur en betrouwbaarheidseisen, ronde boven 1,0 telt mee, waardeplan neemt de laadbanden). `test_v5122_scenario_sluimer_banden.py::test_rendement_per_band` aangepast: de hulpreeks wisselde elk kwartier laden/ontladen zonder tijden (geen rondes); nu een laadronde en een ontlaadronde met echte tijden, zelfde verwachte getallen.
+
+## v5.166.1 — geldsensoren met state_class total (fout uit v5.164.2)
+
+Na de herstart van 02-11 22:05 meldde HA: `discharge_value_expensive_quarters` en `charge_cost_grid_charging` gebruiken `total_increasing`, wat niet kan met device_class `monetary` (alleen `total` of geen). Die combinatie ontstond in v5.164.2. Beide sommen lopen alleen op en worden nooit teruggezet, dus `total` telt in de statistiek hetzelfde.
+
+Tests: `test_v51642_monetary.py` uitgebreid: een monetary-sensor heeft nooit `total_increasing`.

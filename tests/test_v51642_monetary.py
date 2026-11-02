@@ -25,3 +25,13 @@ def test_monetary_nooit_met_measurement():
         tekst = ast.unparse(klasse)
         if "SensorDeviceClass.MONETARY" in tekst:
             assert "_attr_state_class = 'measurement'" not in tekst, klasse.name
+
+
+def test_monetary_nooit_met_total_increasing():
+    """v5.166.1 - HA staat bij monetary alleen total of geen state_class toe."""
+    boom = ast.parse(BRON.read_text())
+    for klasse in [n for n in boom.body if isinstance(n, ast.ClassDef)]:
+        tekst = ast.unparse(klasse)
+        if "SensorDeviceClass.MONETARY" in tekst:
+            assert "_attr_state_class = 'total_increasing'" not in tekst, klasse.name
+            assert "SensorStateClass.TOTAL_INCREASING" not in tekst, klasse.name

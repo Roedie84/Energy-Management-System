@@ -1,3 +1,11 @@
+EMS v5.166.1 - waarschuwing over twee geldsensoren weg
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- "Discharge value" en "Charge cost" gaven na v5.164.2 een waarschuwing in
+  het log (geldbedrag mag niet 'total_increasing' zijn). Nu 'total'; de
+  geschiedenis en statistiek tellen gewoon door.
+
 EMS v5.166.0 - rendement per vermogen eerlijk gemeten
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
