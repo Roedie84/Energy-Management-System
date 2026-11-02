@@ -48,6 +48,12 @@ CORRECTIE_MIN_DAGEN = 5
 CORRECTIE_MIN_KWH = 10.0
 #: Nooit meer dan dit per kWh (in euro).
 CORRECTIE_MAX_EUR = 0.05
+#: v5.167.0: wijkt de bijgehouden voorraad (partijen) zoveel af van de
+#: gemeten inhoud, dan wordt hij gelijkgezet (~2 SoC-stappen van 0,115 kWh;
+#: kleiner is de afronding van de laadstand).
+GELIJKZETTEN_KWH = 0.25
+#: v5.167.0: een eigen kwartiermeting in het dagverloop telt vanaf deze dekking.
+DEKKING_MIN = 0.8
 
 
 @dataclass
@@ -99,7 +105,12 @@ class _Teller:
         self.rust_kwh = 0.0
         self.rust_eur = 0.0
         self.per_dag: dict = {}
-        self.afwijking: list = []     # (dag, ac_kwh, verwacht - gerealiseerd per kWh)
+        self.afwijking: list = []     # (laaddag, ac_kwh, verwacht - gerealiseerd per kWh, ontlaaddag)
+        # v5.167.0
+        self.gat_dagen: set = set()
+        self.gat_kwh = 0.0
+        self.gemeten_kwartieren = 0
+        self.onbekend_geleverd_kwh = 0.0
 
 
 def doorreken(
@@ -109,13 +120,27 @@ def doorreken(
     slijtage_eur: float,
     nu: datetime | None = None,
     banden: dict | None = None,
+    gemeten: dict | None = None,
 ) -> dict:
     """Reken het dagverloop door. Rendementen als fractie (0,92), slijtage in
-    euro per kWh die erin gaat - dezelfde eenheden als het laadbesluit.
+    euro per kWh DOOR DE CELLEN (v5.167.0; per kWh die erin gaat is dat
+    slijtage x laadrendement).
 
     v5.122.0 (punt 7): met `banden` (`rendement_per_band`) het rendement van
     de vermogensband van dat kwartier, zolang die band betrouwbaar is; anders
-    `eta_laad`/`eta_ontlaad`."""
+    `eta_laad`/`eta_ontlaad`.
+
+    v5.167.0 (audit 02-11): met een gemeten kwartier (eigen kwartiermeting in
+    het dagverloop, of `gemeten[dag]["HH:MM"]` uit de meetlaag) telt de
+    AC-energie van dat kwartier: wat eruit kwam IS de levering, wat erin ging
+    maal het laadrendement komt erbij. De laadstand (stappen van 1 %) zet de
+    voorraad alleen gelijk in een stilstandkwartier (tijdens laden of
+    ontladen loopt hij achter op de meter) en als hij meer dan
+    GELIJKZETTEN_KWH afwijkt. Zonder
+    meting de laadstand als voorheen. Een gat van meer dan MAX_GAT gooit de
+    partijen niet meer weg: niets toerekenen over het gat, daarna gelijkzetten;
+    dagen met zo'n gat tellen niet mee in de datacorrectie.
+    """
     if not (0 < eta_laad <= 1 and 0 < eta_ontlaad <= 1):
         return {"beschikbaar": False, "reden": "geen rendement"}
     partijen: list[Partij] = []
@@ -126,18 +151,100 @@ def doorreken(
         inhoud = _getal(r, "beschikbaar_kwh")
         if moment is None or inhoud is None:
             continue
-        if vorig_moment is None or moment - vorig_moment > MAX_GAT or moment <= vorig_moment:
-            # (opnieuw) beginnen: wat erin zit heeft een onbekende inkoop
-            partijen = [Partij(inhoud, 0.0, "begin", dag, None)] if inhoud > 0 else []
+        vermogen = _getal(r, "accu_w")
+        e_l = band_rendement(banden, "laden", vermogen, eta_laad)
+        e_o = band_rendement(banden, "ontladen", vermogen, eta_ontlaad)
+        if vorig_moment is None:
+            if inhoud > 0:
+                partijen.append(Partij(inhoud, 0.0, "begin", dag, None))
+        elif moment - vorig_moment > MAX_GAT or moment <= vorig_moment:
+            # v5.167.0: niets toerekenen over het gat, de partijen houden
+            tel.gat_dagen.update({dag, vorig_moment.date().isoformat()})
+            tel.gat_kwh += abs(_gelijkzetten(partijen, inhoud, dag, None, 0.0))
         else:
-            vermogen = _getal(r, "accu_w")
-            _verwerk(partijen, tel, dag, r, inhoud - vorige_inhoud,
-                     band_rendement(banden, "laden", vermogen, eta_laad),
-                     band_rendement(banden, "ontladen", vermogen, eta_ontlaad), slijtage_eur)
+            stroom = meting_kwartier(dag, r, gemeten)
+            if stroom is not None:
+                tel.gemeten_kwartieren += 1
+                _verwerk_gemeten(partijen, tel, dag, r, stroom, e_l, e_o, slijtage_eur)
+                if stroom[0] + stroom[1] <= STIL_KWH:
+                    # alleen in stilstand: tijdens laden/ontladen loopt de
+                    # laadstand achter op de meter
+                    _gelijkzetten(partijen, inhoud, dag, tel, e_l)
+            else:
+                _verwerk(partijen, tel, dag, r, inhoud - vorige_inhoud, e_l, e_o, slijtage_eur)
         vorig_moment, vorige_inhoud = moment, inhoud
     uit = _samenvatting(tel, partijen, eta_laad * eta_ontlaad, slijtage_eur, nu)
     uit["voorraad_kostprijs"] = voorraad_kostprijs(partijen, eta_laad)
     return uit
+
+
+def meting_kwartier(dag: str, r: dict, gemeten: dict | None) -> tuple[float, float, str] | None:
+    """(AC erin, AC eruit, bron) van een kwartier, of None zonder meting (v5.167.0).
+
+    Eerst de eigen kwartiermeting in het dagverloop (`accu_in_kwh`,
+    `accu_uit_kwh`: het accuvermogen over het kwartier opgeteld, met
+    `accu_dekking` >= DEKKING_MIN); dan de meetlaag (`gemeten[dag]["HH:MM"]`,
+    tellers per kwartier vanaf zijn begin - dezelfde sleutel als de regel
+    van het dagverloop, waarvan de inhoud op het eind van dat kwartier staat).
+    """
+    erin, eruit = _getal(r, "accu_in_kwh"), _getal(r, "accu_uit_kwh")
+    if erin is not None and eruit is not None and (_getal(r, "accu_dekking") or 0.0) >= DEKKING_MIN:
+        return max(0.0, erin), max(0.0, eruit), "kwartiermeting"
+    m = ((gemeten or {}).get(dag) or {}).get(str(r.get("tijd")))
+    if not isinstance(m, dict):
+        return None
+    erin, eruit = _getal(m, "accu_in_kwh"), _getal(m, "accu_uit_kwh")
+    if erin is not None and eruit is not None:
+        return max(0.0, erin), max(0.0, eruit), "meetlaag"
+    netto = _getal(m, "accu_kwh")
+    if netto is None:
+        return None
+    return max(0.0, -netto), max(0.0, netto), "meetlaag"
+
+
+def _gelijkzetten(partijen: list, inhoud: float, dag: str, tel, eta_laad: float) -> float:
+    """Zet de partijen gelijk aan de gemeten inhoud als ze meer dan
+    GELIJKZETTEN_KWH afwijken (v5.167.0). Te veel: de oudste partijen eruit
+    (met `tel` als rustverbruik: de accu verloor het zonder te leveren). Te
+    weinig: een partij met onbekende inkoop erbij. Geeft het verschil terug."""
+    verschil = inhoud - sum(p.kwh for p in partijen)
+    if abs(verschil) <= (GELIJKZETTEN_KWH if tel is not None else STAP_KWH):
+        return 0.0
+    if verschil > 0:
+        partijen.append(Partij(verschil, 0.0, "begin", dag, None))
+        return verschil
+    _rust(partijen, tel, -verschil, eta_laad)
+    return verschil
+
+
+def _rust(partijen: list, tel, weg: float, eta_laad: float) -> None:
+    """`weg` kWh uit de oudste partijen zonder levering: rustverbruik (met
+    `tel`), of niet toe te rekenen (zonder)."""
+    while weg > 1e-9 and partijen:
+        p = partijen[0]
+        x = min(p.kwh, weg)
+        p.kwh -= x
+        weg -= x
+        if p.kwh <= 1e-9:
+            partijen.pop(0)
+        if tel is not None:
+            tel.rust_kwh += x
+            if p.bron != "begin" and eta_laad > 0:
+                tel.rust_eur += x / eta_laad * p.inkoop_eur
+
+
+def _verwerk_gemeten(partijen, tel, dag, r, stroom, eta_laad, eta_ontlaad, slijtage_eur) -> None:
+    """Een gemeten kwartier: AC erin maal laadrendement erbij, AC eruit is de
+    levering en haalt eruit / ontlaadrendement uit de oudste partijen."""
+    prijs = _getal(r, "prijs_ct")
+    if prijs is None:
+        return
+    erin, eruit, _bron = stroom
+    if erin > 1e-6:
+        _boek_lading(partijen, tel, dag, r, erin * eta_laad, eta_laad, prijs / 100)
+    if eruit > 1e-6:
+        _boek_levering(partijen, tel, dag, eruit / eta_ontlaad, eta_ontlaad, eta_laad,
+                       prijs / 100, slijtage_eur)
 
 
 #: Pas een kostprijs van de voorraad bij zoveel opgeslagen kWh met bekende inkoop.
@@ -163,59 +270,84 @@ def voorraad_kostprijs(partijen: list, eta_laad: float) -> dict:
     return uit
 
 
+def _dagtel(tel, dag) -> dict:
+    return tel.per_dag.setdefault(dag, {"net_in_kwh": 0.0, "net_inkoop_eur": 0.0,
+                                        "geleverd_kwh": 0.0, "opbrengst_eur": 0.0,
+                                        "net_marge_eur": 0.0, "net_uit_ac_kwh": 0.0})
+
+
 def _verwerk(partijen, tel, dag, r, delta, eta_laad, eta_ontlaad, slijtage_eur) -> None:
+    """Een kwartier zonder meting: uit de verandering van de laadstand."""
     prijs = _getal(r, "prijs_ct")
     if prijs is None or abs(delta) < STAP_KWH:
         return
     prijs /= 100
-    dagtel = tel.per_dag.setdefault(dag, {"net_in_kwh": 0.0, "net_inkoop_eur": 0.0,
-                                          "geleverd_kwh": 0.0, "opbrengst_eur": 0.0,
-                                          "net_marge_eur": 0.0, "net_uit_ac_kwh": 0.0})
     if delta > 0:
-        net = _aandeel_net(r)
-        verwacht = _getal(r, "laad_waarde_ct")
-        for bron, deel in (("net", net), ("zon", 1.0 - net)):
-            kwh = delta * deel
-            if kwh <= 0:
-                continue
-            ac = kwh / eta_laad
-            tel.t[bron]["in_kwh"] += ac
-            tel.t[bron]["inkoop_eur"] += ac * prijs
-            if bron == "net":
-                dagtel["net_in_kwh"] += ac
-                dagtel["net_inkoop_eur"] += ac * prijs
-            partijen.append(Partij(kwh, prijs, bron, dag,
-                                   verwacht / 100 if bron == "net" and verwacht is not None else None))
+        _boek_lading(partijen, tel, dag, r, delta, eta_laad, prijs)
         return
     weg = -delta
     ontlaadt = (_getal(r, "accu_w") or 0.0) > STIL_W or (
         (_getal(r, "huis_w") or 0.0) > (_getal(r, "pv_w") or 0.0) + STIL_W
     )
-    while weg > 1e-9 and partijen:
+    if not ontlaadt:
+        _rust(partijen, tel, weg, eta_laad)
+        return
+    _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijtage_eur)
+
+
+def _boek_lading(partijen, tel, dag, r, opgeslagen, eta_laad, prijs) -> None:
+    """`opgeslagen` kWh erbij, verdeeld over net en zon naar de netmeter."""
+    dagtel = _dagtel(tel, dag)
+    net = _aandeel_net(r)
+    verwacht = _getal(r, "laad_waarde_ct")
+    for bron, deel in (("net", net), ("zon", 1.0 - net)):
+        kwh = opgeslagen * deel
+        if kwh <= 0:
+            continue
+        ac = kwh / eta_laad
+        tel.t[bron]["in_kwh"] += ac
+        tel.t[bron]["inkoop_eur"] += ac * prijs
+        if bron == "net":
+            dagtel["net_in_kwh"] += ac
+            dagtel["net_inkoop_eur"] += ac * prijs
+        partijen.append(Partij(kwh, prijs, bron, dag,
+                               verwacht / 100 if bron == "net" and verwacht is not None else None))
+
+
+def _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijtage_eur) -> None:
+    """`weg` kWh uit de oudste partijen; elke kWh uit de cellen levert
+    `eta_ontlaad` kWh aan het huis of het net. Slijtage per kWh door de
+    cellen (v5.167.0: niet meer per kWh die erin ging)."""
+    dagtel = _dagtel(tel, dag)
+    rest = weg
+    while rest > 1e-9:
+        if not partijen:
+            # meer geleverd dan er bijgehouden was: de rest uit onbekende voorraad
+            geleverd = rest * eta_ontlaad
+            dagtel["geleverd_kwh"] += geleverd
+            dagtel["opbrengst_eur"] += geleverd * prijs
+            tel.onbekend_geleverd_kwh += geleverd
+            break
         p = partijen[0]
-        x = min(p.kwh, weg)
+        x = min(p.kwh, rest)
         p.kwh -= x
-        weg -= x
+        rest -= x
         if p.kwh <= 1e-9:
             partijen.pop(0)
-        if not ontlaadt:
-            tel.rust_kwh += x
-            if p.bron != "begin":
-                tel.rust_eur += x / eta_laad * p.inkoop_eur
-            continue
         geleverd = x * eta_ontlaad
         dagtel["geleverd_kwh"] += geleverd
         dagtel["opbrengst_eur"] += geleverd * prijs
         if p.bron == "begin":
+            tel.onbekend_geleverd_kwh += geleverd
             continue
         ac = x / eta_laad                      # wat er voor dit deel in ging
         t = tel.t[p.bron]
         t["uit_kwh"] += ac
         t["geleverd_kwh"] += geleverd
         t["opbrengst_eur"] += geleverd * prijs
-        t["kosten_uit_eur"] += ac * (p.inkoop_eur + slijtage_eur)
+        t["kosten_uit_eur"] += ac * p.inkoop_eur + x * slijtage_eur
         # per kWh die erin ging: zelfde maat als het laadbesluit
-        gerealiseerd = geleverd * prijs / ac - slijtage_eur
+        gerealiseerd = (geleverd * prijs - x * slijtage_eur) / ac
         if p.bron == "net":
             dagtel["net_uit_ac_kwh"] += ac
             dagtel["net_marge_eur"] += ac * (gerealiseerd - p.inkoop_eur)
@@ -223,7 +355,7 @@ def _verwerk(partijen, tel, dag, r, delta, eta_laad, eta_ontlaad, slijtage_eur) 
                 t["verwacht_eur"] += ac * p.verwacht_eur
                 t["verwacht_ac_kwh"] += ac
                 t["gerealiseerd_bij_verwacht_eur"] += ac * gerealiseerd
-                tel.afwijking.append((p.dag, ac, p.verwacht_eur - gerealiseerd))
+                tel.afwijking.append((p.dag, ac, p.verwacht_eur - gerealiseerd, dag))
 
 
 def _per_kwh(eur: float, kwh: float) -> float | None:
@@ -303,7 +435,16 @@ def _samenvatting(tel: _Teller, partijen: list, eta: float, slijtage_eur: float,
         "nog_in_accu_kwh": {b: round(sum(p.kwh for p in partijen if p.bron == b), 2)
                             for b in ("net", "zon", "begin")},
         "per_dag": dagen,
-        "correctie": correctie(tel.afwijking, nu),
+        # v5.167.0: alles wat de accu leverde (ook uit voorraad met onbekende
+        # inkoop) - hoort bij de AC-teller van de accu te liggen
+        "ontladen_totaal_kwh": round(sum(d["geleverd_kwh"] for d in tel.per_dag.values()), 2),
+        "ontladen_onbekende_inkoop_kwh": round(tel.onbekend_geleverd_kwh, 2),
+        "gemeten_kwartieren": tel.gemeten_kwartieren,
+        "dagen_met_gat": sorted(tel.gat_dagen),
+        "niet_toegerekend_over_gaten_kwh": round(tel.gat_kwh, 2),
+        "correctie": correctie(
+            [(a[0], a[1], a[2]) for a in tel.afwijking
+             if a[0] not in tel.gat_dagen and a[3] not in tel.gat_dagen], nu),
     }
 
 
@@ -349,9 +490,11 @@ RONDE_MIN_KWH = 0.35
 def kwartierreeks(dagverloop: dict, gemeten: dict | None = None) -> list[dict]:
     """Opeenvolgende kwartierparen: Δinhoud en de netkant van de accu.
 
-    `gemeten[dag]["HH:MM"]["accu_kwh"]` (meetlaag: uit - in) als het er is,
-    anders het accuvermogen van het dagverloop / 4000. Een gat van meer dan
-    een kwartier begint opnieuw.
+    De netkant uit `meting_kwartier` (v5.167.0: eerst de eigen kwartiermeting
+    in het dagverloop, dan de meetlaag `gemeten[dag]["HH:MM"]`), anders het
+    accuvermogen van het dagverloop / 4000. `accu_kwh` = eruit - erin;
+    `in_kwh`/`uit_kwh` apart. Een gat van meer dan een kwartier begint
+    opnieuw.
     """
     uit = []
     vorige = None
@@ -362,15 +505,16 @@ def kwartierreeks(dagverloop: dict, gemeten: dict | None = None) -> list[dict]:
             vorige = None
             continue
         if vorige is not None and timedelta(0) < moment - vorige[0] <= timedelta(minutes=16):
-            m = ((gemeten or {}).get(dag) or {}).get(str(r.get("tijd")))
-            if m is not None and m.get("accu_kwh") is not None:
-                accu = float(m["accu_kwh"])
-                bron = "meetlaag"
+            stroom = meting_kwartier(dag, r, gemeten)
+            if stroom is not None:
+                erin, eruit, bron = stroom
+                accu = eruit - erin
             else:
                 accu = (_getal(r, "accu_w") or 0.0) / 4000
-                bron = "vermogen"
+                erin, eruit, bron = max(0.0, -accu), max(0.0, accu), "vermogen"
             uit.append({
                 "dag": dag, "tijd": r.get("tijd"), "delta_kwh": inhoud - vorige[1], "accu_kwh": accu,
+                "in_kwh": erin, "uit_kwh": eruit,
                 "bron": bron, "soc": _getal(r, "soc"), "stand": str(r.get("stand") or ""),
                 "reden": str(r.get("reden") or ""),
             })
@@ -423,6 +567,8 @@ def sluimerverbruik(reeks: list[dict], min_soc: float, bovengrens: float) -> dic
     totaal_kwh = sum(v["kwh"] for v in uit.values())
     return {
         "per_stand": uit,
+        # v5.167.0: over lange stilstandblokken, zonder kwartierfilter
+        "zelfontlading_blokken": sluimer_blokken(reeks, min_soc, bovengrens),
         "stilstand_uren": round(totaal_uren, 1),
         "gemiddeld_w": round(max(0.0, totaal_kwh) / totaal_uren * 1000, 1) if totaal_uren else None,
         "toelichting": (
@@ -430,6 +576,62 @@ def sluimerverbruik(reeks: list[dict], min_soc: float, bovengrens: float) -> dic
             "het net in ging. Vol of leeg komt het uit het net, bij sparen uit de cellen. "
             "Alleen meten; schrijven naar de Zendure is niet goedgekeurd."
         ),
+    }
+
+
+#: v5.167.0: een stilstandblok telt mee vanaf zoveel uur aaneen.
+SLUIMER_BLOK_MIN_UUR = 3.0
+#: Een blok met meer dan dit gemiddeld (W) is geen sluimer maar een meetfout.
+SLUIMER_BLOK_MAX_W = 100.0
+
+
+def _stilstand_blokken(reeks: list[dict]) -> list[list[dict]]:
+    """Aaneengesloten stilstandkwartieren (< 50 W, zonder gat) als blokken."""
+    blokken: list[list[dict]] = []
+    huidig: list[dict] = []
+    vorig = None
+    for q in reeks:
+        moment = _moment(str(q.get("dag")), str(q.get("tijd")))
+        aansluitend = (moment is not None and vorig is not None
+                       and timedelta(0) < moment - vorig <= timedelta(minutes=16))
+        vorig = moment
+        if huidig and (not aansluitend or abs(q["accu_kwh"]) > STIL_KWH):
+            blokken.append(huidig)
+            huidig = []
+        if abs(q["accu_kwh"]) <= STIL_KWH:
+            huidig.append(q)
+    if huidig:
+        blokken.append(huidig)
+    return blokken
+
+
+def sluimer_blokken(reeks: list[dict], min_soc: float, bovengrens: float) -> dict:
+    """Zelfontlading over lange stilstandblokken (v5.167.0, audit punt 8).
+
+    Per kwartier valt een kwartier MET SoC-stap (0,115 kWh) buiten het filter
+    van `sluimerverbruik`, dus de cellen leken nooit iets te verliezen. Over
+    een blok van >= SLUIMER_BLOK_MIN_UUR uur: afname inhoud (begin - eind)
+    plus wat er van het net in ging min wat eruit kwam. De stap van 1 % aan
+    begin en eind middelt over veel blokken uit. Per stand van het eerste
+    kwartier. Alleen meten; stuurt niets.
+    """
+    per: dict = {}
+    for blok in _stilstand_blokken(reeks):
+        uren = len(blok) / 4
+        if uren < SLUIMER_BLOK_MIN_UUR:
+            continue
+        kwh = -sum(q["delta_kwh"] for q in blok) - sum(q["accu_kwh"] for q in blok)
+        if abs(kwh) / uren * 1000 > SLUIMER_BLOK_MAX_W:
+            continue
+        t = per.setdefault(_stilstand_soort(blok[0], min_soc, bovengrens), {"blokken": 0, "uren": 0.0, "kwh": 0.0})
+        t["blokken"] += 1
+        t["uren"] += uren
+        t["kwh"] += kwh
+    return {
+        soort: {"blokken": t["blokken"], "uren": round(t["uren"], 1), "kwh": round(t["kwh"], 3),
+                "gemiddeld_w": round(t["kwh"] / t["uren"] * 1000, 1),
+                "betrouwbaar": t["uren"] >= SLUIMER_MIN_UUR and t["blokken"] >= 3}
+        for soort, t in per.items()
     }
 
 
@@ -552,6 +754,44 @@ def laadrendement_uit_banden(banden: dict | None) -> float | None:
             teller += b["kwh"] * b["rendement_procent"] / 100
             noemer += b["kwh"]
     return teller / noemer if noemer > 0 else None
+
+
+#: v5.167.0: het geleerde laad-/ontlaadrendement uit hele rondes vanaf zoveel
+#: rondes en zoveel kWh aan de netkant per richting.
+RONDES_MIN = 3
+RONDES_MIN_KWH = 5.0
+
+
+def rendement_over_rondes(reeks: list[dict]) -> dict:
+    """Laad- en ontlaadrendement over ALLE hele rondes samen (v5.167.0, audit punt 3).
+
+    Laden: som toename inhoud / som AC erin. Ontladen: som AC eruit / som
+    afname inhoud. Per ronde dezelfde toets als de banden (`_ronde_meting`:
+    tot BAND_RENDEMENT_MAX + RONDE_RENDEMENT_SPELING, dus ontladen mag per
+    ronde tot 1,15 - de SoC-stap laat een ronde daar eerlijk overheen gaan);
+    de uitkomst afgekapt op 1,0. Geen mediaan van losse stukken en geen
+    weggooien boven 100 %: dat gaf ontladen 96 % tegen ~100 % op de meter.
+    Per richting None tot RONDES_MIN rondes en RONDES_MIN_KWH.
+    """
+    som = {"laden": [0, 0.0, 0.0], "ontladen": [0, 0.0, 0.0]}
+    for r in laad_ontlaadrondes(reeks):
+        meting = _ronde_meting(r)
+        if meting is None:
+            continue
+        t = som[r["richting"]]
+        t[0] += 1
+        t[1] += meting[0]
+        t[2] += meting[1]
+    uit = {}
+    for richting, (n, teller, noemer) in som.items():
+        ac = noemer if richting == "laden" else teller
+        eta = min(BAND_RENDEMENT_MAX, teller / noemer) if noemer > 0 else None
+        uit[richting] = {
+            "rondes": n, "ac_kwh": round(ac, 2),
+            "rendement": eta if (n >= RONDES_MIN and ac >= RONDES_MIN_KWH) else None,
+            "rendement_procent": round(eta * 100, 1) if eta is not None else None,
+        }
+    return uit
 
 
 def band_rendement(banden: dict | None, richting: str, vermogen_w: float | None, terugval: float) -> float:

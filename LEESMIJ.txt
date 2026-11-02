@@ -1,3 +1,25 @@
+EMS v5.167.0 - accuberekeningen kloppen met de kWh-meter
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De nacalculatie van de accu (accukosten) telt het ontladen nu uit de
+  gemeten energie per kwartier. Eerder telde hij ~132 kWh waar de meter
+  ~150 kWh zag, en na een gat in de gegevens telde wat daarna ontlaadde
+  niet meer mee.
+- Laad- en ontlaadrendement worden over hele laad- en ontlaadrondes
+  geleerd: laden ~82 % (was 86 %), ontladen ~100 % (was 96 %). Heen en
+  terug blijft ~82-85 %.
+- Slijtage bij laden telt per kWh die echt in de cellen komt (~3,5 ct in
+  plaats van 4,2 ct per kWh uit het net).
+- Verkopen op hoog vermogen rekent met hetzelfde gemeten ontlaadrendement
+  als het huis dekken.
+- Onder de min-laadstand is de beschikbare energie 0 (niet een oude waarde).
+- "Besparing deze maand" op de besparingssensor is nu hetzelfde getal als
+  de sensor; het oude getal staat erbij als "ongecorrigeerd".
+- Tip: bij de EMS-instellingen kunnen nu de ontlaad- en laadmeter van de
+  accu allebei gekozen worden. Kies daar de kWh-meter van de accu
+  (zendure_batterij_energie_export / _energy_import) voor de beste meting.
+
 EMS v5.166.1 - waarschuwing over twee geldsensoren weg
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

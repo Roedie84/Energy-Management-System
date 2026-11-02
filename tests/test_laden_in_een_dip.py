@@ -40,7 +40,8 @@ def test_een_winderige_nacht_loont(make_coordinator, hass):
     besluit = c._dipbesluit(NU, BLOK)
 
     assert besluit["laden"] is True
-    assert besluit["marge_ct"] == pytest.approx(7.1, abs=0.1)
+    # v5.167.0: slijtage 11,4 x 83,7 % = 9,5 ct per kWh die erin gaat -> 7,1 + 1,9
+    assert besluit["marge_ct"] == pytest.approx(8.9, abs=0.1)
     assert besluit["gat_kwh"] == 2.0  # nooit meer dan er tot het blok ontbreekt
 
 

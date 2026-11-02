@@ -55,7 +55,9 @@ def test_27_september_had_moeten_laden(make_coordinator, hass):
     besluit = c.laadbesluit_uit_het_net(NU, *BLOK)
 
     assert besluit["laden"] is True
-    assert besluit["marge_ct"] == pytest.approx(7.6, abs=0.2)
+    # v5.167.0: slijtage per kWh die erin gaat = 11,4 x 83,7 % = 9,5 ct
+    # (was 11,4: de slijtage telt per kWh door de cellen) -> marge 7,6 + 1,9
+    assert besluit["marge_ct"] == pytest.approx(9.5, abs=0.2)
 
 
 def test_de_zon_vult_de_accu_dan_niet_laden(make_coordinator, hass):
@@ -182,7 +184,7 @@ def test_de_waarom_regels_tonen_de_getallen_van_het_besluit(make_coordinator, ha
 
     assert "stroom kost nu 13.1 ct" in regels
     assert "38.4 ct x 84%" in regels
-    assert "11.4 ct slijtage" in regels
+    assert "9.5 ct slijtage" in regels   # v5.167.0: 11,4 x 83,7 % per kWh die erin gaat
 
 
 

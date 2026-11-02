@@ -88,6 +88,9 @@ class Accu:
     #: ((bovengrens_w, rendement of None), ...) oplopend. Leeg of None in
     #: een band = het ene getal (rondrit / laadrendement).
     ontlaadbanden: tuple = ()
+    #: v5.167.0: het gemeten ontlaadrendement over alle rondes (fractie);
+    #: None = rondrit / laden. Ook de terugval voor een onbetrouwbare band.
+    rendement_ontladen: float | None = None
 
 
 @dataclass
@@ -123,6 +126,11 @@ def rendementen(accu: Accu) -> tuple[float, float]:
     Ontladen: rondrit / laden (zoals de nacalculatie in accukosten.py).
     """
     rondrit = max(0.5, min(1.0, accu.rendement))
+    if accu.rendement_laden and accu.rendement_ontladen:
+        # v5.167.0: beide gemeten (hele rondes) - zelfde grondslag voor
+        # huisband en terugval.
+        return (max(0.5, min(1.0, accu.rendement_laden)),
+                max(0.5, min(1.0, accu.rendement_ontladen)))
     if accu.rendement_laden:
         eta_l = max(0.5, min(1.0, accu.rendement_laden))
         return eta_l, max(0.5, min(1.0, rondrit / eta_l))

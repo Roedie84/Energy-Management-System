@@ -130,6 +130,7 @@ from .const import (
     CONF_FEEDIN_PRICE_ATTRIBUTE,
     CONF_PRICE_ATTRIBUTE,
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
+    CONF_BATTERY_CHARGE_ENERGY_SENSOR,
     CONF_CONTRACT_START_DATE,
     CONF_COST_ENERGY_SENSOR,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
@@ -350,6 +351,12 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 selector.EntitySelectorConfig(domain="sensor")
             ),
             _optioneel(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR, defaults): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            # v5.167.0: de laadteller ernaast (meetlaag), zodat beide tellers
+            # van dezelfde kWh-meter kunnen komen; leeg = de naamgenoot van
+            # de ontlaadteller, als voorheen.
+            _optioneel(CONF_BATTERY_CHARGE_ENERGY_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
             _optioneel(CONF_COST_ENERGY_SENSOR, defaults): selector.EntitySelector(

@@ -3514,7 +3514,12 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
             "tegenfeitelijke_kosten_deze_maand_eur": round(
                 c.counterfactual_cost_current_month_eur, 2
             ),
-            "besparing_deze_maand_eur": round(
+            # v5.167.0 (audit punt 9): één bron met de sensor "Besparing deze
+            # maand" (verschil van het gecorrigeerde totaal sinds de 1e). De
+            # rauwe som van de dagkosten, zonder correctie voor de
+            # accu-inhoud, staat er apart en zo benoemd bij.
+            "besparing_deze_maand_eur": c.besparing_deze_maand_eur(),
+            "besparing_deze_maand_ongecorrigeerd_eur": round(
                 c.counterfactual_cost_current_month_eur
                 - c.actual_cost_current_month_eur,
                 2,
@@ -4170,26 +4175,18 @@ class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        c = self._coordinator
         return {
-            "history": self._coordinator.learned_efficiency_history,
+            # v5.167.0 (audit 02-11): `history` weg - die lijst
+            # (learned_efficiency_history, [95.5 ... 56.4]) wordt sinds de
+            # halve slagen nergens meer bijgeschreven. Nu de halve rendementen
+            # waar de toestand uit volgt.
+            "laadrendement_procent": c.learned_charge_efficiency_percent,
+            "ontlaadrendement_procent": c.learned_discharge_efficiency_percent,
+            "uit_hele_rondes": c._rendement_uit_rondes(),
             # v5.115.0: wat de accu werkelijk kost en oplevert (cockpit)
-            "accukosten": self._coordinator.get_accukosten(),
+            "accukosten": c.get_accukosten(),
         }
-
-    @_store_wint
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is None:
-            return
-        raw_history = last_state.attributes.get("history")
-        if isinstance(raw_history, list):
-            try:
-                self._coordinator.learned_efficiency_history = [
-                    float(v) for v in raw_history
-                ]
-            except (TypeError, ValueError):
-                pass
 
 
 class ApplianceUsageHoursSensor(SensorEntity, RestoreEntity):

@@ -1875,6 +1875,12 @@ EFFICIENCY_HALF_HISTORY = 20
 # Per halve slag is minder dan 70% onmogelijk; dat is een meetfout.
 MIN_PLAUSIBLE_HALF_EFFICIENCY_PERCENT = 70.0
 MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT = 100.0
+# v5.167.0 (audit 02-11): een ontlaadstuk mag tot 115 % uitkomen voor het
+# als meetfout geldt. De laadstand is op de bruikbare afgifte geijkt
+# (ontladen op de kWh-meter ~100 %) en loopt in stappen van 1 % = 0,115 kWh;
+# alles boven 100 % weggooien hield alleen de stukken die te laag uitvielen
+# (dezelfde selectie als bij de banden). De mediaan wordt op 100 % afgekapt.
+MAX_PLAUSIBLE_DISCHARGE_SEGMENT_PERCENT = 115.0
 
 # Onder dit aantal metingen per kant geen uitspraak - dan blijft de oude
 # schatting gelden.

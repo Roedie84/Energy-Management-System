@@ -69,6 +69,7 @@ from . import waardeplan as waardeplan_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .const import (
     ACCU_MEETREEKS_DAGEN,
+    MAX_PLAUSIBLE_DISCHARGE_SEGMENT_PERCENT,
     HERSPEEL_DAGEN,
     HERSPEEL_VERSIES,
     P1_VERSCHIL_MONSTERS,
@@ -4274,11 +4275,13 @@ class EnergyManagementSystemCoordinator:
         # 100,00000000000001 uitkomt is gewoon 100 en hoort niet als
         # onmogelijk weggegooid te worden.
         percentage = round(percentage, 1)
-        if not (
-            MIN_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
-            <= percentage
-            <= MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
-        ):
+        # v5.167.0: ontladen tot 115 % toelaten (zie
+        # MAX_PLAUSIBLE_DISCHARGE_SEGMENT_PERCENT); de mediaan kapt op 100 af.
+        bovengrens = (
+            MAX_PLAUSIBLE_DISCHARGE_SEGMENT_PERCENT if richting > 0
+            else MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
+        )
+        if not (MIN_PLAUSIBLE_HALF_EFFICIENCY_PERCENT <= percentage <= bovengrens):
             _LOGGER.debug(
                 "Rendementsstuk verworpen: %.1f%% (richting %s, ac %.2f kWh, "
                 "voorraadverschil %.2f kWh)",
@@ -4289,7 +4292,7 @@ class EnergyManagementSystemCoordinator:
             )
             self._tel_afwijzing(
                 "te_hoog"
-                if percentage > MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
+                if percentage > bovengrens
                 else "te_laag",
                 percentage,
                 richting,
@@ -4304,17 +4307,53 @@ class EnergyManagementSystemCoordinator:
 
     @property
     def learned_charge_efficiency_percent(self) -> float | None:
-        """Laadrendement, mediaan van de metingen (v1.32.0)."""
+        """Laadrendement (v1.32.0; v5.167.0 uit hele rondes).
+
+        v5.167.0 (audit 02-11): eerst over alle hele laadrondes samen uit de
+        accu-meetreeks (`_rendement_uit_rondes`: kwartiermeting / meetlaag),
+        dezelfde meting als de banden. De mediaan van de stukken (86,3 %,
+        spreiding 72,9-93,3) lag boven de kWh-meter (~81-83 %). Zonder
+        genoeg rondes de mediaan als voorheen."""
+        gemeten = self._rendement_uit_rondes().get("laden")
+        if gemeten is not None:
+            return gemeten
         if len(self.charge_efficiency_history) < MIN_HALF_EFFICIENCY_SAMPLES:
             return None
         return statistics.median(self.charge_efficiency_history)
 
     @property
     def learned_discharge_efficiency_percent(self) -> float | None:
-        """Ontlaadrendement, mediaan van de metingen (v1.32.0)."""
+        """Ontlaadrendement (v1.32.0; v5.167.0 uit hele rondes, max. 100 %).
+
+        v5.167.0: eerst over alle hele ontlaadrondes samen; anders de mediaan
+        van de stukken, die nu tot 115 % meetellen en op 100 % worden
+        afgekapt (alles boven 100 % weggooien gaf 96,2 % tegen ~100 %)."""
+        gemeten = self._rendement_uit_rondes().get("ontladen")
+        if gemeten is not None:
+            return gemeten
         if len(self.discharge_efficiency_history) < MIN_HALF_EFFICIENCY_SAMPLES:
             return None
-        return statistics.median(self.discharge_efficiency_history)
+        return min(100.0, statistics.median(self.discharge_efficiency_history))
+
+    def _rendement_uit_rondes(self) -> dict:
+        """{"laden": %, "ontladen": %} uit hele rondes, of leeg (v5.167.0).
+
+        Eén keer per accu-meetreeks berekend (die wordt per uur opgebouwd).
+        Mag nooit iets breken: zonder dagverloop of bij een fout leeg, en dan
+        geldt de mediaan van de stukken."""
+        try:
+            from . import accukosten as A
+
+            reeks = self._accu_meetreeks()
+            bewaard = getattr(self, "_rendement_rondes_cache", None)
+            if bewaard is not None and bewaard[0] is reeks:
+                return bewaard[1]
+            r = A.rendement_over_rondes(reeks)
+            uit = {k: round(v["rendement"] * 100, 1) for k, v in r.items() if v.get("rendement")}
+            self._rendement_rondes_cache = (reeks, uit, r)
+            return uit
+        except Exception:  # noqa: BLE001 - leren mag de sturing nooit raken
+            return {}
 
     def get_efficiency_overview(self) -> dict:
         """Waar het rendement vandaan komt (v1.32.0).
@@ -4338,8 +4377,12 @@ class EnergyManagementSystemCoordinator:
             "metingen_ontladen": len(self.discharge_efficiency_history),
             "metingen_laden_reeks": list(self.charge_efficiency_history),
             "metingen_ontladen_reeks": list(self.discharge_efficiency_history),
+            # v5.167.0: hele rondes uit de meetreeks gaan voor
+            "uit_hele_rondes": self._rendement_uit_rondes(),
+            "rondes": (getattr(self, "_rendement_rondes_cache", None) or (None, None, {}))[2],
             "methode": (
-                "per halve slag"
+                "hele rondes (meetreeks)" if self._rendement_uit_rondes()
+                else "per halve slag"
                 if laden is not None and ontladen is not None
                 else "oude methode (hele venster)"
             ),
@@ -9346,6 +9389,12 @@ class EnergyManagementSystemCoordinator:
             # module. De terugval hieronder komt uit de brug, die al
             # gecorrigeerd is.
             return self._na_module_leeg(gemeten)
+        if gemeten is not None:
+            # v5.167.0 (audit 02-11): onder de min-SoC meldt de Zendure een
+            # negatieve beschikbare energie (-0,576 gezien). Dat is een
+            # verse meting van "niets bruikbaar", geen storing: 0, niet de
+            # (mogelijk oude) terugval hieronder.
+            return 0.0
 
         # v3.50.0: het bijproduct mag terugval blijven, maar alleen
         # zolang het VERS is.
@@ -16249,9 +16298,10 @@ class EnergyManagementSystemCoordinator:
         eta_o = ontladen / 100 if ontladen else heen_terug / eta_l
         slijtage = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
         banden = self.get_rendement_per_band(now)
+        gemeten = self._gemeten_voor_accukosten(now)
         try:
             uit = A.doorreken(self.dagverloop or {}, eta_l, min(1.0, eta_o), (slijtage or 0.0) / 100, now,
-                              banden=banden)
+                              banden=banden, gemeten=gemeten)
         except Exception as fout:  # noqa: BLE001 - nacalculatie mag de sturing nooit raken
             _LOGGER.debug("Accukosten niet doorgerekend", exc_info=True)
             uit = {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
@@ -16270,6 +16320,15 @@ class EnergyManagementSystemCoordinator:
         self._accukosten_cache = (sleutel, uit)
         return uit
 
+    def _gemeten_voor_accukosten(self, now: datetime) -> dict:
+        """De meetlaag per dag voor de nacalculatie (v5.167.0): dezelfde
+        kwartieren als de accu-meetreeks (eens per uur opgebouwd)."""
+        try:
+            self._accu_meetreeks(now)
+        except Exception:  # noqa: BLE001 - zonder meetlaag de laadstand
+            return {}
+        return getattr(self, "_accu_meetreeks_gemeten", None) or {}
+
     def laadcorrectie_ct(self) -> float:
         """De datacorrectie op netladen, in ct/kWh (v5.115.0)."""
         return round(((self.get_accukosten().get("correctie") or {}).get("eur") or 0.0) * 100, 2)
@@ -16281,7 +16340,9 @@ class EnergyManagementSystemCoordinator:
         slijtage = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
         if slijtage is None:
             return None
-        return slijtage + self.laadcorrectie_ct()
+        # v5.167.0 (audit 02-11): de slijtage geldt per kWh door de cellen;
+        # van een kWh die erin gaat komt laadrendement x 1 kWh in de cellen.
+        return slijtage * self._plan_laadrendement(self.learned_battery_efficiency_percent) + self.laadcorrectie_ct()
 
     def _laad_waarde_ct(self) -> float | None:
         """Wat het laadbesluit van dit moment verwachtte dat een kWh uit het
@@ -27746,6 +27807,12 @@ class EnergyManagementSystemCoordinator:
             # waard wordt, zodat de nacalculatie (accukosten.py) het kan toetsen.
             "laad_waarde_ct": self._laad_waarde_ct(),
         }
+        # v5.167.0 (audit 02-11): de AC-energie van de accu over dit kwartier,
+        # uit het accuvermogen (dat op het uur gelijk loopt met de kWh-meter).
+        try:
+            regel.update(self._accu_kwartiermeting(now, kwartier))
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Kwartiermeting accu niet bepaald", exc_info=True)
         # v5.81 (L-EMS-018): de getallen van de verkooptoets en het
         # spaarplan erbij, zodat achteraf vast te stellen is of een verkoop
         # onder de reserve tot het blok zakte, en of spaarplan en
@@ -27775,6 +27842,53 @@ class EnergyManagementSystemCoordinator:
         self.noteer_meting_gevuld("dagverloop")
         for oud in sorted(self.dagverloop)[:-DAGVERLOOP_DAGEN]:
             self.dagverloop.pop(oud, None)
+
+    #: v5.167.0: langer dan dit tussen twee rondes telt niet als gemeten.
+    ACCU_KWARTIER_MAX_STAP_S = 180.0
+
+    def _accu_kwartiermeting(self, now: datetime, kwartier: datetime) -> dict:
+        """AC erin/eruit van de accu in dit kwartier, opgeteld per ronde (v5.167.0).
+
+        Elke ronde telt het vermogen van de vorige ronde over de tijd sinds
+        die ronde (linker som), voor zover die tijd in dit kwartier valt.
+        Langer dan ACCU_KWARTIER_MAX_STAP_S tussen twee rondes: dat stuk telt
+        niet. Wat er gemeten is wordt naar het hele kwartier opgeschaald;
+        `accu_dekking` zegt welk deel gemeten is (de nacalculatie gebruikt
+        het vanaf 80 %). Zo staat de energie per kwartier in het dagverloop,
+        los van de accutellers van de meetlaag.
+        """
+        vermogen = self._read_corrected_battery_power()   # + = ontladen
+        st = getattr(self, "_accu_kwartier_som", None)
+        if st is None or st["kwartier"] != kwartier:
+            nieuw = {"kwartier": kwartier, "in": 0.0, "uit": 0.0, "s": 0.0}
+            if st is not None and st.get("t") is not None and st.get("w") is not None:
+                # het stuk van de vorige ronde tot nu, voor zover in dit kwartier
+                stap = (now - st["t"]).total_seconds()
+                if 0 < stap <= self.ACCU_KWARTIER_MAX_STAP_S:
+                    self._accu_kwartier_tel(nieuw, st["w"], min(stap, (now - kwartier).total_seconds()))
+            st = nieuw
+        elif st.get("t") is not None and st.get("w") is not None:
+            stap = (now - st["t"]).total_seconds()
+            if 0 < stap <= self.ACCU_KWARTIER_MAX_STAP_S:
+                self._accu_kwartier_tel(st, st["w"], stap)
+        st["t"], st["w"] = now, vermogen
+        self._accu_kwartier_som = st
+        if st["s"] <= 0:
+            return {}
+        schaal = 900.0 / st["s"]
+        return {
+            "accu_in_kwh": round(st["in"] * schaal, 4),
+            "accu_uit_kwh": round(st["uit"] * schaal, 4),
+            "accu_dekking": round(min(1.0, st["s"] / 900.0), 2),
+        }
+
+    @staticmethod
+    def _accu_kwartier_tel(st: dict, vermogen_w: float, seconden: float) -> None:
+        if seconden <= 0:
+            return
+        kwh = abs(vermogen_w) * seconden / 3600 / 1000
+        st["uit" if vermogen_w > 0 else "in"] += kwh
+        st["s"] += seconden
 
     def _dagverloop_verkoopvelden(self, regel: dict) -> dict:
         """Verkooptoets en spaarplan van dit moment, voor het dagverloop
@@ -37092,6 +37206,13 @@ class EnergyManagementSystemCoordinator:
             laden = self.learned_charge_efficiency_percent / 100
         if laden:
             uit["rendement_laden"] = laden
+        # v5.167.0 (audit punt 4): een onbetrouwbare ontlaadband viel terug op
+        # rondrit / laden (0,83/0,819 -> 1,0) terwijl de huisband 95,8 % had:
+        # verkopen op hoog vermogen leek ~4 pt zuiniger. Nu het gemeten
+        # ontlaadrendement over alle rondes (zelfde grondslag) als terugval.
+        ontladen = self.learned_discharge_efficiency_percent
+        if ontladen:
+            uit["rendement_ontladen"] = min(1.0, ontladen / 100)
         banden = alle.get("ontladen") or {}
         grenzen = tuple(A.BANDEN_W) + (math.inf,)
         rijen = []
@@ -52763,6 +52884,8 @@ class EnergyManagementSystemCoordinator:
             uit[sleutel] = {
                 "huis_kwh": r["house_kwh"], "pv_kwh": r["pv_kwh"],
                 "accu_kwh": r["battery_out_kwh"] - r["battery_in_kwh"],
+                # v5.167.0: apart, voor de nacalculatie (accukosten)
+                "accu_in_kwh": r["battery_in_kwh"], "accu_uit_kwh": r["battery_out_kwh"],
             }
         return uit
 
@@ -54687,10 +54810,17 @@ class EnergyManagementSystemCoordinator:
 
         now = now or dt_util.now()
         sleutel = f"{now:%Y-%m-%d %H}"
+        # v5.167.0 (audit 02-11): zolang de meetlaag na een herstart zijn
+        # dagen nog terugleest, is `_gemeten_kwartieren` leeg. De reeks werd
+        # dan voor het hele uur zonder meetlaag bewaard (live:
+        # kwartieren_uit_de_meetlaag 0). Nu alleen per minuut tot hij klaar is.
+        laag = getattr(self, "_meetlaag", None)
+        if laag is not None and not getattr(laag, "_laden_klaar", True):
+            sleutel = f"{now:%Y-%m-%d %H:%M} laden"
         bewaard = getattr(self, "_accu_meetreeks_cache", None)
         if bewaard and bewaard[0] == sleutel:
             return bewaard[1]
-        verloop = self.dagverloop or {}
+        verloop = getattr(self, "dagverloop", None) or {}
         gemeten = {}
         for dag in sorted(verloop)[-ACCU_MEETREEKS_DAGEN:]:
             try:
@@ -54704,6 +54834,7 @@ class EnergyManagementSystemCoordinator:
             _LOGGER.debug("Accu-meetreeks niet opgebouwd", exc_info=True)
             reeks = []
         self._accu_meetreeks_cache = (sleutel, reeks)
+        self._accu_meetreeks_gemeten = gemeten   # v5.167.0: ook voor de accukosten
         return reeks
 
     def get_sluimerverbruik(self, now: datetime | None = None) -> dict:
@@ -54714,6 +54845,9 @@ class EnergyManagementSystemCoordinator:
         reeks = self._accu_meetreeks(now)
         uit = A.sluimerverbruik(reeks, float(self.effective_min_soc_percent()), self._bovengrens_procent())
         uit["kwartieren_uit_de_meetlaag"] = sum(1 for q in reeks if q.get("bron") == "meetlaag")
+        # v5.167.0: de eigen kwartiermeting in het dagverloop (accuvermogen opgeteld)
+        uit["kwartieren_uit_de_kwartiermeting"] = sum(1 for q in reeks if q.get("bron") == "kwartiermeting")
+        uit["kwartieren_uit_het_vermogen"] = sum(1 for q in reeks if q.get("bron") == "vermogen")
         uit["dagen"] = len({q["dag"] for q in reeks})
         return uit
 
