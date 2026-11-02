@@ -209,3 +209,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 17:46 | luchtreiniger aanwezig-herbeoordeling <15 min na herstart gaat naar mid (marge telt pas na 15 min uptime, 5 wissels)
 02-11 18:25 | updates installeren ems 5.162.1 (hacs) + ha herstarten
 02-11 18:25 | ems uitleg loopt achter op waardeplan (laadbesluit_sinds_9u leeg, blok 23:30 vs laadplan 23:45)
+02-11 18:55 | ems plantabel net_w lopend kwartier niet geschaald (10.511 w bij 559 w huis, _waardeplan_net_kwh)
