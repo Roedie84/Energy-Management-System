@@ -327,10 +327,23 @@ BAND_NAMEN = ("<500 W", "500-1500 W", ">1500 W")
 BAND_MIN_KWARTIEREN = 40
 BAND_MIN_KWH = 5.0
 #: Een kwartier telt alleen mee als er minstens dit door de accu ging (kWh).
+#: v5.166.0: niet meer gebruikt door `rendement_per_band` (zie RONDE_*);
+#: blijft staan voor wie er nog naar verwijst.
 BAND_MIN_KWARTIER_KWH = 0.03
 #: Rendementen buiten deze grenzen zijn meetfouten (SoC-stap, gat).
 BAND_RENDEMENT_MIN = 0.5
 BAND_RENDEMENT_MAX = 1.0
+#: v5.166.0: een ronde (laden of ontladen) mag per ronde tot zoveel boven
+#: BAND_RENDEMENT_MAX uitkomen voor hij als meetfout geldt. Ontladen in
+#: inhoud-eenheden is gemeten ~1,0 (de SoC is op de bruikbare afgifte
+#: geijkt); de SoC-stap van 1 % laat een ronde daar eerlijk overheen gaan.
+#: De uitkomst per band blijft op BAND_RENDEMENT_MAX afgekapt.
+RONDE_RENDEMENT_SPELING = 0.15
+#: Een ronde telt pas mee met minstens zoveel kWh aan de netkant (~3
+#: SoC-stappen van 0,115 kWh). Bewust op de AC-kant geselecteerd, niet op
+#: de inhoud: selecteren op de SoC-stap brengt precies de vertekening terug
+#: die v5.166.0 weghaalt.
+RONDE_MIN_KWH = 0.35
 
 
 def kwartierreeks(dagverloop: dict, gemeten: dict | None = None) -> list[dict]:
@@ -428,34 +441,93 @@ def _band(kw: float) -> int:
     return len(BANDEN_W)
 
 
+def _richting(accu_kwh: float) -> str | None:
+    """'laden', 'ontladen' of None (stilstand, < 50 W) voor één kwartier."""
+    if accu_kwh >= STIL_KWH:
+        return "ontladen"
+    if accu_kwh <= -STIL_KWH:
+        return "laden"
+    return None
+
+
+def laad_ontlaadrondes(reeks: list[dict]) -> list[dict]:
+    """De aaneengesloten laad- en ontlaadrondes uit de kwartierreeks (v5.166.0).
+
+    Een ronde = opeenvolgende kwartieren zonder gat (hooguit 16 min tussen
+    twee kwartieren, als in `kwartierreeks`) die dezelfde kant op gaan
+    (laden of ontladen, >= 50 W). Stilstand, een gat of omdraaien sluit de
+    ronde. Kwartieren zonder SoC-stap tellen gewoon mee: over de hele ronde
+    middelt de stap van 1 % uit. Per ronde: richting, kwartieren, AC-energie
+    (|accu_kwh| opgeteld) en het inhoudsverschil (delta_kwh opgeteld).
+    """
+    rondes: list[dict] = []
+    huidig = None
+    vorig_moment = None
+    for q in reeks:
+        moment = _moment(str(q.get("dag")), str(q.get("tijd")))
+        aansluitend = (
+            moment is not None and vorig_moment is not None
+            and timedelta(0) < moment - vorig_moment <= timedelta(minutes=16)
+        )
+        vorig_moment = moment
+        richting = _richting(q["accu_kwh"])
+        if huidig is not None and (not aansluitend or richting != huidig["richting"]):
+            rondes.append(huidig)
+            huidig = None
+        if richting is None:
+            continue
+        if huidig is None:
+            huidig = {"richting": richting, "kwartieren": 0, "ac_kwh": 0.0, "delta_kwh": 0.0}
+        huidig["kwartieren"] += 1
+        huidig["ac_kwh"] += abs(q["accu_kwh"])
+        huidig["delta_kwh"] += q["delta_kwh"]
+    if huidig is not None:
+        rondes.append(huidig)
+    return rondes
+
+
+def _ronde_meting(r: dict) -> tuple[float, float] | None:
+    """(teller, noemer) van een ronde, of None als hij niet meetelt."""
+    ac, d = r["ac_kwh"], r["delta_kwh"]
+    if ac < RONDE_MIN_KWH:
+        return None
+    if r["richting"] == "laden":
+        teller, noemer = d, ac           # toename inhoud / wat erin ging
+    else:
+        teller, noemer = ac, -d          # wat eruit kwam / afname inhoud
+    if teller <= 0 or noemer <= 0:
+        return None
+    if not BAND_RENDEMENT_MIN <= teller / noemer <= BAND_RENDEMENT_MAX + RONDE_RENDEMENT_SPELING:
+        return None
+    return teller, noemer
+
+
 def rendement_per_band(reeks: list[dict]) -> dict:
-    """Laad- en ontlaadrendement per vermogensband (punt 7).
+    """Laad- en ontlaadrendement per vermogensband (punt 7, v5.166.0 per ronde).
 
     Laden: toename inhoud / wat er aan de netkant in ging. Ontladen: wat er
-    aan de netkant uit kwam / afname inhoud. Opgeteld per band (een enkel
-    kwartier is te grof: de inhoud komt uit de laadstand).
+    aan de netkant uit kwam / afname inhoud.
+
+    v5.166.0 (akkoord Ruud 02-11 21:49): over hele laad-/ontlaadrondes, niet
+    meer per kwartier. Per kwartier telde een kwartier alleen mee als de
+    SoC (stappen van 1 % = 115 Wh) bewoog; bij 240 W (60 Wh per kwartier)
+    alleen de kwartieren MET stap, en dan 60 Wh tegen 115 Wh: ontladen onder
+    500 W kwam op 68 % terwijl het gemeten ~100 % is. Nu per ronde
+    (`laad_ontlaadrondes`): de ronde valt in de band van zijn gemiddelde
+    vermogen (een lange ronde wordt niet opgeknipt: eenvoudig, en bij het
+    huis dekken blijft het vermogen grotendeels in één band). De
+    plausibiliteitstoets geldt per ronde. `kwartieren` telt de kwartieren
+    van de meegetelde rondes, zodat de betrouwbaarheidseisen gelijk blijven.
     """
     som = {(r, b): [0, 0.0, 0.0] for r in ("laden", "ontladen") for b in range(len(BAND_NAMEN))}
-    for q in reeks:
-        a, d = q["accu_kwh"], q["delta_kwh"]
-        if abs(a) < BAND_MIN_KWARTIER_KWH:
+    for r in laad_ontlaadrondes(reeks):
+        meting = _ronde_meting(r)
+        if meting is None:
             continue
-        if a < 0 and d > 0:            # laden: a = -(in)
-            eta = d / -a
-            sleutel = ("laden", _band(-a * 4))
-            teller, noemer = d, -a
-        elif a > 0 and d < 0:          # ontladen
-            eta = a / -d
-            sleutel = ("ontladen", _band(a * 4))
-            teller, noemer = a, -d
-        else:
-            continue
-        if not BAND_RENDEMENT_MIN <= eta <= BAND_RENDEMENT_MAX + 0.1:
-            continue
-        t = som[sleutel]
-        t[0] += 1
-        t[1] += teller
-        t[2] += noemer
+        t = som[(r["richting"], _band(r["ac_kwh"] / (r["kwartieren"] / 4)))]
+        t[0] += r["kwartieren"]
+        t[1] += meting[0]
+        t[2] += meting[1]
     uit: dict = {"laden": {}, "ontladen": {}}
     for (richting, b), (n, teller, noemer) in som.items():
         eta = min(BAND_RENDEMENT_MAX, teller / noemer) if noemer > 0 else None
@@ -466,6 +538,20 @@ def rendement_per_band(reeks: list[dict]) -> dict:
             "betrouwbaar": n >= BAND_MIN_KWARTIEREN and noemer >= BAND_MIN_KWH and eta is not None,
         }
     return uit
+
+
+def laadrendement_uit_banden(banden: dict | None) -> float | None:
+    """Het laadrendement over alle betrouwbare laadbanden samen (v5.166.0).
+
+    Gewogen naar de kWh die erin ging; None zolang geen enkele laadband
+    betrouwbaar is.
+    """
+    teller = noemer = 0.0
+    for b in ((banden or {}).get("laden") or {}).values():
+        if b.get("betrouwbaar") and b.get("rendement_procent") and b.get("kwh"):
+            teller += b["kwh"] * b["rendement_procent"] / 100
+            noemer += b["kwh"]
+    return teller / noemer if noemer > 0 else None
 
 
 def band_rendement(banden: dict | None, richting: str, vermogen_w: float | None, terugval: float) -> float:

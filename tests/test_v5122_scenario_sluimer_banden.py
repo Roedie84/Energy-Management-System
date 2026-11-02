@@ -141,18 +141,25 @@ def test_meetlaag_gaat_voor_het_vermogen():
     assert A.sluimerverbruik(reeks, 10, 100)["per_stand"]["vol"]["gemiddeld_w"] == pytest.approx(24.0, abs=0.5)
 
 
-def _laad_ontlaad_reeks(n, laad_w, ontlaad_w, eta_l, eta_o):
+def _laad_ontlaad_reeks(n, laad_w, ontlaad_w, eta_l, eta_o, dag="2026-10-20"):
+    """v5.166.0: een aaneengesloten laadronde van n kwartieren en daarna een
+    ontlaadronde van n kwartieren (met echte tijden). Voorheen wisselden
+    laden en ontladen elk kwartier zonder tijd; `rendement_per_band` meet
+    sinds v5.166.0 per hele ronde, dus dan bestond er geen ronde."""
+    tijden = _tijden(2 * n)
     uit = []
     for i in range(n):
         uit.append({"delta_kwh": laad_w / 4000 * eta_l, "accu_kwh": -laad_w / 4000, "soc": 50,
-                    "stand": "manual", "reden": "", "dag": "d", "tijd": "t", "bron": "meetlaag"})
+                    "stand": "manual", "reden": "", "dag": dag, "tijd": tijden[i], "bron": "meetlaag"})
+    for i in range(n, 2 * n):
         uit.append({"delta_kwh": -ontlaad_w / 4000 / eta_o, "accu_kwh": ontlaad_w / 4000, "soc": 50,
-                    "stand": "smart", "reden": "", "dag": "d", "tijd": "t", "bron": "meetlaag"})
+                    "stand": "smart", "reden": "", "dag": dag, "tijd": tijden[i], "bron": "meetlaag"})
     return uit
 
 
 def test_rendement_per_band():
-    reeks = _laad_ontlaad_reeks(50, 2000, 300, 0.95, 0.85) + _laad_ontlaad_reeks(60, 2000, 2200, 0.95, 0.93)
+    reeks = (_laad_ontlaad_reeks(50, 2000, 300, 0.95, 0.85)
+             + _laad_ontlaad_reeks(60, 2000, 2200, 0.95, 0.93, dag="2026-10-21"))
     banden = A.rendement_per_band(reeks)
     assert banden["ontladen"]["<500 W"]["rendement_procent"] == pytest.approx(85.0, abs=0.2)
     assert banden["ontladen"][">1500 W"]["rendement_procent"] == pytest.approx(93.0, abs=0.2)

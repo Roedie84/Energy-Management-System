@@ -37068,11 +37068,10 @@ class EnergyManagementSystemCoordinator:
            14:00-14:45 voor 34,6/37,3/36,9 ct voor een avond van 50-51 ct.
            Nu kost elke kWh die boven het zonoverschot uit het net de accu
            in gaat dezelfde correctie (`laadcorrectie_ct`, max. 5 ct).
-        2. Rendement per vermogensband. Het huis dekken met 500 W haalt
-           gemeten veel minder (69 %) dan verkopen met 2,4 kW. Per stap het
-           ontlaadrendement van die band als die betrouwbaar is gemeten
-           (`get_rendement_per_band`), anders het ene getal. Laden: het
-           gemeten laadrendement, anders de wortel van de rondrit.
+        2. Rendement per vermogensband (`get_rendement_per_band`) als die
+           betrouwbaar is, anders het ene getal. v5.166.0: banden per hele
+           ronde gemeten (de 69 % bij 500 W was kwartier-selectie); laden
+           uit de laadbanden, anders het geleerde, anders wortel rondrit.
         """
         from . import accukosten as A
 
@@ -37081,13 +37080,19 @@ class EnergyManagementSystemCoordinator:
             uit["netlaadmarge_eur"] = max(0.0, float(self.laadcorrectie_ct() or 0.0)) / 100
         except Exception:  # noqa: BLE001 - zonder correctie rekent het plan door
             _LOGGER.debug("Datacorrectie voor het waardeplan niet beschikbaar", exc_info=True)
-        laden = self.learned_charge_efficiency_percent
-        if laden:
-            uit["rendement_laden"] = laden / 100
         try:
-            banden = (self.get_rendement_per_band(now) or {}).get("ontladen") or {}
+            alle = self.get_rendement_per_band(now) or {}
         except Exception:  # noqa: BLE001
-            banden = {}
+            alle = {}
+        # v5.166.0: laden uit dezelfde rondemeting (AC-teller) als de
+        # ontlaadbanden zodra een laadband betrouwbaar is; anders het
+        # geleerde laadrendement (vermogenssensor, hele stukken >= 1,5 kWh).
+        laden = A.laadrendement_uit_banden(alle)
+        if laden is None and self.learned_charge_efficiency_percent:
+            laden = self.learned_charge_efficiency_percent / 100
+        if laden:
+            uit["rendement_laden"] = laden
+        banden = alle.get("ontladen") or {}
         grenzen = tuple(A.BANDEN_W) + (math.inf,)
         rijen = []
         for grens, naam in zip(grenzen, A.BAND_NAMEN):

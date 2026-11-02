@@ -1,3 +1,16 @@
+EMS v5.166.0 - rendement per vermogen eerlijk gemeten
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het laad- en ontlaadrendement per vermogen wordt nu over hele laad- en
+  ontlaadrondes gemeten in plaats van per kwartier. De oude meting telde bij
+  weinig watt alleen de kwartieren waarin de laadstand een procent zakte, en
+  kwam daardoor veel te laag uit (68 % waar het ~100 % is).
+- Het waardeplan rekent laden met het gemeten laadrendement van dezelfde
+  meting (~80 %). Heen en terug komt het plan daarmee rond de 80-85 % uit in
+  plaats van 59-64 %: het huis dekken uit de accu wordt niet meer onterecht
+  duur ingeschat.
+
 EMS v5.165.0 - waardeplan rekent met de gemeten verliezen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
