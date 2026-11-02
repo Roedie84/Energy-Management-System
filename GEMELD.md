@@ -211,3 +211,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 18:25 | ems uitleg loopt achter op waardeplan (laadbesluit_sinds_9u leeg, blok 23:30 vs laadplan 23:45)
 02-11 18:55 | ems plantabel net_w lopend kwartier niet geschaald (10.511 w bij 559 w huis, _waardeplan_net_kwh)
 02-11 19:51 | ems live verbruikscorrectie grens per kwartier i.p.v. hele planhorizon (piek 2,75 kw blaast waardeplan op)
+02-11 20:51 | eenheden eigen integraties: ems sensoren € zonder monetary, digital_twin_nauwkeurigheid zonder class, eufy battery_temp zonder temperature
