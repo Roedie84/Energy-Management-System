@@ -886,3 +886,18 @@ laatste ronde: 02-11 11:40, gemeten t/m 02-11 11:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-11 (piek vastgehouden; onder het waardeplan opnieuw meten).
 
 laatste ronde: 02-11 15:40, gemeten t/m 02-11 15:50
+
+
+## 02-11 19:40 · tussenronde
+- **Draait v5.164.0** (herstarts 17:05, 18:34, 19:28, updates door Ruud). Log schoon op Solcast-limiet en sensoren bij de herstart na. Geen release: niets acuts. `net_w` lopend kwartier in de plantabel (19:30: 1.939 W bij huis 572 W) is al gemeld (18:55), alleen weergave.
+- **Harde regel: 0× onder de reserve.** Regeloverschot vandaag 0,034 kWh (01-11: 0,342). Demping niet echt getoetst: de accu ontlaadde pas vanaf 18:35, dus geen pendelen rond 18:00.
+- **Eerste lading waardeplan bijna op:** in 14:00-14:45 1,63 kWh à 36,2 ct, uit 18:35-19:44 0,903 kWh AC bij ~51 ct. Bruto +€ 0,11, vóór slijtage. Gemeten rendement ~94 % (n=1, inhoud in stappen van 0,115 kWh) tegen geleerd 83 %. Scheelt per kWh zo'n 6 ct in de plankeuze; eerst meer laadrondes meten.
+- **Inzet kwam 50 min later dan het plan van 15:40** (17:45 → 18:35): v5.162.x hield de accu vast voor de balanceerlading tot v5.163.0 die grens op 22 ct zette. Geen fout, verklaard.
+- **Balanceren** staat zonder uiterste termijn (besluit Ruud, v5.163.0). 4 dagen sinds vol; prijzen deze dagen 35-52 ct, dus hij wacht op zon. cel_delta 0,13 V bij 16 % (lage SoC, geen zuivere balansmaat). KPI bijhouden.
+- **L-EMS-054 gebouwd v5.164.0** (status bijgewerkt). Eerste toets nacht 02→03: verwacht tekort tot blok 1,38 kWh, soort nu `onbekend` want `laadbesluit_sinds_9u` blijft leeg onder het waardeplan.
+- **H-EMS-15 (nieuw):** `_laadbesluit_stand` wordt onder het waardeplan niet gezet, dus elke tekortnacht loopt via het dagverloop. Prijs-goedkoopst < waarde zonder `waardeplan_laden` in het venster geeft `planning`, en dat telt wél in `marge_tekortnachten`. Vanavond niet (37 ct tegen ~29 ct waarde = economisch). Toets per nacht; alleen bij een echte `planning` een voorstel.
+- Laadplan klapte 19:29 weer: 'geen laden' → 01:45-02:15 (37,7 ct). Past bij de indifferentie van 15:40. MC tot blok 98 %. Twin 0,363. Planvolging 88,6 % (n=79).
+- Stilstand: **geen echte** (12 wachten, 0 doen; 12e is Accugezondheid = niet melden). Airco 'niets', knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-15 (tekortsoort onder waardeplan).
+
+laatste ronde: 02-11 19:40, gemeten t/m 02-11 19:50
