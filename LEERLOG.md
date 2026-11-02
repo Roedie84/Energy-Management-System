@@ -859,3 +859,16 @@ laatste ronde: 02-11 03:40, gemeten t/m 02-11 03:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-11 (piek vastgehouden; neemt af).
 
 laatste ronde: 02-11 07:40, gemeten t/m 02-11 07:50
+
+
+## 02-11 11:40 · tussenronde
+- **Draait v5.160.0** (herstarts 08:34, 10:46, 10:53; DNS-storing 11:21 ~1 min, extern). **Waardeplan stuurt sinds 08:37.** Tot nu alleen `waardeplan_houden`: accu 9-10 %, inhoud 0,0 kWh. Geen laden, geen verkoop; eerste echte toets is het laadblok 14:00-14:45 en de avond.
+- **Nieuw: L-EMS-054 (open).** `waardeplan_houden` telt als bewuste netafname, ook bij een lege accu. Een nacht als 01→02 zou onder het waardeplan ~0 meten: marge en MC-kalibratie blind. Code plus 0,06 kWh live na 08:35. Raakt de reserve → Ruud beslist; geen acute release. Tot de bouw meet de leerronde zulke nachten zelf.
+- **Tekortnacht 01→02 gesloten: 2,70 kWh** (economisch, telt als tekortdag; MC 22:00 100 %). Komt om middernacht in de dagrecords; dan pas kalibratiepunt.
+- **Harde regel: 0× onder de reserve.** KPI `huis_gaat_voor` zet 01-11 op `geschonden` om 0,342 kWh regeloverschot (pendelen 18:00-18:13), geen verkoop. Demping v5.159.0 actief; vanavond 18:00 is de toets.
+- L-EMS-050 gebouwd v5.159.0 (status bijgewerkt); effect vanaf nacht 02→03.
+- Twin `kwartierplan` MAE **0,391** (daalt door vlak plan bij lege accu; geen echte verbetering). MC tot blok 70,4 %.
+- Stilstand: **geen echte** (10 wachten, 0 doen). Airco besluit "niets" (niemand thuis), knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-11 (piek vastgehouden; onder het waardeplan opnieuw meten).
+
+laatste ronde: 02-11 11:40, gemeten t/m 02-11 11:45

@@ -1137,3 +1137,11 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-02 07:40,TUSSEN,ems_celbescherming_actief,0,1,"v5.157.0 draait sinds 06:35; laagste cel module 3.20 V rust bij 9 %, startgrens 2.90: nog niet aangesproken"
 2026-11-02 07:40,TUSSEN,ems_stilstand_functies,0,11,"11 wachten, 0 doen; scenario-plan 10/14; airco besluit 'verwarmen', knop uit -> rekent"
 2026-11-02 07:40,TUSSEN,ems_meting_harde_regel_gat,1,1,"v5.158.0: waardeplan_verkopen niet in _VERKOOPREDENEN -> verkoop zou regeloverschot zijn; v5.158.1 (L-EMS-052)"
+2026-11-02 11:40,TUSSEN,ems_verkoop_onder_reserve,0,1,verkoopkwartieren leeg; 02-11 nog geen regeloverschot; reserve_sprongen 3
+2026-11-02 11:40,TUSSEN,ems_regeloverschot_kwh,0.342,1,"dag 01-11, 18:00-18:13 pendelen; 0 onder de reserve; KPI huis_gaat_voor zet 'geschonden' op true (grens 0.1); demping v5.159.0 actief"
+2026-11-02 11:40,TUSSEN,ems_tekortnacht_tot_nu_kwh,2.704,1,"nacht 01->02 gesloten 09:00; economisch; telt als tekortdag; 07:40-08:35 net 0.32 kWh, 08:35-09:00 0.06 (na start waardeplan niet meegeteld, L-EMS-054)"
+2026-11-02 11:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,70.4,1000,blok 14:00; det. 0.96; incl. lange horizon 100
+2026-11-02 11:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.391,60,07:40 0.563; lege accu = vlak plan
+2026-11-02 11:40,TUSSEN,ems_waardeplan_stuurt,1,1,"sinds herstart 08:34 (reden waardeplan_houden vanaf 08:37); v5.160.0 sinds 10:53; 0 verkoop, 0 laden tot nu"
+2026-11-02 11:40,TUSSEN,ems_meetgat_tekortnacht_waardeplan,1,1,waardeplan_houden in REDENEN_BEWUSTE_NETAFNAME en actie 'houden' bij lege accu -> tekortnacht onder waardeplan 0; L-EMS-054
+2026-11-02 11:40,TUSSEN,ems_stilstand_functies,0,10,"10 wachten, 0 doen; scenario-plan 10/14; airco besluit 'niets', knop uit -> rekent"

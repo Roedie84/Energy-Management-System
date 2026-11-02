@@ -367,7 +367,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: `aantal_doen` in *Nog niet bepaald* rond 23:40 (nu 1, onterecht).
 
 ## L-EMS-050 · temperatuurregressie leert in de stookperiode bijna niet (meetbaarheid, raakt de reserve)
-- Status: **open** (01-11 03:40; raakt via `temperatuur_extra_kwh` de reserve → Ruud beslist).
+- Status: **gebouwd v5.159.0** (akkoord Ruud 02-11, chatsessie; actief sinds de herstart van 08:34): `_update_vaste_nacht_temp` meet over 22-07. Effect meten vanaf de eerste volle nacht 02→03. Was: open 01-11 03:40.
 - Onderbouwing (01-11, code v5.155.0): `_finalize_temp_consumption_regression` voegt alleen een paar (buitentemperatuur, gemiddeld vermogen) toe uit het ontlaadvenster tot het goedkope blok, en alleen als dat ≥ 2,0 u duurt (`TEMP_CONSUMPTION_MIN_HOURS`). Live: 7 paren (9-21 °C), in 10 dagen 1 nieuw; status sinds 29-10 "Venster van 0,3 uur is te kort". In de stookperiode houdt de accu 's nachts vaak vast of laadt hij bij, dus het venster is kort. Sinds v5.68 voedt dit model `temperatuur_extra_kwh` in de reserve op koude nachten.
 - Voorstel: daarnaast elke nacht één paar uit het vaste venster 22:00-07:00 (huisverbruik uit de meetlaag, gemiddelde buitentemperatuur), onafhankelijk van het ontladen; ontlaadvensterparen blijven. Eerst eerlijk valideren (voorspellen vóór toevoegen), zoals nu.
 - Verwacht effect: ~1 paar per nacht → in 2-3 weken een model over 0-15 °C vóór de eerste vorst; reserve op koude nachten op gemeten basis i.p.v. 7 oude paren.
@@ -393,3 +393,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: `waardeplan_huis` en `waardeplan_verkopen` als zelfvoorzienend meetellen.
 - Verwacht effect: overschotleren werkt als vóór v5.158.0.
 - Meten: `reserve_excess_days` komt weer los van 0 op dagen met beschikbaar ≥ ratio × nodig.
+
+## L-EMS-054 · tekortnachten onzichtbaar onder het waardeplan (leerregressie, raakt de reserve)
+- Status: **open** (02-11 11:40; raakt via `marge_tekortnachten` de reserve → Ruud beslist).
+- Onderbouwing (code v5.160.0 + live 02-11): `waardeplan_houden` en `waardeplan_laden` staan in `REDENEN_BEWUSTE_NETAFNAME`, dus `_netimport_is_tekort` en `_tekortnacht_uit_verloop` tellen die rondes nooit. Maar het plan kiest ook `houden` bij een lege accu: 08:37-11:42 accu 9-10 %, inhoud 0,0 kWh, reden `waardeplan_houden`, `nu.actie` houden. Dan is niets vastgehouden. Een nacht als 01→02 (2,70 kWh, gemeten onder `default_smart`) komt onder het waardeplan op ~0 uit. Klein bewijs live: 08:35-09:00 ging nog 0,06 kWh over het net zonder dat de teller meeliep (eindstand 2,704). Gevolg: de marge, de soort-indeling (capaciteit/planning/economisch) en de MC-kalibratie (Brier) zien geen tekortnacht meer; een kans van 100 % telt dan als vals alarm. Zelfde familie als L-EMS-053.
+- Voorstel: `waardeplan_houden` alleen als bewuste netafname tellen als er echt iets vastgehouden wordt (inhoud > ~0,1 kWh). Bij een lege accu is het een tekort, net als onder `default_smart`. `_tekortnacht_uit_verloop` kent de inhoud niet, maar `soc > vloer` staat daar al vóór de redencontrole: de reden hoeft daar alleen bij `houden` te vervallen.
+- Verwacht effect: tekortnachtmeting en MC-kalibratie werken als vóór v5.158.0. Economische nachten verhogen de marge nog steeds niet.
+- Meten: test met lege accu + `waardeplan_houden` = tekort; eerste nacht met lege accu onder het waardeplan telt > 0. Tot de bouw meet de leerronde die nachten zelf uit P1 en SoC.
