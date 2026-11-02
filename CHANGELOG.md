@@ -34328,3 +34328,13 @@ De overschotmeting in `_update_shortfall_detection` liep alleen bij stand `smart
 Nu tellen `waardeplan_huis` en `waardeplan_verkopen` als zelfvoorzienend, net als de oude ontlaadredenen. `waardeplan_houden` en `waardeplan_laden` niet: dan voedt de accu het huis bewust niet.
 
 Tests: `test_v5161_overschot_waardeplan.py` (6).
+
+## v5.161.1 — NILM: apparaten die uit staan zijn geen duplicaat
+
+Akkoord Ruud 02-11 ("oplossen").
+
+`get_nilm_duplicate_pairs` vergeleek daggemiddelden met een relatieve tolerantie en een ondergrens van 0,01 W. Twee apparaten die dagen op 0 W stonden, leken daardoor altijd identiek: ontvochtiger zolder met Salon, en met de verdwenen oude entiteit van dezelfde Shelly-stekker (`sensor.shellyplug_s_80646f825723_power`). Er waren al 77 paren handmatig afgewezen.
+
+Nu tellen alleen dagen waarop minstens een van beide gemiddeld `NILM_DUPLICATE_MIN_ACTIVE_W` (0,1 W) of meer gebruikte, en daarvan moeten er minstens `NILM_DUPLICATE_MIN_SHARED_DAYS` zijn.
+
+Tests: `test_nilm_duplicate_detection.py` (+2).

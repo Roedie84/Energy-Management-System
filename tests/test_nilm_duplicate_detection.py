@@ -108,3 +108,21 @@ def test_empty_with_no_confirmed_devices(make_coordinator, hass):
     coordinator = make_coordinator({})
 
     assert coordinator.get_nilm_duplicate_pairs() == []
+
+
+def test_twee_apparaten_die_uit_staan_zijn_geen_duplicaat(make_coordinator, hass):
+    """v5.161.1: ontvochtiger zolder en Salon stonden 4 dagen op 0 W en
+    werden als duplicaat gemeld."""
+    coordinator = make_coordinator({})
+    _confirm_device(coordinator, "sensor.ontvochtiger", "Ontvochtiger", [0.0, 0.0, 0.0, 0.0])
+    _confirm_device(coordinator, "sensor.salon", "Salon", [0.0, 0.0, 0.0, 0.0])
+
+    assert coordinator.get_nilm_duplicate_pairs() == []
+
+
+def test_te_weinig_actieve_dagen_is_geen_duplicaat(make_coordinator, hass):
+    coordinator = make_coordinator({})
+    _confirm_device(coordinator, "sensor.a", "A", [0.0, 0.0, 5.0, 5.0])
+    _confirm_device(coordinator, "sensor.b", "B", [0.0, 0.0, 5.0, 5.0])
+
+    assert coordinator.get_nilm_duplicate_pairs() == []

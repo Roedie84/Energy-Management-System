@@ -181,6 +181,7 @@ from .const import (
     BATTERY_CYCLES_TO_80_PERCENT_CAPACITY,
     NILM_PATTERN_EXCLUDED_KEYWORDS,
     NILM_DUPLICATE_MIN_SHARED_DAYS,
+    NILM_DUPLICATE_MIN_ACTIVE_W,
     NILM_DUPLICATE_TOLERANCE_FRACTION,
     NILM_TREND_RISING_THRESHOLD_PERCENT,
     NILM_TREND_FALLING_THRESHOLD_PERCENT,
@@ -43494,6 +43495,15 @@ class EnergyManagementSystemCoordinator:
 
                 shared_a = history_a[-shared_len:]
                 shared_b = history_b[-shared_len:]
+                # v5.161.1: alleen dagen waarop minstens een van beide iets
+                # gebruikte tellen; twee apparaten die uit staan zijn geen
+                # duplicaat.
+                actieve_dagen = sum(
+                    1 for value_a, value_b in zip(shared_a, shared_b)
+                    if max(abs(value_a), abs(value_b)) >= NILM_DUPLICATE_MIN_ACTIVE_W
+                )
+                if actieve_dagen < NILM_DUPLICATE_MIN_SHARED_DAYS:
+                    continue
                 all_close = True
                 for value_a, value_b in zip(shared_a, shared_b):
                     reference = max(abs(value_a), abs(value_b), 0.01)

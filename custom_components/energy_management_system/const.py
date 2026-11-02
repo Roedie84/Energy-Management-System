@@ -1412,6 +1412,11 @@ NILM_PATTERN_EXCLUDED_KEYWORDS = (
 # de relatieve tolerantie van elkaar ligt.
 NILM_DUPLICATE_MIN_SHARED_DAYS = 3
 NILM_DUPLICATE_TOLERANCE_FRACTION = 0.02
+# v5.161.1: een dag waarop beide apparaten onder deze waarde (W, daggemiddelde)
+# bleven zegt niets - twee apparaten die uit staan lijken altijd op elkaar.
+# Zo'n dag telt niet mee voor NILM_DUPLICATE_MIN_SHARED_DAYS. Aanleiding 02-11:
+# ontvochtiger zolder en Salon (beide 0 W) als "duplicaat"; 77 paren afgewezen.
+NILM_DUPLICATE_MIN_ACTIVE_W = 0.1
 
 # NILM devices overview table trend labels (v0.63.51). A lighter-weight,
 # more granular signal than the anomaly_detected flag (which only fires
