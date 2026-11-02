@@ -407,3 +407,17 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: als `balanceerlading().nodig` en de zon de accu niet vult, in de goedkoopste kwartieren van de bekende prijzen tot vol laden, en dat in `_met_waardeplan` tonen. De verkoopreserve en celbescherming blijven gelden.
 - Verwacht effect: de cellen worden weer om de ≤ 7 dagen gelijkgetrokken. Kosten per keer klein: de lading wordt daarna weer gebruikt; indicatie € 0,10-0,50 bij de huidige spreiding (schatting, niet gemeten).
 - Meten: test met nodig=True en waardeplan actief = laden tot vol; daarna `balanceer_laatst_vol` wordt bijgewerkt en max SoC ≥ 99 % binnen 7 dagen. Kosten per balanceerlading uit `nabeschouwing_7d`.
+
+## L-EMS-056 · spiegel Beschikbare energie vergelijkt ruw met gecorrigeerd (meetfout)
+- Status: **te bouwen in de dagafsluiting** (02-11 23:40; zelf te bouwen: meetfout, geen sturing).
+- Onderbouwing (live + code v5.168.0): analyse sinds 23:30 `fout 1`: "rekent met 0.576 kWh terwijl sensor 0.025". `_ververs_..` regel ~35875 zet `last_available_kwh` ruw uit de sensor; `_spiegelcontrole` trekt sinds v5.164.1 de modulesprong van de meting af. Verschil = de sprong 0,551 > marge 0,5. Ook `diagnose_sturing` toont daardoor 0,58 terwijl het plan met 0,14 rekent. Periode 02-11 23:30-23:40, n=1 episode; 19:56 was het omgekeerde geval.
+- Voorstel: op regel ~35875 `self._na_module_leeg(...)` om de meting, zoals de energie-check op ~31531; test met module laag: spiegel in orde, `last_available_kwh` gecorrigeerd.
+- Verwacht effect: geen valse `fout`, geen valse 'Der klopt wat neet in de sommen' bij een lege module.
+- Meten: `diagnose_gezondheid` fout 0 bij module < 15 %; `diagnose_sturing` beschikbaar gelijk aan `waardeplan.inhoud_kwh` (± stap).
+
+## L-EMS-057 · airco-besluit verwarmt 's nachts na de vaste uit van 22:00 (sturing, alleen met knop aan)
+- Status: **open** (02-11 23:40; verandert het airco-besluit → Ruud beslist).
+- Onderbouwing (history `airco_besluit` 31-10 t/m 02-11, n=3 nachten + code): `airco_sturing.besluit` heeft geen klok. Zolang de aanwezigheid 'thuis' is en het onder 19 °C is, wordt het 'verwarmen': 31-10 23:25-01:18, 01-11 23:24-01:08, 02-11 02:17-02:33 en 05:57-06:02, 02-11 23:37. Geleerd dagritme: jullie zetten hem aan tussen 12:19-20:40 (werkdag) en 13:50-19:38 (weekend), bedtijd 22:04. Knop uit, dus er is niets uitgevoerd.
+- Voorstel: tussen de vaste uit (22:00) en het begin van het ochtendvenster (04:00) geen 'verwarmen' uit het gewone besluit; handmatig gaat altijd voor, ochtend- en dagritme ongewijzigd.
+- Verwacht effect: 0 nachtstarts met de knop aan, ~1,7 uur × 0,75 kW ≈ 1,3 kWh per nacht minder (schatting, geen meting: met de knop uit draait hij niet).
+- Meten: geen `verwarmen` tussen 22:00 en 04:00 in de history; ochtendbesluit blijft komen.

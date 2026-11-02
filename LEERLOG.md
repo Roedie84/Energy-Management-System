@@ -901,3 +901,19 @@ laatste ronde: 02-11 15:40, gemeten t/m 02-11 15:50
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-14 (weekend te laag; 1 weekend), H-EMS-15 (tekortsoort onder waardeplan).
 
 laatste ronde: 02-11 19:40, gemeten t/m 02-11 19:50
+
+
+## 02-11 23:40 · tussenronde
+- **Draait v5.167.0** (herstarts 20:14, 21:09, 21:35, 22:03, 22:42, 23:05; updates door Ruud). **v5.168.0 staat klaar**, HACS heeft hem, wacht op herstart. Daarom geen release; niets acuts.
+- **Harde regel: 0× onder de reserve.** Regeloverschot 02-11 blijft 0,034 kWh.
+- **Correctie op 19:40:** de eerste waardeplan-lading leverde geen +€ 0,11 op, maar **−€ 0,13** bruto: 1,63 kWh in × 36,2 ct tegen 0,909 kWh uit × ~51 ct. Na 19:44 kwam er niets meer uit: celgrens module 00996 (19:35), daarna 0,14 kWh bruikbaar. Het rendement van 94 % was te mooi; met de bruikbare rest **64 %**, met de ruwe sensor 91 %. Het verschil is de modulesprong. n=1.
+- **H-EMS-16 (nieuw):** een kleine lading vanaf leeg verliest ~0,45 kWh aan de modulesprong van 00996; het waardeplan telt die alleen zodra de module laag is, niet bij het laadbesluit. Geen voorstel: de module gaat terug. Volgende netlading vanaf leeg opnieuw meten.
+- **L-EMS-056 (te bouwen, dagafsluiting):** `fout 1` sinds 23:30 is vals. Regel 35875 zet `last_available_kwh` ruw, de spiegel van v5.164.1 trekt de sprong er wel af: 0,576 tegen 0,025. Geen stuurfout; wel een valse fout en mogelijk een valse nachtmelding. Tussenronde: niet acuut, en v5.168.0 wacht al.
+- **L-EMS-057 (open):** het airco-besluit wordt 's nachts 'verwarmen' zodra iemand beweegt of de slaapsensor nog niet aansloeg (3 van 3 nachten). Knop uit, dus niets gebeurd; met knop aan start hij na de vaste uit van 22:00.
+- **Tekortnacht 02→03 loopt:** net 22-23 uur 0,337 kWh, accu leeg, plan houdt vast. Morgen 09:00 eerste toets L-EMS-054 en H-EMS-15.
+- **MC** stond 22:04-23:30 op 0 % en sprong 23:30 naar 100 %: tot het blok was de horizon kort, daarna tot 09:00. De 22:00-meting (100 %) valt niet weg; oorzaak van de 0 na een herstart niet nagelopen, morgen 22:00 kijken.
+- **Besparing wisselt ±5 ct** om de ~8 min: volgt de Zendure-stap 0,576/0,691 kWh bij een accu in rust. Meetruis, geen voorstel.
+- Niet gemeten: planvolging (diagnostiek in deze ronde niet nagelezen; dagafsluiting). Stilstand: **geen echte** (12 wachten, 0 doen). Twin 0,377.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort onder waardeplan), H-EMS-16 (modulesprong bij laden vanaf leeg). H-EMS-14 geparkeerd tot het volgende weekend.
+
+laatste ronde: 02-11 23:40, gemeten t/m 02-11 23:50
