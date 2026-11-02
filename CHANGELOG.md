@@ -34308,3 +34308,13 @@ Akkoord Ruud 02-11 op alle punten.
 **4. KPI 'huis gaat voor'.** `sturing_meetattributen()["huis_gaat_voor"]`: per dag verkoopkwartieren onder de reserve en het regeloverschot (export uit de accu zonder verkoopbesluit); `geschonden` als er onder de reserve verkocht is of meer dan `HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH` (0,1 kWh) regeloverschot was. Zo tellen dagcontrole en leerronde hetzelfde.
 
 Tests: `test_v5159_akkoordpunten.py` (8).
+
+## v5.160.0 — het waardeplan verkoopt niet onder de verkoopreserve
+
+Akkoord Ruud 02-11.
+
+Plan en sturing liepen uiteen: het waardeplan kende de verkoopreserve niet en zette op 02-11 18:00-18:45 "verkopen" in het kwartierplan (SoC 19 → 13 %), terwijl `_waardeplan_als_nodig` onder de reserve niets verkoopt. Het plan rekende daarna door met een accu die leger was dan hij zou zijn, en kon vooraf laden voor een verkoop die niet doorging.
+
+Nu krijgt elk kwartier van het waardeplan zijn verkoopreserve mee (`Kwartier.verkoop_vloer_kwh`, via `_planning_verkoopreserve_kwh`: dezelfde regel als het oude kwartierplan). De optimalisatie laat geen export uit de accu toe die onder die vloer eindigt; het huis dekken mag er wel onder. De toets bij het uitvoeren blijft staan als laatste grens.
+
+Tests: `test_v5160_verkoopvloer.py`.

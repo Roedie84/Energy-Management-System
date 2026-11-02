@@ -49,6 +49,9 @@ class Kwartier:
     zon_kwh: float
     inkoop_eur: float
     teruglever_eur: float
+    #: v5.160.0: onder deze inhoud (kWh) gaat er in dit kwartier niets uit de
+    #: accu het net op; het huis dekken mag wel.
+    verkoop_vloer_kwh: float = 0.0
 
 
 @dataclass
@@ -102,6 +105,44 @@ def actie_van(b: float, verbruik: float, zon: float) -> tuple[str, float]:
     return "zon", max(b, 0.0)
 
 
+def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus):
+    """Achterwaarts: per kwartier en inhoud de goedkoopste stap."""
+    n = len(kwartieren)
+    keuze = np.zeros((n, niveaus), dtype=np.int16)
+    for t in range(n - 1, -1, -1):
+        k = kwartieren[t]
+        overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
+        tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
+        beste = np.full(niveaus, np.inf)
+        beste_s = np.zeros(niveaus, dtype=np.int16)
+        for s, b in zip(stappen, b_stap):
+            if b > 0 and not accu.netladen and b > overschot + 1e-9:
+                continue
+            if b < 0 and not accu.verkopen and -b > tekort + 1e-9:
+                continue
+            doel = np.arange(niveaus) + s
+            geldig = (doel >= 0) & (doel < niveaus)
+            if not geldig.any():
+                continue
+            # v5.160.0: het plan verkoopt niet wat de sturing tegenhoudt.
+            if k.verkoop_vloer_kwh > 0 and b < 0 and -b > tekort + EPS_KWH:
+                geldig = geldig & (doel * STAP_KWH >= k.verkoop_vloer_kwh - 1e-9)
+                if not geldig.any():
+                    continue
+            kosten = np.full(niveaus, np.inf)
+            kosten[geldig] = (
+                _kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
+                             k.teruglever_eur, np.full(geldig.sum(), b), accu)
+                + waarde[doel[geldig]]
+            )
+            beter = kosten < beste
+            beste[beter] = kosten[beter]
+            beste_s[beter] = s
+        keuze[t] = beste_s
+        waarde = beste
+    return keuze
+
+
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     """Het goedkoopste accuplan over de gegeven kwartieren."""
     n = len(kwartieren)
@@ -122,33 +163,7 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     inkoop = [k.inkoop_eur for k in kwartieren]
     eind = max(0.0, median(inkoop) * eta_o - accu.slijtage_eur)
     waarde = -e * eind                 # kosten-to-go aan het eind (negatief = waard)
-    keuze = np.zeros((n, niveaus), dtype=np.int16)
-    for t in range(n - 1, -1, -1):
-        k = kwartieren[t]
-        overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
-        tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
-        beste = np.full(niveaus, np.inf)
-        beste_s = np.zeros(niveaus, dtype=np.int16)
-        for s, b in zip(stappen, b_stap):
-            if b > 0 and not accu.netladen and b > overschot + 1e-9:
-                continue
-            if b < 0 and not accu.verkopen and -b > tekort + 1e-9:
-                continue
-            doel = np.arange(niveaus) + s
-            geldig = (doel >= 0) & (doel < niveaus)
-            if not geldig.any():
-                continue
-            kosten = np.full(niveaus, np.inf)
-            kosten[geldig] = (
-                _kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
-                             k.teruglever_eur, np.full(geldig.sum(), b), accu)
-                + waarde[doel[geldig]]
-            )
-            beter = kosten < beste
-            beste[beter] = kosten[beter]
-            beste_s[beter] = s
-        keuze[t] = beste_s
-        waarde = beste
+    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus)
 
     # vooruit, vanaf de huidige inhoud
     i = int(round(min(max(accu.inhoud_kwh, 0.0), accu.bruikbaar_kwh) / STAP_KWH))

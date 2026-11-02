@@ -36801,6 +36801,8 @@ class EnergyManagementSystemCoordinator:
         from . import overschotwaarde as OW
 
         uit = []
+        # v5.160.0: per kwartier de verkoopreserve die de sturing dan toepast.
+        reserve_cache: dict = {}
         for begin, eind, prijs in entries or []:
             if eind <= now or begin >= horizon:
                 continue
@@ -36817,7 +36819,10 @@ class EnergyManagementSystemCoordinator:
                 teruglever = OW.terugleverwaarde_2027(kaal[begin], feedin_cost)
             else:
                 return None
-            uit.append(waardeplan_mod.Kwartier(begin, max(0.0, verbruik), max(0.0, zon), inkoop, teruglever))
+            vloer = self._planning_verkoopreserve_kwh(begin, reserve_cache, entries, inkoop)
+            uit.append(waardeplan_mod.Kwartier(
+                begin, max(0.0, verbruik), max(0.0, zon), inkoop, teruglever, max(0.0, vloer or 0.0)
+            ))
         return uit or None
 
     def bereken_waardeplan(self, now: datetime, entries) -> dict:

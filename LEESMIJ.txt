@@ -1,3 +1,11 @@
+EMS v5.160.0 - plan verkoopt niet meer onder de verkoopreserve
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het waardeplan rekent per kwartier met de verkoopreserve. Het kwartierplan
+  toont dus geen "verkopen" meer dat de sturing toch tegenhoudt, en er wordt
+  niet meer vooraf geladen voor een verkoop die niet doorgaat.
+
 EMS v5.159.0 - rustigere P1-regeling, beter leren voor koude nachten
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
