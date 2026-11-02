@@ -201,3 +201,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 12:55 | cpu speed-integratie verwijderen
 02-11 12:55 | hacs cheapest energy hours verwijderen
 02-11 12:55 | lege apparaten upnp extender/internetbox en browser mod 44657ac7/f611bb68
+02-11 15:29 | ems storingsvlag ronde:* blijft hangen tot herstart, oorzaak niet in cockpit
+02-11 15:29 | ems planvolging lopend kwartier niet geschaald, afgeronde inhoud (valse afwijking accu)
+02-11 15:29 | ems melding kosten wijkt af van zonneplan vals door achterlopende teller
