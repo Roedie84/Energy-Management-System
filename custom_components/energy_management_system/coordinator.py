@@ -43,6 +43,7 @@ import json
 import time
 import copy
 import statistics
+from contextlib import contextmanager
 import sys
 import time
 import random
@@ -19058,6 +19059,11 @@ class EnergyManagementSystemCoordinator:
             _gemeten_beschikbaar = self._read_sensor_float(beschikbaar_entity)
             if _gemeten_beschikbaar is not None and _gemeten_beschikbaar < 0:
                 _gemeten_beschikbaar = 0.0
+            # v5.164.1: dezelfde modulesprong-correctie als de sturing
+            # (`_na_module_leeg`). Gemeld 02-11 19:56: cel module 4 op 3,09 V,
+            # EMS rekende bewust met 0,025 kWh, de Zendure meldde 0,576 - een
+            # vals "Der klopt wat neet in de sommen".
+            _gemeten_beschikbaar = self._na_module_leeg(_gemeten_beschikbaar)
             _voeg_toe(
                 "Beschikbare energie",
                 self.last_available_kwh,
@@ -21878,6 +21884,38 @@ class EnergyManagementSystemCoordinator:
         )
         return kwh * (1 - reduction_percent / 100)
 
+    @contextmanager
+    def _gedeeld_correctiebudget(self):
+        """Eén plafond voor de live verbruikscorrectie over een heel plan (v5.164.1).
+
+        Gemeld (woninganalyse 02-11 19:00, akkoord Ruud 19:53): een piek van
+        2,75 kW (18:58-19:02) liet het waardeplan tot ~20:30 met 2,4 kW en
+        aflopend tot 23:00 rekenen, gemeten ~600 W: ~4,5 kWh verbruik dat
+        niet kwam. Het waardeplan en de kwartierplanning vragen het verbruik
+        per kwartier op, en de grens CONSUMPTION_CORRECTION_MAX_EXTRA_KWH
+        (1,5 kWh, "hooguit een apparaat") gold daardoor per kwartier - of in
+        `_estimate_consumption_kwh_for_period` helemaal niet. Binnen dit blok
+        delen alle opvragingen één budget. Genest: het buitenste budget telt.
+        """
+        if getattr(self, "_correctie_budget", None) is not None:
+            yield
+            return
+        self._correctie_budget = [CONSUMPTION_CORRECTION_MAX_EXTRA_KWH]
+        try:
+            yield
+        finally:
+            self._correctie_budget = None
+
+    def _correctie_uit_budget(self, extra_kwh: float) -> float:
+        """Extra verbruik door de live correctie, binnen het gedeelde budget
+        als er een loopt (v5.164.1). Een negatieve correctie gaat ongemoeid."""
+        budget = getattr(self, "_correctie_budget", None)
+        if budget is None or extra_kwh <= 0:
+            return extra_kwh
+        extra_kwh = min(extra_kwh, max(0.0, budget[0]))
+        budget[0] -= extra_kwh
+        return extra_kwh
+
     def _verbruik_met_terugval(self, start: datetime, einde: datetime) -> float:
         """Verbruik over een venster, altijd een getal (v3.45.1).
 
@@ -21979,7 +22017,8 @@ class EnergyManagementSystemCoordinator:
                 correction_ratio,
                 gewogen,
             )
-            total_kwh *= gewogen
+            # v5.164.1: binnen een plan uit het gedeelde budget.
+            total_kwh += self._correctie_uit_budget(total_kwh * (gewogen - 1.0))
 
         # v1.61.0: gepland witgoed erbij.
         #
@@ -22572,7 +22611,7 @@ class EnergyManagementSystemCoordinator:
             # 8,64. Een onbekende last is hooguit een apparaat.
             extra_kwh = basis_kwh * (factor - 1.0)
             ruimte = CONSUMPTION_CORRECTION_MAX_EXTRA_KWH - correctie_extra_totaal
-            extra_kwh = max(0.0, min(extra_kwh, ruimte))
+            extra_kwh = self._correctie_uit_budget(max(0.0, min(extra_kwh, ruimte)))
             correctie_extra_totaal += extra_kwh
             consumption_kwh = basis_kwh + extra_kwh
             # v3.99.3: witgoed erbij, per segment. Gepland witgoed
@@ -26084,7 +26123,10 @@ class EnergyManagementSystemCoordinator:
         bewaard = getattr(self, "_kwartierplan_cache", None)
         if ronde is not None and bewaard is not None and bewaard[0] == sleutel:
             return bewaard[1]
-        plan = self._met_waardeplan(self._bouw_kwartierplan(now))
+        # v5.164.1: één budget voor de live correctie over het hele plan.
+        with self._gedeeld_correctiebudget():
+            kwplan = self._bouw_kwartierplan(now)
+        plan = self._met_waardeplan(kwplan)
         if ronde is not None:
             self._kwartierplan_cache = (sleutel, plan)
             self._volg_laadplan(plan, moment)
@@ -26135,13 +26177,32 @@ class EnergyManagementSystemCoordinator:
             # rendement in de cellen komt (toonde 2,0 kW bij 2,4 kW laden).
             if r.get("actie") == "laden_net":
                 nieuw["laden_w"] = self._waardeplan_laadvermogen_w(r)
-            nieuw["tekort"] = False
+            nieuw["tekort"] = self._waardeplan_tekort(r)
             nieuw["bron"] = "waardeplan"
             if bruikbaar:
                 nieuw["soc_procent"] = round(min_soc + (100 - min_soc) * r["inhoud_kwh"] / bruikbaar)
                 nieuw["soc_bruikbaar_procent"] = round(100 * r["inhoud_kwh"] / bruikbaar)
             uit.append(nieuw)
         return uit
+
+    @staticmethod
+    def _waardeplan_tekort(rij: dict) -> bool:
+        """Hangt het huis in dit waardeplankwartier aan het net omdat de accu
+        niets meer kan leveren? (v5.164.1)
+
+        Gemeld 02-11 20:00: "Den accu kump neet meer tekort" terwijl de accu
+        leeg was en het huis aan het net hing. `_met_waardeplan` zette elk
+        kwartier op tekort=False, dus de teller bleef nul. Een tekort is
+        netafname terwijl de accu na het kwartier leeg is; een lege accu
+        spaart niets (zie PLAN_SPAREN_LEEG_KWH). Netafname met nog inhoud is
+        een keuze van het plan (bewaren voor duurder), net als laden en
+        verkopen.
+        """
+        if rij.get("actie") in ("laden_net", "verkopen"):
+            return False
+        if (rij.get("net_kwh") or 0.0) <= 0.01:
+            return False
+        return (rij.get("inhoud_kwh") or 0.0) <= PLAN_SPAREN_LEEG_KWH
 
     @staticmethod
     def _waardeplan_net_kwh(rij: dict, uren: float | None, eerste: bool) -> float | None:
@@ -36918,7 +36979,9 @@ class EnergyManagementSystemCoordinator:
             uit["reden"] = "accu-inhoud, capaciteit, rendement of slijtage onbekend"
             return uit
         bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
-        kwartieren = self._waardeplan_kwartieren(now, entries)
+        # v5.164.1: één budget voor de live correctie over het hele plan.
+        with self._gedeeld_correctiebudget():
+            kwartieren = self._waardeplan_kwartieren(now, entries)
         if not kwartieren:
             uit["reden"] = "geen verbruiksverwachting of prijzen vooruit"
             return uit

@@ -34389,3 +34389,13 @@ Akkoord Ruud 02-11.
 `waardeplan_houden` stond sinds v5.158.0 in `REDENEN_BEWUSTE_NETAFNAME`. Een nacht met een lege accu onder het waardeplan (stand 'houden') mat daardoor ~0 kWh tekort, en de reservemarge en tekortkans leerden niets meer. Een tekort telt alleen als de accu op de vloer staat (`_netimport_is_tekort`, `TEKORT_LEEG_MARGE_PROCENT`), dus 'houden' boven de vloer blijft geen tekort; 'houden' met een lege accu wel. `waardeplan_laden` blijft bewuste netafname. De nachtcontrole (`NACHT_BEWUST_NIET_ONTLADEN_REDENEN`) is ongewijzigd.
 
 Tests: `test_v5164_tekort_houden.py` (3); `test_v5158_waardeplan.py` aangepast.
+
+## v5.164.1 — één correctieplafond per plan, tekort onder het waardeplan, spiegel met modulesprong
+
+Akkoord Ruud 02-11 (verbruikspiek); de andere twee zijn veilige fixes van valse meldingen.
+
+- **Verbruikspiek**: het plafond `CONSUMPTION_CORRECTION_MAX_EXTRA_KWH` (1,5 kWh) gold per opvraging, dus per kwartier. Een piek van 2,75 kW liet het waardeplan tot ~20:30 met 2,4 kW rekenen. Nu één budget per plan: `_gedeeld_correctiebudget` (contextmanager) en `_correctie_uit_budget`, gebruikt in `_segmenten_verbruik_zon` en `_estimate_consumption_kwh_for_period`; de kwartierplanning en `bereken_waardeplan` openen elk een budget.
+- **Tekortmelding**: `_met_waardeplan` zette elk kwartier op `tekort=False`, waardoor `_tel_tekorten_tot_bijladen` altijd 0 gaf en "Den accu kump neet meer tekort" kwam terwijl de accu leeg was (02-11 20:00). Nieuw: `_waardeplan_tekort` - netafname met een lege accu na het kwartier, behalve bij laden of verkopen.
+- **Zelfcontrole**: de spiegel "Beschikbare energie" vergeleek de door `_na_module_leeg` gecorrigeerde waarde (0,025 kWh) met de ruwe Zendure-sensor (0,576 kWh). De meting krijgt nu dezelfde correctie.
+
+Tests: `test_v51641_correctiebudget.py` (9).

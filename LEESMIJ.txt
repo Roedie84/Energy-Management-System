@@ -1,3 +1,13 @@
+EMS v5.164.1 - verbruikspiek, tekortmelding en zelfcontrole
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Een korte verbruikspiek telt in de planning nog maar één keer mee: maximaal
+  1,5 kWh extra over het hele plan, niet per kwartier.
+- De melding "Den accu kump tekort" werkt weer met het waardeplan. Een lege
+  accu met netafname telt als tekort; de valse "neet meer tekort" verdwijnt.
+- Geen vals "Der klopt wat neet in de sommen" meer als een cel bijna leeg is.
+
 EMS v5.164.0 - tekortnachten tellen weer onder het waardeplan
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
