@@ -34241,3 +34241,12 @@ Gemeld 01-11 21:02: "De planning voorziet al een half uur geen kwartieren meer w
 Nu spaart het plan alleen met een bruikbare inhoud boven `PLAN_SPAREN_LEEG_KWH` (0,01 kWh). Daaronder rekent het het kwartier als `smart`: natuurkundig gelijk (zonoverschot gaat de accu in, er komt niets uit), maar een netafname telt als tekort. Vult de zon de accu, dan spaart het plan de kwartieren daarna weer zoals voorheen. De live sturing (spaarplan, `sparen_in_blok`) is ongewijzigd.
 
 Tests: `test_v51560_lege_accu_spaart_niet.py` (4).
+
+## v5.156.1 — nabeschouwing: geen bodemstraf op een dag die onder de bodem begint (L-EMS-051)
+
+Leerronde 02-11 (dagafsluiting 01-11): de nabeschouwing van 01-11 gaf "accu leverde −€ 0,64, best mogelijk −€ 0,00, gemist € 0,64 door de voorspelling", het dagarchief −€ 0,04. De laadstand liep van 22 naar 9 %; de bodem van de meetlat (`_reserve_bodem_kwh`, 15 % van de capaciteit) lag boven de beginstand. `beste_planning` zette de beginstand stil op de bodem (`begin_s` afgekapt op 0), terwijl `nabeschouwing` de eindstand van de werkelijkheid tegen diezelfde bodem waardeerde (`(eind − bodem) × dagprijs × √η`, dus negatief). Gevolg: wie onder de bodem begon en niets deed, kreeg (bodem − begin) × dagprijs als gemist. Op een dag die leeg begint is dat de hele bodem (~€ 0,60 bij 1,5 kWh en 44 ct).
+
+Nu rekent `nabeschouwing` met `bodem = min(bodem, begin)`: dezelfde beginstand en hetzelfde nulpunt voor de restwaarde van de meetlat en de werkelijkheid. Boven de bodem is er niets veranderd; `beste_planning` zelf is ongewijzigd. Nieuwe velden `bodem_meetlat_kwh` en `bodem_gebruikt_kwh`. Alleen meten: de nabeschouwing voedt alleen kandidaten die meten en niet sturen.
+
+Tests: `test_v5161_leerronde.py` (6).
+

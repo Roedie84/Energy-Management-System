@@ -211,6 +211,16 @@ def nabeschouwing(
     gemiste bedrag is voorspelling en regels - dat deel is grotendeels
     onvermijdelijk, want de beste planning kent de zon van morgen.
     """
+    # v5.156.1 (L-EMS-051): begon de dag onder de bodem, dan ligt de bodem
+    # van de meetlat op de beginstand. Tot v5.156.0 zette `beste_planning` de
+    # beginstand stil op de bodem (die energie bestond niet) terwijl de
+    # eindstand van de werkelijkheid tegen diezelfde bodem werd gewaardeerd:
+    # wie niets deed, kreeg (bodem - begin) x dagprijs als "gemist" (op een
+    # dag die leeg begint de hele bodem, ~€ 0,60; op 01-11 met 22 -> 9 % een
+    # deel van de € 0,64). Nu: zelfde begin, zelfde nulpunt voor de
+    # restwaarde, en niets doen mist niets. Boven de bodem verandert niets.
+    bodem_meetlat_kwh = bodem_kwh
+    bodem_kwh = max(0.0, min(bodem_kwh, begin_kwh))
     zonder = kosten_zonder_accu(kwartieren)
     gemiddelde_prijs = sum(k.prijs_eur for k in kwartieren) / len(kwartieren)
     eta = rendement ** 0.5
@@ -318,6 +328,10 @@ def nabeschouwing(
         ),
         "reserve_kwh": reserve_kwh,
         "reserve_als": "verkooppoort",
+        # v5.156.1: de bodem van de meetlat en de bodem waarmee gerekend is
+        # (lager als de dag eronder begon).
+        "bodem_meetlat_kwh": round(bodem_meetlat_kwh, 3),
+        "bodem_gebruikt_kwh": round(bodem_kwh, 3),
         "netarbitrage_eur": round(
             max(0.0, zonder_net["kosten_eur"] - met_arbitrage["kosten_eur"]), 2
         )
