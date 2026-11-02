@@ -382,7 +382,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 
 
 ## L-EMS-052 · verkoop door het waardeplan niet in de meting van de harde regel (meetfout)
-- Status: **gebouwd v5.158.1** (02-11 07:48, tussenronde: acuut, harde regel anders onmeetbaar; zelf gebouwd: meetfout, sturing ongewijzigd; suite 6521 groen, `test_v51581_verkoopmeting.py` (6)). Wacht op installatie door Ruud (vervangt v5.158.0).
+- Status: **gebouwd v5.158.1** (02-11 07:48, tussenronde: acuut, harde regel anders onmeetbaar; zelf gebouwd: meetfout, sturing ongewijzigd; suite 6521 groen, `test_v51581_verkoopmeting.py` (6)). Wacht op installatie door Ruud (v5.158.0 is gedownload, draait nog niet: eerst bijwerken naar v5.158.1, dan herstarten).
 - Onderbouwing (code): v5.158.0 zette `waardeplan_verkopen` in `_REDENEN_ONTLADEN` en de financiën, niet in `_VERKOOPREDENEN`. `verkocht` bleef dan False, de export ging naar `regeloverschot_kwh`, en `verkoopkwartieren`/`vk`/`vkm`/`vko` bleven leeg.
 - Verwacht effect: elke verkoop van het waardeplan staat in `verkoopkwartieren` met marge.
 - Meten (na installatie): dagen met `waardeplan_verkopen` hebben `verkoopkwartieren` > 0 en `regeloverschot_kwh` ≈ klein; marge ≥ 0 (harde regel).
