@@ -214,3 +214,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 20:51 | eenheden eigen integraties: ems sensoren € zonder monetary, digital_twin_nauwkeurigheid zonder class, eufy battery_temp zonder temperature
 02-11 21:52 | ems monetary met total_increasing logwaarschuwing (discharge_value_expensive_quarters, charge_cost_grid_charging), test uitbreiden
 02-11 21:52 | gold scalper latency_p99 niet in recorder (ig al langer, xauusd/btc_eur sinds exclude), trend niet te volgen
+02-11 22:52 | gold scalper dubbele route bij gelijktijdige start (flag na await in async_register_frontend, ig setup_error)
+02-11 22:52 | ems plantabel vs sturing zon morgen (tabel 0 w accu, smart laadt toch, 39 vs 40 ct)
+02-11 22:52 | ems diagnose_sturing noemt blok 23:30 terwijl plan niets laadt
