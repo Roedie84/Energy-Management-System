@@ -354,6 +354,10 @@ BALANCEER_VROEG_NA_DAGEN = 4
 BALANCEER_VROEG_CEL_DELTA_V = 0.10
 # Vanaf deze stand telt de accu als vol (dezelfde als de kalibratie).
 BALANCEER_VOL_PERCENT = 99.0
+# v5.162.0 (L-EMS-055): onder het waardeplan moet de balanceerlading klaar zijn
+# vóór dit lokale uur: vóór de ochtendpiek, en een vast moment zodat de lading
+# niet bij elke nieuwe prijsreeks of herstart opschuift.
+BALANCEER_KLAAR_UUR = 8
 
 # Hoeveel dagen er minstens nodig zijn voordat de zonpersistentie een
 # richting noemt. Bij acht dagen was r=0,69 een aanwijzing en geen

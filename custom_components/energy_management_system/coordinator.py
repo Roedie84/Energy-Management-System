@@ -274,6 +274,7 @@ from .const import (
     BALANCEER_VROEG_NA_DAGEN,
     BALANCEER_VROEG_CEL_DELTA_V,
     BALANCEER_VOL_PERCENT,
+    BALANCEER_KLAAR_UUR,
     NABESCHOUWING_MIN_KWARTIEREN,
     NACHTLAST_MIN_NACHTEN,
     NACHTLAST_MIN_STIJGING_FRACTIE,
@@ -26126,6 +26127,10 @@ class EnergyManagementSystemCoordinator:
             # v5.161.3: wat het plan in dit kwartier in de accu doet, los van
             # de startstand. Voor het vermogen; zie planvolging._accu_w.
             nieuw["inhoud_delta_kwh"] = r.get("inhoud_delta_kwh")
+            # v5.162.0: wat de accu van het net vraagt, niet wat er na het
+            # rendement in de cellen komt (toonde 2,0 kW bij 2,4 kW laden).
+            if r.get("actie") == "laden_net":
+                nieuw["laden_w"] = self._waardeplan_laadvermogen_w(r)
             nieuw["tekort"] = False
             nieuw["bron"] = "waardeplan"
             if bruikbaar:
@@ -36922,6 +36927,8 @@ class EnergyManagementSystemCoordinator:
             netladen=True,
             verkopen=True,
         )
+        balans = self._waardeplan_balanceren(now, kwartieren, accu)
+        accu.vol_na_kwartier = balans.get("kwartier")
         res = waardeplan_mod.plan(kwartieren, accu)
         if not res.beschikbaar:
             uit["reden"] = res.reden
@@ -36946,8 +36953,52 @@ class EnergyManagementSystemCoordinator:
                 for r in res.kwartieren[:24]
             ],
             "verwachte_inhoud_kwh": nu["inhoud_kwh"],
+            "balanceren": balans or None,
         })
         return uit
+
+    #: v5.162.0: het moment waarop de lopende balanceerlading klaar moet zijn.
+    _balanceer_doel: datetime | None = None
+
+    def _waardeplan_balanceren(self, now: datetime, kwartieren: list, accu) -> dict:
+        """Moet het waardeplan vol laden voor de balans? (v5.162.0, L-EMS-055)
+
+        Het waardeplan beslist vóór de oude regels, dus `_balanceer_laadbesluit`
+        kwam niet meer aan bod. Dezelfde vraag, hier als eis aan het plan: vol
+        vóór het vaste moment (zie BALANCEER_KLAAR_UUR); het plan kiest de
+        goedkoopste kwartieren. Leeg = geen eis.
+        """
+        bal = self.balanceerlading(now)
+        ruimte = self._resterende_laadruimte_kwh()
+        if not bal.get("nodig") or ruimte is None or ruimte <= 0.05:
+            self._balanceer_doel = None
+            return {}
+        if self._balanceer_zon_vult_vandaag(now, accu.inhoud_kwh, ruimte):
+            return {"reden": f"{bal['reden']}; de zon maakt de accu vandaag vol"}
+        einde = kwartieren[-1].begin + timedelta(minutes=15)
+        per_kwartier = accu.laden_kw * accu.duur_h * max(0.5, min(1.0, accu.rendement)) ** 0.5
+        doel = self._balanceer_doel
+        if doel is None or doel <= now:
+            # Een nieuw moment; niet meer haalbaar vóór 08:00 = de dag erna,
+            # anders laadt hij op het laatste moment tegen elke prijs.
+            doel = dt_util.as_local(now).replace(
+                hour=BALANCEER_KLAAR_UUR, minute=0, second=0, microsecond=0
+            )
+            if doel <= now:
+                doel += timedelta(days=1)
+            nodig = math.ceil((accu.bruikbaar_kwh - accu.inhoud_kwh) / per_kwartier)
+            if sum(1 for k in kwartieren if k.begin < doel) < nodig:
+                doel += timedelta(days=1)
+        if doel > einde:
+            self._balanceer_doel = None
+            return {"reden": f"{bal['reden']}; wacht op de prijzen tot {doel:%d-%m %H:%M}"}
+        self._balanceer_doel = doel
+        index = sum(1 for k in kwartieren if k.begin < doel) - 1
+        return {
+            "kwartier": index,
+            "vol_om": doel.isoformat(),
+            "reden": f"{bal['reden']}: vol vóór {dt_util.as_local(doel):%d-%m %H:%M}",
+        }
 
     def _waardeplan_nu(self, now: datetime, entries) -> dict:
         """Het plan voor dit kwartier: één keer per kwartier rekenen, of
@@ -36973,6 +37024,13 @@ class EnergyManagementSystemCoordinator:
         self._waardeplan_cache = (kwartier, plan)
         return plan
 
+    def _waardeplan_laadvermogen_w(self, rij: dict) -> float:
+        """Het laadvermogen van een planrij, gemeten aan het net (v5.162.0)."""
+        ingesteld = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0)
+        if rij.get("vol_vermogen"):
+            return ingesteld
+        return min(ingesteld, float(rij.get("accu_kwh") or 0.0) * 4000)
+
     async def _waardeplan_als_nodig(self, now: datetime, entries) -> bool:
         """Past het waardeplan toe (v5.158.0, akkoord Ruud 02-11).
         True als de beslissing klaar is; False = de oude regels gelden."""
@@ -36990,10 +37048,7 @@ class EnergyManagementSystemCoordinator:
         charge_power = None
         discharge_power = None
         if actie == "laden_net":
-            vermogen = min(
-                abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0),
-                float(nu.get("accu_kwh") or 0.0) * 4000,
-            )
+            vermogen = self._waardeplan_laadvermogen_w(nu)
             if vermogen < WAARDEPLAN_MIN_VERMOGEN_W:
                 actie = "houden"
             else:
@@ -37072,6 +37127,8 @@ class EnergyManagementSystemCoordinator:
             )
         if p.get("verkoop_tegengehouden"):
             regels.append("verkopen tegengehouden: " + p["verkoop_tegengehouden"])
+        if (p.get("balanceren") or {}).get("reden"):
+            regels.append("balanceerlading: " + p["balanceren"]["reden"])
         return regels or ["het waardeplan rekent elk kwartier de goedkoopste inzet uit"]
 
     def _meld_lage_celspanning(self) -> None:

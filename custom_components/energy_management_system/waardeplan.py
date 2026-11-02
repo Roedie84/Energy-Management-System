@@ -66,6 +66,10 @@ class Accu:
     netladen: bool = True
     verkopen: bool = True
     duur_h: float = 0.25
+    #: v5.162.0 (L-EMS-055): na dit kwartier (index) moet de accu vol zijn,
+    #: voor de balanceerlading. Het plan kiest zelf de goedkoopste kwartieren
+    #: ervoor. None = geen eis.
+    vol_na_kwartier: int | None = None
 
 
 @dataclass
@@ -105,12 +109,18 @@ def actie_van(b: float, verbruik: float, zon: float) -> tuple[str, float]:
     return "zon", max(b, 0.0)
 
 
-def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus):
-    """Achterwaarts: per kwartier en inhoud de goedkoopste stap."""
+def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=None):
+    """Achterwaarts: per kwartier en inhoud de goedkoopste stap.
+
+    `eis` = (kwartier, niveau): na dat kwartier minstens dat niveau.
+    """
     n = len(kwartieren)
     keuze = np.zeros((n, niveaus), dtype=np.int16)
     for t in range(n - 1, -1, -1):
         k = kwartieren[t]
+        if eis is not None and t == eis[0]:
+            waarde = waarde.copy()
+            waarde[: eis[1]] = np.inf
         overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
         tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
         beste = np.full(niveaus, np.inf)
@@ -163,12 +173,18 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     inkoop = [k.inkoop_eur for k in kwartieren]
     eind = max(0.0, median(inkoop) * eta_o - accu.slijtage_eur)
     waarde = -e * eind                 # kosten-to-go aan het eind (negatief = waard)
-    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus)
-
     # vooruit, vanaf de huidige inhoud
     i = int(round(min(max(accu.inhoud_kwh, 0.0), accu.bruikbaar_kwh) / STAP_KWH))
     i = min(i, niveaus - 1)
     i_start = i
+    eis = None
+    if accu.vol_na_kwartier is not None and accu.netladen and 0 <= accu.vol_na_kwartier < n:
+        # Nooit meer eisen dan de tijd toelaat: een onhaalbare eis laat geen
+        # enkel plan over.
+        t = accu.vol_na_kwartier
+        eis = (t, min(niveaus - 1, i_start + (t + 1) * max_op))
+    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus, eis)
+
     rijen = []
     kosten_plan = 0.0
     kosten_zonder = 0.0
@@ -191,6 +207,9 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
             "net_kwh": round(g, 3),
             "inhoud_kwh": round(i * STAP_KWH, 2),
             "inhoud_delta_kwh": round((i - i_voor) * STAP_KWH, 2),
+            # v5.162.0: de grootste laadstap = vol vermogen. De stap van
+            # 0,1 kWh rondt af: bij 2,4 kW zou er 2.196 W op de accu staan.
+            "vol_vermogen": s == max_op,
             "prijs_eur": round(k.inkoop_eur, 4),
         })
     # verschil in inhoud tegen de eindwaarde verrekenen (begin en eind)

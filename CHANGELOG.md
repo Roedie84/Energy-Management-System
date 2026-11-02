@@ -34354,3 +34354,13 @@ Gevonden door de EMS-ronde van 02-11, akkoord Ruud ("Alles oplossen").
 - **Melding 'Kostenberekening wijkt af van Zonneplan'.** De Zonneplan-teller loopt soms een uur achter. De melding komt nu pas als het verschil over 3 verschillende Zonneplan-standen blijft staan (`ZONNEPLAN_COST_MISMATCH_MIN_STANDEN`). De diagnose toont het verschil nog wel direct.
 
 Tests: `test_v51613_storing_planvolging_kosten.py`.
+
+## v5.162.0 — balanceerlading onder het waardeplan (L-EMS-055), laden op vol vermogen
+
+Akkoord Ruud 02-11 ("Alles oplossen").
+
+- **Balanceerlading (L-EMS-055).** `_balanceer_laadbesluit` zit in de oude regels en die worden onder het waardeplan niet bereikt; de accu was sinds 29-10 niet meer vol. Nu geeft `_waardeplan_balanceren` het plan de eis `vol_na_kwartier`: vol vóór 08:00 (`BALANCEER_KLAAR_UUR`), en het plan kiest de goedkoopste kwartieren. Het moment staat vast tot het voorbij is, anders schuift de lading mee met elke nieuwe prijsreeks; alleen als vol niet meer haalbaar is, wordt het de dag erna. Geen eis als de zon de accu vandaag vult of als de prijzen tot dat moment nog niet bekend zijn. Een onhaalbare eis wordt begrensd op wat de tijd toelaat. Verkoopreserve en celbescherming blijven gelden.
+- **Laadvermogen.** De stap van 0,1 kWh rondde het vermogen af: 2.196 W op de accu bij 2.400 W ingesteld (gemeten 02-11 14:15). De grootste laadstap is nu het ingestelde vermogen (`vol_vermogen`).
+- **Plantabel.** Bij laden toonde de cockpit wat er na het rendement in de cellen komt (2,0 kW). Dat is nu het vermogen aan het net (`laden_w`), zoals de meting; de planvolging vergelijkt daarmee ook gelijke grootheden.
+
+Tests: `test_v51620_balanceren_waardeplan.py`.

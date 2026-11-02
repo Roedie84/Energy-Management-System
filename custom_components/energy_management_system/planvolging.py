@@ -50,6 +50,8 @@ def _accu_w(rij: dict, start_kwh: float | None) -> float | None:
     onzin: de inhoud staat op 0,1 kWh afgerond (0,013 kWh verschil over
     4 min = 179 W) en een plan van een kwartier geleden telde twee stappen.
     """
+    if rij.get("laden_w"):
+        return -rij["laden_w"]  # v5.162.0: aan het net, zoals de meting
     delta = rij.get("inhoud_delta_kwh")
     if delta is not None:
         return -delta * 4000

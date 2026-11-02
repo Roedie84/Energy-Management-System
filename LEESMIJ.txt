@@ -1,3 +1,13 @@
+EMS v5.162.0 - balanceerlading terug, laden op vol vermogen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De balanceerlading kwam onder het waardeplan niet meer aan bod. Is de accu
+  te lang niet vol geweest, dan laadt het plan nu in de goedkoopste kwartieren
+  tot vol, klaar voor 08:00. Maakt de zon de accu die dag vol, dan niet.
+- Laden uit het net gaat nu op het ingestelde vermogen (2,4 kW) in plaats van
+  2,2 kW, en de planning toont dat vermogen ook (stond op 2,0 kW).
+
 EMS v5.161.3 - minder valse meldingen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
