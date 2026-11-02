@@ -186,3 +186,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 09:51 | ems kwartierplan toont verkopen onder verkoopreserve (avond 18:00-18:45, plan vs uitvoering)
 02-11 09:51 | gold scalper oordeeltekst mand t -2,31 'toeval' vs 'aantoonbaar verliesgevend', 0.000 USD/oz
 02-11 09:51 | gold scalper mandclusters gelijktijdige starts niet onafhankelijk, over hele mand clusteren (na L-GS-037)
+02-11 11:51 | L-EMS-054 ems lege accu onder 'houden' als tekort tellen (akkoord)
+02-11 11:51 | ems waardeplan zonder datacorrectie netladen (5 ct), laadblok 14:00 marge 1-2 ct
+02-11 11:51 | ems plan één rendement 83% i.p.v. per vermogensband, smart 400 w volgt huis (voorraad eerder op)
