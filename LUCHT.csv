@@ -2127,7 +2127,7 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-04 00:20,pm25_gem_aanwezig,2.78,34,occupancy of tv; t/m 23:10:28
 2026-11-04 00:20,pm25_gem_afwezig,1.77,14,na 23:10:28; 3 blokken auto daarna mid
 2026-11-04 00:20,halvering_mid_min,26,11,"direct na wissel 23:25 2.73 -> 0.99 om 00:15-00:20; 22-38 per achtergrond 0.6-0; 5-min gemiddelden"
-2026-11-04 00:20,co2_gem,1531,48,5-min; ramen dicht
+2026-11-04 00:20,co2_gem,1535,48,5-min; ramen dicht
 2026-11-04 00:20,co2_max,1641,48,momentaan 22:20-22:25; min 1381; nu 1370
 2026-11-04 00:20,co2_uren_gt1200,4.00,48,hele ronde
 2026-11-04 00:20,vocht_max,58.4,48,min 51.2; 22.2 -> 18.4 C
