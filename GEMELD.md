@@ -228,3 +228,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 08:51 | ems mini-laadblok 0,03 kwh 'manual' onder minimale hoeveelheid niet tonen of schakelen
 03-11 08:51 | ems besparing t.o.v. zonder sturing 0,89 vs eigen 1,99 vs kostprijsmodel 1,51 (omvormer-rustverbruik)
 03-11 08:51 | ems ontladen stopt op ~15-16% terwijl min_soc 10%, ~0,58 kwh blijft staan (instelling)
+03-11 11:51 | ems monte carlo/tekort rekent met goedkoopste blok dat niet in waardeplan staat (mc 0->100%, cockpit blok 10:15)
+03-11 11:51 | L-EMS-060 ems bewolking_vandaag overleeft herstart niet (notify in noteer_bewolking)
