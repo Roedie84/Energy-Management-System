@@ -381,6 +381,12 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
             # elke herstart opnieuw, en dan komt hij nooit aan zijn vier
             # dagen per vak.
             ATTR_DEVIATION_CONTEXT: self._tracker.deviation_context,
+            # v5.171.0 (L-EMS-058): de zonkwartieren van vandaag, zodat
+            # een herstart het daggemiddelde niet halveert.
+            "bewolking_vandaag": {
+                "dag": self._tracker.bewolking_dag,
+                "kwartieren": self._tracker.bewolking_kwartieren,
+            },
             ATTR_DEVIATION_STDEV_HISTORY: self._tracker.deviation_stdev_history,
             ATTR_LEARNED_BIAS_PERCENT: self._tracker.learned_bias_percent,
             # v5.118.0 (L-EMS-025): correctie als de dagen aan één kant liggen.
@@ -430,6 +436,14 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
                         for r in context
                         if isinstance(r, dict) and "afwijking" in r
                     ]
+                vandaag = attrs.get("bewolking_vandaag")
+                if isinstance(vandaag, dict) and isinstance(vandaag.get("kwartieren"), dict):
+                    self._tracker.bewolking_dag = vandaag.get("dag")
+                    self._tracker.bewolking_kwartieren = {
+                        str(k): [float(v[0]), float(v[1])]
+                        for k, v in vandaag["kwartieren"].items()
+                        if isinstance(v, (list, tuple)) and len(v) == 2
+                    }
                 stdev_history = attrs.get(ATTR_DEVIATION_STDEV_HISTORY)
                 if isinstance(stdev_history, list):
                     self._tracker.deviation_stdev_history = [

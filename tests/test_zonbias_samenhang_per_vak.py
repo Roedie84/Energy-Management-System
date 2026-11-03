@@ -53,7 +53,8 @@ def tracker(hass):
 def _vul(tracker, rijen):
     """rijen: (bewolking_percent, afwijking_procent)"""
     tracker.deviation_context = [
-        {"datum": f"2026-08-{20 + i:02d}", "bewolking": b, "afwijking": a}
+        {"datum": f"2026-08-{20 + i:02d}", "bewolking": b, "afwijking": a,
+         "bewolking_bron": "zonkwartieren"}
         for i, (b, a) in enumerate(rijen)
     ]
 

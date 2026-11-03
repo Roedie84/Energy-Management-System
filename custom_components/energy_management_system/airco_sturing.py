@@ -153,6 +153,27 @@ def gewenste_temperatuur(setpunten: list, minimaal: int) -> float | None:
     return round(statistics.median(waarden), 1)
 
 
+# v5.171.0 (L-EMS-057): tot dit moment (minuten na middernacht) geldt de
+# nachtrust; gelijk aan het begin van het ochtendvenster in `airco_ritme`.
+NACHTRUST_TOT_MIN = 4 * 60
+
+
+def in_nachtrust(minuut_nu: int, uit_om_min: int | None, tot_min: int = NACHTRUST_TOT_MIN) -> bool:
+    """Valt dit moment tussen de vaste uit en het ochtendvenster? (v5.171.0)
+
+    L-EMS-057: het gewone besluit had geen klok. Met iemand 'thuis' en onder
+    de aanzettemperatuur werd het om 23:25 en 01:08 gewoon 'verwarmen' (31-10
+    t/m 02-11, n=3 nachten; knop uit, dus niets uitgevoerd). Van de vaste uit
+    (`airco_uit_om`, 22:00) tot `tot_min` (04:00) dus geen verwarmen uit het
+    gewone besluit. Over middernacht heen; zonder uittijd geen nachtrust.
+    """
+    if uit_om_min is None or uit_om_min == tot_min:
+        return False
+    if uit_om_min > tot_min:
+        return minuut_nu >= uit_om_min or minuut_nu < tot_min
+    return uit_om_min <= minuut_nu < tot_min
+
+
 def besluit(
     *,
     woonkamer_c: float | None,
@@ -166,6 +187,7 @@ def besluit(
     setpunten_gezien: int,
     setpunten_nodig: int,
     vooruit: dict | None = None,
+    nachtrust: bool = False,
 ) -> dict:
     """Wat het EMS met de woonkamer-airco zou doen, en waarom.
 
@@ -179,6 +201,10 @@ def besluit(
     7. over een uur kouder dan de aanzettemperatuur volgens een projectie
        die nauwkeurig genoeg is (v5.64)  -> vooruit verwarmen
     8. anders                            -> niets
+
+    Sinds v5.171.0 (L-EMS-057): met `nachtrust` (tussen de vaste uit en het
+    ochtendvenster, zie `in_nachtrust`) worden 6 en 7 "niets". Handmatig gaat
+    nog steeds voor; het uitzetten om 22:00 doet de bedtijdregel.
 
     Het EMS zet de airco alleen UIT als het hem zelf AANzette; wat een mens
     aanzette, laat het staan.
@@ -233,6 +259,13 @@ def besluit(
     if advies != "airco":
         return uit_of_niets("gas is nu goedkoper dan de airco")
     redenen.append("de airco is goedkoper dan gas")
+    if nachtrust:
+        redenen.append("nachtrust: na de vaste uit en vóór 04:00 niet verwarmen")
+        return _uitkomst(
+            "niets",
+            "Nachtrust: tussen de vaste uit en 04:00 verwarmt het EMS niet.",
+            redenen, doel_c, aanzet_c,
+        )
     if woonkamer_c < aanzet_c:
         if airco_stand == "heat":
             return _uitkomst("niets", "De airco verwarmt al.", redenen, doel_c, aanzet_c)

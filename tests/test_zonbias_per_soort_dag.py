@@ -34,7 +34,7 @@ def _tracker(hass, context=()):
         },
     )
     t.deviation_context = [
-        {"datum": f"d{i}", "afwijking": a, "bewolking": b}
+        {"datum": f"d{i}", "afwijking": a, "bewolking": b, "bewolking_bron": "zonkwartieren"}
         for i, (a, b) in enumerate(context)
     ]
     return t

@@ -26,6 +26,8 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    SOLAR_BEWOLKING_BRON,
+    SOLAR_BEWOLKING_MIN_ZONKWARTIEREN,
     SOLAR_EENZIJDIG_AANDEEL,
     SOLAR_EENZIJDIG_DAGEN,
     SOLAR_EENZIJDIG_MAX_PERCENT,
@@ -147,6 +149,10 @@ class SolarForecastAccuracyTracker:
         # De coordinator schuift die door via `laatste_bewolking_percent`.
         self.deviation_context: list[dict] = []
         self.laatste_bewolking_percent: float | None = None
+        # v5.171.0 (L-EMS-058): per kwartier met verwachte zon [bewolking %,
+        # verwachte kWh] van `bewolking_dag`; bewaard via de sensor.
+        self.bewolking_dag: str | None = None
+        self.bewolking_kwartieren: dict[str, list] = {}
         self.deviation_stdev_history: list[float] = []
 
         # Rolling history of the raw forecast values themselves, used to
@@ -295,10 +301,58 @@ class SolarForecastAccuracyTracker:
         return [
             r["afwijking"]
             for r in (self.deviation_context or [])
-            if r.get("bewolking") is not None
+            if self._telt_in_vak(r)
             and self._bewolkingsvak(r["bewolking"]) == vak
             and abs(r["afwijking"]) <= MAX_REASONABLE_DEVIATION_PERCENT
         ]
+
+    @staticmethod
+    def _telt_in_vak(r: dict) -> bool:
+        """Telt deze dag mee in de vakken? (v5.171.0, L-EMS-058)
+
+        Tot v5.171.0 was het label de bewolking om 23:59:50: 02-11 stond
+        25,8 % terwijl het tot 15:15 100 % was. Die oude dagen houden hun
+        label (de export en de leerronde lezen het), maar tellen in de
+        vakken niet mee tot ze na DEVIATION_HISTORY_DAYS uit de reeks zijn:
+        een vak dat heldere en bewolkte dagen door elkaar haalt, corrigeert
+        verkeerd, en geen correctie per vak is de bestaande terugval
+        (vlakke of eenzijdige correctie).
+        """
+        return r.get("bewolking") is not None and r.get("bewolking_bron") == SOLAR_BEWOLKING_BRON
+
+    def noteer_bewolking(self, moment: datetime, percent: float | None, verwacht_kwh: float | None) -> None:
+        """De bewolking van deze ronde, met de verwachte zon (v5.171.0).
+
+        Per kwartier de laatste stand; alleen kwartieren met verwachte zon
+        (`verwacht_kwh` > 0, de Solcast-verwachting van dat halfuur) tellen.
+        `laatste_bewolking_percent` blijft de stand van nu.
+        """
+        self.laatste_bewolking_percent = percent
+        dag = moment.date().isoformat()
+        if dag != self.bewolking_dag:
+            self.bewolking_dag = dag
+            self.bewolking_kwartieren = {}
+        if percent is None or not verwacht_kwh or verwacht_kwh <= 0:
+            return
+        sleutel = f"{moment.hour:02d}:{moment.minute // 15 * 15:02d}"
+        self.bewolking_kwartieren[sleutel] = [round(float(percent), 1), round(float(verwacht_kwh), 4)]
+
+    def bewolking_van_de_dag(self, dag: date) -> float | None:
+        """De bewolking van die dag, gewogen met de verwachte zon (v5.171.0).
+
+        None bij minder dan SOLAR_BEWOLKING_MIN_ZONKWARTIEREN zonkwartieren:
+        liever geen label dan een verkeerd.
+        """
+        if self.bewolking_dag != dag.isoformat():
+            return None
+        rijen = [
+            (float(p), float(g)) for p, g in (self.bewolking_kwartieren or {}).values()
+            if g and g > 0
+        ]
+        if len(rijen) < SOLAR_BEWOLKING_MIN_ZONKWARTIEREN:
+            return None
+        totaal = sum(g for _, g in rijen)
+        return round(sum(p * g for p, g in rijen) / totaal, 1)
 
     @staticmethod
     def _vak_ingehouden_reden(metingen: list[float]) -> str | None:
@@ -357,12 +411,18 @@ class SolarForecastAccuracyTracker:
             metingen = [
                 r["afwijking"]
                 for r in (self.deviation_context or [])
-                if r.get("bewolking") is not None
+                if self._telt_in_vak(r)
                 and self._bewolkingsvak(r["bewolking"]) == vak
             ]
             genoeg = len(metingen) >= SOLAR_BIAS_MIN_PER_VAK
             uit[vak] = {
                 "dagen": len(metingen),
+                # v5.171.0: dagen met het oude label (stand om 23:59), apart.
+                "oude_dagen_apart": sum(
+                    1 for r in (self.deviation_context or [])
+                    if r.get("bewolking") is not None and not self._telt_in_vak(r)
+                    and self._bewolkingsvak(r["bewolking"]) == vak
+                ),
                 "mediaan_afwijking_procent": (
                     round(statistics.median(metingen), 1) if metingen else None
                 ),
@@ -671,6 +731,23 @@ class SolarForecastAccuracyTracker:
         if self._unsub_capture:
             self._unsub_capture()
 
+    def _dagrecord(self, today: date) -> dict:
+        """De afwijking van vandaag met de bewolking (v3.45.0, v5.171.0).
+
+        L-EMS-058: de bewolking is het gewogen gemiddelde over de
+        zonkwartieren (`bewolking_van_de_dag`), niet de stand van 23:59:50.
+        Die staat er ter vergelijking naast.
+        """
+        return {
+            "datum": today.isoformat(),
+            "afwijking": self.last_deviation_percent,
+            "bewolking": self.bewolking_van_de_dag(today),
+            "bewolking_bron": SOLAR_BEWOLKING_BRON,
+            "bewolking_zonkwartieren": len(self.bewolking_kwartieren or {})
+            if self.bewolking_dag == today.isoformat() else 0,
+            "bewolking_middernacht": self.laatste_bewolking_percent,
+        }
+
     @callback
     def _handle_compare(self, _now) -> None:
         self.hass.async_create_task(self._async_handle_compare())
@@ -714,13 +791,7 @@ class SolarForecastAccuracyTracker:
                         # de reeks niet uit te splitsen en blijft er
                         # alleen de keuze tussen een verkeerd gemiddelde
                         # en helemaal niets.
-                        self.deviation_context.append(
-                            {
-                                "datum": today.isoformat(),
-                                "afwijking": self.last_deviation_percent,
-                                "bewolking": self.laatste_bewolking_percent,
-                            }
-                        )
+                        self.deviation_context.append(self._dagrecord(today))
                         # v4.10: de GESCHIEDENIS gaat veertig dagen mee;
                         # het leervenster blijft LEARNING_HISTORY_DAYS.
                         self.deviation_context = self.deviation_context[

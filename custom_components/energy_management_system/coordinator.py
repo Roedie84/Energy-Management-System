@@ -855,6 +855,7 @@ from .const import (
     CONF_VERKOOP_MIN_WINST_CT,
     DEFAULT_VERKOOP_MIN_WINST_CT,
     SHORTFALL_MIN_NETIMPORT_KWH,
+    TEKORT_LEEG_INHOUD_KWH,
     TEKORT_LEEG_MARGE_PROCENT,
     REDENEN_BEWUSTE_NETAFNAME,
     EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
@@ -1197,6 +1198,20 @@ def _tel_rangorde(paren: list[tuple[float, float]]) -> tuple[int, int]:
             ingevoegd += 1
         i = j
     return eens, totaal
+
+
+def accu_is_leeg(soc, inhoud_kwh, vloer: float) -> bool:
+    """Staat de accu leeg, voor de tekortmeting? (v5.33, v5.171.0)
+
+    Leeg: de laadstand op de vloer (minimum + TEKORT_LEEG_MARGE_PROCENT), of
+    sinds v5.171.0 (L-EMS-059) een bruikbare inhoud onder
+    TEKORT_LEEG_INHOUD_KWH, los van de laadstand: een module die eerder op
+    zijn celgrens zit, maakt de accu leeg bij 15-16 %. Geen van beide
+    bekend: niet leeg.
+    """
+    if isinstance(inhoud_kwh, (int, float)) and inhoud_kwh < TEKORT_LEEG_INHOUD_KWH:
+        return True
+    return isinstance(soc, (int, float)) and soc <= vloer
 
 
 class EnergyManagementSystemCoordinator:
@@ -30502,6 +30517,8 @@ class EnergyManagementSystemCoordinator:
         leveren - en de reden geen bewuste netafname is. Netafname bij een
         accu boven de vloer is vasthouden (sparen voor de piek) of een
         vermogensgrens; een grotere reserve lost geen van beide op.
+        v5.171.0 (L-EMS-059): leeg is ook een bruikbare inhoud onder
+        TEKORT_LEEG_INHOUD_KWH, los van de SoC - zie `accu_is_leeg`.
         """
         reden = self.last_reason or ""
         if reden in REDENEN_BEWUSTE_NETAFNAME:
@@ -30513,10 +30530,14 @@ class EnergyManagementSystemCoordinator:
         tot = dt_util.parse_datetime(self.piekverkoop_tot or "")
         if tot is not None and now < tot:
             return False
-        soc = self.accustand_procent()
-        if soc is None:
-            return False
-        return soc <= self.effective_min_soc_percent() + TEKORT_LEEG_MARGE_PROCENT
+        try:
+            inhoud = self.beschikbare_energie_kwh()
+        except Exception:  # noqa: BLE001 - zonder inhoud de SoC-regel
+            inhoud = None
+        return accu_is_leeg(
+            self.accustand_procent(), inhoud,
+            self.effective_min_soc_percent() + TEKORT_LEEG_MARGE_PROCENT,
+        )
 
     def _update_shortfall_detection(
         self,
@@ -34574,8 +34595,12 @@ class EnergyManagementSystemCoordinator:
             return None
         kwh = 0.0
         for r in rijen:
-            soc, net_w = r.get("soc"), r.get("net_w")
-            if soc is None or net_w is None or net_w <= 0 or soc > vloer:
+            net_w = r.get("net_w")
+            # v5.171.0 (L-EMS-059): ook leeg bij een bruikbare inhoud onder
+            # TEKORT_LEEG_INHOUD_KWH; oudere regels zonder inhoud: de SoC.
+            if net_w is None or net_w <= 0 or not accu_is_leeg(
+                r.get("soc"), r.get("beschikbaar_kwh"), vloer
+            ):
                 continue
             if r.get("reden") in REDENEN_BEWUSTE_NETAFNAME:
                 continue
@@ -36010,8 +36035,22 @@ class EnergyManagementSystemCoordinator:
         # sensor gewoon 0,9504 gaf - die ronden namen een andere tak.
         beschikbaar_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if beschikbaar_entity:
-            self.last_available_kwh = self._read_sensor_float(beschikbaar_entity)
+            self.last_available_kwh = self._beschikbaar_voor_spiegel(
+                beschikbaar_entity
+            )
             self._onthoud_meting("last_available_kwh")
+
+    def _beschikbaar_voor_spiegel(self, entity: str) -> float | None:
+        """De meting zoals de sturing en de spiegel hem lezen (L-EMS-056).
+
+        Deze tak zette het veld ruw, de spiegel trekt sinds v5.164.1 de
+        modulesprong af en maakt negatief 0. Gemeten 02-11 23:30: 0,576
+        tegen 0,025 = een valse `fout 1`, terwijl het plan met 0,14 rekende.
+        """
+        gemeten = self._read_sensor_float(entity)
+        if gemeten is None:
+            return None
+        return self._na_module_leeg(max(0.0, gemeten))
 
     def _goedkope_koeling_op_slot(self, now: datetime) -> bool:
         """Heeft de goedkope koeling zijn dagportie op? (v3.33.0)
@@ -40083,10 +40122,28 @@ class EnergyManagementSystemCoordinator:
         `_update_weather_ensemble_check` staan al op de ratel van
         v3.35.0 en mogen niet groeien.
         """
-        if self.solar_tracker is not None:
-            self.solar_tracker.laatste_bewolking_percent = (
-                self._weather_cloud_cover_percent()
-            )
+        if self.solar_tracker is None:
+            return
+        nu = dt_util.now()
+        percent = self._weather_cloud_cover_percent()
+        noteer = getattr(self.solar_tracker, "noteer_bewolking", None)
+        if noteer is None:
+            self.solar_tracker.laatste_bewolking_percent = percent
+            return
+        # v5.171.0 (L-EMS-058): met de verwachte zon van dit halfuur, zodat
+        # de dagafsluiting een gewogen daggemiddelde bewaart.
+        noteer(nu, percent, self._pv_verwacht_nu_kwh(nu))
+
+    def _pv_verwacht_nu_kwh(self, nu: datetime) -> float | None:
+        """De Solcast-verwachting (kWh) van het interval waar `nu` in valt
+        (v5.171.0); None als er geen voorspelling is."""
+        try:
+            for start, eind, kwh in self._get_pv_forecast_entries() or []:
+                if start <= nu < eind:
+                    return kwh
+        except Exception:  # noqa: BLE001 - zonder voorspelling geen gewicht
+            return None
+        return None
 
     def _weer_de_slechte_bronnen(
         self, sources_used: list, cloud_readings: list
@@ -52114,6 +52171,14 @@ class EnergyManagementSystemCoordinator:
             setpunten_gezien=len(self.airco_setpunten or []),
             setpunten_nodig=AIRCO_PREDICTION_MIN_SAMPLES,
             vooruit=self._airco_vooruitblik(),
+            # v5.171.0 (L-EMS-057): geen nachtstart na de vaste uit
+            nachtrust=airco_sturing.in_nachtrust(
+                airco_ritme.minuut(now),
+                airco_ritme.minuten_uit_klok(
+                    self.instelling(CONF_AIRCO_UIT_OM, DEFAULT_AIRCO_UIT_OM)
+                ),
+                airco_ritme.OCHTEND_VAN,
+            ),
         )
         uit = self._airco_ritme_ronde(now, uit, stand)
         uit = self._airco_kort_weg_ronde(now, uit)

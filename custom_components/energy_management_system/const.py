@@ -1935,6 +1935,10 @@ SHORTFALL_MIN_NETIMPORT_KWH = 0.5
 # hij spaart; een extra reserve lost daar niets op. Een lege accu in
 # `default_smart` heeft wél een tekort.
 TEKORT_LEEG_MARGE_PROCENT = 3.0
+# v5.171.0 (L-EMS-059): ook leeg als de bruikbare inhoud hieronder ligt, los
+# van de laadstand. Nacht 02->03: 15-16 % met 0,02-0,14 kWh bruikbaar (een
+# module op zijn celgrens), 1,887 kWh van het net, als tekort geteld: 0.
+TEKORT_LEEG_INHOUD_KWH = 0.1
 
 # Redenen waarin netafname bewust is en dus nooit een tekort (v5.33).
 REDENEN_BEWUSTE_NETAFNAME = (
@@ -5421,6 +5425,13 @@ SOLAR_EENZIJDIG_MAX_PERCENT = 15.0
 SOLAR_BEWOLKING_HELDER_PERCENT = 30.0
 SOLAR_BEWOLKING_BEWOLKT_PERCENT = 70.0
 SOLAR_BIAS_MIN_PER_VAK = 4
+# v5.171.0 (L-EMS-058): de bewolking van een dag is het gemiddelde over de
+# kwartieren met verwachte zon, gewogen met die verwachting. Minder dan dit
+# aantal zonkwartieren gezien (herstart, geen voorspelling) -> geen label.
+SOLAR_BEWOLKING_MIN_ZONKWARTIEREN = 4
+# Zo heet de bron van dat label in `deviation_context`; dagen zonder (van
+# vóór v5.171.0: de stand om 23:59) tellen niet mee in de vakken.
+SOLAR_BEWOLKING_BRON = "zonkwartieren"
 
 # Hoe dicht een dag bij de weinig-zon-drempel mag liggen voordat het het
 # vermelden waard is. Vandaag zat op ~70% van typisch, vlak op de grens -

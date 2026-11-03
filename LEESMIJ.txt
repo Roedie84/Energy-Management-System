@@ -1,3 +1,22 @@
+EMS v5.171.0 - vier meetfouten en de airco 's nachts
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Beschikbare energie: de controle vergeleek de ruwe meting met de waarde
+  waar al de sprong van een bijna lege module af was. Dat gaf een valse
+  "fout" in de analyse. Nu leest de controle hetzelfde getal als de sturing.
+- Airco: tussen de vaste uit (22:00) en 04:00 kiest het EMS niet meer voor
+  verwarmen. Zelf aanzetten kan altijd; ochtend en dag blijven gelijk.
+- Bewolking bij de zonvoorspelling: dat was de stand om middernacht. Nu het
+  gemiddelde over de uren met zon, zwaarder naarmate er meer zon verwacht
+  werd. Oude dagen tellen in de correctie per soort dag niet meer mee; de
+  correctie per soort dag komt terug zodra er per soort weer 4 nieuwe dagen
+  zijn (tot dan de gewone correctie).
+- Lege accu: ook als er minder dan 0,1 kWh bruikbaar is telt stroom van het
+  net 's nachts als tekort, ook boven 13 %. Vannacht stond de accu op 15 %
+  met bijna niets bruikbaar (een module op zijn grens). Alleen echte
+  tekorten verhogen de marge; economische nachten niet.
+
 EMS v5.170.1 - kostenoverzicht accu werkt weer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
