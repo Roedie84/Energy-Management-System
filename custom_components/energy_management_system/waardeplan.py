@@ -44,6 +44,10 @@ import numpy as np
 
 STAP_KWH = 0.1
 EPS_KWH = 0.02
+#: v5.169.0: ontladen in inhoud-eenheden (inhoud -> AC) mag boven 1,0: het is
+#: een schaalfactor tussen de laadstand en de AC-kant (zie rondrit.py). De
+#: afkapping op 1,0 drukte laden x ontladen onder de gemeten rondrit.
+ONTLADEN_MAX = 1.20
 
 
 @dataclass
@@ -128,16 +132,17 @@ def rendementen(accu: Accu) -> tuple[float, float]:
 
     Laden: het gemeten laadrendement, anders de wortel van de rondrit.
     Ontladen: rondrit / laden (zoals de nacalculatie in accukosten.py).
+    v5.169.0: ontladen tot ONTLADEN_MAX (inhoud -> AC, mag boven 1,0).
     """
     rondrit = max(0.5, min(1.0, accu.rendement))
     if accu.rendement_laden and accu.rendement_ontladen:
         # v5.167.0: beide gemeten (hele rondes) - zelfde grondslag voor
         # huisband en terugval.
         return (max(0.5, min(1.0, accu.rendement_laden)),
-                max(0.5, min(1.0, accu.rendement_ontladen)))
+                max(0.5, min(ONTLADEN_MAX, accu.rendement_ontladen)))
     if accu.rendement_laden:
         eta_l = max(0.5, min(1.0, accu.rendement_laden))
-        return eta_l, max(0.5, min(1.0, rondrit / eta_l))
+        return eta_l, max(0.5, min(ONTLADEN_MAX, rondrit / eta_l))
     return rondrit ** 0.5, rondrit ** 0.5
 
 
@@ -145,7 +150,7 @@ def ontlaadrendement(vermogen_w: float, accu: Accu, terugval: float) -> float:
     """Het ontlaadrendement bij dit vermogen (aan de netkant, v5.165.0)."""
     for grens, eta in accu.ontlaadbanden or ():
         if vermogen_w < grens:
-            return max(0.5, min(1.0, eta)) if eta else terugval
+            return max(0.5, min(ONTLADEN_MAX, eta)) if eta else terugval
     return terugval
 
 

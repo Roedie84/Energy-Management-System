@@ -168,7 +168,9 @@ def test_ronde_boven_100_procent_telt_mee_uitkomst_afgekapt():
     r_fout = {"richting": "ontladen", "kwartieren": 8, "ac_kwh": 0.48, "delta_kwh": -0.2}
     assert A._ronde_meting(r_fout) is None                # 2,4: meetfout
     reeks = _kwartieren(_rondes_met_pauze(10, 16, 240.0, 1.06), inhoud0=10.0)
-    assert A.rendement_per_band(reeks)["ontladen"]["<500 W"]["rendement_procent"] == 100.0
+    # v5.169.0: ontladen (inhoud -> AC) niet meer op 100 % afgekapt maar op
+    # 120 %: de gesimuleerde 1,06 komt (met de SoC-stap) als ~106 % door
+    assert A.rendement_per_band(reeks)["ontladen"]["<500 W"]["rendement_procent"] == pytest.approx(106.0, abs=1.5)
 
 
 def test_laadrendement_uit_banden_alleen_betrouwbaar():

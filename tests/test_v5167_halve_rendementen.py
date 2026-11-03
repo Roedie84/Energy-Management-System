@@ -27,7 +27,9 @@ def _reeks(eta_l=0.82, eta_o=1.0, dagen=4):
 def test_hele_rondes_geven_de_meter():
     r = A.rendement_over_rondes(_reeks())
     assert r["laden"]["rendement"] == pytest.approx(0.82, abs=0.01)
-    assert r["ontladen"]["rendement"] == pytest.approx(1.0, abs=0.001)   # afgekapt op 1,0
+    # v5.169.0: niet meer afgekapt op 1,0 (inhoud -> AC mag erboven); de
+    # SoC-stap van 1 % geeft hier 1,003
+    assert r["ontladen"]["rendement"] == pytest.approx(1.0, abs=0.01)
     assert r["laden"]["rondes"] >= 3 and r["ontladen"]["rondes"] >= 3
 
 
@@ -45,7 +47,9 @@ def test_te_weinig_rondes_geen_uitspraak():
 
 
 def _c(**kw):
-    c = SimpleNamespace(charge_efficiency_history=[86.3] * 5, discharge_efficiency_history=[96.0] * 5)
+    # v5.169.0: zonder rondrit uit de kWh-meter (de rekenwijze van v5.167.0)
+    c = SimpleNamespace(charge_efficiency_history=[86.3] * 5, discharge_efficiency_history=[96.0] * 5,
+                        _rondrit_anker=lambda: None)
     c.__dict__.update(kw)
     return c
 
@@ -66,7 +70,8 @@ def test_rendement_uit_rondes_in_de_coordinator():
     reeks = _reeks()
     c = SimpleNamespace(_accu_meetreeks=lambda now=None: reeks)
     uit = C._rendement_uit_rondes(c)
-    assert uit == {"laden": pytest.approx(82.0, abs=1.0), "ontladen": 100.0}
+    # v5.169.0: ontladen niet meer op 100,0 afgekapt (SoC-stap: 100,3)
+    assert uit == {"laden": pytest.approx(82.0, abs=1.0), "ontladen": pytest.approx(100.0, abs=1.0)}
     assert C._rendement_uit_rondes(c) is uit          # bewaard bij dezelfde reeks
     kapot = SimpleNamespace(_accu_meetreeks=lambda now=None: 1 / 0)
     assert C._rendement_uit_rondes(kapot) == {}
@@ -108,10 +113,12 @@ def test_waardeplan_terugval_voor_een_onbetrouwbare_band_is_het_gemeten_ontladen
     assert W.ontlaadrendement(2000.0, accu, eta_o) == 0.97      # was 0,83/0,819 -> 1,0
     assert W.ontlaadrendement(300.0, accu, eta_o) == 0.958
     oud = W.Accu(**{**accu.__dict__, "rendement_ontladen": None})
-    assert W.rendementen(oud)[1] == 1.0
+    # v5.169.0: rondrit / laden = 0,83/0,819 = 1,013, niet meer afgekapt op 1,0
+    assert W.rendementen(oud)[1] == pytest.approx(0.83 / 0.819)
 
 
 def test_coordinator_geeft_het_ontlaadrendement_aan_het_waardeplan():
     from pathlib import Path
     bron = (Path(A.__file__).parent / "coordinator.py").read_text(encoding="utf-8")
-    assert 'uit["rendement_ontladen"] = min(1.0, ontladen / 100)' in bron
+    # v5.169.0: tot ONTLAAD_RENDEMENT_MAX (1,20) in plaats van 1,0
+    assert 'uit["rendement_ontladen"] = min(A.ONTLAAD_RENDEMENT_MAX, ontladen / 100)' in bron

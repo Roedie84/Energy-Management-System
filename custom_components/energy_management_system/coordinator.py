@@ -4330,7 +4330,13 @@ class EnergyManagementSystemCoordinator:
 
         v5.167.0: eerst over alle hele ontlaadrondes samen; anders de mediaan
         van de stukken, die nu tot 115 % meetellen en op 100 % worden
-        afgekapt (alles boven 100 % weggooien gaf 96,2 % tegen ~100 %)."""
+        afgekapt (alles boven 100 % weggooien gaf 96,2 % tegen ~100 %).
+
+        v5.169.0: eerst rondrit (kWh-meter van de accu) / laadrendement -
+        zie `_rondrit_anker`; mag boven 100 % (inhoud -> AC)."""
+        anker = self._rondrit_anker()
+        if anker is not None:
+            return round(anker["ontladen"] * 100, 1)
         gemeten = self._rendement_uit_rondes().get("ontladen")
         if gemeten is not None:
             return gemeten
@@ -4358,6 +4364,117 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001 - leren mag de sturing nooit raken
             return {}
 
+    #: v5.169.0: de rondrit uit de kWh-meter van de accu (rondrit.py).
+    _rondrit_meter: dict | None = None
+    _rondrit_meter_uur: str | None = None
+
+    def _rondrit_anker(self) -> dict | None:
+        """{"rondrit", "laden", "ontladen"} (fracties) of None (v5.169.0).
+
+        De rondrit uit de tellerstanden van de kWh-meter van de accu over
+        een lang venster (`async_ververs_rondrit_meter`); het gemeten
+        laadrendement (hele rondes) is het splitspunt en ontladen (inhoud ->
+        AC) = rondrit / laden, ook boven 1,0. Zo is laden x ontladen bij elke
+        gebruiker de gemeten rondrit. None zonder meter, met een te kort
+        venster of zonder laadrendement: dan de rekenwijze van v5.167.0."""
+        from . import rondrit as R
+
+        meting = self._rondrit_meter or {}
+        rt = meting.get("rendement")
+        laden = self.learned_charge_efficiency_percent
+        if not rt or not laden:
+            return None
+        eta_l = max(0.5, min(1.0, laden / 100))
+        return {"rondrit": rt, "laden": eta_l, "ontladen": R.ontlaadrendement(rt, eta_l)}
+
+    def _rondrit_inhoud(self) -> dict:
+        """{moment: beschikbare energie} uit het dagverloop (v5.169.0).
+
+        De regel 'HH:MM' draagt de inhoud op het eind van dat kwartier."""
+        uit = {}
+        for dag, reeks in (self.dagverloop or {}).items():
+            for r in reeks or []:
+                try:
+                    moment = datetime.fromisoformat(f"{dag}T{r.get('tijd')}") + timedelta(minutes=15)
+                    kwh = float(r["beschikbaar_kwh"])
+                except (TypeError, ValueError, KeyError, AttributeError):
+                    continue
+                uit[moment] = kwh
+        return uit
+
+    async def async_ververs_rondrit_meter(self, now: datetime) -> None:
+        """Haalt eens per uur de tellerstanden van de kWh-meter van de accu
+        (uurstatistiek van de ingestelde laad-/ontlaadteller, `sum`) over
+        `rondrit.VENSTER_DAGEN` dagen en rekent de rondrit uit (v5.169.0).
+        Best effort: zonder recorder of tellers blijft het anker leeg."""
+        from . import rondrit as R
+
+        uur = f"{now:%Y-%m-%d %H}"
+        if self._rondrit_meter_uur == uur:
+            return
+        self._rondrit_meter_uur = uur
+        ids = {"in": self.config.get(CONF_BATTERY_CHARGE_ENERGY_SENSOR),
+               "uit": self.config.get(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR)}
+        if not ids["in"] or not ids["uit"]:
+            self._rondrit_meter = {"rendement": None, "reden": "geen laad- en ontlaadteller ingesteld"}
+            return
+        rijen, eenheden = await self._rondrit_statistiek(now, set(ids.values()))
+        if rijen is None:
+            return
+        standen = {}
+        for kant, entity in ids.items():
+            factor = ENERGY_UNIT_TO_KWH.get(eenheden.get(entity) or "kWh")
+            standen[kant] = R.tellerstanden(
+                [{"end": self._rondrit_lokaal(r.get("end")), "sum": r.get("sum")} for r in rijen.get(entity) or []],
+                factor or 1.0)
+        laden = self.learned_charge_efficiency_percent
+        uit = R.rondrit_uit_meter(standen["in"], standen["uit"], self._rondrit_inhoud(),
+                                  laden / 100 if laden else None)
+        uit.update({"bron": "kWh-meter van de accu (uurstatistiek)", "tellers": ids,
+                    "berekend_om": now.isoformat()})
+        self._rondrit_meter = uit
+
+    @staticmethod
+    def _rondrit_lokaal(eind) -> datetime | None:
+        """Het eind van een statistiekrij als lokale tijd zonder zone."""
+        if isinstance(eind, (int, float)):
+            eind = datetime.fromtimestamp(eind if eind < 1e11 else eind / 1000, tz=timezone.utc)
+        if not isinstance(eind, datetime):
+            return None
+        return dt_util.as_local(eind).replace(tzinfo=None)
+
+    async def _rondrit_statistiek(self, now: datetime, ids: set) -> tuple:
+        """(rijen per entiteit, eenheid per entiteit) of (None, None)."""
+        from . import rondrit as R
+
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import get_metadata, statistics_during_period
+        except ImportError:
+            return None, None
+        begin, eind = R.venster(now)
+        begin, eind = begin.astimezone(timezone.utc), eind.astimezone(timezone.utc)
+
+        def _ophalen():
+            meta = get_metadata(self.hass, statistic_ids=ids)
+            rijen = statistics_during_period(self.hass, begin, eind, ids, "hour", None, {"sum"})
+            return rijen, {k: (v[1] or {}).get("unit_of_measurement") for k, v in (meta or {}).items()}
+
+        try:
+            return await get_instance(self.hass).async_add_executor_job(_ophalen)
+        except Exception:  # noqa: BLE001 - best effort, het anker blijft zoals het was
+            _LOGGER.debug("Tellerstanden van de accu niet uit de recorder", exc_info=True)
+            return None, None
+
+    async def _async_recorder_staartstappen(self, now: datetime) -> None:
+        """De staartstappen die de recorder lezen (v5.169.0: samen, zodat de
+        bevroren `_async_update_locked` niet groeit)."""
+        await self.async_vul_dagverloop_aan_uit_recorder(now)
+        try:
+            await self.async_ververs_rondrit_meter(now)
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Rondrit uit de kWh-meter niet berekend", exc_info=True)
+
     def get_efficiency_overview(self) -> dict:
         """Waar het rendement vandaan komt (v1.32.0).
 
@@ -4382,6 +4499,8 @@ class EnergyManagementSystemCoordinator:
             "metingen_ontladen_reeks": list(self.discharge_efficiency_history),
             # v5.167.0: hele rondes uit de meetreeks gaan voor
             "uit_hele_rondes": self._rendement_uit_rondes(),
+            # v5.169.0: de rondrit uit de kWh-meter van de accu
+            "rondrit_kwh_meter": self._rondrit_meter,
             "rondes": (getattr(self, "_rendement_rondes_cache", None) or (None, None, {}))[2],
             "methode": (
                 "hele rondes (meetreeks)" if self._rendement_uit_rondes()
@@ -16299,23 +16418,25 @@ class EnergyManagementSystemCoordinator:
         ontladen = self.learned_discharge_efficiency_percent
         eta_l = laden / 100 if laden else math.sqrt(heen_terug)
         eta_o = ontladen / 100 if ontladen else heen_terug / eta_l
+        # v5.169.0: ontladen (inhoud -> AC) mag boven 1,0 (rondrit.py)
+        eta_o = min(A.ONTLAAD_RENDEMENT_MAX, eta_o)
         slijtage = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
         banden = self.get_rendement_per_band(now)
         gemeten = self._gemeten_voor_accukosten(now)
         try:
-            uit = A.doorreken(self.dagverloop or {}, eta_l, min(1.0, eta_o), (slijtage or 0.0) / 100, now,
+            uit = A.doorreken(self.dagverloop or {}, eta_l, eta_o, (slijtage or 0.0) / 100, now,
                               banden=banden, gemeten=gemeten)
         except Exception as fout:  # noqa: BLE001 - nacalculatie mag de sturing nooit raken
             _LOGGER.debug("Accukosten niet doorgerekend", exc_info=True)
             uit = {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
         uit["laadrendement_procent"] = round(eta_l * 100, 1)
-        uit["ontlaadrendement_procent"] = round(min(1.0, eta_o) * 100, 1)
+        uit["ontlaadrendement_procent"] = round(eta_o * 100, 1)
         # v5.122.0 (punt 7): per vermogensband, sturend via de datacorrectie
         # zodra een band betrouwbaar is
         uit["rendement_per_band"] = banden
         huis_w = self._read_corrected_consumption_power()
         uit["afweging_huis_of_verkopen"] = A.afweging_huis_of_verkopen(
-            banden, max(100.0, float(huis_w or 400.0)), self.slimme_ontlaadgrens_w(), min(1.0, eta_o))
+            banden, max(100.0, float(huis_w or 400.0)), self.slimme_ontlaadgrens_w(), eta_o)
         uit["slijtage_bron"] = (
             "aanname: aanschafprijs modules / (capaciteit x cycli); de gemeten "
             "capaciteit kan cyclus- en kalenderslijtage nog niet scheiden"
@@ -37341,6 +37462,11 @@ class EnergyManagementSystemCoordinator:
         laden = A.laadrendement_uit_banden(alle)
         if laden is None and self.learned_charge_efficiency_percent:
             laden = self.learned_charge_efficiency_percent / 100
+        # v5.169.0: met de rondrit uit de kWh-meter hetzelfde splitspunt als
+        # het geleerde rendement, zodat laden x ontladen = de gemeten rondrit.
+        anker = self._rondrit_anker()
+        if anker is not None:
+            laden = anker["laden"]
         if laden:
             uit["rendement_laden"] = laden
         # v5.167.0 (audit punt 4): een onbetrouwbare ontlaadband viel terug op
@@ -37349,7 +37475,7 @@ class EnergyManagementSystemCoordinator:
         # ontlaadrendement over alle rondes (zelfde grondslag) als terugval.
         ontladen = self.learned_discharge_efficiency_percent
         if ontladen:
-            uit["rendement_ontladen"] = min(1.0, ontladen / 100)
+            uit["rendement_ontladen"] = min(A.ONTLAAD_RENDEMENT_MAX, ontladen / 100)
         banden = alle.get("ontladen") or {}
         grenzen = tuple(A.BANDEN_W) + (math.inf,)
         rijen = []
@@ -38406,8 +38532,11 @@ class EnergyManagementSystemCoordinator:
             schatting = voorraad_kwh / factor
             ondergrens, bovengrens = voorraad_kwh, voorraad_kwh / ACCU_AC_MIN_RENDEMENT
         else:
+            # v5.169.0: ontladen (inhoud -> AC) mag boven 1,0 (rondrit.py)
+            from .rondrit import ONTLADEN_MAX
+
             schatting = voorraad_kwh * factor
-            ondergrens, bovengrens = voorraad_kwh * ACCU_AC_MIN_RENDEMENT, voorraad_kwh
+            ondergrens, bovengrens = voorraad_kwh * ACCU_AC_MIN_RENDEMENT, voorraad_kwh * ONTLADEN_MAX
         if gemeten > 0 and ondergrens <= gemeten <= bovengrens:
             return gemeten
         return min(max(schatting, ondergrens), bovengrens)
@@ -38428,7 +38557,10 @@ class EnergyManagementSystemCoordinator:
         )
         if not half:
             return vermogen_w
-        factor = min(max(half / 100, ACCU_AC_MIN_RENDEMENT), 1.0)
+        from .rondrit import ONTLADEN_MAX
+
+        # v5.169.0: ontladen (inhoud -> AC) tot ONTLADEN_MAX, laden tot 1,0
+        factor = min(max(half / 100, ACCU_AC_MIN_RENDEMENT), ONTLADEN_MAX if vermogen_w > 0 else 1.0)
         return vermogen_w / factor if vermogen_w > 0 else vermogen_w * factor
 
     def _update_energy_balance_validation(self, now: datetime) -> None:
@@ -49554,7 +49686,7 @@ class EnergyManagementSystemCoordinator:
         await self._voer_staartstap_async_uit("accukoeling", self._async_apply_battery_cooling())
         # v5.72: lege laadstanden in het dagverloop uit de recorder.
         await self._voer_staartstap_async_uit(
-            "dagverloop uit recorder", self.async_vul_dagverloop_aan_uit_recorder(now)
+            "dagverloop uit recorder", self._async_recorder_staartstappen(now)
         )
 
         for naam, stap in (
@@ -54995,7 +55127,15 @@ class EnergyManagementSystemCoordinator:
         """Laad- en ontlaadrendement per vermogensband (v5.122.0, punt 7)."""
         from . import accukosten as A
 
-        return A.rendement_per_band(self._accu_meetreeks(now))
+        banden = A.rendement_per_band(self._accu_meetreeks(now))
+        # v5.169.0: ontladen geschaald op rondrit (kWh-meter) / laden; de
+        # banden houden hun onderlinge verhouding.
+        anker = self._rondrit_anker()
+        if anker is not None:
+            from . import rondrit as R
+
+            banden = R.schaal_ontlaadbanden(banden, anker["ontladen"])
+        return banden
 
     # --- punt 3: P1-doel 2027 ---------------------------------------------
 

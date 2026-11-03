@@ -1,3 +1,25 @@
+EMS v5.169.0 - heen-en-terug-rendement uit de kWh-meter van de accu
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het EMS haalt het heen-en-terug-rendement nu uit de kWh-meter van de
+  accu (de HomeWizard): over de laatste 30 dagen wat er aan stroom in ging
+  tegen wat eruit kwam, gecorrigeerd voor wat er nog in zit. Nu ~84 %
+  (in oktober ~85 %), rustverbruik inbegrepen.
+- Eerder kwam dat getal uit twee losse metingen in laadstand-procenten, en
+  daarmee rekende het EMS ~79-80 %. Ontladen telde nooit boven 100 %, maar
+  in laadstand-procenten komt er juist iets meer stroom uit dan de
+  laadstand laat zien. Dat mag nu (tot 120 %), zodat laden x ontladen
+  overal gelijk is aan wat de meter meet.
+- Gevolg: het plan rekent een kleiner verlies per opgeslagen kWh. Laden
+  uit het net en later gebruiken loont daardoor eerder: bij een goedkoop
+  uur van 28,6 ct (zonder energiebelasting) is ~2 ct minder prijsverschil
+  nodig.
+- Zonder bruikbare meterstanden (te kort venster, geen tellers ingesteld)
+  rekent het EMS zoals voorheen.
+- Te zien bij de sensor "Learned battery efficiency" onder
+  "rondrit_kwh_meter" (venster, kWh erin en eruit, uitkomst).
+
 EMS v5.168.0 - salderen: rekenen met de prijs zonder energiebelasting bij een overschot
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

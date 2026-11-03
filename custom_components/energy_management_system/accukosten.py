@@ -505,8 +505,21 @@ BAND_RENDEMENT_MAX = 1.0
 #: BAND_RENDEMENT_MAX uitkomen voor hij als meetfout geldt. Ontladen in
 #: inhoud-eenheden is gemeten ~1,0 (de SoC is op de bruikbare afgifte
 #: geijkt); de SoC-stap van 1 % laat een ronde daar eerlijk overheen gaan.
-#: De uitkomst per band blijft op BAND_RENDEMENT_MAX afgekapt.
+#: v5.169.0: de uitkomst per band op `rendement_max` (ontladen 1,20).
 RONDE_RENDEMENT_SPELING = 0.15
+#: v5.169.0: ontladen in inhoud-eenheden (inhoud -> AC) is een schaalfactor
+#: tussen de laadstand en de AC-kant en komt gemeten vaak boven 1,0 uit (de
+#: kWh-meter van de accu: AC eruit 3-8 % meer dan de daling van de
+#: laadstand). De afkapping op BAND_RENDEMENT_MAX drukte het product (de
+#: rondrit) 5-7 pt omlaag. Ontladen: uitkomst tot ONTLAAD_RENDEMENT_MAX,
+#: per ronde tot ONTLAAD_RENDEMENT_MAX + RONDE_RENDEMENT_SPELING. Laden blijft
+#: op BAND_RENDEMENT_MAX (meer dan erin ging kan er niet bij komen).
+ONTLAAD_RENDEMENT_MAX = 1.20
+
+
+def rendement_max(richting: str) -> float:
+    """De bovengrens van de uitkomst per richting (v5.169.0)."""
+    return ONTLAAD_RENDEMENT_MAX if richting == "ontladen" else BAND_RENDEMENT_MAX
 #: Een ronde telt pas mee met minstens zoveel kWh aan de netkant (~3
 #: SoC-stappen van 0,115 kWh). Bewust op de AC-kant geselecteerd, niet op
 #: de inhoud: selecteren op de SoC-stap brengt precies de vertekening terug
@@ -726,7 +739,7 @@ def _ronde_meting(r: dict) -> tuple[float, float] | None:
         teller, noemer = ac, -d          # wat eruit kwam / afname inhoud
     if teller <= 0 or noemer <= 0:
         return None
-    if not BAND_RENDEMENT_MIN <= teller / noemer <= BAND_RENDEMENT_MAX + RONDE_RENDEMENT_SPELING:
+    if not BAND_RENDEMENT_MIN <= teller / noemer <= rendement_max(r["richting"]) + RONDE_RENDEMENT_SPELING:
         return None
     return teller, noemer
 
@@ -759,7 +772,7 @@ def rendement_per_band(reeks: list[dict]) -> dict:
         t[2] += meting[1]
     uit: dict = {"laden": {}, "ontladen": {}}
     for (richting, b), (n, teller, noemer) in som.items():
-        eta = min(BAND_RENDEMENT_MAX, teller / noemer) if noemer > 0 else None
+        eta = min(rendement_max(richting), teller / noemer) if noemer > 0 else None
         uit[richting][BAND_NAMEN[b]] = {
             "kwartieren": n,
             "kwh": round(noemer, 2),
@@ -794,9 +807,8 @@ def rendement_over_rondes(reeks: list[dict]) -> dict:
 
     Laden: som toename inhoud / som AC erin. Ontladen: som AC eruit / som
     afname inhoud. Per ronde dezelfde toets als de banden (`_ronde_meting`:
-    tot BAND_RENDEMENT_MAX + RONDE_RENDEMENT_SPELING, dus ontladen mag per
-    ronde tot 1,15 - de SoC-stap laat een ronde daar eerlijk overheen gaan);
-    de uitkomst afgekapt op 1,0. Geen mediaan van losse stukken en geen
+    tot `rendement_max` + RONDE_RENDEMENT_SPELING; v5.169.0: ontladen per
+    ronde tot 1,35 en de uitkomst tot 1,20, laden tot 1,15 / 1,0). Geen mediaan van losse stukken en geen
     weggooien boven 100 %: dat gaf ontladen 96 % tegen ~100 % op de meter.
     Per richting None tot RONDES_MIN rondes en RONDES_MIN_KWH.
     """
@@ -812,7 +824,7 @@ def rendement_over_rondes(reeks: list[dict]) -> dict:
     uit = {}
     for richting, (n, teller, noemer) in som.items():
         ac = noemer if richting == "laden" else teller
-        eta = min(BAND_RENDEMENT_MAX, teller / noemer) if noemer > 0 else None
+        eta = min(rendement_max(richting), teller / noemer) if noemer > 0 else None
         uit[richting] = {
             "rondes": n, "ac_kwh": round(ac, 2),
             "rendement": eta if (n >= RONDES_MIN and ac >= RONDES_MIN_KWH) else None,

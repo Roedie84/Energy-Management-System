@@ -4186,6 +4186,8 @@ class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):
             "laadrendement_procent": c.learned_charge_efficiency_percent,
             "ontlaadrendement_procent": c.learned_discharge_efficiency_percent,
             "uit_hele_rondes": c._rendement_uit_rondes(),
+            # v5.169.0: heen-en-terug uit de kWh-meter van de accu (venster, kWh)
+            "rondrit_kwh_meter": getattr(c, "_rondrit_meter", None),
             # v5.115.0: wat de accu werkelijk kost en oplevert (cockpit)
             "accukosten": c.get_accukosten(),
         }
