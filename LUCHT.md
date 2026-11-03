@@ -683,4 +683,13 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ hele ronde > 1.200 (gem 1.591, max 1.838, nu 1.476), ramen dicht, aanwezig. Vocht 50,6-64,0% (koken) bij 19,6-21,8 °C, schimmelindicator 68 → 86 → 79, buiten 99% / 8,3 °C. Luchten; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 17). H2 auto bij koken 6x: 61, 22,6, 7,2, 6,6, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=25): reiniger aan houdt het laag; wachttijd op auto zonder daling nu n=5, mid daalt direct; apparaatsensor op 2 kan verklaren dat auto dan zacht draait (nog niet bewezen). Airco: start 17:46 gaf geen piek, piek 16:42 lag niet bij een start: geen bewijs voor airco.
 
-laatste ronde: 03-11 20:25, gemeten t/m 20:20
+## 04-11 00:25 (ronde 91, eerste na middernacht)
+- DAG 03-11: PM2.5 gem 1,96 (max 43,3 om 16:06, geen koken; 0,08 u > 15, 0 u > 25), onder de WHO-jaarnorm 5. 7d (28-10/03-11) 2,61 (nulmeting okt 2025 9,1). CO₂ 11 van 24 u > 1.200. 12 HA-herstarts.
+- Ronde 20:20-00:20: PM2.5 gem 2,48, mediaan 2,72, P95 3,06, max 3,51 (21:00-21:10) (n=48); 0 uur > 15. Geen piek > 25, geen kookmoment, ramen dicht.
+- Stand: auto 183 min (gem 2,76), mid 55 min (gem 1,56), 2,6 min unavailable. Aanwezig 2,78 (n=34) vs afwezig 1,77 (n=14).
+- Op auto 3 uur vlak 2,4-3,2 met apparaat op 2. Wachttijd 23:10-23:25: 2,64 → 2,73, geen daling (n=6). Direct na wissel naar mid 23:25: 2,73 → 0,99 in 50 min, halvering ~26 min (22-38 per achtergrond), derde keer dat mid direct daalt (19, 10, 26 min).
+- Werking: mid precies 15 min na laatste aanwezigheid (23:10:28 → 23:25:28), tv uit 23:01. 2 HA-herstarts (~20:38, 22:16), stand ~1,3 min unavailable, geen extra wissels. 5/5 traces zonder fout (2 failed_conditions = nachtvenster). Lokaal 69 mislukt op 193.861 (geen nieuwe), uitval 0, 272 verbindingen, sturen 440/441 (1/1 nieuw), filter 0%. Kookplaat en apparaat-PM 00:17 enkele seconden unavailable, geen herstart. Apparaat-PM2.5 2-3 bij Ultimate 1-3,5.
+- CO₂ hele ronde > 1.200 (gem 1.531, max 1.641, nu 1.370), ramen dicht. Vocht 51,2-58,4%, temperatuur 22,2 → 18,4 °C, schimmelindicator 80, buiten 99% / 8,3 °C. VOC-index 54 → 397 (20:50-21:40, nu 338) zonder PM-stijging: oorzaak niet te zien. Ochtend luchten en verwarmen; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 17). H2 auto bij koken 6x: 61, 22,6, 7,2, 6,6, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=26): reiniger aan houdt het laag; auto blijft bij apparaat op 2 hangen (wachttijd n=6), mid daalt direct (n=3); onder de norm, dus klein belang, oorzaak nog niet bewezen. Geen toets voor H1/H2.
+
+laatste ronde: 04-11 00:25, gemeten t/m 00:20
