@@ -917,3 +917,18 @@ laatste ronde: 02-11 19:40, gemeten t/m 02-11 19:50
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort onder waardeplan), H-EMS-16 (modulesprong bij laden vanaf leeg). H-EMS-14 geparkeerd tot het volgende weekend.
 
 laatste ronde: 02-11 23:40, gemeten t/m 02-11 23:50
+
+
+## 03-11 03:40 · dagafsluiting 02-11
+- **Draait v5.167.0**, v5.168.0 wacht op herstart: geen release. Geen purge/repack; log alleen Solcast-limiet (herstarts, niet melden) en sensoren rond de herstart. **L-EMS-056 klaargezet** op `wip/l-ems-056` (5 tests, suite 6694 groen); dagafsluiting na installatie van v5.168.0.
+- Dag 02-11 (ma): PV **1,99 kWh** (day-ahead 4,03 → **−50,6 %**, slechtste dag van 40), import 10,84, export 0,14, accu 1,93 in / 0,91 uit, huis **11,68** (verwacht 10,04 → **+1,64**). **Harde regel: 0× onder de reserve**, regeloverschot 0,034.
+- **Nieuw inzicht, meetfout:** `deviation_context.bewolking` heet "van die dag", maar is de stand om **23:59:50**. 02-11: label 25,8 %, terwijl de bewolking tot 15:15 op 100 % stond (instraling 36-136 W/m²). Alle uitsplitsingen van H-EMS-2 per bewolking (≤ 50 % −21,2, > 90 % −8,3) rusten daarop, en `zonbias_percent` kiest er een correctie mee. → **L-EMS-058 (open)**, raakt via de correctie de reserve.
+- **H-EMS-2 (PV te hoog):** 7 d MAE/bias **28,2/−19,9 %** (6/7 negatief), 14 d 21,0/−15,1, 30 d 18,2/−14,6 (25/30). Bias per bewolking niet meer gebruiken tot L-EMS-058 besloten is. Solcast vandaag 7,69 (p10 1,87, p90 10,86); breed, dus vandaag telt als toets.
+- **Tekortnacht 02→03 loopt:** net 22-03 uur 1,18 kWh, MC 22:00 100 %, plan volgt. Uitslag 09:00 voor L-EMS-054 en H-EMS-15.
+- **Nabeschouwing 7 d 62,8 %** (7,58 / 12,07) door de dure dagen 27-29-10 tegen dagen zonder spreiding; 02-11 0,09 / 0,03. Vergelijking met 73,9 % gaat over een ander venster, geen trend. Planvolging 7 d **69,7 %** (02-11 84,5); stijgt mee met de lege accu.
+- Verbruik 7 d +0,93 kWh/dag (MAE 1,73); maandag +1,64 past niet in "alleen weekend" (H-EMS-14 blijft geparkeerd). MC Brier n=4 **0,018**. Twin **0,366**.
+- Stilstand: **geen echte** (12 wachten, 0 doen). Airco 'niets', knop uit → rekent. Dagen sinds vol: 5.
+- Niet gemeten: bewolking per uur voor oudere dagen (`pv_model_samples` staat niet in de diagnostiek); herlabelen van de 30 d kan dus niet.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort onder waardeplan), H-EMS-16 (modulesprong bij laden vanaf leeg). H-EMS-14 geparkeerd.
+
+laatste ronde: 03-11 03:40, gemeten t/m 03-11 03:55

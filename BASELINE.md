@@ -118,4 +118,8 @@
 | PV-voorspelling MAE (dag, day-ahead tracker) | 16,6 % (30 d) · 18,0 % (14 d) · 21,5 % (7 d); bias −13,0 / −12,0 / −12,2; > 90 % bewolking −8,0 | 03-10..01-11 | 02-11 03:40 |
 | Nabeschouwing realisatie 7 d | 73,9 % (€ 9,41 / 12,74) — vóór L-EMS-051 | 26-10..01-11 | 02-11 03:40 |
 | Verbruik dagtotaal bias 7 d | +1,11 kWh/dag (MAE 1,92); weekend +3,48 (n=3), werkdagen +0,66 (n=5) | 26-10..01-11 | 02-11 03:40 |
-
+| PV-voorspelling MAE (dag, day-ahead tracker) | 18,2 % (30 d) · 21,0 % (14 d) · 28,2 % (7 d); bias −14,6 / −15,1 / −19,9; 25/30 negatief | 04-10..02-11 | 03-11 03:40 |
+| PV-bias per bewolking | **vervallen als referentie**: label is de stand om 23:59:50, niet de dag (L-EMS-058) | — | 03-11 03:40 |
+| Nabeschouwing realisatie 7 d | 62,8 % (€ 7,58 / 12,07) | 27-10..02-11 | 03-11 03:40 |
+| Verbruik dagtotaal bias 7 d | +0,93 kWh/dag (MAE 1,73) | 27-10..02-11 | 03-11 03:40 |
+| Planvolging volgens plan | 69,7 % (7 d, 53,7-93,7) | 27-10..02-11 | 03-11 03:40 |

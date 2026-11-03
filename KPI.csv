@@ -1178,3 +1178,23 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-02 23:40,TUSSEN,ems_airco_nachtbesluit_verwarmen,3,3,"besluit 'verwarmen' na vaste uit 22:00: 31-10 23:25-01:18, 01-11 23:24-01:08 (+02:17, 05:57), 02-11 23:37; L-EMS-057; knop uit, niets uitgevoerd"
 2026-11-02 23:40,TUSSEN,ems_dagen_sinds_vol,4,1,"laatst 100 % 29-10; balanceren wacht op < 22 ct; plan noemt celverschil 0.26 V; 00996 nu 0.12 V in rust"
 2026-11-02 23:40,TUSSEN,ems_stilstand_functies,0,12,"12 wachten, 0 doen; airco rekent ('verwarmen'), knop uit"
+2026-11-03 03:40,DAG,ems_pv_mae_7d_pct,28.2,7,"bias -19.9; mediaan -16.7; 6/7 negatief; 02-11 -50.6 (1.99 tegen 4.03), slechtste dag in 40"
+2026-11-03 03:40,DAG,ems_pv_mae_14d_pct,21.0,14,bias -15.1; mediaan -11.25; 11/14 negatief
+2026-11-03 03:40,DAG,ems_pv_mae_30d_pct,18.2,30,bias -14.6; mediaan -9.0; 25/30 negatief
+2026-11-03 03:40,DAG,ems_pv_bias_helder_30d_pct,-21.2,11,"bewolking <=50 %; 50-90 % -16.1 (n=6); >90 % -8.3 (n=13); ONBETROUWBAAR: label is de stand om 23:59:50, L-EMS-058"
+2026-11-03 03:40,DAG,ems_meetfout_bewolkingslabel,1,3,02-11 label 25.8 (23:59:50) tegen 100 % tot 15:15; 31-10 en 01-11 toevallig gelijk; L-EMS-058
+2026-11-03 03:40,DAG,ems_harde_regel_verkoop_onder_reserve,0,96,"02-11 0 kwartieren onder de reserve; verkoopkwartieren leeg; regeloverschot 0.034, niet geschonden"
+2026-11-03 03:40,DAG,ems_pv_dag_kwh,1.99,1,02-11; SolarEdge uren som 1.994; day-ahead 4.03; instraling uurgemiddelde 36-136 W/m2
+2026-11-03 03:40,DAG,ems_net_import_kwh,10.84,1,02-11 dagarchief; export 0.14
+2026-11-03 03:40,DAG,ems_accu_laden_kwh,1.93,1,02-11; ontladen 0.91
+2026-11-03 03:40,DAG,ems_huisverbruik_kwh,11.68,1,02-11; verwacht 10.04 = +1.64
+2026-11-03 03:40,DAG,ems_verbruik_dag_bias_kwh,0.93,7,27-10..02-11: +2.91/+1.27/-0.73/-2.10/+3.92/+0.55/+1.64; MAE 1.73
+2026-11-03 03:40,DAG,ems_besparing_eur,-0.07,1,"02-11 dagarchief accu_opbrengst; kosten 4.56 tegen zonder accu 4.30, voorraad +0.19"
+2026-11-03 03:40,DAG,ems_nabeschouwing_realisatie_7d_pct,62.8,7,27-10..02-11 leverde 7.58 / had 12.07; 02-11 0.09 / 0.03; 01-11 nog -0.64 (dag van voor v5.156.1 draait niet opnieuw)
+2026-11-03 03:40,DAG,ems_planvolging_7d_pct,69.7,7,"27-10..02-11: 56.2/66.3/53.7/54.2/70.5/93.7/84.5; 02-11 13 kwartieren accu, 2 verbruik"
+2026-11-03 03:40,DAG,ems_mc_brier_22u,0.018,4,"per_nacht 27/28/30/31-10; nachten met andere horizon los: 01-11 100 % geen tekort, 02-11 100 % tekort; 22:00 02-11 kans 100 tot blok"
+2026-11-03 03:40,DAG,ems_digital_twin_kwartierplan_mae_kwh,0.366,60,23:40 0.377; lege accu = vlak plan
+2026-11-03 03:40,DAG,ems_tekortnacht_tot_nu_kwh,1.178,5,"P1 22:00-03:00: 0.337/0.216/0.215/0.205/0.205; accu leeg, uitslag 09:00 (L-EMS-054, H-EMS-15)"
+2026-11-03 03:40,DAG,ems_dagen_sinds_vol,5,1,laatst 100 % 29-10; balanceren wacht op < 22 ct
+2026-11-03 03:40,DAG,ems_spiegel_beschikbaar_vals,1,1,diagnose_gezondheid draait v5.167.0 fout 1 sinds 23:30; fix klaar op wip/l-ems-056; niet gereleased: v5.168.0 wacht op herstart
+2026-11-03 03:40,DAG,ems_stilstand_functies,0,12,"12 wachten, 0 doen; airco 'niets', knop uit -> rekent"

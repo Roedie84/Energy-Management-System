@@ -409,7 +409,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: test met nodig=True en waardeplan actief = laden tot vol; daarna `balanceer_laatst_vol` wordt bijgewerkt en max SoC ≥ 99 % binnen 7 dagen. Kosten per balanceerlading uit `nabeschouwing_7d`.
 
 ## L-EMS-056 · spiegel Beschikbare energie vergelijkt ruw met gecorrigeerd (meetfout)
-- Status: **te bouwen in de dagafsluiting** (02-11 23:40; zelf te bouwen: meetfout, geen sturing).
+- Status: **klaargezet op `wip/l-ems-056`** (03-11 03:40; `_beschikbaar_voor_spiegel`, ook negatief wordt 0; 5 tests). Niet gereleased: v5.168.0 wacht op herstart, niet stapelen. Release bij de eerstvolgende dagafsluiting na installatie. (Was: te bouwen in de dagafsluiting, 02-11 23:40; zelf te bouwen: meetfout, geen sturing.)
 - Onderbouwing (live + code v5.168.0): analyse sinds 23:30 `fout 1`: "rekent met 0.576 kWh terwijl sensor 0.025". `_ververs_..` regel ~35875 zet `last_available_kwh` ruw uit de sensor; `_spiegelcontrole` trekt sinds v5.164.1 de modulesprong van de meting af. Verschil = de sprong 0,551 > marge 0,5. Ook `diagnose_sturing` toont daardoor 0,58 terwijl het plan met 0,14 rekent. Periode 02-11 23:30-23:40, n=1 episode; 19:56 was het omgekeerde geval.
 - Voorstel: op regel ~35875 `self._na_module_leeg(...)` om de meting, zoals de energie-check op ~31531; test met module laag: spiegel in orde, `last_available_kwh` gecorrigeerd.
 - Verwacht effect: geen valse `fout`, geen valse 'Der klopt wat neet in de sommen' bij een lege module.
@@ -421,3 +421,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: tussen de vaste uit (22:00) en het begin van het ochtendvenster (04:00) geen 'verwarmen' uit het gewone besluit; handmatig gaat altijd voor, ochtend- en dagritme ongewijzigd.
 - Verwacht effect: 0 nachtstarts met de knop aan, ~1,7 uur × 0,75 kW ≈ 1,3 kWh per nacht minder (schatting, geen meting: met de knop uit draait hij niet).
 - Meten: geen `verwarmen` tussen 22:00 en 04:00 in de history; ochtendbesluit blijft komen.
+
+## L-EMS-058 · bewolking bij de PV-afwijking is de stand om middernacht (meetfout met invloed op de correctie)
+- Status: **open** (03-11 03:40; de meting is een fout, maar `zonbias_percent` kiest ermee een correctie die de reserve in gaat → Ruud beslist).
+- Onderbouwing (code v5.168.0 + history 31-10..02-11, n=3 dagen): `_handle_compare` draait om 23:59:50 en bewaart `laatste_bewolking_percent`, de stand van dat moment, als "bewolking van die dag". 02-11: label 25,8 %, terwijl de stand tot 15:15 op 100 % stond en 16:24 pas naar 3,9 zakte; instraling die dag 36-136 W/m² (uurgemiddelde). 31-10 en 01-11 stonden toevallig om middernacht ook op 100 %. `bias_voor_bewolking` en `_vak_ingehouden_reden` werken op dit label, en de leerronde-KPI per bewolking ook.
+- Voorstel: per dag de bewolking middelen over de kwartieren met zon (gewogen met de verwachte opbrengst) en dat bewaren; oude dagen krijgen geen nieuw label en tellen tot ze uit het venster zijn apart of niet mee.
+- Verwacht effect: vakken die echt heldere en bewolkte dagen scheiden. Grootte op de correctie niet te ramen: de uurbewolking van oudere dagen staat niet in de export.
+- Meten: label tegen het gemiddelde uit de history over 10 dagen; verschil < 15 pp; daarna bias per vak en of `ingehouden_reden` vaker leeg is.
