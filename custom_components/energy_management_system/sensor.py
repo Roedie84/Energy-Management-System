@@ -19,6 +19,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
+from .zuinig_schrijven import STANDAARD_VLUCHTIG, ZuinigSchrijven
 from .const import (
     CONF_STEELSTOFZUIGER_POWER_SENSOR,
     CONF_FIETSLADERS_POWER_SENSOR,
@@ -695,7 +696,7 @@ class MeldingenSensor(_CoordinatorDiagnosticSensor):
         }
 
 
-class SystemStatusSensor(_CoordinatorDiagnosticSensor):
+class SystemStatusSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
     """A single, simple health status for the integration itself: 'OK'
     if it's actively working, or an explanation of what's wrong
     otherwise - so a problem shows up directly on the dashboard instead
@@ -705,6 +706,8 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
     _attr_name = "System status"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 60  # dashboard leest aandachtspunten/statuskop
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "system_status")
@@ -924,7 +927,7 @@ def kort_op_zinsgrens(tekst: str | None, limiet: int = HA_STATE_MAX_TEKENS) -> s
     return ruimte + "…"
 
 
-class ExplanationSensor(_CoordinatorDiagnosticSensor):
+class ExplanationSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
     """Plain-language (Dutch) explanation of what the integration is
     doing right now and why - so you can read in the dashboard what's
     happening without piecing together raw sensor values yourself.
@@ -938,6 +941,8 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
     _attr_name = "Explanation"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 60  # dashboard leest heavy_load_source
     _attr_icon = "mdi:text-box-outline"
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -1680,7 +1685,7 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
         self._coordinator.sluipverbruik_detected = last_state.state == "gedetecteerd"
 
 
-class WeatherEnsembleSensor(SensorEntity, RestoreEntity):
+class WeatherEnsembleSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Weather ensemble cross-check (v0.63.30): live cloud_coverage from
     independent weather sources (KNMI/OpenWeatherMap, read from HA
     `weather` entities the person already has - not a new API
@@ -1704,6 +1709,7 @@ class WeatherEnsembleSensor(SensorEntity, RestoreEntity):
     _attr_name = "Weather ensemble (bewolkingsgraad)"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:weather-partly-cloudy"
     _attr_native_unit_of_measurement = "%"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1973,7 +1979,7 @@ class WashingMachinePlanningSensor(_WitgoedPlanningSensor):
         super().__init__(coordinator, entry_id, "washing_machine_planning")
 
 
-class MpcAdvisorySensor(SensorEntity):
+class MpcAdvisorySensor(ZuinigSchrijven, SensorEntity):
     """MPC (Model Predictive Control) advisory engine (v0.63.33).
 
     ADVISORY ONLY - never sends a device command, never overrides the
@@ -1990,6 +1996,7 @@ class MpcAdvisorySensor(SensorEntity):
     _attr_name = "MPC advies (prijsarbitrage-plan)"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:chart-timeline-variant"
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
@@ -2023,7 +2030,7 @@ class MpcAdvisorySensor(SensorEntity):
         }
 
 
-class MonteCarloAdvisorySensor(SensorEntity):
+class MonteCarloAdvisorySensor(ZuinigSchrijven, SensorEntity):
     """Monte Carlo advisory engine (v0.63.34).
 
     ADVISORY ONLY - never sends a device command, never overrides the
@@ -2040,6 +2047,8 @@ class MonteCarloAdvisorySensor(SensorEntity):
 
     # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 300
 
     _attr_has_entity_name = True
     _attr_name = "Monte Carlo risico (tekortkans)"
@@ -2102,7 +2111,7 @@ class MonteCarloAdvisorySensor(SensorEntity):
         }
 
 
-class KalmanFilterAdvisorySensor(SensorEntity):
+class KalmanFilterAdvisorySensor(ZuinigSchrijven, SensorEntity):
     """Kalman filtering advisory engine (v0.63.35).
 
     ADVISORY ONLY - a smoothed estimate of three live, naturally noisy
@@ -2122,6 +2131,7 @@ class KalmanFilterAdvisorySensor(SensorEntity):
     _attr_name = "Kalman filtering (SoC/PV/verbruik)"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:chart-bell-curve-cumulative"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -2173,7 +2183,7 @@ class KalmanFilterAdvisorySensor(SensorEntity):
         }
 
 
-class DigitalTwinAdvisorySensor(SensorEntity):
+class DigitalTwinAdvisorySensor(ZuinigSchrijven, SensorEntity):
     """Digital Twin advisory engine (v0.63.36).
 
     ADVISORY ONLY - simulates forward what the *existing* rule-based
@@ -2193,6 +2203,7 @@ class DigitalTwinAdvisorySensor(SensorEntity):
     _attr_name = "Digital Twin (gesimuleerde SoC/winst)"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:cube-outline"
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
@@ -2220,7 +2231,7 @@ class DigitalTwinAdvisorySensor(SensorEntity):
         }
 
 
-class NilmUnconfirmedCandidatesSensor(SensorEntity):
+class NilmUnconfirmedCandidatesSensor(ZuinigSchrijven, SensorEntity):
     """NILM-like device auto-discovery: unconfirmed candidates
     (v0.63.39).
 
@@ -2240,6 +2251,7 @@ class NilmUnconfirmedCandidatesSensor(SensorEntity):
 
     # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
 
     _attr_has_entity_name = True
     _attr_name = "NILM onbevestigde kandidaten"
@@ -2298,7 +2310,7 @@ class NilmUnconfirmedCandidatesSensor(SensorEntity):
         }
 
 
-class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
+class NilmConfirmedDevicesSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """NILM-like device auto-discovery: confirmed devices, with per-
     device CUSUM drift-detection (v0.63.39) - same principle as the
     household sluipverbruik detector (v0.63.29), but per device and
@@ -2329,6 +2341,7 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
     _attr_name = "NILM bevestigde apparaten"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:devices"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -2512,7 +2525,7 @@ class AdvisoryReadinessSensor(SensorEntity):
         }
 
 
-class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
+class LivingRoomAircoPredictionSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Living-room-temperature airco activation predictor (v0.63.55,
     requested: "verwacht wanneer ik de airco aanzet").
 
@@ -2538,6 +2551,7 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
     _attr_name = "Airco-verwachting (kans binnen 1 uur)"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:air-conditioner"
     _attr_native_unit_of_measurement = "%"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -2669,7 +2683,7 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
             }
 
 
-class ClimateForecastSensor(SensorEntity, RestoreEntity):
+class ClimateForecastSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Klimaat-tabblad: geleerde woonkamertemperatuur-projectie
     (v0.63.56/.57/.58, requested).
 
@@ -2696,6 +2710,8 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
     _attr_name = "Klimaat-projectie (woonkamertemperatuur)"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 300  # cockpit toont verwarmingsadvies
     _attr_icon = "mdi:home-thermometer-outline"
     _attr_native_unit_of_measurement = "°C"
     # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
@@ -3006,7 +3022,7 @@ class BatteryHealthSensor(SensorEntity, RestoreEntity):
             self._coordinator.battery_cumulative_discharged_kwh = float(raw)
 
 
-class SelfConsumptionSensor(SensorEntity):
+class SelfConsumptionSensor(ZuinigSchrijven, SensorEntity):
     """Zelfconsumptieratio als eigen sensor (v1.21.4).
 
     Gemeld: de grafiek achter de zelfconsumptie-tegel toonde de
@@ -3024,6 +3040,8 @@ class SelfConsumptionSensor(SensorEntity):
 
     # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 300
 
     _attr_has_entity_name = True
     _attr_name = "Zelfconsumptieratio"
@@ -3065,7 +3083,7 @@ class SelfConsumptionSensor(SensorEntity):
         self._coordinator.register_listener(self.async_write_ha_state)
 
 
-class SelfSufficiencySensor(SensorEntity):
+class SelfSufficiencySensor(ZuinigSchrijven, SensorEntity):
     """Zelfconsumptie-/zelfvoorzieningsratio (v0.63.101, gevraagd:
     "zaken voor een typisch EMS welke we kunnen toevoegen" - klassieke
     EMS-KPI's). Puur informatief, stuurt niets aan.
@@ -3078,6 +3096,8 @@ class SelfSufficiencySensor(SensorEntity):
 
     # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 300
 
     _attr_has_entity_name = True
     _attr_name = "Zelfvoorzieningsratio"
@@ -3115,7 +3135,7 @@ class SelfSufficiencySensor(SensorEntity):
         }
 
 
-class CounterfactualSavingsTotalSensor(SensorEntity):
+class CounterfactualSavingsTotalSensor(ZuinigSchrijven, SensorEntity):
     """Besparing t.o.v. zonder accu-sturing, oplopend totaal (v5.99.10).
 
     Gevraagd 17-10: "één besparingscijfer als hoofdgetal". Er waren er twee:
@@ -3131,6 +3151,8 @@ class CounterfactualSavingsTotalSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Besparing totaal t.o.v. zonder accu-sturing"
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 300
     _attr_icon = "mdi:cash-plus"
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
@@ -3195,7 +3217,7 @@ class CounterfactualSavingsTotalSensor(SensorEntity):
         }
 
 
-class SavingsThisMonthSensor(SensorEntity):
+class SavingsThisMonthSensor(ZuinigSchrijven, SensorEntity):
     """Besparing deze maand, uit het totaal (v5.128.0, punt 4).
 
     Vervangt de utility meter `sensor.ems_accubesparing_deze_maand`
@@ -3210,6 +3232,8 @@ class SavingsThisMonthSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Besparing deze maand"
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 300
     _attr_icon = "mdi:calendar-month"
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
@@ -3333,13 +3357,14 @@ class ZelfanalyseSensor(_V5100Sensor):
         return self._coordinator.get_zelfanalyse()
 
 
-class Repetitie2027Sensor(_V5100Sensor):
+class Repetitie2027Sensor(ZuinigSchrijven, _V5100Sensor):
     """Generale repetitie voor 2027: de regels van na de saldering in de schaduw (v5.100).
 
     Staat: wat de accu met de regels van 2027 gemiddeld per dag zou opleveren.
     """
 
     _attr_name = "Generale repetitie 2027"
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:calendar-sync"
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
@@ -3459,7 +3484,7 @@ class DagarchiefSensor(_V5100Sensor):
         return self._coordinator.get_dagarchief()
 
 
-class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
+class CounterfactualSavingsSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Tegenfeitelijke besparingsvergelijking (v0.63.101, gevraagd:
     "als je dit systeem niet had, had je deze maand €X betaald; nu
     betaalde je €Y"). Puur informatief, stuurt niets aan.
@@ -3473,6 +3498,8 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
     _attr_name = "Besparing t.o.v. zonder accu-sturing"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 120  # cockpit toont kosten vandaag
     _attr_icon = "mdi:cash-check"
     _attr_native_unit_of_measurement = "EUR"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
@@ -3726,7 +3753,7 @@ class PeakPowerSensor(SensorEntity, RestoreEntity):
             self._coordinator.peak_power_daily_history = raw_history
 
 
-class WaterUsageSensor(SensorEntity, RestoreEntity):
+class WaterUsageSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals bij
     vaatwasser/wasmachine" - herzien naar "geen meldingen alleen een
     watertabblad met relevante info"). Puur informatief, stuurt nooit
@@ -3751,6 +3778,8 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
     _attr_name = "Waterverbruik"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 120  # cockpit toont vandaag_liter
     _attr_icon = "mdi:water"
     _attr_native_unit_of_measurement = "L/min"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -3835,7 +3864,7 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
                 pass
 
 
-class LiveNarrativeSensor(SensorEntity):
+class LiveNarrativeSensor(ZuinigSchrijven, SensorEntity):
     """Lopend, samenhangend verhaal in gewone taal (v0.63.97, gevraagd:
     "een tabblad wat live vertelt wat de gehele integratie doet... om
     mijzelf bewuster te maken wat er gebeurt op alle vlakken en
@@ -3854,6 +3883,8 @@ class LiveNarrativeSensor(SensorEntity):
     _attr_name = "Wat doet de integratie nu"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 60  # het verhaal op het dashboard
     _attr_icon = "mdi:text-box-outline"
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -4237,7 +4268,7 @@ def _rondrit_weergave(meting: dict | None) -> dict:
     }
 
 
-class ApplianceUsageHoursSensor(SensorEntity, RestoreEntity):
+class ApplianceUsageHoursSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Informational only: the hours of the day this appliance is
     typically active, learned from its power sensor. Never used to
     control anything - purely so you (or a future automation) can see
@@ -4245,6 +4276,7 @@ class ApplianceUsageHoursSensor(SensorEntity, RestoreEntity):
 
     # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -4440,7 +4472,7 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
                     pass
 
 
-class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
+class HourlyConsumptionProfileSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Learned average power (kW) per hour-of-day (0-23), sampled
     continuously all day every day - so seasons with less predictable
     solar (autumn/winter) still get an accurate consumption estimate,
@@ -4454,6 +4486,7 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
     _attr_name = "Hourly consumption profile"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:chart-bell-curve"
     _attr_native_unit_of_measurement = "W"
     # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
@@ -4634,7 +4667,7 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
             self._coordinator.hourly_consumption_profile = restored
 
 
-class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
+class PvHourlyBiasSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Learned (actual/forecast) ratio per hour-of-day (0-23) for the
     Solcast PV forecast - more precise than the single flat daily bias,
     since Solcast may e.g. systematically under-forecast mornings but
@@ -4649,6 +4682,7 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
     _attr_name = "PV hourly forecast bias"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:weather-partly-cloudy"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -4855,7 +4889,7 @@ class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
         }
 
 
-class BatteryCoolingSensor(SensorEntity):
+class BatteryCoolingSensor(ZuinigSchrijven, SensorEntity):
     """Accu-koelventilator: huidige stand + waarom (v0.63.122).
 
     Overgenomen uit een losse HA-automatisering die de gebruiker zelf had
@@ -4870,6 +4904,8 @@ class BatteryCoolingSensor(SensorEntity):
     _attr_name = "Accu-koeling"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 120  # dashboard toont accu_c/buiten_c/vermogen_w
     _attr_icon = "mdi:fan"
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -4921,7 +4957,7 @@ def _veilig_dict(functie) -> dict:
         return {}
 
 
-class BatteryModuleHealthSensor(SensorEntity):
+class BatteryModuleHealthSensor(ZuinigSchrijven, SensorEntity):
     """Gezondheid per accumodule (v0.63.123).
 
     Anders dan `battery_estimated_capacity_percent` (een LINEAIRE
@@ -4946,6 +4982,8 @@ class BatteryModuleHealthSensor(SensorEntity):
     _attr_name = "Accu-modulegezondheid"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 300
     _attr_icon = "mdi:battery-heart-variant"
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -5086,7 +5124,7 @@ class DigitalTwinAccuracySensor(SensorEntity, RestoreEntity):
             self._coordinator._digital_twin_pending = list(openstaand)
 
 
-class ReliabilityOverviewSensor(SensorEntity):
+class ReliabilityOverviewSensor(ZuinigSchrijven, SensorEntity):
     """Alle betrouwbaarheidsoordelen op één plek, in één taal (v1.3.0).
 
     Gevraagd: "hoe betrouwbaar is de gegenereerde data" - voor alle
@@ -5107,6 +5145,7 @@ class ReliabilityOverviewSensor(SensorEntity):
     _attr_name = "Betrouwbaarheid gegenereerde data"
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _attr_icon = "mdi:shield-check-outline"
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -5213,7 +5252,7 @@ class PvInstallationProfileSensor(SensorEntity):
         }
 
 
-class GacsAssessmentSensor(SensorEntity):
+class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
     """Zelfbeoordeling tegen de vier functionele GACS-eisen (v1.10.0).
 
     Nadrukkelijk GEEN nalevingsbewijs. De GACS-verplichting geldt voor
@@ -5242,6 +5281,9 @@ class GacsAssessmentSensor(SensorEntity):
     # wijziging, ~120 keer per uur (25 MB per dag). Nu gaat er geen enkel
     # eigen attribuut meer naar de database.
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 300  # dashboard leest waarom_nu/zelfcontrole
+    _zuinig_vluchtig = STANDAARD_VLUCHTIG | {"rondeduur"}
 
     def __init__(self, coordinator, entry_id: str) -> None:
         self._coordinator = coordinator
@@ -5266,13 +5308,22 @@ class GacsAssessmentSensor(SensorEntity):
         """
         if _voor_eerste_ronde(self._coordinator):
             return {}
+        # v5.173.0: de poort van zuinig_schrijven bouwt de attributen om te
+        # vergelijken; schrijft hij, dan vraagt Home Assistant ze direct
+        # opnieuw. Binnen een seconde niet twee keer rekenen.
+        nu = time.monotonic()
+        vorige = getattr(self, "_attr_cache", None)
+        if vorige is not None and nu - vorige[0] < 1.0:
+            return vorige[1]
         start = time.perf_counter()
         attributen: dict = {}
         try:
             attributen = self._bouw_attributen(GACS_DASHBOARD_SLEUTELS)
             # v5.62: alleen wat het dashboard leest. De volledige set staat
             # in de diagnostiek (`gacs_zelfbeoordeling_volledig`).
-            return gacs_voor_het_dashboard(attributen)
+            resultaat = gacs_voor_het_dashboard(attributen)
+            self._attr_cache = (nu, resultaat)
+            return resultaat
         finally:
             # v5.14.4: de traagste onderdelen meegeven. Die worden sinds
             # v4.9.7 al gemeten (`rekentijd_ms`), maar alleen als attribuut -
@@ -5665,7 +5716,7 @@ def _aantal(attributen: dict, sleutel: str, lijst: str | None = None) -> int:
     return len(waarde) if isinstance(waarde, (list, dict)) else 0
 
 
-class DashboardPaginaSensor(_CoordinatorDiagnosticSensor):
+class DashboardPaginaSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
     """Eén grote dashboardtabel op een eigen sensor (v5.62).
 
     Stond eerst op de zelfbeoordeling, die daardoor ~204 kB groot werd. Nu
@@ -5675,6 +5726,7 @@ class DashboardPaginaSensor(_CoordinatorDiagnosticSensor):
     """
 
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
 
     def __init__(
         self,
@@ -5693,6 +5745,10 @@ class DashboardPaginaSensor(_CoordinatorDiagnosticSensor):
         self._telt = sleutels[0]
         self._lijst = lijst
         self._laatst: tuple[float, dict] | None = None
+        # v5.173.0: pagina's die het dashboard live toont sneller bijwerken.
+        self._zuinig_attr_interval_s = DASHBOARD_PAGINA_INTERVAL_S.get(
+            suffix, self._zuinig_attr_interval_s
+        )
 
     def _attributen(self) -> dict:
         """Eén keer per toestand: HA vraagt de waarde en de attributen
@@ -5717,6 +5773,15 @@ class DashboardPaginaSensor(_CoordinatorDiagnosticSensor):
         return self._attributen()
 
 
+# v5.173.0: hoogstens zo vaak een schrijfbeurt als alleen de attributen
+# veranderen (standaard 10 minuten, zie zuinig_schrijven.py). De aanwezigheid
+# staat bovenin de cockpit, het kwartierplan en de perioden zijn live tabellen.
+DASHBOARD_PAGINA_INTERVAL_S = {
+    "aanwezigheid": 60,
+    "kwartierplanning_tabel": 120,
+    "perioden": 120,
+}
+
 # v5.62: (suffix, naam, icoon, attributen, lijst die de toestand telt).
 # De toestand is het aantal regels van het eerste attribuut.
 DASHBOARD_PAGINA_SENSOREN = (
@@ -5740,7 +5805,7 @@ DASHBOARD_PAGINA_SENSOREN = (
 )
 
 
-class MeetlogSensor(_CoordinatorDiagnosticSensor):
+class MeetlogSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
     """De meetlaag van v5.28: draait hij, klopt de productiespiegel, hoeveel
     van de energie komt rechtstreeks uit tellers."""
 
@@ -5749,6 +5814,8 @@ class MeetlogSensor(_CoordinatorDiagnosticSensor):
     _attr_icon = "mdi:database-eye-outline"
     # v5.76: alle attributen niet naar de recorder (was een deelverzameling).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_vluchtig = STANDAARD_VLUCHTIG | {"event_loop_ms", "laatste_evaluatie"}
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "meetlog")
@@ -5770,7 +5837,7 @@ class MeetlogSensor(_CoordinatorDiagnosticSensor):
         return uit
 
 
-class AircoBesluitSensor(_CoordinatorDiagnosticSensor):
+class AircoBesluitSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
     """Wat het EMS met de woonkamer-airco zou doen, en waarom (v5.27).
 
     Gevraagd: "voor zowel stand aan als uit kunnen zien wat de
@@ -5784,6 +5851,9 @@ class AircoBesluitSensor(_CoordinatorDiagnosticSensor):
     _attr_icon = "mdi:air-conditioner"
     # v5.76: alle attributen niet naar de recorder (was een deelverzameling).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_attr_interval_s = 60  # cockpit toont tekst/verwachting
+    _zuinig_vluchtig = STANDAARD_VLUCHTIG | {"moment"}
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "airco_besluit")
@@ -5882,9 +5952,15 @@ class CockpitSensor(_CoordinatorDiagnosticSensor):
         # verandert alleen als de stand verandert). Een STORING was
         # achteraf niet te herleiden.
         gegevens = self._gegevens()
+        # v5.173.0: "Bijgewerkt ... geleden" onderaan de cockpit las de
+        # systeemstatus; die schrijft nu alleen nog bij een echte wijziging
+        # (zuinig_schrijven.py). De cockpit wordt toch al bij elke meting
+        # opnieuw getekend, dus het tijdstip kost hier geen extra rij.
+        laatste = getattr(self._coordinator, "last_successful_update", None)
         return {
             "plaat": self._coordinator.get_cockpit_svg(gegevens),
             "reden": gegevens.get("status_regel"),
+            "bijgewerkt": laatste.isoformat() if laatste else None,
         }
 
     async def async_added_to_hass(self) -> None:
@@ -5981,7 +6057,7 @@ class DiagnoseLerenSensor(DiagnoseSensor):
     _soort = "leren"
 
 
-class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
+class ZendureLokaalSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
     """Wat het EMS zelf van de Zendure-accu leest, naast de Zendure-integratie
     (v5.50). Alleen lezen - stuurt niets. Toestand: verzamelt / gelijk /
     wijkt af / geen verbinding / niet gevonden."""
@@ -5994,6 +6070,8 @@ class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
     # v5.76: alle attributen; ook de kerngetallen (rondes, overeenkomst)
     # wisselden elke 30 s en gaven elke keer een nieuwe attribuutrij.
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_vluchtig = STANDAARD_VLUCHTIG | {"laatste_gelukt"}
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "zendure_lokaal")
@@ -6015,7 +6093,7 @@ class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
 
 
 
-class LuchtreinigerLokaalSensor(_CoordinatorDiagnosticSensor):
+class LuchtreinigerLokaalSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
     """Wat het EMS zelf van de luchtreiniger leest via het lokale
     Tuya-protocol (v5.84; sturen sinds v5.85 via de keuzelijst
     "Luchtreiniger stand"). Toestand: verzamelt /
@@ -6026,6 +6104,8 @@ class LuchtreinigerLokaalSensor(_CoordinatorDiagnosticSensor):
     _attr_name = "Luchtreiniger lokaal"
     _attr_icon = "mdi:air-purifier"
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
+    _zuinig_vluchtig = STANDAARD_VLUCHTIG | {"laatste_gelukt", "waarden_van"}
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "luchtreiniger_lokaal")

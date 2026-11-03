@@ -2453,7 +2453,9 @@ class EmsCockpitCard extends HTMLElement {
     const meetlog = this._s("meetlog");
     const gez = this._s("gezondheid");
     const st = this._s("status");
-    const bijgewerkt = attr(st, "last_successful_update");
+    // v5.173.0: eerst de cockpit zelf (wordt bij elke meting getekend); de
+    // systeemstatus schrijft nog alleen bij een echte wijziging.
+    const bijgewerkt = attr(this._s("cockpit"), "bijgewerkt") || attr(st, "last_successful_update");
     const links = LINKS.map(([n, p]) => `<button data-nav="${p}">${esc(n)}</button>`).join("");
     return (
       `<div class="links" style="padding-top:14px">${links}</div>` +

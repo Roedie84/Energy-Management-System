@@ -1,3 +1,21 @@
+EMS v5.173.0 - minder database-rijen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Database: zo'n dertig EMS-sensoren schreven elke halve minuut een nieuwe
+  regel in de database, ook als er niets veranderde (alleen een tijdstip of
+  een teller in de details). Samen ~75.000 regels per dag. Nu schrijft een
+  sensor meteen als zijn waarde verandert, en de details hoogstens eens per
+  1 tot 10 minuten. Verwacht: hooguit ~28.000 regels per dag, waarschijnlijk
+  minder. De database en de back-up groeien daardoor veel langzamer.
+- Wat je ziet: waarden die het dashboard en de cockpit live tonen (status,
+  uitleg, accu-koeling, aanwezigheid, airco besluit) blijven binnen 1 a 2
+  minuten bij. Andere details (zoals de NILM-lijst of het uurprofiel) kunnen
+  tot 10 minuten achterlopen. "Bijgewerkt ... geleden" onderaan de cockpit
+  blijft gewoon lopen.
+- Oude regels verdwijnen vanzelf na de bewaartermijn van de recorder; de
+  database wordt pas kleiner na een opschoning (recorder.purge met repack).
+
 EMS v5.172.0 - rustige accustand, geen mini-laadblokken, besparing gelijkgetrokken
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
