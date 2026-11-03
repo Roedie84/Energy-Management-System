@@ -975,3 +975,17 @@ laatste ronde: 03-11 11:40, gemeten t/m 03-11 11:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-16 (modulesprong), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
 
 laatste ronde: 03-11 15:40, gemeten t/m 03-11 15:48
+
+## 03-11 19:40 · tussenronde
+- **Draait v5.175.3** (herstarts 17:03, 19:33; niets nieuws klaar). Geen release: niets acuts, vandaag al negen. Log EMS: alleen Zonneplan rond de herstart, 0 fouten.
+- **Module 00996 is om 19:22-19:31 uit het systeem.** Capaciteit 11,52 → **8,64 kWh**, bruikbaar 10,37 → **7,78 kWh**, reserve en plan volgen. Vergelijk KPI's in kWh vanaf nu niet blind met eerdere dagen (vermeld in BASELINE).
+- **Nieuw L-EMS-061 (open):** de modulesprong-correctie blijft na het vertrek van 00996 werken op de andere modules. Nu: module 01029 13 %, ruw 0,173 kWh, EMS 0,00, modus `waardeplan_leeg`. De sprong (0,551) is gemeten aan 00996. Statistiek 40 d: 00917 en 02093 zaten op 16 dagen op ≤ 14 %, 01029 op 5 van 21 d, laagste 5-7 %, nooit 0; 00996 zelf 4× 0 %. Onder 15 % ligt 0,43 kWh die niet meer gebruikt wordt, en omdat de accu dan niet verder ontlaadt kan de sprong ook niet meer weerlegd worden. Raakt de sturing, dus voorstel.
+- **Nieuw L-EMS-062 (zelf te bouwen, dagafsluiting):** geschatte cycli 189,8 → **253,0** om 19:31. Teller ~2186 kWh, gedeeld door de nieuwe capaciteit. Alleen rapportage.
+- **H-EMS-16 afgesloten:** laatste sprong 17:55 (0,69 → 0,29 = 0,40 kWh, plan rekende 0,55). Module weg, vervalt. Vervolg = H-EMS-17.
+- **Vaatwasser afgesloten, geen hypothese:** 15:40-16:21 accu gemiddeld 1,35 kW tegen plan 1,2 (0,10 kWh). SoC 18:00 **15 %** tegen plan 18 % (0,35 kWh); rest is verbruik (17:45 'verklaard'). Bij 45-50 ct maakt dat ~1-2 ct uit. De 2008 W van 15:40 was een piek.
+- **Regeloverschot:** P1-export 17:03-19:33 **0,04 kWh** (0,016/uur) tegen 0,155/uur 15:48-17:03. Past bij v5.175.1, maar geen zon en geen witgoed, dus nog geen bewijs; morgen overdag toetsen. Harde regel: **0× onder de reserve**, verkoopkwartieren leeg.
+- Niet meetbaar: `sensor.zendure_manager_power` geeft sinds 15:40 geen rijen in de history; accuvermogen hierboven komt uit stappen in de inhoud (grof, 0,115 kWh).
+- Plan 19:45: netladen alleen nog 06:00-06:15 (was ook 03:45, 11:15, 13:45). MC tot blok 100 % (det. 3,46 kWh). Twin 0,374. Besparing vandaag € 0,07. Vannacht eerste volle toets L-EMS-057 en L-EMS-059 (SoC 12 %, dus ≤ 13 %). Stilstand: **geen echte** (11 wachten, 0 doen). Airco 'niets', knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-17 (modulesprong niet op de andere modules). H-EMS-14 geparkeerd.
+
+laatste ronde: 03-11 19:40, gemeten t/m 03-11 19:46

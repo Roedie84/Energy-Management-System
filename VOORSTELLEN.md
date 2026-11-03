@@ -443,3 +443,17 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Verwacht effect: alle zonkwartieren staan na een herstart nog in `bewolking_vandaag`.
 - Meten: test met een nieuwe kwartiersleutel = één notify, zelfde kwartier = geen; live: geen gat rond een herstart.
 - Aanvulling 03-11 15:40 (live): na de herstarts van 14:58 en 15:36 bevat `bewolking_vandaag` nog 3 kwartieren (08:15, 15:30, 15:45). De drempel `SOLAR_BEWOLKING_MIN_ZONKWARTIEREN` = 4 telt kwartieren, niet de dekking: vanaf 16:00 krijgt de dag een label op bijna alleen de late middag. Bouwen in de dagafsluiting (dan ook geen label bij te weinig dekking: aandeel van de verwachte zon); label 03-11 niet meetellen.
+
+## L-EMS-061 · modulesprong-correctie geldt na het vertrek van 00996 voor de andere modules
+- Status: **open** (03-11 19:40; verandert wat als beschikbaar telt, dus de sturing → Ruud beslist).
+- Onderbouwing (live 03-11 19:45 + statistiek 40 d): `_volg_module_leeg` slaat aan op elke module onder 15 %; `_module_leeg_sprong_kwh` neemt de mediaan van alle gemeten sprongen, en die zijn alle van 00996. Nu 01029 op 13 %: correctie 0,374, ruw 0,173, EMS 0,00. Dagminima: 00917 en 02093 op 16 van 40 dagen ≤ 14 %, 01029 op 5 van 21, laagste 5-7 %, nooit 0. 00996 ging 4× naar 0 %. n=1 avond met 3 modules; meer kan niet, want de accu ontlaadt nu niet verder.
+- Voorstel: correctie alleen voor een apparaat dat zelf een gemeten sprong heeft (`module_leeg_sprongen[].module`); geen eigen sprong = geen vooraf-aftrek. Komt er een sprong bij een andere module, dan wordt die gemeten en geldt hij weer.
+- Verwacht effect: tot 0,43 kWh extra bruikbaar op lage avonden (10-15 % van 8,64 kWh), status en tekort beginnen later. Klein in euro's: bij 49 ct tegen ~43 ct laadkosten enkele centen per avond; vooral een eerlijke 'leeg'.
+- Meten: test met sprong van 00996 en lage 01029 = correctie 0; live: accu zakt op een lage avond tot ~10 % en `sprong_gezien` blijft uit; geen SoC-sprong ≥ 3 pp.
+
+## L-EMS-062 · geschatte cycli springen bij een capaciteitswijziging (meetfout)
+- Status: **open, zelf te bouwen** (03-11 19:40; alleen rapportage → dagafsluiting, lage prioriteit).
+- Onderbouwing (live 03-11 19:31, n=1): `battery_estimated_full_cycles` deelt de levenslange teller (~2186 kWh) door de actuele capaciteit. 11,52 → 8,64 kWh geeft 189,8 → 253,0 cycli zonder dat er iets ontladen is. Gebruikt in sensor en diagnostics, niet in de sturing.
+- Voorstel: delen door de grootste bewaarde capaciteit, of bij een capaciteitswijziging de cycli tot dan vastleggen en daarna doortellen.
+- Verwacht effect: geen sprong bij het weghalen of terugplaatsen van een module.
+- Meten: test met capaciteit 11,52 → 8,64 = cycli gelijk; live: 253,0 keert terug naar ~190.

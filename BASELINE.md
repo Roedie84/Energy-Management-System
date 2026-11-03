@@ -123,3 +123,5 @@
 | Nabeschouwing realisatie 7 d | 62,8 % (€ 7,58 / 12,07) | 27-10..02-11 | 03-11 03:40 |
 | Verbruik dagtotaal bias 7 d | +0,93 kWh/dag (MAE 1,73) | 27-10..02-11 | 03-11 03:40 |
 | Planvolging volgens plan | 69,7 % (7 d, 53,7-93,7) | 27-10..02-11 | 03-11 03:40 |
+
+- 03-11 19:31: accu van 4 naar 3 modules (00996 eruit): totaal 8,64 kWh, bruikbaar 7,78 kWh (was 11,52 / 10,37). Referenties in kWh van vóór deze datum niet zonder meer vergelijken.
