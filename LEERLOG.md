@@ -989,3 +989,17 @@ laatste ronde: 03-11 15:40, gemeten t/m 03-11 15:48
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-17 (modulesprong niet op de andere modules). H-EMS-14 geparkeerd.
 
 laatste ronde: 03-11 19:40, gemeten t/m 03-11 19:46
+
+## 03-11 23:40 · tussenronde
+- **Draait v5.176.2** (herstarts 20:38, 22:04, 22:16). Geen release: niets acuts, vandaag al twaalf. Log EMS: alleen Zonneplan/Solcast rond de herstart, 0 fouten. Twee releases ná de vorige ronde: v5.176.0 (L-EMS-061, L-EMS-062), v5.176.1/.2 (status en uitleg bij een lege accu).
+- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, P1-export 19:40-23:43 **0,000 kWh**. KPI `huis_gaat_voor` zet 03-11 op `geschonden` om 0,228 kWh regeloverschot (rond de zon, vóór v5.175.1), geen verkoop.
+- **L-EMS-059 eerste volle toets, loopt goed:** `tekortnacht_tot_nu_kwh` **0,448** bij ~0,48 kWh P1 sinds 22:00, SoC 12 %. Vorige nacht 0 om 07:40. Uitslag 09:00.
+- **H-EMS-15 live:** soort nu **planning** ("bijladen loonde, maar de accu werd niet vol"), `laadbesluit_sinds_9u` loont; verwacht tekort tot blok 1,41 kWh. Planning telt wél in `marge_tekortnachten`. Toets 09:00: blijft de soort staan en klopt 'loonde'? Plan 22:30 schrapte 03:45, 11:15 en 13:45, houdt alleen 06:00-06:15 (0,6 kWh). Reserve staat tegen het plafond (7,78), dus de marge doet nu niets.
+- **L-EMS-061 gebouwd v5.176.0:** beschikbaar EMS 0,17 = ruw 0,173, correctie weg. Nog niet geverifieerd: SoC bleef 12 % sinds 19:31 (de accu was al leeg toen hij actief werd; leeg-grens 13 %). Beloofd effect (zakken tot ~10 %, geen sprong) pas op de volgende lage avond. H-EMS-17 sluit hiermee.
+- **L-EMS-062 geverifieerd:** cycli 253,0 → **189,8**, geen sprong meer.
+- Net 19:40-23:43 2,415 kWh (0,60 kW), accu 0 W, volgens plan. Nacht verwacht 1,29 kWh tot 06:00.
+- Regeloverschot: 0 sinds 19:40, maar zonder zon en met lege accu geen bewijs; morgen overdag. L-EMS-057: airco tot 06:00 'niet verwacht', toets morgenochtend. H-EMS-2: uitslag dag in de dagafsluiting.
+- MC tot blok 100 % (det. 1,35 kWh). Twin 0,405 (0,374). Planvolging 64,1 % (n=92). Besparing € 0,07. Stilstand: **geen echte** (12 wachten, 0 doen). Airco 'niets' (slaapt), knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
+
+laatste ronde: 03-11 23:40, gemeten t/m 03-11 23:46
