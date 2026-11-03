@@ -1213,5 +1213,5 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-03 11:40,TUSSEN,ems_zon_vandaag_solcast_kwh,5.22,1,"day-ahead tracker 7.69; p10 2.60 p90 7.93; verloop 5.09/5.05/4.79/4.76/5.22; morgen 4.71 (p10 0.72 p90 11.44)"
 2026-11-03 11:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,100,1000,"11:42 horizon tot 04-11 09:00; det. 7.09 kWh; laadblok tot 15:30 +0.00 gepland"
 2026-11-03 11:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.278,60,"07:40 0.298"
-2026-11-03 11:40,TUSSEN,ems_bewolking_zonkwartieren_verloren,6,1,"bewolking_vandaag mist 08:30-09:30 na herstart 09:45 (9 van 15 aanwezig); L-EMS-060"
+2026-11-03 11:40,TUSSEN,ems_bewolking_zonkwartieren_verloren,5,1,"bewolking_vandaag mist 08:30-09:30 na herstart 09:45 (9 van 14 aanwezig); L-EMS-060"
 2026-11-03 11:40,TUSSEN,ems_stilstand_functies,0,10,"10 wachten, 0 doen; airco niets, knop uit -> rekent"
