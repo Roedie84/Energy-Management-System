@@ -243,3 +243,7 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 12:52 | hacs neerslag app verwijderen
 03-11 12:52 | lege labels verwijderen (brandstof, adguard, batterij sim, mijn tuin)
 03-11 12:52 | verborgen yaml-dashboard energy-management-system uit configuration.yaml
+03-11 14:51 | ha herstarten om ems 5.173.0 en configuration.yaml-wijzigingen te activeren (excludes, yaml-dashboard)
+03-11 14:51 | sensor.keuken_sm_x200_* 49 entiteiten opschonen
+03-11 14:51 | dubbele select.achtertuin_achtertuin_scene(_2)
+03-11 14:51 | vier weer-integraties terugbrengen (forecast_thuis, knmi_thuis, openweathermap, stormchase)
