@@ -255,3 +255,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 17:53 | sun2 zon van eibergen opkomst/daglicht unknown, ondergang 15:28 (herstellen of integratie weghalen)
 03-11 18:52 | updates installeren ems 5.175.2 (hacs) + ha herstarten
 03-11 18:52 | ems accumodule_melding 00996 uit (status vast op aandacht gewenst)
+03-11 19:55 | L-EMS-061 ems modulesprong alleen bij module die zelf sprong liet zien (na vertrek 00996, akkoord)
+03-11 19:55 | L-EMS-062 ems geschatte cycli springen bij lagere capaciteit (190->253, rapportage)
