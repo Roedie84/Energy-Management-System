@@ -252,3 +252,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 16:51 | ems plantabel zon_opslag_stappen rondt af, net-kolom toont netladen dat smart niet doet (~0,3 kwh te veel)
 03-11 16:51 | ems tekort vannacht 0 door restje 0,1 kwh, plan_sparen_leeg_kwh 0,01 ophogen (mc 100%)
 03-11 16:51 | ems status aandacht gewenst door momentopname warmste module levert minste (momentwaarde, aanhoudend tellen)
+03-11 17:53 | sun2 zon van eibergen opkomst/daglicht unknown, ondergang 15:28 (herstellen of integratie weghalen)
