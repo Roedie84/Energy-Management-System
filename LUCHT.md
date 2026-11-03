@@ -673,4 +673,14 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ 662 (14:50) → 1.292 nu, stijgt met aanwezigheid; 0,08 u > 1.200, ramen dicht. Vocht 64,3 → 51,3%, temperatuur 17,1 → 21,3 °C (airco), schimmelindicator 78 → 62 → 68, buiten 89% / 12-13 °C. Vanavond luchten; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 16). H2 auto bij koken 5x: 61, 22,6, 7,2, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. Piek 16:06 was geen koken, telt niet voor H2. H3 (n=24): reiniger aan houdt het laag; auto ruimde 43 µg/m³ snel op (staart ~6 min, n=1). Airco-start 15:58 vlak voor de piek: 28-10 17:14 gaf een airco-start geen piek (ronde-max 7,2), dus niet voldoende; bij volgende start toetsen.
 
-laatste ronde: 03-11 16:25, gemeten t/m 16:20
+## 03-11 20:25 (ronde 90)
+- PM2.5 16:20-20:20: gem 4,25, mediaan 3,43, P95 7,99, max 25,8 (16:42:49) (n=48); 0 uur > 15 en > 25 op 5-min-gemiddelde. Dag t/m nu ~1,84; 7d (27-10/02-11) 2,54 (nulmeting okt 2025 9,1).
+- PIEK 16:42 max 25,8 (5,3 om 16:38; 16:40:49 ontbreekt): kookplaat en oven inactive, ramen dicht, auto, aanwezig, airco verwarmt al sinds 16:00. Tweede piek zonder koken binnen 36 min; oorzaak niet te zien. Onder 10 om 16:48:49 (6 min na top). Eerste halvering ~1,5 min (vooral menging), staart ~14 min (9-17 per achtergrond), n=1. PM1 ~95% van PM2.5 en PM10 = PM2.5, zelfde verhouding als achtergrond: zegt niets over de bron.
+- Koken: kookplaat 17:07-17:42, ramen dicht, auto, aanwezig: max 6,6 (17:32), basis ~5, geen piek.
+- Stand: auto 222 min (gem 4,38; zonder piekblokken 3,84), mid 15 min (gem 2,78, n=4), 2,5 min unavailable. Aanwezig 4,41 (n=42) vs afwezig 3,13 (n=6). Auto bleef 16:25-17:48 op ~5 en vanaf 18:50 op ~2,7 terwijl het apparaat 2 toonde.
+- Wachttijd op auto 18:17-18:32: 3,8 → 3,8, geen daling (n=5). Direct na wissel naar mid 18:32: 3,8 → 2,0 in 12 min, halvering ~10 min (9-12 per achtergrond), n=1; terug op auto weer 2,5-3.
+- Werking: mid precies 15 min na laatste aanwezigheid (18:17:19 → 18:32:19), auto direct 18:47:43. 2 HA-herstarts (17:03, 19:33), stand ~1,2 min unavailable, geen extra wissels. 5/5 traces zonder fout. Lokaal 69 mislukt op 192.542 (+1: 19:34:52 TimeoutError, ~80 s na herstart, stand 5 s unavailable), uitval 0, 270 verbindingen, sturen 439/440 (2/2 nieuw), filter 0%. Apparaat-PM2.5 max 8 bij Ultimate 25,8; verder 2-3.
+- CO₂ hele ronde > 1.200 (gem 1.591, max 1.838, nu 1.476), ramen dicht, aanwezig. Vocht 50,6-64,0% (koken) bij 19,6-21,8 °C, schimmelindicator 68 → 86 → 79, buiten 99% / 8,3 °C. Luchten; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 17). H2 auto bij koken 6x: 61, 22,6, 7,2, 6,6, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=25): reiniger aan houdt het laag; wachttijd op auto zonder daling nu n=5, mid daalt direct; apparaatsensor op 2 kan verklaren dat auto dan zacht draait (nog niet bewezen). Airco: start 17:46 gaf geen piek, piek 16:42 lag niet bij een start: geen bewijs voor airco.
+
+laatste ronde: 03-11 20:25, gemeten t/m 20:20

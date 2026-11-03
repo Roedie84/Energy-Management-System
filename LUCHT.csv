@@ -2085,3 +2085,33 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-03 16:20,filtergebruik_pct,0,1,
 2026-11-03 16:20,automation_traces_fout,0,5,5 finished; 1 detail gecontroleerd
 2026-11-03 16:20,apparaat_pm25_bereik,59,1,2 tot 16:05; volgt piek
+2026-11-03 20:20,pm25_gem,4.25,48,5-min statistiek 16:20-20:20; incl piek 16:42
+2026-11-03 20:20,pm25_mediaan,3.43,48,
+2026-11-03 20:20,pm25_p95,7.99,48,
+2026-11-03 20:20,pm25_max,25.8,48,momentaan 16:42:49; hoogste 5-min gem 13.7
+2026-11-03 20:20,pm25_uren_gt15,0.00,48,5-min gemiddelden
+2026-11-03 20:20,pm25_uren_gt25,0.00,48,5-min gemiddelden; momentaan 16:42:49 boven 25
+2026-11-03 20:20,stand_auto_min,222.1,44,gem pm25 4.38; zonder piekblokken 3.84
+2026-11-03 20:20,stand_mid_min,15.4,4,gem pm25 2.78
+2026-11-03 20:20,stand_unavailable_min,2.5,0,2 HA-herstarts; 5 s timeout 19:34:52
+2026-11-03 20:20,pm25_gem_aanwezig,4.41,42,occupancy of tv
+2026-11-03 20:20,pm25_gem_afwezig,3.13,6,18:20-18:45 en 19:00-19:05
+2026-11-03 20:20,pm25_dag_tm_nu,1.84,244,uurgem 00-20 plus 5-min 20:00-20:20
+2026-11-03 16:42,piek_max,25.8,7,"geen koken; ramen dicht; auto; airco verwarmt sinds 16:00; aanwezig; 2-min meetpunten, 16:40:49 ontbreekt"
+2026-11-03 16:42,piek_tijd_tot_onder_10_min,6,7,na top 16:42:49 -> 9.25 om 16:48:49
+2026-11-03 16:42,piek_halvering_auto_eerste_min,1.5,1,"25.8 -> 10.45 in 2 min; achtergrond ~5; vooral menging, 2-min meetpunten"
+2026-11-03 16:42,piek_halvering_auto_staart_min,14,12,"16:44:49-17:06:49; 9-17 bij achtergrond 4.7-2.5"
+2026-11-03 16:42,apparaat_pm25_max,8,1,16:42:04; Ultimate 25.8
+2026-11-03 17:07,kookmoment_max,6.58,18,"kookplaat 17:07-17:42; ramen dicht; auto; aanwezig; geen piek; basis ~5"
+2026-11-03 18:32,halvering_mid_min,10,7,"direct na wissel 3.82 -> 1.96 in 12 min; 9-12 per achtergrond; laag niveau"
+2026-11-03 20:20,co2_gem,1591,48,5-min; ramen dicht
+2026-11-03 20:20,co2_max,1838,48,momentaan 17:40-17:45; min 1266; nu 1476
+2026-11-03 20:20,co2_uren_gt1200,4.00,48,hele ronde
+2026-11-03 20:20,vocht_max,64.0,48,min 50.6; 19.6-21.8 C; koken 17:30-17:45
+2026-11-03 20:20,schimmel_indicator,79,1,68 -> 86 -> 77 -> 79; buiten 99% / 12.0 -> 8.3 C
+2026-11-03 20:20,ha_herstarts,2,1,"17:03, 19:33"
+2026-11-03 20:20,lokaal_mislukt,69,192542,+1 19:34:52 TimeoutError na herstart; uitval 0; 270 verbindingen
+2026-11-03 20:20,sturen_bevestigd,439,440,2/2 nieuw
+2026-11-03 20:20,filtergebruik_pct,0,1,
+2026-11-03 20:20,automation_traces_fout,0,5,5 finished; lijst gecontroleerd
+2026-11-03 20:20,apparaat_pm25_bereik,8,1,8 bij piek 16:42; verder 2-3 bij Ultimate 2-10
