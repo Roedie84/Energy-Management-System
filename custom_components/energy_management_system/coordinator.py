@@ -848,6 +848,7 @@ from .const import (
     MODULE_LEEG_HERSTEL_V,
     MODULE_LEEG_SPRONG_MAX_KWH,
     MODULE_LEEG_SPRONGEN_BEWAARD,
+    BATTERY_CAPACITEIT_BOOTSTRAP_DAGEN,
     # v5.73
     SPAREN_IN_BLOK_VOL_MARGE_KWH,
     SPAREN_IN_BLOK_MIN_WINST_EUR,
@@ -2453,16 +2454,16 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de energiereeks niet opschonen")
 
-        try:
-            self._ruim_pv_uurbias_op()
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Kon de PV-uurverhoudingen niet opruimen")
+        self._ruim_pv_uurbias_op_veilig()
 
         # v5.74: de vloerreeks voor de sluipverbruik-detectie.
         try:
             await self.async_bootstrap_vloer_uit_recorder()
         except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
             _LOGGER.debug("Vloerverbruik niet uit de recorder", exc_info=True)
+
+        # v5.176.0 (L-EMS-062): de grootste capaciteit voor de cycli.
+        await self.async_bootstrap_hoogste_capaciteit()
 
         try:
             await self.async_bootstrap_energy_history()
@@ -9822,14 +9823,23 @@ class EnergyManagementSystemCoordinator:
         een module (AB3000 00996) onder 15% kwam: circa 0,35 kWh die de EMS
         dacht nog te hebben. Zolang een module onder `MODULE_LEEG_SOC_PROCENT`
         staat (of een cel onder `MODULE_LEEG_CEL_V`) en die sprong nog niet
-        gezien is, telt hij niet als beschikbaar. De gemeten waarde (mediaan
-        van `module_leeg_sprongen`) gaat voor de constante. Geen moduledata,
-        geen correctie.
+        gezien is, telt hij niet als beschikbaar. Geen moduledata, geen
+        correctie.
+
+        v5.176.0 (L-EMS-061): alleen voor een module die zelf zo'n sprong
+        liet zien (`module_leeg_sprongen[].module`), met de mediaan van
+        haar eigen sprongen. Na het vertrek van 00996 werkte haar sprong
+        door op de andere drie, die op 16 van 40 dagen op <= 14 % stonden
+        en nooit naar 0 gingen: tot 0,43 kWh telde als leeg. Springt een
+        andere module wel, dan wordt dat gemeten en geldt het voor haar.
         """
         staat = self._module_leeg or {}
         if not staat.get("actief") or staat.get("sprong_gezien"):
             return 0.0
-        sprong = self._module_leeg_sprong_kwh()
+        module = staat.get("apparaat")
+        if not self._module_eigen_sprongen(module):
+            return 0.0
+        sprong = self._module_leeg_sprong_kwh(module)
         # v5.172.0 (punt 4): de sprong is de lage module die naar 0 % gaat
         # (01-11 18:15: module 00996 18 -> 0 %, totaal 20 -> 15 %, gemeten
         # 0,551 kWh = ~18 % van een module). Hij kan dus nooit meer zijn dan
@@ -9841,13 +9851,22 @@ class EnergyManagementSystemCoordinator:
             return min(sprong, float(plafond))
         return sprong
 
-    def _module_leeg_sprong_kwh(self) -> float:
-        """De sprong: gemeten als die er is, anders de constante (v5.72)."""
-        gemeten = [
+    def _module_eigen_sprongen(self, module: str | None) -> list[float]:
+        """De geldige gemeten sprongen van één module, of alle bij None."""
+        return [
             float(r["kwh"]) for r in (self.module_leeg_sprongen or [])
             if isinstance(r, dict) and isinstance(r.get("kwh"), (int, float))
             and 0 < r["kwh"] <= MODULE_LEEG_SPRONG_MAX_KWH
+            and (module is None or r.get("module") == module)
         ]
+
+    def _module_leeg_sprong_kwh(self, module: str | None = None) -> float:
+        """De sprong: gemeten als die er is, anders de constante (v5.72).
+
+        Met `module` alleen haar eigen sprongen (v5.176.0). De constante is
+        alleen nog de weergave; `module_leeg_correctie_kwh` trekt hem niet af.
+        """
+        gemeten = self._module_eigen_sprongen(module)
         return round(statistics.median(gemeten), 3) if gemeten else MODULE_LEEG_SPRONG_KWH
 
     def _na_module_leeg(
@@ -10123,6 +10142,24 @@ class EnergyManagementSystemCoordinator:
         else:
             self._module_leeg = None
             return
+        # v5.176.0 (L-EMS-061): staan er meer modules laag, dan telt de module
+        # die zelf al eens sprong, ook als een andere als eerste laag stond.
+        if not staat.get("sprong_gezien") and not self._module_eigen_sprongen(staat.get("apparaat")):
+            met_sprong = next(
+                (
+                    m for m in laag
+                    if self._module_eigen_sprongen(m.get("apparaat_id") or m.get("naam"))
+                ),
+                None,
+            )
+            if met_sprong is not None:
+                staat.update(
+                    module=met_sprong.get("module"),
+                    apparaat=met_sprong.get("apparaat_id") or met_sprong.get("naam"),
+                    soc_percent=met_sprong.get("soc_percent"),
+                    cel_min_v=met_sprong.get("cel_min_v"),
+                )
+                self._module_leeg_modsocs = None
         self._module_leeg_plafond(now, staat, modules)
         if staat.get("sprong_gezien"):
             return
@@ -10191,7 +10228,8 @@ class EnergyManagementSystemCoordinator:
         return {
             "actief": bool(staat.get("actief")),
             "correctie_kwh": round(self.module_leeg_correctie_kwh(), 3),
-            "sprong_kwh": self._module_leeg_sprong_kwh(),
+            "sprong_kwh": self._module_leeg_sprong_kwh(staat.get("apparaat")),
+            "eigen_sprong": bool(self._module_eigen_sprongen(staat.get("apparaat"))),
             "bron": "gemeten" if any(
                 isinstance(r, dict) and r.get("kwh") for r in (self.module_leeg_sprongen or [])
             ) else "constante",
@@ -25247,6 +25285,13 @@ class EnergyManagementSystemCoordinator:
             return None
         return sum(binnen) / len(binnen)
 
+    def _ruim_pv_uurbias_op_veilig(self) -> None:
+        """Opruimen bij het opstarten, zonder dat een fout dat breekt."""
+        try:
+            self._ruim_pv_uurbias_op()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de PV-uurverhoudingen niet opruimen")
+
     def _ruim_pv_uurbias_op(self) -> None:
         """Verwijdert verhoudingen die uit te kleine getallen komen
         (v2.4.0).
@@ -33207,6 +33252,10 @@ class EnergyManagementSystemCoordinator:
         `Totaal geleverd: 1768,70 kWh` meldde - bij 8,64 kWh ongeveer 205
         cycli. De eigen telling begon pas bij de installatie van het EMS.
         De accu weet het zelf beter; dat is de bron.
+
+        v5.176.0 (L-EMS-062): gedeeld door de grootste capaciteit die de accu
+        had. Toen module 00996 wegging sprong dit van 189,8 naar 253,0 zonder
+        dat er iets ontladen was. Alleen rapportage, niet de sturing.
         """
         capacity_entity = self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
         if not capacity_entity:
@@ -33214,10 +33263,47 @@ class EnergyManagementSystemCoordinator:
         capacity_kwh = self._read_sensor_float(capacity_entity)
         if capacity_kwh is None or capacity_kwh <= 0:
             return None
+        capacity_kwh = max(capacity_kwh, self.battery_capaciteit_hoogste_kwh or 0.0)
         geleverd = self._levenslang_geleverd_kwh()
         if geleverd is not None:
             return round(geleverd / capacity_kwh, 1)
         return round(self.battery_cumulative_discharged_kwh / capacity_kwh, 1)
+
+    # Bewaard (PERSISTED_FIELDS); None tot de eerste meting (v5.176.0).
+    battery_capaciteit_hoogste_kwh: float | None = None
+
+    def _onthoud_hoogste_capaciteit(self) -> None:
+        """Houdt de grootste capaciteit bij voor de cycli (v5.176.0, L-EMS-062)."""
+        capaciteit = self._read_sensor_float(self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR))
+        if capaciteit is not None and capaciteit > (self.battery_capaciteit_hoogste_kwh or 0.0):
+            self.battery_capaciteit_hoogste_kwh = capaciteit
+
+    async def async_bootstrap_hoogste_capaciteit(self) -> None:
+        """Eenmalig de grootste capaciteit uit de recorder (v5.176.0, L-EMS-062).
+
+        Bij de eerste start na de update is de accu al kleiner geworden;
+        de langetermijnstatistiek weet nog wat hij was.
+        """
+        entiteit = self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        if not entiteit or self.battery_capaciteit_hoogste_kwh is not None:
+            return
+        begin = dt_util.now() - timedelta(days=BATTERY_CAPACITEIT_BOOTSTRAP_DAGEN)
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import statistics_during_period
+
+            rijen = await get_instance(self.hass).async_add_executor_job(
+                statistics_during_period, self.hass, begin, None, {entiteit}, "day", None, {"max"}
+            )
+        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
+            _LOGGER.debug("Hoogste capaciteit niet uit de recorder", exc_info=True)
+            return
+        waarden = [
+            r["max"] for r in (rijen or {}).get(entiteit, [])
+            if isinstance(r.get("max"), (int, float)) and r["max"] > 0
+        ]
+        if waarden:
+            self.battery_capaciteit_hoogste_kwh = float(max(waarden))
 
     def _levenslang_geleverd_kwh(self) -> float | None:
         """Wat de accu in zijn hele leven heeft geleverd (v5.11)."""
@@ -37578,6 +37664,7 @@ class EnergyManagementSystemCoordinator:
         except Exception as fout:  # noqa: BLE001 - veilig falen: geen correctie
             self._module_leeg = None
             self.internal_failures["module_leeg"] = f"{type(fout).__name__}: {fout}"
+        self._onthoud_hoogste_capaciteit()
 
         day_key = now.date()
         if self._battery_module_day_key is None:

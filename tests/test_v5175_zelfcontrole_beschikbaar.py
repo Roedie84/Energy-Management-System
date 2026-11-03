@@ -86,6 +86,7 @@ def test_correctie_gaat_los_als_de_module_herstelt(make_coordinator, hass):
     c._read_sensor_float = lambda *a, **k: 30.0
     c.bruikbare_capaciteit_kwh = lambda: 8.64
     c._read_corrected_battery_power = lambda: 0.0
+    c.module_leeg_sprongen = [{"kwh": 0.551, "module": "00996"}]
     nu = datetime(2026, 11, 3, 11, 0, tzinfo=TZ)
     _module(c, 11.0)
     c._volg_module_leeg(nu)

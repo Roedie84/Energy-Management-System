@@ -158,7 +158,9 @@ def test_waardeplan_rekent_boven_de_bodem():
 def test_sprong_niet_groter_dan_wat_de_module_meldt(make_coordinator, hass):
     c = make_coordinator({"battery_total_capacity_sensor_entity": "sensor.cap"})
     hass.states.set("sensor.cap", "11.52", {"unit_of_measurement": "kWh"})
-    c.module_leeg_sprongen = [{"moment": "2026-11-01T18:15:35+01:00", "kwh": 0.551}]
+    c.module_leeg_sprongen = [
+        {"moment": "2026-11-01T18:15:35+01:00", "kwh": 0.551, "module": "AB3000 00996"}
+    ]
     modules = [
         {"apparaat_id": "AB3000 01029", "soc_percent": 16},
         {"apparaat_id": "AB3000 00917", "soc_percent": 16},
@@ -177,8 +179,10 @@ def test_sprong_niet_groter_dan_wat_de_module_meldt(make_coordinator, hass):
 
 def test_zonder_plafond_de_gemeten_sprong(make_coordinator, hass):
     c = make_coordinator({})
-    c.module_leeg_sprongen = [{"moment": "2026-11-01T18:15:35+01:00", "kwh": 0.551}]
-    c._module_leeg = {"actief": True, "sprong_gezien": False}
+    c.module_leeg_sprongen = [
+        {"moment": "2026-11-01T18:15:35+01:00", "kwh": 0.551, "module": "AB3000 00996"}
+    ]
+    c._module_leeg = {"actief": True, "apparaat": "AB3000 00996", "sprong_gezien": False}
     assert c.module_leeg_correctie_kwh() == pytest.approx(0.551)
 
 

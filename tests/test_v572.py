@@ -345,6 +345,11 @@ def _module_coordinator(make_coordinator, hass, module_soc=20.0, cel=3.2, soc=14
     hass.states.set("sensor.m2_soc", 25.0)
     hass.states.set("sensor.m1_min", cel)
     hass.states.set("sensor.m2_min", 3.25)
+    # v5.176.0 (L-EMS-061): de correctie geldt alleen na een eigen sprong.
+    eerste = c._read_battery_modules()[0]
+    c.module_leeg_sprongen = [
+        {"kwh": MODULE_LEEG_SPRONG_KWH, "module": eerste.get("apparaat_id") or eerste.get("naam")}
+    ]
     return c
 
 
@@ -390,8 +395,8 @@ def test_na_de_sprong_geen_dubbele_correctie_en_de_sprong_wordt_geleerd(make_coo
     hass.states.set("sensor.soc", 10.5)
     _ronde(c, t + timedelta(minutes=5))
     assert c.module_leeg_correctie_kwh() == 0.0
-    assert len(c.module_leeg_sprongen) == 1
-    gemeten = c.module_leeg_sprongen[0]["kwh"]
+    assert len(c.module_leeg_sprongen) == 2
+    gemeten = c.module_leeg_sprongen[-1]["kwh"]
     # 4,5% min wat 300 W in vijf minuten verklaart (0,29%) van 8,64 kWh.
     assert gemeten == pytest.approx(8.64 * (4.5 - 0.025 / 8.64 * 100) / 100, abs=0.01)
     # De volgende keer geldt de gemeten sprong in plaats van de constante.
@@ -401,7 +406,9 @@ def test_na_de_sprong_geen_dubbele_correctie_en_de_sprong_wordt_geleerd(make_coo
     assert c._module_leeg is None
     hass.states.set("sensor.m1_soc", 14.0)
     _ronde(c, t + timedelta(days=1))
-    assert c.module_leeg_correctie_kwh() == pytest.approx(gemeten)
+    assert c.module_leeg_correctie_kwh() == pytest.approx(
+        (gemeten + MODULE_LEEG_SPRONG_KWH) / 2, abs=0.001
+    )
     assert c.get_module_leeg()["bron"] == "gemeten"
 
 

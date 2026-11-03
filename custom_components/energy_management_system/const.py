@@ -3957,6 +3957,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "reserve_daily_records": {"type": "plain"},
     # v5.72 (L-EMS-014): gemeten sprongen als een module bijna leeg is.
     "module_leeg_sprongen": {"type": "plain"},
+    # v5.176.0 (L-EMS-062): grootste capaciteit, deler van de geschatte cycli.
+    "battery_capaciteit_hoogste_kwh": {"type": "plain"},
     # v5.172.0: waarnemingen van de effectieve ondergrens, de boekwaarde van de
     # voorraad bij het dagbegin en de kostprijsteller bij het dagbegin.
     "ondergrens_waarnemingen": {"type": "plain"},
@@ -7935,6 +7937,8 @@ MODULE_LEEG_HERSTEL_V = 0.05
 # een herstart, een kalibratie of een meetfout.
 MODULE_LEEG_SPRONG_MAX_KWH = 1.5
 MODULE_LEEG_SPRONGEN_BEWAARD = 10
+# v5.176.0 (L-EMS-062): hoe ver de recorder terugkijkt voor de grootste capaciteit.
+BATTERY_CAPACITEIT_BOOTSTRAP_DAGEN = 365
 
 # v5.73 (akkoord Ruud 10-10): sparen BINNEN het goedkope blok.
 # Raakt de accu volgens de verwachting tot zoveel kWh onder vol vóór het

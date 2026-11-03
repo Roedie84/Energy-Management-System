@@ -64,6 +64,8 @@ def test_every_bootstrap_is_named_in_this_test():
         "async_bootstrap_energy_history",
         # v5.74: de vloerreeks, na het terugzetten van de toestand.
         "async_bootstrap_vloer_uit_recorder",
+        # v5.176.0: na het terugzetten, want hij draait alleen zonder bewaarde waarde.
+        "async_bootstrap_hoogste_capaciteit",
     }
 
     assert gevonden == bekend, (

@@ -34651,3 +34651,14 @@ Akkoord Ruud 03-11. Gemeld: "Waarom spaart de accu nu? Leeg gaat hij toch" - sta
 Nieuwe reden `waardeplan_leeg`: dezelfde stand (smart_charging) als `waardeplan_houden`, gekozen als `_waardeplan_accu_leeg` (dezelfde maat als de tekortmeting: `accu_is_leeg` met de effectieve ondergrens). Staat in `NACHT_BEWUST_NIET_ONTLADEN_REDENEN` net als 'houden', niet in `REDENEN_BEWUSTE_NETAFNAME`. Geen moduswisselmelding voor deze reden (wel in `mode_change_log`); de tekortmelding dekt het.
 
 Tests: `test_v51753_waardeplan_leeg.py` (4).
+
+## v5.176.0 — modulesprong alleen bij een module die zelf sprong; cycli springen niet meer bij een capaciteitswijziging
+
+Akkoord Ruud 03-11 (L-EMS-061, L-EMS-062).
+
+1. **Modulesprong per module (L-EMS-061).** Na het vertrek van 00996 trok `module_leeg_correctie_kwh` haar sprong (0,551 kWh) af bij de andere modules: 03-11 19:45 module 01029 op 13 %, correctie 0,374, ruw 0,173, EMS 0,00. Die modules stonden op 16 van 40 dagen op ≤ 14 % en gingen nooit naar 0. De correctie geldt nu alleen voor een module met een eigen gemeten sprong (`module_leeg_sprongen[].module`), met de mediaan van die eigen sprongen. Zonder eigen sprong geen vooraf-aftrek, ook niet de constante. Staan er meer modules laag, dan volgt `_volg_module_leeg` de module die zelf al eens sprong. Een sprong blijft gemeten worden en geldt daarna voor die module. Sprongregels zonder module tellen niet meer. Nieuw kenmerk `eigen_sprong` onder `module_bijna_leeg`. Dit verandert wat als beschikbaar telt: tot ~0,43 kWh meer op lage avonden.
+2. **Cycli (L-EMS-062).** `battery_estimated_full_cycles` deelde de levenslange teller door de actuele capaciteit: 189,8 → 253,0 bij 11,52 → 8,64 kWh zonder ontlading. Nu door de grootste capaciteit (`battery_capaciteit_hoogste_kwh`, bewaard). De eerste keer komt die uit de langetermijnstatistiek (365 dagen, `async_bootstrap_hoogste_capaciteit`). Alleen rapportage.
+
+Grens: bij twee lage modules tegelijk wordt een sprong toegeschreven aan de gevolgde module.
+
+Tests: `test_v5176_modulesprong_en_cycli.py` (13); `test_v572.py`, `test_v5172_effectieve_ondergrens.py` en `test_v5175_zelfcontrole_beschikbaar.py` geven de module nu een eigen sprong. Ratel: het opruimen van de PV-uurverhoudingen ging naar `_ruim_pv_uurbias_op_veilig`, zodat `async_setup` niet groeit.

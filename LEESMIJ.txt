@@ -1,3 +1,14 @@
+EMS v5.176.0 - modulesprong per module, cycli springen niet meer
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De correctie voor een bijna lege module geldt alleen nog voor een module die
+  zelf zo'n sprong liet zien. De sprong van 00996 werkte door op de andere
+  drie; daardoor telde tot 0,43 kWh als leeg. De accu kan op lage avonden nu
+  verder ontladen, richting de ingestelde 10 %.
+- Geschatte cycli: de teller rekent met de grootste capaciteit die de accu had
+  en springt niet meer als een module weggaat. 253 gaat terug naar ongeveer 190.
+
 EMS v5.175.3 - lege accu heet weer leeg
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
