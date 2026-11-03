@@ -61,10 +61,13 @@ def test_uitgezette_module_telt_niet_voor_de_status(make_coordinator, hass):
     assert any(tekst in p for p in s["informatief"])
 
 
-def test_een_restje_van_een_stap_telt_als_leeg():
+def test_een_restje_telt_als_leeg():
     assert C._waardeplan_tekort({"actie": "houden", "net_kwh": 0.15, "inhoud_kwh": 0.1}) is True
-    assert C._waardeplan_tekort({"actie": "houden", "net_kwh": 0.15, "inhoud_kwh": 0.2}) is False
-    assert 0.1 < PLAN_SPAREN_LEEG_KWH < 0.2
+    # v5.176.1: 0,17 kWh (12 %) telde als sparen terwijl de status 'leeg' zei.
+    assert C._waardeplan_tekort({"actie": "houden", "net_kwh": 0.15, "inhoud_kwh": 0.17}) is True
+    assert C._waardeplan_tekort({"actie": "houden", "net_kwh": 0.15, "inhoud_kwh": 0.3}) is True
+    assert C._waardeplan_tekort({"actie": "houden", "net_kwh": 0.15, "inhoud_kwh": 0.4}) is False
+    assert 0.26 <= PLAN_SPAREN_LEEG_KWH < 0.4
 
 
 def test_net_volgt_de_zonlading_niet_de_afgeronde_stap():

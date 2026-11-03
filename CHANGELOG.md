@@ -34662,3 +34662,15 @@ Akkoord Ruud 03-11 (L-EMS-061, L-EMS-062).
 Grens: bij twee lage modules tegelijk wordt een sprong toegeschreven aan de gevolgde module.
 
 Tests: `test_v5176_modulesprong_en_cycli.py` (13); `test_v572.py`, `test_v5172_effectieve_ondergrens.py` en `test_v5175_zelfcontrole_beschikbaar.py` geven de module nu een eigen sprong. Ratel: het opruimen van de PV-uurverhoudingen ging naar `_ruim_pv_uurbias_op_veilig`, zodat `async_setup` niet groeit.
+
+## v5.176.1 — geen "kump neet meer tekort" bij een lege accu
+
+Gemeld Ruud 03-11 21:08, na v5.176.0. Melding `plan_tekort_hersteld` terwijl de accu op 12 % stond (0,17 kWh), het huis 704 W van het net nam en status en cockpit "accu leeg" zeiden.
+
+**Oorzaak.** Twee maten voor leeg. `accu_is_leeg` telt tot ondergrens + `TEKORT_LEEG_MARGE_PROCENT` (13 %), `_waardeplan_tekort` tot `PLAN_SPAREN_LEEG_KWH` (0,15 kWh). Vóór v5.176.0 trok de modulecorrectie de inhoud naar 0; sinds L-EMS-061 blijft 0,17 kWh staan, net boven de grens. Alle kwartieren tot het laadblok telden daardoor als sparen in plaats van tekort, en na 30 minuten kwam de herstelmelding.
+
+**Gebouwd.** `PLAN_SPAREN_LEEG_KWH` 0,15 → 0,3: 13 % van 8,64 kWh, op planstappen van 0,1 kWh.
+
+Niet veranderd: de sturing. De accu blijft vanavond op 12 % omdat het waardeplan de rest bewaart voor de duurdere avond van morgen; de plantabel ontlaadt dan tot 10 %.
+
+Tests: `test_v51752_status_en_plan.py` (grenzen 0,17, 0,3 en 0,4 kWh).

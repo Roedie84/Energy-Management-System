@@ -7959,7 +7959,11 @@ SPAREN_IN_BLOK_MIN_WINST_EUR = 0.02
 # v5.175.2 (analysekaart 03-11): het plan rekent in stappen van 0,1 kWh, dus een
 # restje van één stap gold als "bewust sparen" en de tekortmelding wisselde
 # vijf keer op een middag. Eén stap is geen zinvolle levering: dat telt als leeg.
-PLAN_SPAREN_LEEG_KWH = 0.15
+# v5.176.1 (melding Ruud 03-11 21:08): 0,15 -> 0,3. Met 0,17 kWh (12 %) meldde het
+# plan "kump neet meer tekort" terwijl status en cockpit "accu leeg" zeiden en het
+# huis op het net draaide. Status en tekortmeting rekenen leeg tot de ondergrens
+# + TEKORT_LEEG_MARGE_PROCENT: 13 % = 0,26 kWh bij 8,64 kWh, afgerond op planstappen 0,3.
+PLAN_SPAREN_LEEG_KWH = 0.3
 
 # v5.155.0 (akkoord Ruud 31-10): het sluimerverbruik van de accu tijdens het
 # sparen telt mee. Kost het vasthouden tot het eerste gedekte kwartier meer

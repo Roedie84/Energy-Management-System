@@ -1,3 +1,11 @@
+EMS v5.176.1 - geen valse "kump neet meer tekort"
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Bij een bijna lege accu (tot ongeveer 13 %) telt netafname in het plan weer als
+  tekort, net als in de status en de cockpit. De melding "kump neet meer tekort"
+  komt dan niet meer ten onrechte. De sturing is gelijk.
+
 EMS v5.176.0 - modulesprong per module, cycli springen niet meer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
