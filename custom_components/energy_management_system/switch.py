@@ -18,10 +18,28 @@ from .const import (
 )
 
 
+def _ruim_pendeldemping_op(hass: HomeAssistant, entry_id: str) -> None:
+    """Haal de vervallen schakelaar "P1 pendeldemping" uit het register (v5.175.1).
+
+    Ruud 03-11 16:16: "Demping er helemaal uit". De schakelaar bestaat niet
+    meer; zonder deze opruiming bleef er een wees "niet beschikbaar" staan.
+    """
+    try:
+        from homeassistant.helpers import entity_registry as er
+
+        register = er.async_get(hass)
+        entity_id = register.async_get_entity_id("switch", DOMAIN, f"{entry_id}_p1_pendeldemping")
+        if entity_id:
+            register.async_remove(entity_id)
+    except Exception:  # noqa: BLE001 - opruimen mag het opstarten nooit breken
+        pass
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
+    _ruim_pendeldemping_op(hass, entry.entry_id)
     async_add_entities(
         [
             ForceManualSwitch(coordinator, entry_id=entry.entry_id),
@@ -57,7 +75,6 @@ async def async_setup_entry(
             AircoAutomaatSwitch(coordinator, entry_id=entry.entry_id),
             NuLadenSwitch(coordinator, entry_id=entry.entry_id),
             AchterhoeksSwitch(coordinator, entry_id=entry.entry_id),
-            P1PendeldempingSwitch(coordinator, entry_id=entry.entry_id),
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
             BatterijladerOverrideSwitch(coordinator, entry_id=entry.entry_id),
@@ -396,47 +413,6 @@ class AchterhoeksSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         self._coordinator.achterhoeks = False
-        self.async_write_ha_state()
-
-
-class P1PendeldempingSwitch(SwitchEntity, RestoreEntity):
-    """P1 pendeldemping (v5.154.0, akkoord Ruud 31-10).
-
-    Aan: pendelt de accu tegen een apparaat dat in pulsen aan en uit gaat,
-    dan krijgt de Zendure via "P1 regeldoel" het gemiddelde van de laatste
-    minuut in plaats van de momentwaarde. Uit: alleen tellen, zoals voorheen
-    regelen. Standaard aan.
-    """
-
-    _attr_has_entity_name = True
-    _attr_name = "P1 pendeldemping"
-    _attr_icon = "mdi:sine-wave"
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        super().__init__()
-        self._coordinator = coordinator
-        self._attr_unique_id = f"{entry_id}_p1_pendeldemping"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": DEFAULT_NAME,
-        }
-
-    @property
-    def is_on(self) -> bool:
-        return self._coordinator.p1_pendeldemping
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state in ("on", "off"):
-            self._coordinator.p1_pendeldemping = last_state.state == "on"
-
-    async def async_turn_on(self, **kwargs) -> None:
-        self._coordinator.p1_pendeldemping = True
-        self.async_write_ha_state()
-
-    async def async_turn_off(self, **kwargs) -> None:
-        self._coordinator.p1_pendeldemping = False
         self.async_write_ha_state()
 
 

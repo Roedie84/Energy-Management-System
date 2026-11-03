@@ -1441,8 +1441,7 @@ class EnergyManagementSystemCoordinator:
         self._last_plan_alert: dict[str, str] = {}
         # v1.24.0: meldingen in het Achterhoeks.
         self.achterhoeks: bool = False
-        # v5.154.0: pendeldemping in P1 regeldoel (schakelaar, standaard aan).
-        self.p1_pendeldemping: bool = True
+        # v5.175.1: de pendeldemping (v5.154.0) en haar schakelaar zijn weg.
         # If True: compute and learn everything as normal, but never send
         # commands to the Zendure entities. Set via a dedicated switch.
         self.learning_only: bool = False
@@ -55957,9 +55956,12 @@ class EnergyManagementSystemCoordinator:
         monsters = self._p1_verschil_monsters or []
         verschuiving = statistics.median(monsters) if monsters else 0.0
         salderen = self._is_salderen_active(now)
+        # v5.175.1 (Ruud 03-11 16:16: "Demping er helemaal uit"): de
+        # pendeldetectie telt alleen nog, als diagnose. De Zendure krijgt
+        # altijd de momentwaarde - het 60-s gemiddelde hield een echte
+        # lastsprong minutenlang tegen (16:04-16:14: regeldoel -190 W bij
+        # +988 W import).
         pendel = self._p1_pendel(regel_w, now)
-        if regel_w is not None and pendel["gedempt"]:
-            regel_w = pendel["gemiddelde_w"]
         if regel_w is None:
             waarde = None
         elif salderen:
@@ -55978,7 +55980,7 @@ class EnergyManagementSystemCoordinator:
     _p1_pendel_staat: dict | None = None
 
     def _p1_pendel(self, regel_w: float | None, now: datetime) -> dict:
-        """Pendeldetectie en -demping voor "P1 regeldoel" (v5.154.0, akkoord Ruud 31-10).
+        """Pendeldetectie voor "P1 regeldoel" (v5.154.0; alleen nog tellen sinds v5.175.1).
 
         Gemeld 30-10 en 31-10 (EMS-kaart): de accu pendelt tegen apparaten die
         in pulsen van ~2 kW aan en uit gaan. De Zendure volgt de momentwaarde
@@ -55991,9 +55993,15 @@ class EnergyManagementSystemCoordinator:
         gaat (of andersom) met samen meer dan `PENDEL_SPRONG_W` tussen de top
         van de vorige en de huidige reeks; waarden binnen `PENDEL_RUIS_W` van
         nul tellen niet. Bij minstens `PENDEL_MIN_WISSELS` wissels binnen
-        `PENDEL_VENSTER_S` krijgt de Zendure het tijdgewogen gemiddelde over
-        dat venster. Na `PENDEL_LOS_S` zonder wissel weer de momentwaarde.
-        Met de schakelaar "P1 pendeldemping" uit wordt er alleen geteld.
+        `PENDEL_VENSTER_S` heet de periode een pendelepisode, tot
+        `PENDEL_LOS_S` zonder wissel.
+
+        v5.175.1 (Ruud 03-11 16:16: "Demping er helemaal uit"): tot v5.175.0
+        kreeg de Zendure tijdens een episode het 60-s gemiddelde. Dat hield
+        een echte, aanhoudende last minutenlang tegen (03-11 16:04-16:14:
+        regeldoel -190 W terwijl de meter +988 W importeerde). De demping en
+        de schakelaar "P1 pendeldemping" zijn weg; dit telt alleen nog, als
+        diagnose voor de analysekaarten. De uitkomst stuurt niets.
         """
         st = self._p1_pendel_staat
         if st is None:
@@ -56047,8 +56055,6 @@ class EnergyManagementSystemCoordinator:
         actief = st["actief_sinds"] is not None
         return {
             "actief": actief,
-            "gedempt": actief and self.p1_pendeldemping and gemiddelde is not None,
-            "demping_aan": self.p1_pendeldemping,
             "tekenwissels_60s": len(recent),
             "gemiddelde_w": round(gemiddelde, 1) if gemiddelde is not None else None,
             "actief_sinds": st["actief_sinds"].isoformat() if actief else None,

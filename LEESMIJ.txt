@@ -1,3 +1,18 @@
+EMS v5.175.1 - pendeldemping eruit: nul op de meter weer snel
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De pendeldemping (sinds v5.154) is verwijderd. Op 3 november tussen
+  16:04 en 16:14 gaf "P1 regeldoel" het gemiddelde van de laatste minuut
+  door (-190 W) terwijl de meter 988 W van het net haalde. De accu volgde
+  daardoor minutenlang niet. Nu krijgt de Zendure altijd de echte waarde
+  van de meter.
+- De schakelaar "P1 pendeldemping" is weg. Hij wordt bij het opstarten
+  ook uit de lijst met entiteiten gehaald, zodat er geen "niet
+  beschikbaar" blijft staan.
+- Het pendelen wordt nog wel geteld (aantal keer en minuten vandaag), als
+  informatie voor de analyse. Het stuurt niets meer.
+
 EMS v5.175.0 - plan rekent met zon-opslag, zelfcontrole en meldingen kloppen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -37,7 +37,7 @@ def test_accu_slingert_bij_constant_huis_geen_demping(make_coordinator, hass):
     assert uit["waarde_w"] == -1400
 
 
-def test_pulserende_last_wel_demping(make_coordinator, hass):
+def test_pulserende_last_wordt_geteld(make_coordinator, hass):
     c = _c(make_coordinator)
     huis = {"w": 400.0}
     c._read_corrected_consumption_power = lambda: huis["w"]
@@ -46,7 +46,8 @@ def test_pulserende_last_wel_demping(make_coordinator, hass):
         huis["w"] = 2400.0 if w > 0 else 300.0
         uit = c.p1_regeldoel(w, w, T0 + timedelta(seconds=i))
     assert uit["pendel"]["actief"] is True
-    assert uit["pendel"]["gedempt"] is True
+    # v5.175.1: alleen nog tellen - de Zendure krijgt de momentwaarde.
+    assert uit["waarde_w"] == -900
 
 
 def test_pendel_door_last():

@@ -8053,6 +8053,9 @@ HERSPEEL_VERSIES = 10
 # PENDEL_VENSTER_S, met sprongen van meer dan PENDEL_SPRONG_W, dan krijgt de
 # Zendure het tijdgewogen gemiddelde over PENDEL_VENSTER_S in plaats van de
 # momentwaarde. Na PENDEL_LOS_S zonder wissel weer de momentwaarde.
+# v5.175.1 (Ruud 03-11 16:16: "Demping er helemaal uit"): de demping is weg,
+# de detectie telt alleen nog als diagnose. P1 regeldoel = altijd de
+# momentwaarde.
 PENDEL_VENSTER_S = 60
 PENDEL_MIN_WISSELS = 3
 PENDEL_SPRONG_W = 1000.0
