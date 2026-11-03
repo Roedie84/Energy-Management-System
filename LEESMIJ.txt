@@ -1,3 +1,23 @@
+EMS v5.170.0 - heen-en-terug-rendement voor beslissingen zonder sluimerverbruik
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het rendement uit de kWh-meter van de accu (v5.169.0) telde ook mee wat
+  de accu verbruikt als hij stilstaat (sluimeren: bij sparen ~5-11 W uit de
+  accu zelf, leeg of vol een paar watt uit het net).
+- Dat sluimeren gebeurt ook als je geen extra ronde laadt en ontlaadt, en
+  het EMS rekent het vasthouden van stroom al apart (sinds v5.155.0). In het
+  rendement telde het dus dubbel, en een rustige week drukte het rendement.
+- Nu haalt het EMS het gemeten sluimeren eraf: stilstanduren per stand x
+  het gemeten verbruik per stand. Daar rekenen alle beslissingen mee.
+- Live is het verschil klein (~1,3 kWh sluimer in 30 dagen, rendement
+  ~83,8 -> ~84,3 %): de accu staat zelden echt stil. Bij een goedkoop uur
+  van 28,6 ct is ~0,2 ct minder prijsverschil nodig.
+- De sensor "Learned battery efficiency" toont nu het rendement zonder
+  sluimeren; met sluimeren staat erbij als "rondrit_totaal_procent", het
+  sluimeren als "rondrit_sluimer_kwh".
+- Zonder sluimermeting rekent het EMS zoals in v5.169.0.
+
 EMS v5.169.0 - heen-en-terug-rendement uit de kWh-meter van de accu
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

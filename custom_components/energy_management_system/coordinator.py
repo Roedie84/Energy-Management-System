@@ -4430,9 +4430,26 @@ class EnergyManagementSystemCoordinator:
         laden = self.learned_charge_efficiency_percent
         uit = R.rondrit_uit_meter(standen["in"], standen["uit"], self._rondrit_inhoud(),
                                   laden / 100 if laden else None)
+        uit = self._rondrit_zonder_sluimer(uit, now)
         uit.update({"bron": "kWh-meter van de accu (uurstatistiek)", "tellers": ids,
                     "berekend_om": now.isoformat()})
         self._rondrit_meter = uit
+
+    def _rondrit_zonder_sluimer(self, meting: dict, now: datetime) -> dict:
+        """De rondrit zonder sluimerverbruik voor de beslissingen (v5.170.0).
+
+        Sluimer gebeurt ook zonder extra ronde, en het vasthouden kost al
+        apart (`_sluimer_bij_sparen`); zie rondrit.py. Best effort: bij een
+        fout blijft de totale rondrit (v5.169.0)."""
+        from . import rondrit as R
+
+        try:
+            lokaal = dt_util.as_local(now).replace(tzinfo=None) if now.tzinfo else now
+            return R.met_sluimer(meting, self._accu_meetreeks(lokaal), self.get_sluimerverbruik(lokaal),
+                                 float(self.effective_min_soc_percent()), self._bovengrens_procent())
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            _LOGGER.debug("Sluimer in de rondrit niet bepaald", exc_info=True)
+            return meting
 
     @staticmethod
     def _rondrit_lokaal(eind) -> datetime | None:

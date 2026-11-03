@@ -4188,9 +4188,33 @@ class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):
             "uit_hele_rondes": c._rendement_uit_rondes(),
             # v5.169.0: heen-en-terug uit de kWh-meter van de accu (venster, kWh)
             "rondrit_kwh_meter": getattr(c, "_rondrit_meter", None),
+            # v5.170.0: de toestand is de rondrit ZONDER sluimerverbruik (daar
+            # rekenen de beslissingen mee); met sluimer staat hiernaast.
+            **_rondrit_weergave(getattr(c, "_rondrit_meter", None)),
             # v5.115.0: wat de accu werkelijk kost en oplevert (cockpit)
             "accukosten": c.get_accukosten(),
         }
+
+
+def _rondrit_weergave(meting: dict | None) -> dict:
+    """Rondrit met en zonder sluimer als kenmerken (v5.170.0)."""
+    meting = meting or {}
+
+    def pct(v):
+        return round(v * 100, 1) if v else None
+
+    return {
+        "rondrit_conversie_procent": pct(meting.get("rendement_conversie")),
+        "rondrit_totaal_procent": pct(meting.get("rendement_totaal")),
+        "rondrit_sluimer_kwh": meting.get("sluimer_kwh"),
+        "toestand_betekent": (
+            "heen-en-terugrendement zonder sluimerverbruik (conversie); daar rekenen de "
+            "beslissingen mee. Het sluimeren telt apart (vasthouden kost), het totaal met "
+            "sluimer staat in rondrit_totaal_procent."
+            if meting.get("rendement_conversie") else
+            "heen-en-terugrendement (laden x ontladen)"
+        ),
+    }
 
 
 class ApplianceUsageHoursSensor(SensorEntity, RestoreEntity):
