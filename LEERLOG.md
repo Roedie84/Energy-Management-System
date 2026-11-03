@@ -932,3 +932,17 @@ laatste ronde: 02-11 23:40, gemeten t/m 02-11 23:50
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort onder waardeplan), H-EMS-16 (modulesprong bij laden vanaf leeg). H-EMS-14 geparkeerd.
 
 laatste ronde: 03-11 03:40, gemeten t/m 03-11 03:55
+
+
+## 03-11 07:40 · tussenronde
+- **Draait v5.170.1** (andere sessie 07:12-07:33, herstarts 06:06, 07:22, 07:30, 07:35). v5.168.0 is dus actief. Geen release: niets acuts, en vandaag al drie releases. Log: alleen sensoren rond de herstarts.
+- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, P1-export 0 sinds 21:00.
+- **Vroege uitslag L-EMS-054 (nacht 02→03):** net 22-07 uur **1,887 kWh**, accu heel de nacht `waardeplan_houden` op 15-16 %, bruikbaar 0,02-0,14 kWh. Toch `tekortnacht_tot_nu_kwh` **0**. Oorzaak uit de code: `_netimport_is_tekort` en `_tekortnacht_uit_verloop` eisen SoC ≤ vloer 10 + marge 3 = 13 %. Door de modulesprong (00996) is de accu leeg bij 15 %. L-EMS-054 sprak van inhoud, gebouwd is SoC. → **L-EMS-059 (open)**, raakt via de marge de reserve. Uitslag 09:00 bevestigt het in de volgende ronde.
+- **H-EMS-15 vervalt daarmee voor deze nacht:** de vraag welke soort tekort het wordt, komt niet aan bod bij 0. `laadbesluit_sinds_9u` staat nu wel op `loont` (was leeg op 02-11).
+- **L-EMS-056 past bij het beeld:** de ruwe spiegel 0,58-0,69 stond er 23:30-05:45, precies zolang er geen blok was ('reserve geen blok', stale `blok 23:30`). Vanaf 05:45 blok 10:15, beschikbaar 0,02, `fout 0`. Dus niet weg, alleen dit pad niet in gebruik. `wip/l-ems-056` staat op v5.168.0 en moet voor de dagafsluiting op main.
+- **Rondrit:** conversie 84,3 %, totaal 83,3 %, venster nu 09-10 t/m 03-11 (24,7 d, in 175,6 kWh); de CHANGELOG noemt 04-10 (212,6 kWh). Reden van het kortere venster niet nagelopen; dagafsluiting.
+- **Zon vandaag:** Solcast 7,69 (03:40) → **5,09** vóór zonsopkomst, p10 0,86, p90 10,11. Reserve 07:24 eenmalig 1 min +1,43 kWh door `live_correctie_verhouding` 4,1 na de herstart (bekend, gemeld 02-11).
+- MC tot blok 20,2 %. Twin 0,298. Planvolging niet gemeten (tussenronde). Stilstand: **geen echte** (12 wachten, 0 doen). Airco wisselt 'niets'/'verwarmen', knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-16 (modulesprong bij laden vanaf leeg). H-EMS-15 geparkeerd tot L-EMS-059 besloten is; H-EMS-14 geparkeerd.
+
+laatste ronde: 03-11 07:40, gemeten t/m 03-11 07:45

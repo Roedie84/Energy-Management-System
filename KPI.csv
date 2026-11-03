@@ -1198,3 +1198,11 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-03 03:40,DAG,ems_dagen_sinds_vol,5,1,laatst 100 % 29-10; balanceren wacht op < 22 ct
 2026-11-03 03:40,DAG,ems_spiegel_beschikbaar_vals,1,1,diagnose_gezondheid draait v5.167.0 fout 1 sinds 23:30; fix klaar op wip/l-ems-056; niet gereleased: v5.168.0 wacht op herstart
 2026-11-03 03:40,DAG,ems_stilstand_functies,0,12,"12 wachten, 0 doen; airco 'niets', knop uit -> rekent"
+2026-11-03 07:40,TUSSEN,ems_verkoop_onder_reserve,0,1,"verkoopkwartieren leeg; P1 export 0.000 kWh 21:00-07:00; huis_gaat_voor alleen 02-11 ok"
+2026-11-03 07:40,TUSSEN,ems_nacht_net_kwh,1.887,9,"P1 22:00-07:00 per uur 0.337/0.216/0.215/0.205/0.205/0.217/0.201/0.209/0.282; export 0; 07-09 nog open"
+2026-11-03 07:40,TUSSEN,ems_tekortnacht_tot_nu_kwh,0,1,"live 07:41 tekortnacht_tot_nu_kwh 0 bij 1.89 kWh net met lege accu: soc 15-16 % > vloer 10 + marge 3; L-EMS-059"
+2026-11-03 07:40,TUSSEN,ems_rondrit_conversie_pct,84.3,25,"v5.170.1 kWh-meter 09-10 14:00 t/m 03-11 07:00 (24.7 d): in 175.59 uit 147.28; totaal 83.3; sluimer 2.18 kWh"
+2026-11-03 07:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,20.2,1000,"07:41 blok 10:15; det. 0.46 kWh; incl lange horizon 100"
+2026-11-03 07:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.298,60,"03:40 0.366; lege accu = vlak plan"
+2026-11-03 07:40,TUSSEN,ems_zon_vandaag_solcast_kwh,5.09,1,"03:40 7.69; p10 0.86 p90 10.11; Forecast.Solar 9.83 -> 5.74 tussen 00:05 en 06:05"
+2026-11-03 07:40,TUSSEN,ems_stilstand_functies,0,12,"12 wachten, 0 doen; airco wisselt niets/verwarmen, knop uit -> rekent"

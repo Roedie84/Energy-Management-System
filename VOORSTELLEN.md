@@ -428,3 +428,11 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: per dag de bewolking middelen over de kwartieren met zon (gewogen met de verwachte opbrengst) en dat bewaren; oude dagen krijgen geen nieuw label en tellen tot ze uit het venster zijn apart of niet mee.
 - Verwacht effect: vakken die echt heldere en bewolkte dagen scheiden. Grootte op de correctie niet te ramen: de uurbewolking van oudere dagen staat niet in de export.
 - Meten: label tegen het gemiddelde uit de history over 10 dagen; verschil < 15 pp; daarna bias per vak en of `ingehouden_reden` vaker leeg is.
+
+## L-EMS-059 · lege accu boven 13 % telt niet als tekort (meetfout met invloed op de marge)
+- Status: **open** (03-11 07:40; een tekortnacht verhoogt de marge, dus raakt de reserve → Ruud beslist).
+- Onderbouwing (code v5.170.1 + live nacht 02→03, n=1): `_netimport_is_tekort` en `_tekortnacht_uit_verloop` eisen SoC ≤ vloer 10 + `TEKORT_LEEG_MARGE_PROCENT` 3 = 13 %. De accu stond de hele nacht op 15-16 % met 0,02-0,14 kWh bruikbaar (celgrens module 00996). P1 22-07 uur 1,887 kWh, `tekortnacht_tot_nu_kwh` 0. L-EMS-054 sprak van inhoud (> ~0,1 kWh), gebouwd is de SoC-grens.
+- Voorstel: ook tekort als de bruikbare inhoud onder ~0,1 kWh ligt, los van de SoC. Het dagverloop moet daarvoor de inhoud per kwartier bewaren; `_tekortnacht_uit_verloop` kent die nu niet. Alternatief: niets doen, want de module gaat terug en dan klopt de SoC-grens weer.
+- Verwacht effect: tekortnachten en MC-kalibratie kloppen zolang een module eerder leeg is dan de rest. Hogere marge alleen bij `capaciteit`/`planning`, economische nachten niet.
+- Meten: test met SoC 15 %, inhoud 0,02 kWh en `waardeplan_houden` = tekort; eerstvolgende lege nacht telt > 0 en de soort is gevuld.
+
