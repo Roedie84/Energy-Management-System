@@ -1171,6 +1171,8 @@ async def async_get_config_entry_diagnostics(
             "battery_module_live": coordinator.battery_module_live,
             # v5.72 (L-EMS-014): de sprong van een bijna lege module.
             "module_leeg": _veilig("get_module_leeg", coordinator.get_module_leeg),
+            "effectieve_ondergrens": _veilig("get_ondergrens", coordinator.get_ondergrens),
+            "soc_demper": _veilig("get_soc_demper", coordinator.get_soc_demper),
             # v3.31.0: de ruwe dagmonsters samengevat. Vijf reeksen van
             # 740 waarden maal drie modules is 70 KB aan getallen waar
             # het bereik en de laatste waarde uit gelezen worden. Het

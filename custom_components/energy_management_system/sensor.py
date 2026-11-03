@@ -3186,8 +3186,12 @@ class CounterfactualSavingsTotalSensor(SensorEntity):
                 "zonder sturing) plus per dag het verschil in accu-inhoud "
                 "(eind - begin) tegen wat de energie in de accu kostte om erin "
                 "te krijgen. Een meter op deze sensor geeft per dag dezelfde "
-                "waarde als 'Besparing t.o.v. zonder accu-sturing'."
+                "waarde als 'Besparing t.o.v. zonder accu-sturing'. Sinds "
+                "v5.172.0: gemeten inhoud (zonder modulesprong) en de "
+                "verandering van de boekwaarde, zodat dagen op elkaar aansluiten."
             ),
+            # v5.172.0 (punt 3): de besparingscijfers naast elkaar, met labels.
+            "vergelijking_7_dagen": _veilig_dict(c.besparing_vergelijking),
         }
 
 
@@ -3550,6 +3554,8 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
             # v5.99.10: het hoofdgetal; de kostprijsmethode is een tweede blik.
             "hoofdgetal": True,
             "rustverbruik_omvormer": c.get_rustverbruik(),
+            # v5.172.0 (punt 3): hoofdgetal, kostprijsmodel en sluimer per 7 dagen.
+            "vergelijking_7_dagen": _veilig_dict(c.besparing_vergelijking),
             # v5.122.0 (punt 4): sluimerverbruik per stilstand-uur, per stand
             "sluimerverbruik_per_stand": c.get_sluimerverbruik(),
             "note": (
@@ -4907,6 +4913,14 @@ class BatteryCoolingSensor(SensorEntity):
         return state
 
 
+def _veilig_dict(functie) -> dict:
+    """v5.172.0: een kenmerk dat omvalt, maakt de sensor niet stuk."""
+    try:
+        return functie()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 class BatteryModuleHealthSensor(SensorEntity):
     """Gezondheid per accumodule (v0.63.123).
 
@@ -4958,6 +4972,9 @@ class BatteryModuleHealthSensor(SensorEntity):
             "spreiding": self._coordinator.battery_module_spread,
             # v5.72 (L-EMS-014): een bijna lege module en de verwachte sprong.
             "module_bijna_leeg": self._coordinator.get_module_leeg(),
+            # v5.172.0: de werkelijke bodem (punt 4) en de SoC-demper (punt 1).
+            "effectieve_ondergrens": _veilig_dict(self._coordinator.get_ondergrens),
+            "soc_demper": _veilig_dict(self._coordinator.get_soc_demper),
             "note": (
                 "Elke module wordt vergeleken met het gemiddelde van de "
                 "ANDERE modules op hetzelfde moment. Omdat ze onder "

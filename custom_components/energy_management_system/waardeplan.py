@@ -99,6 +99,9 @@ class Accu:
     #: v5.167.0: het gemeten ontlaadrendement over alle rondes (fractie);
     #: None = rondrit / laden. Ook de terugval voor een onbetrouwbare band.
     rendement_ontladen: float | None = None
+    #: v5.172.0 (punt 2): onder dit gemiddelde vermogen (W, netkant) is een
+    #: netlading of verkoop in de planrij geen opdracht. 0 = elke stap.
+    min_actie_w: float = 0.0
 
 
 @dataclass
@@ -177,14 +180,28 @@ def _ontlaadstappen(accu: Accu, eta_o: float) -> tuple[np.ndarray, np.ndarray]:
     return s[houden], -ac[houden]
 
 
-def actie_van(b: float, verbruik: float, zon: float) -> tuple[str, float]:
-    """Wat de accu in een kwartier doet, en hoeveel (kWh, AC)."""
+def actie_van(b: float, verbruik: float, zon: float, min_kwh: float = 0.0) -> tuple[str, float]:
+    """Wat de accu in een kwartier doet, en hoeveel (kWh, AC).
+
+    v5.172.0 (punt 2): een netlading of verkoop onder `min_kwh` is geen
+    opdracht. Zo'n restje komt uit de stapgrootte (0,1 kWh inhoud = ~0,12 kWh
+    AC), niet uit een afweging: 03-11 12:00 een stap van 0,12 kWh boven een
+    zonoverschot van 0,09 = `laden_net` 0,027 kWh, en de Zendure ging op
+    manual. Nu: met zonoverschot 'zon' (de slimme stand laadt dat vanzelf),
+    zonder 'houden'; een verkooprestje wordt 'huis'.
+    """
     overschot = max(zon - verbruik, 0.0)
     tekort = max(verbruik - zon, 0.0)
     if b > overschot + EPS_KWH:
-        return "laden_net", b - overschot
+        if b - overschot >= min_kwh:
+            return "laden_net", b - overschot
+        if overschot > EPS_KWH:
+            return "zon", overschot
+        return "houden", 0.0
     if b < 0 and -b > tekort + EPS_KWH:
-        return "verkopen", -b - tekort
+        if -b - tekort >= min_kwh:
+            return "verkopen", -b - tekort
+        return "huis", min(-b, tekort) if tekort > EPS_KWH else -b
     if b < -EPS_KWH:
         return "huis", -b
     if tekort > EPS_KWH:
@@ -281,7 +298,8 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     for t, k in enumerate(kwartieren):
         s = int(keuze[t, i])
         b = float(b_stap[index[s]])
-        actie, kwh = actie_van(b, k.verbruik_kwh, k.zon_kwh)
+        uren = getattr(k, "uren", 0.25) or 0.25
+        actie, kwh = actie_van(b, k.verbruik_kwh, k.zon_kwh, accu.min_actie_w / 1000 * uren)
         g = k.verbruik_kwh - k.zon_kwh + b
         kosten_plan += float(_kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
                                           k.teruglever_eur, np.array([b]), accu)[0])

@@ -857,6 +857,21 @@ from .const import (
     SHORTFALL_MIN_NETIMPORT_KWH,
     TEKORT_LEEG_INHOUD_KWH,
     TEKORT_LEEG_MARGE_PROCENT,
+    SOC_DEMPER_STIL_W,
+    SOC_DEMPER_MAX_STAP_KWH,
+    SOC_DEMPER_MINUTEN,
+    SOC_DEMPER_STROOM_FRACTIE,
+    WAARDEPLAN_MIN_ACTIE_W,
+    ONDERGRENS_LEVER_W,
+    ONDERGRENS_STIL_W,
+    ONDERGRENS_AFNAME_W,
+    ONDERGRENS_STIL_MINUTEN,
+    ONDERGRENS_MIN_BOVEN,
+    ONDERGRENS_MAX_BOVEN,
+    ONDERGRENS_GELDIG_DAGEN,
+    ONDERGRENS_WAARNEMINGEN_BEWAARD,
+    ACCU_SLUIMER_GRENS_W,
+    BESPARING_VERGELIJK_DAGEN,
     REDENEN_BEWUSTE_NETAFNAME,
     EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
     RESERVE_EXCESS_RATIO_THRESHOLD,
@@ -1212,6 +1227,73 @@ def accu_is_leeg(soc, inhoud_kwh, vloer: float) -> bool:
     if isinstance(inhoud_kwh, (int, float)) and inhoud_kwh < TEKORT_LEEG_INHOUD_KWH:
         return True
     return isinstance(soc, (int, float)) and soc <= vloer
+
+
+def demp_soc_stap(staat: dict | None, gemeten: float, vermogen_w: float, now: datetime) -> tuple[float, dict]:
+    """De beschikbare energie zonder SoC-flapperen bij stilstand (v5.172.0, punt 1).
+
+    Nacht 02->03: de laadstand sprong elke ~8 min tussen 15 en 16 % bij 0 W
+    (module 00996 zaagde 11-15 %); 0,115 kWh per stap. De laatste aangenomen
+    inhoud blijft staan zolang de accu stilstaat (|vermogen| < SOC_DEMPER_STIL_W),
+    de stap klein is (<= SOC_DEMPER_MAX_STAP_KWH) en er sinds die waarde
+    minder energie liep dan SOC_DEMPER_STROOM_FRACTIE van de stap. Een nieuwe
+    waarde die SOC_DEMPER_MINUTEN aanhoudt, telt wel (echte langzame daling).
+    Geeft (waarde, nieuwe staat).
+    """
+    if not staat:
+        return gemeten, {"waarde": gemeten, "laatst": now, "stroom_kwh": 0.0,
+                         "kandidaat": None, "kandidaat_sinds": None, "gedempt": 0}
+    staat = dict(staat)
+    uren = (now - staat["laatst"]).total_seconds() / 3600
+    if 0 < uren <= 1:
+        staat["stroom_kwh"] = staat.get("stroom_kwh", 0.0) + abs(vermogen_w) / 1000 * uren
+    staat["laatst"] = now
+    stap = gemeten - staat["waarde"]
+
+    def neem() -> tuple[float, dict]:
+        staat.update(waarde=gemeten, stroom_kwh=0.0, kandidaat=None, kandidaat_sinds=None)
+        return gemeten, staat
+
+    if abs(stap) < 1e-9:
+        staat.update(kandidaat=None, kandidaat_sinds=None)
+        return gemeten, staat
+    if abs(vermogen_w) >= SOC_DEMPER_STIL_W or abs(stap) > SOC_DEMPER_MAX_STAP_KWH:
+        return neem()
+    if staat.get("stroom_kwh", 0.0) >= SOC_DEMPER_STROOM_FRACTIE * abs(stap):
+        return neem()
+    if staat.get("kandidaat") is None or abs(staat["kandidaat"] - gemeten) > 1e-9:
+        staat.update(kandidaat=gemeten, kandidaat_sinds=now)
+        staat["gedempt"] = staat.get("gedempt", 0) + 1
+    elif (now - staat["kandidaat_sinds"]).total_seconds() >= SOC_DEMPER_MINUTEN * 60:
+        return neem()
+    return staat["waarde"], staat
+
+
+def effectieve_ondergrens(waarnemingen, min_soc: float, now: datetime) -> tuple[float, str]:
+    """De werkelijke bodem van de accu en waarom (v5.172.0, punt 4).
+
+    De mediaan van de geldige waarnemingen (jonger dan ONDERGRENS_GELDIG_DAGEN)
+    waarin de accu stopte met leveren terwijl het huis nog van het net nam.
+    Geen waarnemingen: de min-SoC. Nooit onder de min-SoC en nooit meer dan
+    ONDERGRENS_MAX_BOVEN erboven.
+    """
+    geldig = []
+    for w in waarnemingen or []:
+        moment = dt_util.parse_datetime(str(w.get("moment") or "")) if isinstance(w, dict) else None
+        soc = w.get("soc") if isinstance(w, dict) else None
+        if moment is None or not isinstance(soc, (int, float)):
+            continue
+        if (now - moment).total_seconds() <= ONDERGRENS_GELDIG_DAGEN * 86400:
+            geldig.append(float(soc))
+    if not geldig:
+        return float(min_soc), "min-SoC (geen vroege stop gezien)"
+    bodem = min(max(float(statistics.median(geldig)), min_soc), min_soc + ONDERGRENS_MAX_BOVEN)
+    if bodem <= min_soc + 0.5:
+        return float(min_soc), "min-SoC"
+    return round(bodem, 1), (
+        f"accu stopte {len(geldig)}x met leveren op ~{bodem:.0f} % terwijl het huis "
+        f"van het net nam (min-SoC {min_soc:.0f} %)"
+    )
 
 
 class EnergyManagementSystemCoordinator:
@@ -7422,7 +7504,9 @@ class EnergyManagementSystemCoordinator:
         de correctie is een schatting van wat er nog komt.
         """
         begin = self._savings_day_start_available_kwh
-        nu = self.beschikbare_energie_kwh()
+        # v5.172.0 (punt 3): de gemeten inhoud (gedempt), niet de inhoud voor
+        # de sturing - zie `voorraad_inhoud_kwh`.
+        nu = self.voorraad_inhoud_kwh()
         rauw = self.counterfactual_cost_today_eur - self.actual_cost_today_eur
         if begin is None or nu is None:
             # v5.118.0: valt de accustand even weg (Zendure-time-out, de
@@ -7452,7 +7536,17 @@ class EnergyManagementSystemCoordinator:
                 "reden": "Geen kostprijs of terugleverwaarde bekend om de voorraad te waarderen.",
             }
 
-        correctie = verschil_kwh * waarde
+        # v5.172.0 (punt 3): de verandering van de BOEKWAARDE van de voorraad
+        # (inhoud x laadprijs, eind min begin), niet het inhoudsverschil
+        # tegen de prijs van vandaag. Dan sluiten de dagen op elkaar aan: 7
+        # dagen opgeteld = de 7 dagen in één keer, en het is hetzelfde begrip
+        # als het kostprijsmodel (gerealiseerd = stromen + verandering van de
+        # boekwaarde). Zonder bewaarde beginwaarde: zoals voorheen.
+        boekwaarde_nu = nu * waarde
+        boekwaarde_begin = self._savings_day_start_stock_eur
+        if not isinstance(boekwaarde_begin, (int, float)):
+            boekwaarde_begin = begin * waarde
+        correctie = boekwaarde_nu - boekwaarde_begin
         uit = {
             "besparing_vandaag_eur": round(rauw, 2),
             "correctie_beschikbaar": True,
@@ -7465,6 +7559,9 @@ class EnergyManagementSystemCoordinator:
             "kwh_waarde_eur": round(waarde, 4),
             "kwh_waarde_bron": waarde_bron,
             "besparing_gecorrigeerd_eur": round(rauw + correctie, 2),
+            "boekwaarde_begin_eur": round(boekwaarde_begin, 4),
+            "boekwaarde_nu_eur": round(boekwaarde_nu, 4),
+            "inhoud_bron": "gemeten inhoud (gedempt), zonder modulesprong of ondergrens",
             "toelichting": (
                 "Laden telt op het moment zelf als kosten; de opbrengst volgt "
                 "pas bij het ontladen. Staat de accu aan het eind van de dag "
@@ -7510,6 +7607,118 @@ class EnergyManagementSystemCoordinator:
 
     #: v5.116.0: de voorraadcorrecties van afgesloten dagen, opgeteld (bewaard).
     besparing_voorraadcorrectie_totaal_eur: float = 0.0
+
+    # --- v5.172.0 punt 3: de besparingscijfers naast elkaar ------------------
+    #
+    # De analyse van 03-11 zag over 27-10 t/m 02-11 drie getallen: de sensor
+    # EUR 0,89, het kostprijsmodel EUR 1,51 en een eigen berekening EUR 1,99,
+    # met als vermoeden het sluimerverbruik. Gemeten: de HomeWizard-meter van
+    # de accu staat bij stilstand op ~0 W (5-min-gemiddelden 0-0,009 W), dus
+    # er is vrijwel geen sluimer om af te trekken. Het verschil kwam uit de
+    # voorraad: de sensor waardeerde de inhoud met de modulesprong eraf (02-11
+    # eindigde op 15-16 % = 0,58-0,69 kWh gemeten, geteld als 0,02 kWh) en
+    # tegen de prijs van elke dag apart, waardoor dagen niet op elkaar
+    # aansloten. Nu: gemeten inhoud, boekwaarde eind min begin, en per dag de
+    # drie cijfers vastgelegd met wat ze wel en niet bevatten.
+
+    #: Bewaard: boekwaarde van de voorraad (EUR) bij het dagbegin.
+    _savings_day_start_stock_eur: float | None = None
+    #: Bewaard: de stand van het kostprijsmodel bij het dagbegin.
+    _kostprijs_dagbegin_eur: float | None = None
+    #: Bewaard: {"kwh": .., "eur": ..} sluimer van vandaag.
+    sluimer_vandaag: dict | None = None
+    #: Bewaard: de afgesloten dagen (laatste 14).
+    besparing_dagen: list | None = None
+
+    def _begin_besparingsdag(self, afsluiting: dict | None) -> None:
+        """Inhoud, boekwaarde en kostprijsstand bij het dagbegin (v5.172.0)."""
+        self._savings_day_start_available_kwh = self.voorraad_inhoud_kwh()
+        boek = (afsluiting or {}).get("boekwaarde_nu_eur")
+        if not isinstance(boek, (int, float)):
+            waarde, _bron = self._voorraad_kwh_waarde()
+            inhoud = self._savings_day_start_available_kwh
+            boek = inhoud * waarde if inhoud is not None and waarde is not None else None
+        self._savings_day_start_stock_eur = boek
+        self._kostprijs_dagbegin_eur = float(self.total_battery_savings_eur or 0.0)
+        self.sluimer_vandaag = {"kwh": 0.0, "eur": 0.0}
+
+    def _tel_sluimer(self, accu_w: float, uren: float, prijs: float) -> None:
+        """Stilstand die stroom van het net neemt (laadrichting, < 50 W)."""
+        if accu_w >= 0 or -accu_w >= ACCU_SLUIMER_GRENS_W or uren <= 0:
+            return
+        st = dict(self.sluimer_vandaag or {"kwh": 0.0, "eur": 0.0})
+        kwh = -accu_w / 1000 * uren
+        st["kwh"] = st.get("kwh", 0.0) + kwh
+        st["eur"] = st.get("eur", 0.0) + kwh * prijs
+        self.sluimer_vandaag = st
+
+    def _sluit_besparingsdag(self, dag, afsluiting: dict | None) -> None:
+        """Legt de besparingscijfers van een afgesloten dag vast (v5.172.0)."""
+        afsluiting = afsluiting or {}
+        rauw = self.counterfactual_cost_today_eur - self.actual_cost_today_eur
+        begin = self._kostprijs_dagbegin_eur
+        sluimer = self.sluimer_vandaag or {}
+        regel = {
+            "datum": dag.isoformat() if hasattr(dag, "isoformat") else str(dag),
+            "hoofdgetal_eur": round(rauw + (afsluiting.get("voorraadwaarde_exact_eur") or 0.0), 4),
+            "rauw_eur": round(rauw, 4),
+            "voorraad_eur": round(afsluiting.get("voorraadwaarde_exact_eur") or 0.0, 4),
+            "voorraad_volledig": bool(afsluiting.get("correctie_beschikbaar")),
+            "kostprijsmodel_eur": (
+                round(float(self.total_battery_savings_eur or 0.0) - begin, 4)
+                if isinstance(begin, (int, float)) else None
+            ),
+            "sluimer_kwh": round(float(sluimer.get("kwh") or 0.0), 3),
+            "sluimer_eur": round(float(sluimer.get("eur") or 0.0), 4),
+        }
+        dagen = [d for d in (self.besparing_dagen or []) if d.get("datum") != regel["datum"]]
+        self.besparing_dagen = (dagen + [regel])[-14:]
+
+    def besparing_vergelijking(self, dagen: int = BESPARING_VERGELIJK_DAGEN) -> dict:
+        """De besparingscijfers van de laatste afgesloten dagen naast elkaar (v5.172.0).
+
+        - hoofdgetal: de hele rekening tegen een huis zonder accu, met de
+          verandering van de boekwaarde van de voorraad; bevat het
+          sluimeren (dat staat in de netmeting), niet de slijtage.
+        - kostprijsmodel: per inhoudsverandering opbrengst min kostprijs;
+          ziet sluimeren niet (geen inhoudsverandering), ook geen slijtage.
+        - hoofdgetal zonder sluimer: het hoofdgetal plus wat de stilstaande
+          accu van het net nam; dat meet hetzelfde als het kostprijsmodel.
+        """
+        regels = [d for d in (self.besparing_dagen or []) if isinstance(d, dict)][-dagen:]
+        if not regels:
+            return {"beschikbaar": False, "reden": "nog geen afgesloten dag sinds v5.172.0"}
+
+        def som(veld):
+            waarden = [d.get(veld) for d in regels if isinstance(d.get(veld), (int, float))]
+            return round(sum(waarden), 2) if waarden else None
+
+        hoofd, kost, sluimer = som("hoofdgetal_eur"), som("kostprijsmodel_eur"), som("sluimer_eur")
+        zonder = None if hoofd is None else round(hoofd + (sluimer or 0.0), 2)
+        return {
+            "beschikbaar": True,
+            "van": regels[0]["datum"],
+            "tot": regels[-1]["datum"],
+            "dagen": len(regels),
+            "hoofdgetal_incl_sluimer_eur": hoofd,
+            "sluimer_eur": sluimer,
+            "sluimer_kwh": som("sluimer_kwh"),
+            "hoofdgetal_excl_sluimer_eur": zonder,
+            "kostprijsmodel_excl_sluimer_excl_slijtage_eur": kost,
+            "verschil_met_kostprijsmodel_eur": (
+                None if zonder is None or kost is None else round(zonder - kost, 2)
+            ),
+            "dagen_zonder_volledige_voorraad": sum(1 for d in regels if not d.get("voorraad_volledig")),
+            "betekenis": (
+                "Hoofdgetal: rekening tegen geen accu + verandering boekwaarde voorraad "
+                "(gemeten inhoud x laadprijs), incl. sluimer, excl. slijtage. "
+                "Kostprijsmodel: opbrengst min kostprijs per ontlading, excl. sluimer, "
+                "excl. slijtage. Hoofdgetal excl. sluimer hoort gelijk te zijn aan het "
+                "kostprijsmodel; het restverschil is de splitsing zon/net bij het laden "
+                "en de stappen die het kostprijsmodel als meetruis overslaat."
+            ),
+            "per_dag": regels,
+        }
 
     def besparing_totaal_gecorrigeerd_eur(self) -> float:
         """Oplopende besparing t.o.v. zonder sturing, met de accu-inhoud (v5.116.0).
@@ -9619,7 +9828,17 @@ class EnergyManagementSystemCoordinator:
         staat = self._module_leeg or {}
         if not staat.get("actief") or staat.get("sprong_gezien"):
             return 0.0
-        return self._module_leeg_sprong_kwh()
+        sprong = self._module_leeg_sprong_kwh()
+        # v5.172.0 (punt 4): de sprong is de lage module die naar 0 % gaat
+        # (01-11 18:15: module 00996 18 -> 0 %, totaal 20 -> 15 %, gemeten
+        # 0,551 kWh = ~18 % van een module). Hij kan dus nooit meer zijn dan
+        # wat die module zelf nog meldt (hoogste stand van het laatste half
+        # uur, tegen het zaagtandje). 02-11 's nachts stond de module op
+        # 11-15 %: hooguit 0,43 kWh in plaats van 0,551.
+        plafond = staat.get("plafond_kwh")
+        if isinstance(plafond, (int, float)) and plafond >= 0:
+            return min(sprong, float(plafond))
+        return sprong
 
     def _module_leeg_sprong_kwh(self) -> float:
         """De sprong: gemeten als die er is, anders de constante (v5.72)."""
@@ -9631,17 +9850,209 @@ class EnergyManagementSystemCoordinator:
         return round(statistics.median(gemeten), 3) if gemeten else MODULE_LEEG_SPRONG_KWH
 
     def _na_module_leeg(self, beschikbaar_kwh: float | None) -> float | None:
-        """De beschikbare energie min de verwachte modulesprong (v5.72).
-        Nooit onder nul; None blijft None."""
+        """De bruikbare energie uit de gemeten beschikbare energie (v5.72).
+
+        Elke lezer van de beschikbare energie (sturing, plan, reserve,
+        tekort, spiegel, besparing) gaat hierdoor. v5.172.0: eerst het
+        SoC-flapperen bij stilstand eruit (`_demp_soc_flapperen`, punt 1),
+        dan eraf wat er boven de werkelijke bodem niet uit kan: de grootste
+        van de verwachte modulesprong en de effectieve ondergrens (punt 4,
+        `ondergrens_correctie_kwh`). Die twee beschrijven hetzelfde (een
+        module die eerder leeg is), dus niet optellen. Nooit onder nul;
+        None blijft None.
+        """
         if beschikbaar_kwh is None:
             return None
+        beschikbaar_kwh = self._demp_soc_flapperen(beschikbaar_kwh)
         try:
             correctie = self.module_leeg_correctie_kwh()
         except Exception:  # noqa: BLE001 - veilig falen: geen correctie
             correctie = 0.0
+        try:
+            correctie = max(correctie, self.ondergrens_correctie_kwh())
+        except Exception:  # noqa: BLE001 - veilig falen: de min-SoC
+            pass
         if correctie <= 0:
             return beschikbaar_kwh
         return max(0.0, beschikbaar_kwh - correctie)
+
+    # --- v5.172.0 punt 1: SoC-flapperen bij stilstand ----------------------
+
+    _soc_demper: dict | None = None
+
+    def _demp_soc_flapperen(self, gemeten: float) -> float:
+        """De gemeten beschikbare energie zonder flapperen bij 0 W (v5.172.0).
+
+        Zie `demp_soc_stap`. Alleen met een werkende accuvermogenssensor en
+        een niet-negatieve meting; anders de meting zelf.
+        """
+        if not isinstance(gemeten, (int, float)) or gemeten < 0:
+            return gemeten
+        if not self.config.get(CONF_BATTERY_POWER_SENSOR):
+            return gemeten
+        try:
+            vermogen = self._read_corrected_battery_power()
+        except Exception:  # noqa: BLE001 - zonder vermogen niet dempen
+            vermogen = None
+        if vermogen is None:
+            return gemeten
+        waarde, self._soc_demper = demp_soc_stap(
+            self._soc_demper, float(gemeten), float(vermogen), dt_util.now()
+        )
+        return waarde
+
+    def voorraad_inhoud_kwh(self) -> float | None:
+        """De gemeten inhoud boven de min-SoC voor de besparing (v5.172.0, punt 3).
+
+        Gedempt tegen flapperen, maar ZONDER de modulesprong en de
+        ondergrens: dat zijn verwachtingen voor de sturing. De voorraad
+        waarderen met een verwachting gaf op 02-11 een schijnverlies: de
+        dag eindigde op 15-16 % (0,58-0,69 kWh gemeten) maar telde als
+        0,02 kWh, ~EUR 0,24 te weinig. Gaat de module later echt naar 0 %,
+        dan is dat verlies er op dat moment wel, in de meting.
+        """
+        entiteit = (getattr(self, "config", None) or {}).get(CONF_AVAILABLE_ENERGY_SENSOR)
+        gemeten = self._read_sensor_float(entiteit) if entiteit else None
+        if gemeten is None:
+            return self.beschikbare_energie_kwh()
+        if gemeten < 0:
+            return 0.0
+        return self._demp_soc_flapperen(gemeten)
+
+    def get_soc_demper(self) -> dict:
+        """De toestand van de demper, voor sensor en export (v5.172.0)."""
+        st = self._soc_demper or {}
+        return {
+            "actief": bool(st),
+            "waarde_kwh": None if st.get("waarde") is None else round(st["waarde"], 3),
+            "kandidaat_kwh": None if st.get("kandidaat") is None else round(st["kandidaat"], 3),
+            "stroom_sinds_kwh": round(float(st.get("stroom_kwh") or 0.0), 3),
+            "gedempte_stappen": int(st.get("gedempt") or 0),
+            "regel": (
+                f"stilstand (< {SOC_DEMPER_STIL_W:.0f} W) en stap <= "
+                f"{SOC_DEMPER_MAX_STAP_KWH} kWh: oude inhoud tot de nieuwe "
+                f"{SOC_DEMPER_MINUTEN} min aanhoudt of er echt stroom liep"
+            ),
+        }
+
+    # --- v5.172.0 punt 4: de effectieve ondergrens -------------------------
+
+    #: Bewaard (PERSISTED_FIELDS): [{moment, soc, module, cel_min_v}].
+    ondergrens_waarnemingen: list | None = None
+    _ondergrens_stop: dict | None = None
+    _ondergrens_vorig: dict | None = None
+
+    def effectieve_ondergrens_procent(self, now: datetime | None = None) -> float:
+        """De laadstand waaronder de accu in de praktijk niet levert (v5.172.0).
+
+        De min-SoC, of hoger als de accu de laatste dagen eerder stopte (zie
+        `effectieve_ondergrens`). Het apparaat zelf blijft op zijn min-SoC.
+        """
+        return effectieve_ondergrens(
+            self.ondergrens_waarnemingen, self.effective_min_soc_percent(), now or dt_util.now()
+        )[0]
+
+    def ondergrens_correctie_kwh(self) -> float:
+        """Wat er van de beschikbare energie af gaat door de ondergrens (v5.172.0).
+        De Zendure meldt (SoC - min-SoC) x capaciteit; boven de bodem blijft
+        (SoC - bodem) x capaciteit over."""
+        if not self.ondergrens_waarnemingen:
+            return 0.0
+        boven = self.effectieve_ondergrens_procent() - self.effective_min_soc_percent()
+        if boven <= 0:
+            return 0.0
+        capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
+        return capaciteit * boven / 100
+
+    def _volg_ondergrens(self, now: datetime) -> None:
+        """Stopte de accu met leveren boven de min-SoC? (v5.172.0, punt 4)
+
+        Een stop telt als de accu leverde (>= ONDERGRENS_LEVER_W), daarna
+        ONDERGRENS_STIL_MINUTEN lang stilstaat (< ONDERGRENS_STIL_W) terwijl
+        het huis van het net neemt (>= ONDERGRENS_AFNAME_W), in een stand
+        die de accu laat leveren (smart) en zonder wisseling van stand, met
+        de laadstand tussen min-SoC + ONDERGRENS_MIN_BOVEN en + MAX_BOVEN.
+        Levert de accu duidelijk onder een geleerde bodem, dan vervalt die.
+        Alleen meten en rekenen; het apparaat blijft op zijn min-SoC.
+        """
+        accu = self._read_corrected_battery_power()
+        net = self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
+        soc = self.accustand_procent()
+        stand = getattr(self, "last_applied_operation", None)
+        if accu is None or net is None or soc is None:
+            self._ondergrens_stop = None
+            return
+        vorig, self._ondergrens_vorig = self._ondergrens_vorig, {"accu": accu, "stand": stand}
+        self._ondergrens_vervalt_bij_dieper(now, soc, accu)
+        min_soc = self.effective_min_soc_percent()
+        stop = self._ondergrens_stop
+        if accu >= ONDERGRENS_LEVER_W or stand not in (OPTION_SMART, OPTION_SMART_DISCHARGING):
+            self._ondergrens_stop = None
+            return
+        if stop is None:
+            if vorig and vorig.get("accu", 0) >= ONDERGRENS_LEVER_W and vorig.get("stand") == stand \
+                    and abs(accu) < ONDERGRENS_STIL_W:
+                self._ondergrens_stop = {"sinds": now, "soc": soc}
+            return
+        if abs(accu) >= ONDERGRENS_STIL_W or net < ONDERGRENS_AFNAME_W:
+            self._ondergrens_stop = None
+            return
+        if (now - stop["sinds"]).total_seconds() < ONDERGRENS_STIL_MINUTEN * 60 or stop.get("genoteerd"):
+            return
+        stop["genoteerd"] = True
+        soc_stop = float(stop["soc"])
+        if not (min_soc + ONDERGRENS_MIN_BOVEN <= soc_stop <= min_soc + ONDERGRENS_MAX_BOVEN):
+            return
+        laag = min(
+            (m for m in (self.battery_module_live or []) if m.get("soc_percent") is not None),
+            key=lambda m: m["soc_percent"], default={},
+        )
+        self.ondergrens_waarnemingen = (list(self.ondergrens_waarnemingen or []) + [{
+            "moment": stop["sinds"].isoformat(), "soc": round(soc_stop, 1),
+            "module": laag.get("apparaat_id") or laag.get("naam"),
+            "module_soc": laag.get("soc_percent"), "cel_min_v": laag.get("cel_min_v"),
+            "net_w": round(net),
+        }])[-ONDERGRENS_WAARNEMINGEN_BEWAARD:]
+
+    def _ondergrens_vervalt_bij_dieper(self, now: datetime, soc: float, accu: float) -> None:
+        """Levert de accu duidelijk onder de geleerde bodem, dan klopt die niet
+        meer (module vervangen of gebalanceerd): waarnemingen erboven weg."""
+        if not self.ondergrens_waarnemingen or accu < ONDERGRENS_LEVER_W:
+            return
+        bodem = self.effectieve_ondergrens_procent(now)
+        if soc <= bodem - 1.0:
+            self.ondergrens_waarnemingen = [
+                w for w in self.ondergrens_waarnemingen
+                if isinstance(w, dict) and isinstance(w.get("soc"), (int, float)) and w["soc"] <= soc
+            ] or None
+
+    def get_ondergrens(self, now: datetime | None = None) -> dict:
+        """De effectieve ondergrens, voor sensor, uitleg en export (v5.172.0)."""
+        now = now or dt_util.now()
+        min_soc = self.effective_min_soc_percent()
+        bodem, reden = effectieve_ondergrens(self.ondergrens_waarnemingen, min_soc, now)
+        try:
+            correctie = round(self.ondergrens_correctie_kwh(), 3)
+        except Exception:  # noqa: BLE001
+            correctie = None
+        return {
+            "procent": bodem,
+            "min_soc_procent": min_soc,
+            "reden": reden,
+            "correctie_kwh": correctie,
+            "waarnemingen": list(self.ondergrens_waarnemingen or []),
+            "geldig_dagen": ONDERGRENS_GELDIG_DAGEN,
+        }
+
+    def ondergrens_zin(self) -> str | None:
+        """Eén regel voor de uitleg, alleen als de bodem boven de min-SoC ligt."""
+        info = self.get_ondergrens()
+        if info["procent"] <= info["min_soc_procent"]:
+            return None
+        return (
+            f"bruikbaar gerekend vanaf {info['procent']:.0f} % in plaats van "
+            f"{info['min_soc_procent']:.0f} %: {info['reden']}"
+        )
 
     def _volg_module_leeg(self, now: datetime) -> None:
         """Staat er een module bijna leeg, en is de sprong al gekomen? (v5.72)
@@ -9699,6 +10110,7 @@ class EnergyManagementSystemCoordinator:
         else:
             self._module_leeg = None
             return
+        self._module_leeg_plafond(now, staat, modules)
         if staat.get("sprong_gezien"):
             return
         # Is de sprong er (al)? Twee opeenvolgende metingen, hooguit tien
@@ -9732,6 +10144,33 @@ class EnergyManagementSystemCoordinator:
                                 "van_procent": round(v1, 1), "naar_procent": round(v2, 1)}]
                         )[-MODULE_LEEG_SPRONGEN_BEWAARD:]
                 break
+
+    _module_leeg_modsocs: list | None = None
+
+    def _module_leeg_plafond(self, now: datetime, staat: dict, modules: list) -> None:
+        """Hoe groot de modulesprong hooguit kan zijn (v5.172.0, punt 4).
+
+        De hoogste stand van de lage module over het laatste half uur, maal
+        de capaciteit van één module. Zie `module_leeg_correctie_kwh`.
+        """
+        naam = staat.get("apparaat")
+        module = next(
+            (m for m in modules if (m.get("apparaat_id") or m.get("naam")) == naam), None
+        )
+        reeks = [
+            (t, v) for t, v in (self._module_leeg_modsocs or [])
+            if (now - t).total_seconds() <= 1800
+        ]
+        if module is not None and module.get("soc_percent") is not None:
+            reeks.append((now, float(module["soc_percent"])))
+        self._module_leeg_modsocs = reeks
+        capaciteit = self.bruikbare_capaciteit_kwh()
+        if not reeks or not capaciteit or not modules:
+            staat.pop("plafond_kwh", None)
+            return
+        hoogste = max(v for _t, v in reeks)
+        staat["module_soc_max_30min"] = hoogste
+        staat["plafond_kwh"] = round(max(0.0, hoogste) / 100 * capaciteit / len(modules), 3)
 
     def get_module_leeg(self) -> dict:
         """De toestand van de modulesprong, voor sensor en export (v5.72)."""
@@ -30534,9 +30973,10 @@ class EnergyManagementSystemCoordinator:
             inhoud = self.beschikbare_energie_kwh()
         except Exception:  # noqa: BLE001 - zonder inhoud de SoC-regel
             inhoud = None
+        # v5.172.0 (punt 4): de vloer is de effectieve ondergrens.
         return accu_is_leeg(
             self.accustand_procent(), inhoud,
-            self.effective_min_soc_percent() + TEKORT_LEEG_MARGE_PROCENT,
+            self.effectieve_ondergrens_procent(now) + TEKORT_LEEG_MARGE_PROCENT,
         )
 
     def _update_shortfall_detection(
@@ -32491,12 +32931,15 @@ class EnergyManagementSystemCoordinator:
             # v5.116.0: de voorraadcorrectie van de dag die afloopt blijft in
             # het oplopende totaal (vóór het nieuwe dagbegin). Geen vorige
             # dag (eerste start): niets af te sluiten.
+            afsluiting = None
             if self._counterfactual_day_key is not None:
                 afsluiting = self.get_savings_correction() or {}
                 if afsluiting.get("correctie_beschikbaar"):
                     self.besparing_voorraadcorrectie_totaal_eur = (
                         self.besparing_voorraadcorrectie_totaal_eur or 0.0
                     ) + (afsluiting.get("voorraadwaarde_exact_eur") or 0.0)
+                # v5.172.0 (punt 3): de drie besparingscijfers van die dag.
+                self._sluit_besparingsdag(self._counterfactual_day_key, afsluiting)
             self._counterfactual_day_key = today_key
             self.actual_cost_today_eur = 0.0
             self.counterfactual_cost_today_eur = 0.0
@@ -32514,14 +32957,12 @@ class EnergyManagementSystemCoordinator:
             # accu tegen een dag die leeg eindigt is dus geen eerlijke
             # vergelijking - dezelfde soort fout als het meten over een
             # horizon die niet aansluit.
-            self._savings_day_start_available_kwh = (
-                self.beschikbare_energie_kwh()
-            )
+            self._begin_besparingsdag(afsluiting)
         elif self._savings_day_start_available_kwh is None and now.hour == 0:
             # v5.40: was de accustand er bij de daggrens even niet, dan de
             # eerste meting in het eerste uur - anders bleef de correctie de
             # hele dag uit. Later op de dag niet: dan is het geen dagbegin.
-            self._savings_day_start_available_kwh = self.beschikbare_energie_kwh()
+            self._begin_besparingsdag(None)
 
         month_key = now.year * 100 + now.month
         if self._counterfactual_month_key is None:
@@ -32568,6 +33009,8 @@ class EnergyManagementSystemCoordinator:
         self.counterfactual_cost_current_month_eur += counterfactual_cost_eur
         self.actual_cost_all_time_eur += actual_cost_eur
         self.counterfactual_cost_all_time_eur += counterfactual_cost_eur
+        # v5.172.0 (punt 3): wat de stilstaande accu zelf van het net neemt.
+        self._tel_sluimer(battery_power_w, elapsed_hours, price_per_kwh)
 
     def _update_co2_tracking(self, now: datetime) -> None:
         """CO2-intensiteit van het net (v0.63.101, gevraagd: "zaken
@@ -33054,9 +33497,12 @@ class EnergyManagementSystemCoordinator:
             "totaal_verlies_kwh": round(verlies, 2),
             "rendement_gebruikt_procent": round(eta * 100, 1),
             "toelichting": (
-                "Eigen verbruik van de omvormer buiten laden en ontladen. "
-                "Geen marginale kost, dus niet in de laad-/verkoopbesluiten; "
-                "de besparing t.o.v. zonder sturing bevat het al."
+                "Restpost uit de Zendure-tellers (erin - eruit - inhoud - "
+                "rondreisverlies). Geen marginale kost, dus niet in de laad-/"
+                "verkoopbesluiten. v5.172.0: bij stilstand meet de kWh-meter van "
+                "de accu ~0 W, dus dit zit vooral in laden en ontladen zelf (in "
+                "beide besparingscijfers). Wat de stilstaande accu wel van het "
+                "net neemt, staat als sluimer in vergelijking_7_dagen."
             ),
         }
 
@@ -36962,6 +37408,11 @@ class EnergyManagementSystemCoordinator:
         # v5.31.1: een CUSUM die met andere parameters is opgebouwd, eerst
         # opnieuw berekenen - anders blijft een oude valse drift staan.
         self._herijk_module_cusums()
+        # v5.172.0 (punt 4): de effectieve ondergrens, ook zonder moduledata.
+        try:
+            self._volg_ondergrens(now)
+        except Exception as fout:  # noqa: BLE001 - veilig falen: de min-SoC
+            self.internal_failures["ondergrens"] = f"{type(fout).__name__}: {fout}"
         modules = self._read_battery_modules()
         if not modules:
             self.battery_module_live = []
@@ -37420,7 +37871,9 @@ class EnergyManagementSystemCoordinator:
         if beschikbaar is None or not capaciteit or not rendement or slijt_ct is None:
             uit["reden"] = "accu-inhoud, capaciteit, rendement of slijtage onbekend"
             return uit
-        bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
+        # v5.172.0 (punt 4): boven de effectieve ondergrens (gelijk aan de
+        # min-SoC zolang de accu niet eerder stopt), net als de inhoud.
+        bruikbaar = capaciteit * (100 - self.effectieve_ondergrens_procent(now)) / 100
         # v5.164.1: één budget voor de live correctie over het hele plan.
         with self._gedeeld_correctiebudget():
             kwartieren = self._waardeplan_kwartieren(now, entries)
@@ -37439,6 +37892,8 @@ class EnergyManagementSystemCoordinator:
             verkoopmarge_eur=self._verkoop_min_winst_eur(),
             netladen=True,
             verkopen=True,
+            # v5.172.0 (punt 2): geen mini-opdrachten (zie waardeplan.actie_van).
+            min_actie_w=WAARDEPLAN_MIN_ACTIE_W,
             **self._waardeplan_rendementen(now),
         )
         balans = self._waardeplan_balanceren(now, kwartieren, accu)
@@ -37705,6 +38160,12 @@ class EnergyManagementSystemCoordinator:
             regels.append(
                 f"er zit {p['inhoud_kwh']:.1f} kWh in de accu (bruikbaar {p.get('bruikbaar_kwh', 0):.1f})"
             )
+        # v5.172.0 (punt 4): zegt het als de accu eerder stopt dan de min-SoC.
+        try:
+            if zin := self.ondergrens_zin():
+                regels.append(zin)
+        except Exception:  # noqa: BLE001 - uitleg mag niets breken
+            pass
         duurder = [
             r for r in (p.get("vooruit") or [])[1:]
             if r.get("actie") in ("huis", "verkopen")
@@ -48897,6 +49358,15 @@ class EnergyManagementSystemCoordinator:
             )
 
         def blok():
+            # v5.172.0 (punt 2): zolang het waardeplan stuurt, de volgende
+            # netlading uit het plan van nu (elke ronde opnieuw). 03-11 stond
+            # hier nog "10:15" (het oude goedkope blok) terwijl het plan om
+            # 12:00 laadde.
+            lading = self._waardeplan_volgende_lading()
+            if lading is not None:
+                if lading.get("geen"):
+                    return f"geen ({lading['uren']:.0f} u plan)"
+                return f"{dt_util.as_local(lading['van']):%H:%M} plan"
             start = self.last_cheap_block_start
             return start.strftime("%H:%M") if start else "-"
 

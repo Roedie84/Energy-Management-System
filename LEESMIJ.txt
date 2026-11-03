@@ -1,3 +1,24 @@
+EMS v5.172.0 - rustige accustand, geen mini-laadblokken, besparing gelijkgetrokken
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Accustand 's nachts: die sprong elke paar minuten tussen 15 en 16 %
+  terwijl de accu stilstond. Daardoor sprongen de beschikbare energie en de
+  besparing van vandaag mee. Nu blijft de laatste waarde staan tot er echt
+  stroom loopt of de nieuwe waarde 20 minuten blijft.
+- Laden: een piepklein laadstapje (zoals 0,03 kWh om 12:00) zet de accu
+  niet meer op handmatig. Onder 400 W gemiddeld laadt hij alleen de zon in
+  de slimme stand. De diagnose noemt het laadmoment uit het plan van nu.
+- Besparing: de besparing telt nu de echte inhoud van de accu mee, niet de
+  inhoud waar de sturing voorzichtig mee rekent. Dagen sluiten op elkaar
+  aan. Per 7 dagen staan hoofdgetal, kostprijsmodel en sluimer naast elkaar.
+  Vandaag komt er eenmalig ~25 ct bij: dat was op 2 november te weinig.
+- Bodem van de accu: stopt de accu met leveren boven de 10 % terwijl het huis
+  stroom vraagt, dan rekent het EMS vanaf die stand. Gezien is dat de
+  laatste nachten niet (op 2-11 om 19:45 hield het EMS zelf vast). De
+  aftrek voor de bijna lege module is nu niet groter dan wat die module nog
+  meldt (~0,43 in plaats van 0,55 kWh).
+
 EMS v5.171.0 - vier meetfouten en de airco 's nachts
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

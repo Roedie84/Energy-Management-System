@@ -3933,6 +3933,13 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "reserve_daily_records": {"type": "plain"},
     # v5.72 (L-EMS-014): gemeten sprongen als een module bijna leeg is.
     "module_leeg_sprongen": {"type": "plain"},
+    # v5.172.0: waarnemingen van de effectieve ondergrens, de boekwaarde van de
+    # voorraad bij het dagbegin en de kostprijsteller bij het dagbegin.
+    "ondergrens_waarnemingen": {"type": "plain"},
+    "_savings_day_start_stock_eur": {"type": "plain"},
+    "_kostprijs_dagbegin_eur": {"type": "plain"},
+    "sluimer_vandaag": {"type": "plain"},
+    "besparing_dagen": {"type": "plain"},
     "baseline_load_history": {"type": "plain"},
     "climate_forecast_bias_history": {"type": "plain"},
     "climate_rate_history": {"type": "plain"},
@@ -8034,3 +8041,44 @@ PENDEL_SPRONG_W = 1000.0
 # teruglevering: rond nul wisselt het teken vanzelf.
 PENDEL_RUIS_W = 100.0
 PENDEL_LOS_S = 120
+
+# --- v5.172.0 (Ruud 03-11 08:52: "Oplossen") ---------------------------------
+# Punt 1: SoC-flapperen zonder stroom dempen. 's Nachts sprong de laadstand
+# elke ~8 min tussen 15 en 16 % (module 00996 zaagde 11-15 %) bij 0 W: elke
+# stap is 0,115 kWh beschikbaar en ~5 ct in de besparing van vandaag. Staat de
+# accu stil (|vermogen| onder SOC_DEMPER_STIL_W) en is de stap hooguit
+# SOC_DEMPER_MAX_STAP_KWH, dan blijft de laatste inhoud staan tot de nieuwe
+# waarde SOC_DEMPER_MINUTEN aanhoudt, of tot er echt energie liep (geïntegreerd
+# vermogen minstens SOC_DEMPER_STROOM_FRACTIE van de stap).
+SOC_DEMPER_STIL_W = 40.0
+SOC_DEMPER_MAX_STAP_KWH = 0.2
+SOC_DEMPER_MINUTEN = 20
+SOC_DEMPER_STROOM_FRACTIE = 0.5
+
+# Punt 2: een planstap onder dit gemiddelde vermogen (W, aan de netkant) is geen
+# opdracht. 12:00 op 03-11: `laden_net` 0,027 kWh (een restje van de stap van
+# 0,1 kWh inhoud = 0,12 kWh AC boven een zonoverschot van 0,09) zette de
+# Zendure op manual. 400 W = 0,1 kWh per kwartier; onder ~500 W ontlaadt de
+# Zendure op ~69 % en elke wissel is een schrijfactie.
+WAARDEPLAN_MIN_ACTIE_W = 400.0
+
+# Punt 4: de effectieve ondergrens. Stopt de accu met leveren terwijl het huis
+# nog van het net neemt en de stand de accu laat leveren (smart), ruim boven de
+# min-SoC, dan is die laadstand de werkelijke bodem. Pas na
+# ONDERGRENS_STIL_MINUTEN stilstand met afname, alleen tussen min-SoC +
+# ONDERGRENS_MIN_BOVEN en min-SoC + ONDERGRENS_MAX_BOVEN. Waarnemingen vervallen
+# na ONDERGRENS_GELDIG_DAGEN, of zodra de accu duidelijk dieper leverde (module
+# vervangen of gebalanceerd): dan weer de gewone min-SoC.
+ONDERGRENS_LEVER_W = 150.0
+ONDERGRENS_STIL_W = 30.0
+ONDERGRENS_AFNAME_W = 150.0
+ONDERGRENS_STIL_MINUTEN = 10
+ONDERGRENS_MIN_BOVEN = 2.0
+ONDERGRENS_MAX_BOVEN = 15.0
+ONDERGRENS_GELDIG_DAGEN = 7
+ONDERGRENS_WAARNEMINGEN_BEWAARD = 10
+
+# Punt 3: stilstand met afname van het net door de accu telt als sluimer.
+ACCU_SLUIMER_GRENS_W = 50.0
+#: Zoveel afgesloten dagen in de vergelijking van de besparingscijfers.
+BESPARING_VERGELIJK_DAGEN = 7
