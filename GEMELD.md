@@ -253,3 +253,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 16:51 | ems tekort vannacht 0 door restje 0,1 kwh, plan_sparen_leeg_kwh 0,01 ophogen (mc 100%)
 03-11 16:51 | ems status aandacht gewenst door momentopname warmste module levert minste (momentwaarde, aanhoudend tellen)
 03-11 17:53 | sun2 zon van eibergen opkomst/daglicht unknown, ondergang 15:28 (herstellen of integratie weghalen)
+03-11 18:52 | updates installeren ems 5.175.2 (hacs) + ha herstarten
+03-11 18:52 | ems accumodule_melding 00996 uit (status vast op aandacht gewenst)
