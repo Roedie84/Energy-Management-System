@@ -960,3 +960,18 @@ laatste ronde: 03-11 07:40, gemeten t/m 03-11 07:45
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-16 (modulesprong bij laden vanaf leeg), H-EMS-15 (tekortsoort; weer open nu L-EMS-059 werkt). H-EMS-14 geparkeerd.
 
 laatste ronde: 03-11 11:40, gemeten t/m 03-11 11:45
+
+## 03-11 15:40 · tussenronde
+- **Draait v5.175.0** (herstarts 14:58 v5.174.0, 15:36 v5.175.0). Geen release: niets acuts, vandaag al zeven. Log EMS: alleen sensoren rond de herstart. Solcast-limiet niet melden. Na een herstart staan attributen op 10 min-sensoren tot 10 min leeg (`pv_voorspelkwaliteit` tot 15:47, `zuinig_schrijven`); niet aanzien voor stilstand.
+- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, accu uit 0,000 kWh 11-15:40 uur. P1-export 0,120 kWh is regelruis bij de zon.
+- **H-EMS-2 (PV te hoog):** 11-15 uur **4,02 kWh** tegen Solcast 5,14 (**−21,8 %**), 13-15 uur onder p10 (13:37-14:35 bewolking 89 %; Solcast had dat niet). Dag: tot 15:36 5,12 tegen day-ahead 7,69, rest ~0,2; wordt ~−30 %. Uitslag dagafsluiting. Solcast-dagstand 15:44 6,89 ligt al boven wat er echt kan komen.
+- **L-EMS-060 erger dan gedacht:** `bewolking_vandaag` bevat na de herstart van 15:36 nog **3 kwartieren** (08:15, 15:30, 15:45). Middag weg, dus tijdens de zonuren niets terug te halen; een release nu helpt vandaag niet, dus niet acuut. Gevolg: om 16:00 is de drempel van 4 gehaald en krijgt 03-11 om 23:59:50 een label op bijna alleen de late middag (~35 % bij een dag van 100 → 30 → 89 → 40 %). Label 03-11 in de dagafsluiting niet gebruiken. Aanvulling in het voorstel: ook een eis op dekking.
+- **v5.175.0, eerste blik:** melding 15:37 'tekort 20:15-03:45' klopt nu met de tabel (geen tegenstrijdigheid meer). Sinds 15:37 geen 'Verkopen geet neet'. Planvolging zon: pas morgen te toetsen, de zon is voorbij.
+- **Nieuw te volgen:** vaatwasser (~1,5 kW tot 16:25). 15:10-15:40 net **0,633 kWh** bij 45-46 ct, accu op houden (v5.174.0, 37 %). Na de herstart `waardeplan_huis`: accu **2008 W**, P1 −25 W, terwijl het plan 1200 W rekent (net 500-800 W). 'Huis' is smart en volgt het hele huis; dezelfde soort plan-tegen-sturing als de zon vóór v5.175.0, nu bij ontladen. Volgende ronde: planvolging 15:45-16:15 en SoC om 18:00 tegen plan 18 %. Nog geen hypothese (max. 3).
+- **Lading vannacht:** 03:45-04:00 488 W (0,12 kWh) bij 36,4 ct, 06:00 2400 W bij 32,5 ct, morgen 11:15-11:45. 488 W zit net boven `min_actie_w` 400, dus geen mini-blok volgens de regel van v5.172.0, wel in de zwakke laadband. Toets vannacht.
+- **Module-sprong:** 12:12 beschikbaar 0,72 → 1,27 bij SoC 21 % (00996 op 20 %). Vanavond zakt de plaats van de sprong weer in: plan rekent 20:15 als leeg, met 0,55 kWh sprong eerder. H-EMS-16 meet dat vanavond.
+- Niet gemeten: planvolging vandaag, verbruik, SoC-voorspelling (dagafsluiting). Niet te toetsen: L-EMS-057, L-EMS-059, SoC-demper, H-EMS-15: pas vannacht.
+- MC tot blok **100 %** (det. 7,43 kWh, tot 06:00). Twin 0,348 (was 0,278). Besparing vandaag € 0,11. Stilstand: **geen echte** (11 wachten, 0 doen; was 10). Airco 'verwarmen', knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-16 (modulesprong), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
+
+laatste ronde: 03-11 15:40, gemeten t/m 03-11 15:48

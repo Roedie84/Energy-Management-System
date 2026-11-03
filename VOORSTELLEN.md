@@ -442,3 +442,4 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: in `noteer_bewolking` `_notify_listeners()` aanroepen zodra er een nieuw kwartier bijkomt (niet elke ronde).
 - Verwacht effect: alle zonkwartieren staan na een herstart nog in `bewolking_vandaag`.
 - Meten: test met een nieuwe kwartiersleutel = één notify, zelfde kwartier = geen; live: geen gat rond een herstart.
+- Aanvulling 03-11 15:40 (live): na de herstarts van 14:58 en 15:36 bevat `bewolking_vandaag` nog 3 kwartieren (08:15, 15:30, 15:45). De drempel `SOLAR_BEWOLKING_MIN_ZONKWARTIEREN` = 4 telt kwartieren, niet de dekking: vanaf 16:00 krijgt de dag een label op bijna alleen de late middag. Bouwen in de dagafsluiting (dan ook geen label bij te weinig dekking: aandeel van de verwachte zon); label 03-11 niet meetellen.
