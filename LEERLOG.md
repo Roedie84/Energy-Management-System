@@ -991,7 +991,7 @@ laatste ronde: 03-11 15:40, gemeten t/m 03-11 15:48
 laatste ronde: 03-11 19:40, gemeten t/m 03-11 19:46
 
 ## 03-11 23:40 · tussenronde
-- **Draait v5.176.2** (herstarts 20:38, 22:04, 22:16). Geen release: niets acuts, vandaag al twaalf. Log EMS: alleen Zonneplan/Solcast rond de herstart, 0 fouten. Twee releases ná de vorige ronde: v5.176.0 (L-EMS-061, L-EMS-062), v5.176.1/.2 (status en uitleg bij een lege accu).
+- **Draait v5.176.2** (herstarts 20:38, 22:04, 22:16). Geen release: niets acuts, vandaag al veertien. Log EMS: alleen Zonneplan/Solcast rond de herstart, 0 fouten. Twee releases ná de vorige ronde: v5.176.0 (L-EMS-061, L-EMS-062), v5.176.1/.2 (status en uitleg bij een lege accu).
 - **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, P1-export 19:40-23:43 **0,000 kWh**. KPI `huis_gaat_voor` zet 03-11 op `geschonden` om 0,228 kWh regeloverschot (rond de zon, vóór v5.175.1), geen verkoop.
 - **L-EMS-059 eerste volle toets, loopt goed:** `tekortnacht_tot_nu_kwh` **0,448** bij ~0,48 kWh P1 sinds 22:00, SoC 12 %. Vorige nacht 0 om 07:40. Uitslag 09:00.
 - **H-EMS-15 live:** soort nu **planning** ("bijladen loonde, maar de accu werd niet vol"), `laadbesluit_sinds_9u` loont; verwacht tekort tot blok 1,41 kWh. Planning telt wél in `marge_tekortnachten`. Toets 09:00: blijft de soort staan en klopt 'loonde'? Plan 22:30 schrapte 03:45, 11:15 en 13:45, houdt alleen 06:00-06:15 (0,6 kWh). Reserve staat tegen het plafond (7,78), dus de marge doet nu niets.
