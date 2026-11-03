@@ -35872,8 +35872,22 @@ class EnergyManagementSystemCoordinator:
         # sensor gewoon 0,9504 gaf - die ronden namen een andere tak.
         beschikbaar_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if beschikbaar_entity:
-            self.last_available_kwh = self._read_sensor_float(beschikbaar_entity)
+            self.last_available_kwh = self._beschikbaar_voor_spiegel(
+                beschikbaar_entity
+            )
             self._onthoud_meting("last_available_kwh")
+
+    def _beschikbaar_voor_spiegel(self, entity: str) -> float | None:
+        """De meting zoals de sturing en de spiegel hem lezen (L-EMS-056).
+
+        Deze tak zette het veld ruw, de spiegel trekt sinds v5.164.1 de
+        modulesprong af en maakt negatief 0. Gemeten 02-11 23:30: 0,576
+        tegen 0,025 = een valse `fout 1`, terwijl het plan met 0,14 rekende.
+        """
+        gemeten = self._read_sensor_float(entity)
+        if gemeten is None:
+            return None
+        return self._na_module_leeg(max(0.0, gemeten))
 
     def _goedkope_koeling_op_slot(self, now: datetime) -> bool:
         """Heeft de goedkope koeling zijn dagportie op? (v3.33.0)
