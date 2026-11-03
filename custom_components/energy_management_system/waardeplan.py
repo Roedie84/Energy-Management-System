@@ -393,6 +393,10 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
             overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
             ac = min(overschot, accu.laden_kw * uren, ruimte_ac)
             rijen[-1]["accu_ac_w"] = round(-ac / uren * 1000) if uren > 0 else 0
+            # v5.175.2: het net volgt dezelfde lading, niet de afgeronde stap
+            # (tabel: +212 W net bij 276 W overschot in de slimme stand).
+            rijen[-1]["accu_kwh"] = round(ac, 3)
+            rijen[-1]["net_kwh"] = round(k.verbruik_kwh - k.zon_kwh + ac, 3)
     # verschil in inhoud tegen de eindwaarde verrekenen (begin en eind)
     kosten_plan -= (i - i_start) * STAP_KWH * eind
     return Uitkomst(

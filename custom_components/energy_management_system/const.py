@@ -3589,6 +3589,10 @@ BATTERY_MODULE_BUCKET_MIN_SAMPLES = 20
 
 # Absolute celtemperatuur waarboven het vermelden waard is.
 BATTERY_MODULE_TEMPERATURE_ATTENTION_C = 40.0
+# v5.175.2 (analysekaart 03-11): onder dit gemiddelde per module zegt een
+# vermogensverschil niets ("levert het minste, 4 W tegen 78 W", negen keer op
+# een middag "Aandacht gewenst"). De duiding "wijst op de module" vraagt echte belasting.
+BATTERY_MODULE_VERMOGEN_VERGELIJK_MIN_W = 200.0
 
 # Onderlinge spreiding tussen modules. Diagnostisch sterker dan welke
 # absolute waarde ook: de modules draaien onder identieke
@@ -7928,7 +7932,10 @@ SPAREN_IN_BLOK_MIN_WINST_EUR = 0.02
 # avond van het net draaide. Onder deze bruikbare inhoud rekent het plan het
 # kwartier als "smart": natuurkundig gelijk (zon gaat de accu in, er komt
 # niets uit), maar een netafname telt dan als tekort.
-PLAN_SPAREN_LEEG_KWH = 0.01
+# v5.175.2 (analysekaart 03-11): het plan rekent in stappen van 0,1 kWh, dus een
+# restje van één stap gold als "bewust sparen" en de tekortmelding wisselde
+# vijf keer op een middag. Eén stap is geen zinvolle levering: dat telt als leeg.
+PLAN_SPAREN_LEEG_KWH = 0.15
 
 # v5.155.0 (akkoord Ruud 31-10): het sluimerverbruik van de accu tijdens het
 # sparen telt mee. Kost het vasthouden tot het eerste gedekte kwartier meer

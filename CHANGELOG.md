@@ -34630,3 +34630,16 @@ Aanleiding: Ruud 03-11 16:14 "Regeling 0 op meter veel te traag", daarna 16:16 "
 **Gebouwd.** De demping is weg: `p1_regeldoel` gebruikt altijd de momentwaarde (salderen: gespiegeld; 2027: min verschuiving en doel). De schakelaar `P1PendeldempingSwitch` en `coordinator.p1_pendeldemping` zijn verwijderd; `switch._ruim_pendeldemping_op` haalt de registerregel `{entry_id}_p1_pendeldemping` bij het opzetten van het platform weg (fouten worden ingeslikt, opstarten breekt nooit). De detectie telt nog als diagnose in het kenmerk `pendel` (`actief`, `tekenwissels_60s`, `gemiddelde_w`, `actief_sinds`, `keren_vandaag`, `minuten_vandaag`, `niet_geteld_accu`); `gedempt` en `demping_aan` zijn vervallen.
 
 Tests: `test_v51751_pendeldemping_weg.py` (10: regeldoel = momentwaarde bij 12 pulsen met actieve episode, lastsprong +988 W tijdens een episode direct door, 2027 zonder gemiddelde, tellen blijft (rustig, ruis, kleine sprongen, keren_vandaag, sleutels), episode eindigt na rust, onbekende meting, tijdgewogen gemiddelde, schakelaar en vlag weg, wees in het register opgeruimd, opruimfout breekt niets). `test_v5154_p1_pendeldemping.py` vervallen (de telproeven staan in het nieuwe bestand); `test_v5159_akkoordpunten::test_pulserende_last_wordt_geteld` toetst nu de momentwaarde.
+
+## v5.175.2 — status en tekortmelding springen niet meer op een restje; plantabel net volgt de zonlading
+
+Aanleiding: analysekaart EMS 03-11 18:10 (controleronde). Live nagekeken.
+
+1. **Status sprong door een momentopname.** `_meld_module_temperatuur` vergeleek het momentvermogen van de warmste module met het gemiddelde ("levert het minste, 4 W tegen 78 W"): 15:02-16:51 negen keer 1-3 min "Aandacht gewenst". Onder `BATTERY_MODULE_VERMOGEN_VERGELIJK_MIN_W` (200 W gemiddeld per module) geen vergelijking meer; het punt is dan informatief. Te warm (`BATTERY_MODULE_TEMPERATURE_ATTENTION_C`) blijft een aandachtspunt.
+2. **`accumodule_melding` werkte niet door op de status.** Het aandachtspunt keek naar `drift_op` en negeerde `melding_uit`; de status bleef dan voorgoed "Aandacht gewenst" (precies wat v0.63.116 wilde voorkomen). Met de melding uit gaat het naar `informatief`.
+3. **Tekort sprong op een restje.** `PLAN_SPAREN_LEEG_KWH` 0,01 → 0,15: het plan rekent in stappen van 0,1 kWh; bij één stap inhoud telde de netafname als bewust sparen, bij nul als tekort (03-11 vijf wissels, 14:59-17:03).
+4. **Plantabel: net volgde de afgeronde stap.** In 'zon'-rijen stond `accu_ac_w` al op het hele overschot, `net_kwh` nog op de stap (04-11 10:30: zon 564, huis 288, accu −268, net +212 W). Nu volgen `accu_kwh` en `net_kwh` dezelfde lading; de kostenrekening van het plan is ongewijzigd.
+
+Niet gedaan: de inhoud blijft op stappen van 0,1 kWh, dus de SoC-regel loopt bij kleine overschotten nog achter of voor op `accu_ac_w`; doorschuiven van het restje raakt de planning zelf.
+
+Tests: `test_v51752_status_en_plan.py` (6).

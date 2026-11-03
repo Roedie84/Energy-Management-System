@@ -1,3 +1,16 @@
+EMS v5.175.2 - status en tekortmelding springen niet meer op een restje
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Status "Aandacht gewenst" kwam negen keer op een middag door een momentopname
+  ("levert het minste, 4 W tegen 78 W"). Onder 200 W per module wordt er niet
+  meer op vermogen vergeleken; een te warme module blijft wel een aandachtspunt.
+- Melding per module uit (dienst accumodule_melding): die module houdt de status
+  niet meer op "Aandacht gewenst", het punt blijft zichtbaar onder informatief.
+- Verwacht tekort: een restje van 0,1 kWh telt als leeg, niet als bewust sparen.
+- Plantabel: in zonkwartieren volgt net dezelfde lading als accu.
+- Nog niet: de SoC-regel in de plantabel blijft op stappen van 0,1 kWh.
+
 EMS v5.175.1 - pendeldemping eruit: nul op de meter weer snel
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

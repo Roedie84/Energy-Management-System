@@ -510,6 +510,7 @@ from .const import (
     BATTERY_MODULE_SOC_BUCKET_SIZE_PERCENT,
     BATTERY_MODULE_SOC_SPREAD_ATTENTION_PERCENT,
     BATTERY_MODULE_TEMPERATURE_ATTENTION_C,
+    BATTERY_MODULE_VERMOGEN_VERGELIJK_MIN_W,
     BATTERY_MODULE_TEMPERATURE_SPREAD_ATTENTION_C,
     CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS,
     CONF_BATTERY_MODULE_CELL_VOLTAGE_MIN_SENSORS,
@@ -45426,7 +45427,17 @@ class EnergyManagementSystemCoordinator:
             if warmste and len(vermogens) > 1:
                 gemiddeld = sum(vermogens) / len(vermogens)
                 eigen = warmste.get("vermogen_w")
-                if eigen is not None and eigen < gemiddeld:
+                if (
+                    eigen is not None
+                    and abs(gemiddeld) < BATTERY_MODULE_VERMOGEN_VERGELIJK_MIN_W
+                ):
+                    # v5.175.2: bijna geen belasting, dan is er niets te
+                    # vergelijken (geen aandachtspunt op een momentopname).
+                    duiding = (
+                        " Te weinig belasting om de modules op vermogen te "
+                        "vergelijken."
+                    )
+                elif eigen is not None and eigen < gemiddeld:
                     # v1.16.4, gemeld: "Ik vermoed dat de accu 1 direct
                     # onder de omvormer zit."
                     #
@@ -45665,7 +45676,10 @@ class EnergyManagementSystemCoordinator:
                 aandachtspunten.append(f"Accumodule {nummer}: {waarschuwing}.")
             if module.get("drift_op"):
                 velden = ", ".join(module["drift_op"])
-                aandachtspunten.append(
+                # v5.175.2: melding uitgezet (dienst `accumodule_melding`) =
+                # bewust geaccepteerd, dus informatief; anders blijft de status
+                # op "Aandacht gewenst" en valt elk nieuw signaal weg.
+                (informatief if module.get("melding_uit") else aandachtspunten).append(
                     f"Accumodule {nummer} loopt aanhoudend uit de pas met de "
                     f"andere modules ({velden}) - dit is een trend over "
                     "meerdere dagen, geen momentopname."
