@@ -1,3 +1,29 @@
+EMS v5.175.0 - plan rekent met zon-opslag, zelfcontrole en meldingen kloppen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Plan en zon: de accu slaat in de slimme stand elk zonoverschot op. Het
+  plan ging er sinds v5.168 soms van uit dat die zon terug het net op ging
+  ('houden' met de accu stil), terwijl de accu gewoon laadde. Op 3 november
+  liep dat 13:15-14:45 zeven kwartieren uit de pas. Nu rekent het plan met
+  wat de accu echt doet: overschot gaat de accu in tot hij vol is. Alleen
+  echt verkopen (handmatig ontladen) gaat daar nog voor. Terugleveren in
+  plaats van opslaan plant het plan niet meer: de sturing kan dat niet
+  afdwingen.
+- Opnieuw afgespeeld met de metingen van 3 november (09:00-15:00): het plan
+  volgde de accu in 25 van de 25 kwartieren, was 4 van de 25.
+- Zelfcontrole: "Der klopt wat neet in de sommen" over de beschikbare
+  energie (08:18 en 12:11) was vals. Op het moment dat de lege module
+  (00996) aansloeg of herstelde, vergeleek de controle een waarde van vóór
+  die omslag met een van erna. Nu worden beide met dezelfde correctie
+  vergeleken. De correctie zelf ging wel goed los bij herstel.
+- Melding "Den accu kump tekort" komt nu uit het plan dat stuurt: de lading
+  die het plan bewust vasthoudt telt niet als tekort, en de melding kijkt
+  tot de eerstvolgende lading van dat plan. Het verwachte tekort komt ook
+  uit dat plan (met de vastgehouden lading erbij).
+- Melding "Verkopen geet neet" alleen nog als het plan echt wilde verkopen
+  en de sturing dat tegenhield.
+
 EMS v5.174.0 - betere prijsverwachting met een bandbreedte
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -9850,7 +9850,9 @@ class EnergyManagementSystemCoordinator:
         ]
         return round(statistics.median(gemeten), 3) if gemeten else MODULE_LEEG_SPRONG_KWH
 
-    def _na_module_leeg(self, beschikbaar_kwh: float | None) -> float | None:
+    def _na_module_leeg(
+        self, beschikbaar_kwh: float | None, correctie: float | None = None
+    ) -> float | None:
         """De bruikbare energie uit de gemeten beschikbare energie (v5.72).
 
         Elke lezer van de beschikbare energie (sturing, plan, reserve,
@@ -9865,6 +9867,18 @@ class EnergyManagementSystemCoordinator:
         if beschikbaar_kwh is None:
             return None
         beschikbaar_kwh = self._demp_soc_flapperen(beschikbaar_kwh)
+        if correctie is None:
+            correctie = self.beschikbaar_correctie_kwh()
+        if correctie <= 0:
+            return beschikbaar_kwh
+        return max(0.0, beschikbaar_kwh - correctie)
+
+    def beschikbaar_correctie_kwh(self) -> float:
+        """Wat `_na_module_leeg` nu van de meting aftrekt (v5.175.0).
+
+        De grootste van de modulesprong en de ondergrenscorrectie; veilig
+        falen naar 0 (of de ondergrens).
+        """
         try:
             correctie = self.module_leeg_correctie_kwh()
         except Exception:  # noqa: BLE001 - veilig falen: geen correctie
@@ -9873,9 +9887,7 @@ class EnergyManagementSystemCoordinator:
             correctie = max(correctie, self.ondergrens_correctie_kwh())
         except Exception:  # noqa: BLE001 - veilig falen: de min-SoC
             pass
-        if correctie <= 0:
-            return beschikbaar_kwh
-        return max(0.0, beschikbaar_kwh - correctie)
+        return max(0.0, float(correctie or 0.0))
 
     # --- v5.172.0 punt 1: SoC-flapperen bij stilstand ----------------------
 
@@ -19713,14 +19725,7 @@ class EnergyManagementSystemCoordinator:
             # beschikbare energie (01-11 20:47: -0,576 kWh) terwijl het EMS
             # met 0,0 rekent; het verschil lag net boven de marge en gaf een
             # vals "Der klopt wat neet" bij elke lege accu.
-            _gemeten_beschikbaar = self._read_sensor_float(beschikbaar_entity)
-            if _gemeten_beschikbaar is not None and _gemeten_beschikbaar < 0:
-                _gemeten_beschikbaar = 0.0
-            # v5.164.1: dezelfde modulesprong-correctie als de sturing
-            # (`_na_module_leeg`). Gemeld 02-11 19:56: cel module 4 op 3,09 V,
-            # EMS rekende bewust met 0,025 kWh, de Zendure meldde 0,576 - een
-            # vals "Der klopt wat neet in de sommen".
-            _gemeten_beschikbaar = self._na_module_leeg(_gemeten_beschikbaar)
+            _gemeten_beschikbaar = self._spiegel_beschikbaar(beschikbaar_entity)
             _voeg_toe(
                 "Beschikbare energie",
                 self.last_available_kwh,
@@ -26834,19 +26839,32 @@ class EnergyManagementSystemCoordinator:
         bruikbaar = capaciteit * (100 - min_soc) / 100 if capaciteit else None
         uit = []
         eerste = rijen[0]
+        # v5.175.0: "tot bijladen" = tot de eerste netlading van het
+        # waardeplan, niet tot het goedkope blok van de oude planning.
+        geladen = False
         for regel in plan:
             start = dt_util.parse_datetime(regel.get("start") or "")
             r = per_begin.get(start.astimezone(timezone.utc)) if start is not None else None
+            if r is not None and r.get("actie") == "laden_net":
+                geladen = True
             if r is None:
+                if geladen and regel.get("voor_bijladen", True):
+                    regel = {**regel, "voor_bijladen": False}
                 uit.append(regel)
                 continue
             nieuw = dict(regel)
+            nieuw["voor_bijladen"] = not geladen
             nieuw["modus"] = self._WAARDEPLAN_MODUS.get(r.get("actie"), regel.get("modus"))
             nieuw["soc_kwh"] = r.get("inhoud_kwh")
             nieuw["net_kwh"] = self._waardeplan_net_kwh(r, regel.get("uren"), r is eerste)
             # v5.161.3: wat het plan in dit kwartier in de accu doet, los van
             # de startstand. Voor het vermogen; zie planvolging._accu_w.
             nieuw["inhoud_delta_kwh"] = r.get("inhoud_delta_kwh")
+            # v5.175.0: zon opslaan - het overschot aan de netkant.
+            if r.get("accu_ac_w") is not None:
+                nieuw["accu_ac_w"] = r["accu_ac_w"]
+            else:
+                nieuw.pop("accu_ac_w", None)
             # v5.162.0: wat de accu van het net vraagt, niet wat er na het
             # rendement in de cellen komt (toonde 2,0 kW bij 2,4 kW laden).
             if r.get("actie") == "laden_net":
@@ -28106,7 +28124,7 @@ class EnergyManagementSystemCoordinator:
         else:
             self._last_plan_alert.pop("plan_uitstel", None)
 
-        verkoop = self.last_sell_check or {}
+        verkoop = self._verkoopblokkade_voor_melding()
         if verkoop and not verkoop.get("mag_verkopen"):
             # v3.99.22: een blokkering is een EPISODE. De sleutel was de
             # redentekst, met de getallen erin - elke ronde anders, dus
@@ -28120,6 +28138,87 @@ class EnergyManagementSystemCoordinator:
             )
         else:
             self._last_plan_alert.pop("plan_verkoop_geblokkeerd", None)
+
+    def _plan_volgt_waardeplan(self) -> bool:
+        """Stuurt het waardeplan nu, met een plan? (v5.175.0)"""
+        return bool(
+            WAARDEPLAN_STUURT
+            and (self.last_waardeplan or {}).get("beschikbaar")
+            and getattr(self, "_waardeplan_rijen", None)
+        )
+
+    def _verkoopblokkade_voor_melding(self) -> dict:
+        """Waarop de melding "Verkopen geet neet" toetst (v5.175.0).
+
+        Stuurt het waardeplan, dan alleen als het plan NU wilde verkopen en
+        de sturing dat tegenhield (onder de verkoopreserve). De oude
+        verkooptoets (`last_sell_check`) draait elke ronde mee, maar stuurt
+        dan niet: 03-11 14:59 kwam de melding zonder één verkoopkwartier in
+        het plan en met "Wat te doen: niks". Zonder waardeplan de oude toets.
+        """
+        if not self._plan_volgt_waardeplan():
+            return self.last_sell_check or {}
+        tegen = (self.last_waardeplan or {}).get("verkoop_tegengehouden")
+        if not tegen:
+            return {}
+        return {
+            "mag_verkopen": False,
+            "reden": f"Het plan wilde nu verkopen, maar dat is tegengehouden: {tegen}.",
+        }
+
+    def waardeplan_tekort(self) -> dict | None:
+        """Het tekort zoals het waardeplan het ziet (v5.175.0).
+
+        Een tekortkwartier is netafname terwijl de accu leeg is
+        (`_waardeplan_tekort`); netafname met inhoud is een keuze van het plan
+        (vasthouden voor duurder). Tot en na de eerste netlading apart, zoals
+        `verwacht_tekort`. `vastgehouden_kwh` = de lading die het plan vóór het
+        eerste tekortkwartier bewust vasthoudt terwijl het huis van het net
+        neemt ('houden'). None zonder waardeplan.
+        """
+        if not self._plan_volgt_waardeplan():
+            return None
+        rijen = self._waardeplan_rijen or []
+        tot, na = 0.0, 0.0
+        geladen = False
+        perioden: list[list] = []
+        vastgehouden = None
+        eerste_tekort = False
+        for r in rijen:
+            if r.get("actie") == "laden_net":
+                geladen = True
+            if self._waardeplan_tekort(r):
+                net = max(0.0, float(r.get("net_kwh") or 0.0))
+                if geladen:
+                    na += net
+                else:
+                    tot += net
+                eerste_tekort = True
+                b = r.get("begin")
+                eind = b + timedelta(minutes=15) if hasattr(b, "isoformat") else b
+                if perioden and perioden[-1][1] == b:
+                    perioden[-1][1] = eind
+                else:
+                    perioden.append([b, eind])
+            elif (
+                not eerste_tekort and r.get("actie") == "houden"
+                and float(r.get("net_kwh") or 0.0) > 0.01
+                and float(r.get("inhoud_kwh") or 0.0) > PLAN_SPAREN_LEEG_KWH
+            ):
+                inhoud = float(r.get("inhoud_kwh") or 0.0)
+                vastgehouden = inhoud if vastgehouden is None else max(vastgehouden, inhoud)
+
+        def _tekst(b, e) -> str:
+            if hasattr(b, "isoformat"):
+                return f"{dt_util.as_local(b):%d-%m %H:%M}-{dt_util.as_local(e):%H:%M}"
+            return f"{b}-{e}"
+
+        return {
+            "tot_bijladen_kwh": round(tot, 2),
+            "na_bijladen_kwh": round(na, 2),
+            "perioden": [_tekst(b, e) for b, e in perioden],
+            "vastgehouden_kwh": round(vastgehouden, 2) if vastgehouden is not None else None,
+        }
 
     def verkoop_geblokkeerd_door_tekort(self) -> bool:
         """Weigert de aansturing op dit moment te verkopen? (v3.44.0)
@@ -32223,6 +32322,8 @@ class EnergyManagementSystemCoordinator:
 
                 self.last_available_kwh = available_kwh
                 self._onthoud_meting("last_available_kwh")
+                # v5.175.0: met de correctie van deze ronde (zie de spiegel).
+                self._beschikbaar_correctie_bij_meting = self.beschikbaar_correctie_kwh()
                 self.last_needed_kwh_to_bridge = needed_kwh
                 self.last_has_enough_energy = has_enough
 
@@ -36082,6 +36183,14 @@ class EnergyManagementSystemCoordinator:
         # horizon min het deel tot het blok. Dat wordt in het laadblok
         # bijgeladen; geen nachttekort.
         tekort_na_blok = max(0.0, nodig + na_blok - beschikbaar) - tekort
+        # v5.175.0: stuurt het waardeplan, dan zijn tekort uit zijn eigen
+        # tekortkwartieren - met de lading die het bewust vasthoudt. 03-11
+        # 14:59 stond hier 3,3 kWh (reserve min inhoud) terwijl het plan
+        # ~1,1 kWh vasthield en pas morgen 19:30-23:45 tekort had.
+        plan_tekort = self.waardeplan_tekort()
+        if plan_tekort is not None:
+            tekort = plan_tekort["tot_bijladen_kwh"]
+            tekort_na_blok = plan_tekort["na_bijladen_kwh"]
         # v5.72 (L-EMS-015): de soort over de HELE nacht, zoals het dagrecord
         # van 09:00 (`_tekortnacht_vandaag_kwh`): wat er vannacht al als
         # tekort van het net kwam plus wat er nog ontbreekt. Op 10-10 's
@@ -36141,6 +36250,10 @@ class EnergyManagementSystemCoordinator:
             # v5.41: waarom de accu niet vol werd.
             "laadbesluit_sinds_9u": self._laadbesluit_stand,
             "zon_naar_net_met_ruimte_kwh": round(self._pv_export_met_ruimte_kwh, 2),
+            # v5.175.0: waar het tekort vandaan komt.
+            "tekort_bron": "waardeplan" if plan_tekort is not None else "reserve",
+            "plan_tekort_perioden": (plan_tekort or {}).get("perioden"),
+            "plan_vastgehouden_kwh": (plan_tekort or {}).get("vastgehouden_kwh"),
         }
 
     def _let_op_tekortnachten_tekst(self, aantal: int) -> str:
@@ -36487,6 +36600,29 @@ class EnergyManagementSystemCoordinator:
             )
             self._onthoud_meting("last_available_kwh")
 
+    #: v5.175.0: de correctie waarmee `last_available_kwh` is gemaakt.
+    _beschikbaar_correctie_bij_meting: float | None = None
+
+    def _spiegel_beschikbaar(self, entity: str) -> float | None:
+        """De sensor zoals de spiegel hem naast `last_available_kwh` legt (v5.175.0).
+
+        v5.164.1 trok de modulesprong ook hier af, maar met de correctie van
+        NU. `last_available_kwh` wordt aan het begin van de ronde gezet
+        (`_ververs_toestandsvelden`), de moduletoestand pas daarna
+        (`_update_battery_module_health`). In de ronde waarin de module
+        omslaat, vergeleek de spiegel dus ongelijk met ongelijk - gemeten 03-11:
+        08:18 (eerste ronde na de herstart van 08:17, v5.171.0: correctie
+        aan) 0,691 tegen 0,140 en 12:11 (module 00996 op 20 % = hersteld,
+        v5.172.0: correctie los) 0,720 tegen 1,267; beide ~0,55 kWh = de
+        modulesprong. Nu met dezelfde correctie als de interne waarde; zonder
+        vastgelegde correctie de huidige. Een negatieve meting telt als 0
+        (v5.159.0).
+        """
+        gemeten = self._read_sensor_float(entity)
+        if gemeten is None:
+            return None
+        return self._na_module_leeg(max(0.0, gemeten), self._beschikbaar_correctie_bij_meting)
+
     def _beschikbaar_voor_spiegel(self, entity: str) -> float | None:
         """De meting zoals de sturing en de spiegel hem lezen (L-EMS-056).
 
@@ -36497,7 +36633,10 @@ class EnergyManagementSystemCoordinator:
         gemeten = self._read_sensor_float(entity)
         if gemeten is None:
             return None
-        return self._na_module_leeg(max(0.0, gemeten))
+        # v5.175.0: onthouden met welke correctie deze waarde is gemaakt, zodat
+        # de spiegel gelijk met gelijk vergelijkt (zie `_spiegel_beschikbaar`).
+        self._beschikbaar_correctie_bij_meting = self.beschikbaar_correctie_kwh()
+        return self._na_module_leeg(max(0.0, gemeten), self._beschikbaar_correctie_bij_meting)
 
     def _goedkope_koeling_op_slot(self, now: datetime) -> bool:
         """Heeft de goedkope koeling zijn dagportie op? (v3.33.0)
@@ -38071,6 +38210,15 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001 - het plan mag de sturing nooit breken
             _LOGGER.exception("Waardeplan niet te berekenen; de oude regels gelden")
             plan = {"beschikbaar": False, "reden": "rekenfout"}
+        if not plan.get("beschikbaar"):
+            # v5.175.0: dan sturen de oude regels; de tabel toont die.
+            self._waardeplan_rijen = None
+        # v5.175.0: het kwartierplan van deze ronde opnieuw, met DIT plan.
+        # Na de herstart van 03-11 14:59 bouwde een eerder onderdeel van de
+        # ronde het kwartierplan vóór het waardeplan er was; de melding "Den
+        # accu kump tekort" (20:15-06:00, laagste 10 %) kwam uit de oude
+        # planning, terwijl de tabel 20 % vasthield.
+        self._kwartierplan_cache = None
         self._waardeplan_cache = (kwartier, plan)
         return plan
 
@@ -50183,6 +50331,12 @@ class EnergyManagementSystemCoordinator:
         self._update_presence(now)
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
+        # v5.175.0: de beschikbare energie opnieuw met de moduletoestand van
+        # DEZE ronde; `_ververs_toestandsvelden` las hem met die van de vorige.
+        if self.config.get(CONF_AVAILABLE_ENERGY_SENSOR):
+            self.last_available_kwh = self._beschikbaar_voor_spiegel(
+                self.config[CONF_AVAILABLE_ENERGY_SENSOR]
+            )
         # v5.117.0: wanneer de accu het laatst vol was (balanceerlading).
         try:
             self._volg_balanceren(now)

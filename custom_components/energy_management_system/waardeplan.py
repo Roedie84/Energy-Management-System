@@ -102,6 +102,18 @@ class Accu:
     #: v5.172.0 (punt 2): onder dit gemiddelde vermogen (W, netkant) is een
     #: netlading of verkoop in de planrij geen opdracht. 0 = elke stap.
     min_actie_w: float = 0.0
+    #: v5.175.0: de slimme stand slaat elk zonoverschot op zolang er ruimte
+    #: is ('houden' = smart_charging en 'huis' = smart doen dat allebei). Het
+    #: plan rekent daarmee: in een kwartier met overschot gaat minstens dat
+    #: overschot de accu in (tot vol en tot het laadvermogen), tenzij het
+    #: plan echt verkoopt (handmatig ontladen, >= min_actie_w). False = het
+    #: oude model, waarin 'houden' het overschot stil liet terugleveren.
+    zon_opslaan: bool = True
+    #: v5.175.0: kan de sturing zon terugleveren in plaats van opslaan
+    #: afdwingen (laden begrenzen of handmatig op 0 W)? Nu niet: dan plant het
+    #: plan dat ook niet. True = het mag, maar alleen als terugleveren minstens
+    #: `verkoopmarge_eur` per kWh beter is dan opslaan voor later.
+    zon_export_afdwingbaar: bool = False
 
 
 @dataclass
@@ -209,10 +221,48 @@ def actie_van(b: float, verbruik: float, zon: float, min_kwh: float = 0.0) -> tu
     return "zon", max(b, 0.0)
 
 
-def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=None):
+def zon_opslag_stappen(
+    overschot_kwh: float, eta_l: float, max_op: int, niveaus: int, naar_beneden: bool = False
+) -> np.ndarray:
+    """Per inhoud (index) hoeveel stappen de slimme stand van het
+    zonoverschot opslaat (v5.175.0): het overschot maal het laadrendement,
+    afgerond op de stap (naar beneden als er niet uit het net geladen mag
+    worden), hooguit het laadvermogen en de ruimte tot vol."""
+    if overschot_kwh <= EPS_KWH:
+        return np.zeros(niveaus, dtype=int)
+    stappen = overschot_kwh * eta_l / STAP_KWH
+    opslag = int(stappen + 1e-9) if naar_beneden else int(round(stappen))
+    opslag = min(opslag, max_op)
+    ruimte = (niveaus - 1) - np.arange(niveaus)
+    return np.minimum(opslag, ruimte)
+
+
+def _zon_regel(k, accu: Accu, s: int, b: float, s_min, min_kwh: float):
+    """Welke inhouden deze stap mogen bij de zonregel, en wat hij extra kost
+    (v5.175.0). (geldig-masker of None = alle, extra kosten per inhoud of 0)."""
+    if s_min is None or s >= 0 and (s_min <= s).all():
+        return None, 0.0
+    tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
+    if b < 0 and -b - tekort >= min_kwh - 1e-9:
+        return None, 0.0            # echt verkopen: handmatig, de zon gaat mee het net op
+    if accu.zon_export_afdwingbaar and s >= 0:
+        # Terugleveren wat de slimme stand zou opslaan mag, met de marge.
+        gemist = np.maximum(s_min - s, 0) * STAP_KWH
+        return None, gemist * accu.verkoopmarge_eur
+    if s < 0:
+        # Een ontlaadrestje onder de opdrachtgrens wordt 'huis' (smart): die
+        # ontlaadt niet bij een overschot, maar slaat het op.
+        return np.zeros(len(s_min), dtype=bool), 0.0
+    return s_min <= s, 0.0
+
+
+def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=None,
+                  eta_l: float = 1.0, max_op: int = 0):
     """Achterwaarts: per kwartier en inhoud de goedkoopste stap.
 
     `eis` = (kwartier, niveau): na dat kwartier minstens dat niveau.
+    v5.175.0: met `accu.zon_opslaan` slaat elke stap die niet echt verkoopt
+    minstens het zonoverschot op (zie `zon_opslag_stappen`).
     """
     n = len(kwartieren)
     keuze = np.zeros((n, niveaus), dtype=np.int16)
@@ -225,6 +275,10 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
         tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
         beste = np.full(niveaus, np.inf)
         beste_s = np.zeros(niveaus, dtype=np.int16)
+        s_min = None
+        if accu.zon_opslaan and overschot > EPS_KWH:
+            s_min = zon_opslag_stappen(overschot, eta_l, max_op, niveaus, not accu.netladen)
+        min_kwh = accu.min_actie_w / 1000 * (getattr(k, "uren", 0.25) or 0.25)
         for s, b in zip(stappen, b_stap):
             if b > 0 and not accu.netladen and b > overschot + 1e-9:
                 continue
@@ -239,11 +293,17 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
                 geldig = geldig & (doel * STAP_KWH >= k.verkoop_vloer_kwh - 1e-9)
                 if not geldig.any():
                     continue
+            zon_geldig, extra = _zon_regel(k, accu, int(s), float(b), s_min, min_kwh)
+            if zon_geldig is not None:
+                geldig = geldig & zon_geldig
+                if not geldig.any():
+                    continue
             kosten = np.full(niveaus, np.inf)
             kosten[geldig] = (
                 _kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
                              k.teruglever_eur, np.full(geldig.sum(), b), accu)
                 + waarde[doel[geldig]]
+                + (extra[geldig] if isinstance(extra, np.ndarray) else extra)
             )
             beter = kosten < beste
             beste[beter] = kosten[beter]
@@ -290,7 +350,7 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
         # enkel plan over.
         t = accu.vol_na_kwartier
         eis = (t, min(niveaus - 1, i_start + (t + 1) * max_op))
-    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus, eis)
+    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus, eis, eta_l, max_op)
 
     rijen = []
     kosten_plan = 0.0
@@ -325,6 +385,14 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
             # v5.165.0: de duur waarover verbruik en zon gelden.
             "uren": round(getattr(k, "uren", 0.25) or 0.25, 4),
         })
+        if accu.zon_opslaan and actie == "zon":
+            # v5.175.0: wat de slimme stand aan de netkant laadt (W, - =
+            # laden): het hele overschot, tot het laadvermogen en tot vol.
+            # Ongeschaald door de stap van 0,1 kWh, voor tabel en planvolging.
+            ruimte_ac = max(0.0, (accu.bruikbaar_kwh - i_voor * STAP_KWH) / eta_l)
+            overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
+            ac = min(overschot, accu.laden_kw * uren, ruimte_ac)
+            rijen[-1]["accu_ac_w"] = round(-ac / uren * 1000) if uren > 0 else 0
     # verschil in inhoud tegen de eindwaarde verrekenen (begin en eind)
     kosten_plan -= (i - i_start) * STAP_KWH * eind
     return Uitkomst(

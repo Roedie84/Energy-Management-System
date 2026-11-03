@@ -52,6 +52,10 @@ def _accu_w(rij: dict, start_kwh: float | None) -> float | None:
     """
     if rij.get("laden_w"):
         return -rij["laden_w"]  # v5.162.0: aan het net, zoals de meting
+    if rij.get("accu_ac_w") is not None:
+        # v5.175.0: zon opslaan in de slimme stand - het overschot aan de
+        # netkant, niet de afgeronde stap van 0,1 kWh in de inhoud.
+        return rij["accu_ac_w"]
     delta = rij.get("inhoud_delta_kwh")
     if delta is not None:
         return -delta * 4000

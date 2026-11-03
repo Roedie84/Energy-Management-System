@@ -75,7 +75,9 @@ def test_tabel_zegt_niet_meer_dat_het_laadblok_bijlaadt():
     assert ("Laden uit het net (waardeplan)", "Het waardeplan laadt 23:45-00:15 1,2 kWh uit het net") in nieuw
 
 
-def test_laadbesluit_loont_bij_geplande_netlading(make_coordinator, hass):
+def test_laadbesluit_loont_bij_geplande_netlading(make_coordinator, hass, monkeypatch):
+    # v5.175.0: de klok vast, anders ligt de lading van 02-11 in het verleden.
+    monkeypatch.setattr(dt_util, "now", lambda *a, **k: NU)
     c = _c(make_coordinator, ACTIES)
     c.last_laadbesluit = {"waarde_eur": 0.2, "prijs_nu_eur": 0.3}   # oud: loont niet
     c._laadbesluit_stand = "loont_niet"
