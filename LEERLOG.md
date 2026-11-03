@@ -946,3 +946,17 @@ laatste ronde: 03-11 03:40, gemeten t/m 03-11 03:55
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-16 (modulesprong bij laden vanaf leeg). H-EMS-15 geparkeerd tot L-EMS-059 besloten is; H-EMS-14 geparkeerd.
 
 laatste ronde: 03-11 07:40, gemeten t/m 03-11 07:45
+
+
+## 03-11 11:40 · tussenronde
+- **Draait v5.172.0** (herstarts 08:17 v5.171.0, 09:45 v5.172.0). Geen release: niets acuts, vandaag al vijf. Log: Zonneplan onbeschikbaar rond de herstart, Solcast-limiet; 0 fouten EMS.
+- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, accu uit 0,000 kWh 22-11 uur. P1-export 0,021 kWh is regelruis bij de zon.
+- **Uitslag L-EMS-059 (nacht 02→03):** net 22-09 uur **2,491 kWh** bij lege accu, `tekortnacht_tot_nu_kwh` **0,165**: alleen 08:18-09:00 is geteld, want v5.171.0 kwam pas toen. Definitie werkt, deze nacht is dus te laag (< 0,5, geen tekortdag). `_tekortnacht_uit_verloop` herstelt dat niet: het dagrecord krijgt een `tekortnacht_kwh`. Gevolg voor de dagafsluiting: nacht tot 03-11 kan in de MC-kalibratie komen als 100 % zonder tekort (Brier 0,018 → ± 0,21, n=5). Dat is dan meetruis, geen kalibratie. Eerste echte toets: de volgende lege nacht.
+- **Nieuw L-EMS-060 (meetfout, zelf te bouwen):** `bewolking_vandaag` mist 08:30-09:30 (6 zonkwartieren). `noteer_bewolking` meldt niets aan de listeners, dus de sensor schrijft zijn staat niet en de herstart van 09:45 zette een oude stand terug. CHANGELOG belooft dat een herstart het daggemiddelde niet halveert. Geen fout gedrag nu: alleen het label van de dag. Dagafsluiting.
+- **H-EMS-2 (PV te hoog):** 08-11 uur **0,50 kWh** tegen Solcast 0,94 (**−46,6 %**), bij 100 → 74 % bewolking. Solcast dag 7,69 (day-ahead) → 5,22; nu 30 % bewolkt, dus de middag beslist. Uitslag dagafsluiting.
+- **Niet te toetsen:** SoC-demper (accu laadt nu, stilstand pas vanavond), L-EMS-057 (eerste nacht vannacht), mini-laadblok (geen netlading gepland), L-EMS-058 per vak (eerste dag).
+- Accu 18 %, bruikbaar 0,46 kWh, laadt op zon. MC tot 04-11 09:00 **100 %** (det. 7,09 kWh), laadblok tot 15:30 zonder netlading gepland. Twin 0,278. Besparing vandaag € 0,26.
+- Stilstand: **geen echte** (10 wachten, 0 doen; was 12). Airco 'niets', knop uit → rekent.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-16 (modulesprong bij laden vanaf leeg), H-EMS-15 (tekortsoort; weer open nu L-EMS-059 werkt). H-EMS-14 geparkeerd.
+
+laatste ronde: 03-11 11:40, gemeten t/m 03-11 11:45

@@ -430,9 +430,15 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: label tegen het gemiddelde uit de history over 10 dagen; verschil < 15 pp; daarna bias per vak en of `ingehouden_reden` vaker leeg is.
 
 ## L-EMS-059 · lege accu boven 13 % telt niet als tekort (meetfout met invloed op de marge)
-- Status: **gebouwd v5.171.0** (03-11, op eigen gezag na Ruud 02-11 22:16). Was: **open** (03-11 07:40; een tekortnacht verhoogt de marge, dus raakt de reserve → Ruud beslist).
+- Status: **gebouwd v5.171.0, actief sinds 03-11 08:18** (11:40: nacht 02→03 telde alleen 08:18-09:00 = 0,165 kWh van 2,49 kWh net; eerste volle toets de volgende lege nacht). (03-11, op eigen gezag na Ruud 02-11 22:16). Was: **open** (03-11 07:40; een tekortnacht verhoogt de marge, dus raakt de reserve → Ruud beslist).
 - Onderbouwing (code v5.170.1 + live nacht 02→03, n=1): `_netimport_is_tekort` en `_tekortnacht_uit_verloop` eisen SoC ≤ vloer 10 + `TEKORT_LEEG_MARGE_PROCENT` 3 = 13 %. De accu stond de hele nacht op 15-16 % met 0,02-0,14 kWh bruikbaar (celgrens module 00996). P1 22-07 uur 1,887 kWh, `tekortnacht_tot_nu_kwh` 0. L-EMS-054 sprak van inhoud (> ~0,1 kWh), gebouwd is de SoC-grens.
 - Voorstel: ook tekort als de bruikbare inhoud onder ~0,1 kWh ligt, los van de SoC. Het dagverloop moet daarvoor de inhoud per kwartier bewaren; `_tekortnacht_uit_verloop` kent die nu niet. Alternatief: niets doen, want de module gaat terug en dan klopt de SoC-grens weer.
 - Verwacht effect: tekortnachten en MC-kalibratie kloppen zolang een module eerder leeg is dan de rest. Hogere marge alleen bij `capaciteit`/`planning`, economische nachten niet.
 - Meten: test met SoC 15 %, inhoud 0,02 kWh en `waardeplan_houden` = tekort; eerstvolgende lege nacht telt > 0 en de soort is gevuld.
 
+## L-EMS-060 · bewolking van vandaag overleeft een herstart niet (meetfout)
+- Status: **open, zelf te bouwen** (03-11 11:40; meetfout zonder invloed op de sturing vandaag → dagafsluiting).
+- Onderbouwing (live 03-11, n=1): `bewolking_vandaag.kwartieren` mist 08:30-09:30 terwijl de bewolking er was (100 → 99,2 %). Herstart 09:45. `noteer_bewolking` wijzigt de tracker zonder `_notify_listeners`, dus `PvForecastAccuracySensor` schrijft geen staat; alleen de staat die er bij de herstart stond komt terug. Op dagen met meerdere herstarts wordt het label dunner of leeg (< 4 kwartieren).
+- Voorstel: in `noteer_bewolking` `_notify_listeners()` aanroepen zodra er een nieuw kwartier bijkomt (niet elke ronde).
+- Verwacht effect: alle zonkwartieren staan na een herstart nog in `bewolking_vandaag`.
+- Meten: test met een nieuwe kwartiersleutel = één notify, zelfde kwartier = geen; live: geen gat rond een herstart.
