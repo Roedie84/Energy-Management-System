@@ -2059,3 +2059,29 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-03 12:20,filtergebruik_pct,0,1,
 2026-11-03 12:20,automation_traces_fout,0,5,5 finished
 2026-11-03 12:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.3-1.7
+2026-11-03 16:20,pm25_gem,2.86,48,5-min statistiek 12:20-16:20; incl piek 16:06
+2026-11-03 16:20,pm25_mediaan,1.89,48,
+2026-11-03 16:20,pm25_p95,6.51,48,
+2026-11-03 16:20,pm25_max,43.3,48,momentaan 16:06:49; hoogste 5-min gem 23.7
+2026-11-03 16:20,pm25_uren_gt15,0.08,48,
+2026-11-03 16:20,pm25_uren_gt25,0.00,48,5-min gemiddelden; momentaan 16:06:49 boven 25
+2026-11-03 16:20,stand_auto_min,169.4,34,gem pm25 3.36; zonder piekblokken 2.44
+2026-11-03 16:20,stand_mid_min,68,14,gem pm25 1.65
+2026-11-03 16:20,stand_unavailable_min,2.6,0,2 HA-herstarts
+2026-11-03 16:20,pm25_dag_tm_nu,1.25,196,gewogen 5-min 00:00-16:20
+2026-11-03 16:06,piek_max,43.3,9,"geen koken; ramen dicht; auto; airco heat sinds 15:58; aanwezig; 2-min meetpunten"
+2026-11-03 16:06,piek_tijd_tot_onder_10_min,6,9,na top 16:06:49 -> 9.93 om 16:12:49
+2026-11-03 16:06,piek_halvering_auto_eerste_min,1.3,2,"43.3 -> 17.4 in 2 min; achtergrond 3.1; vooral menging, 2-min meetpunten"
+2026-11-03 16:06,piek_halvering_auto_staart_min,6.3,8,"16:08:49-16:22:49; 5.6-7.0 bij achtergrond 3.7-2.5"
+2026-11-03 16:08,apparaat_pm25_max,59,1,"16:08:22; ~1.5 min na Ultimate; 59 -> 30 in ~1 min"
+2026-11-03 16:20,co2_gem,820,48,5-min; ramen dicht
+2026-11-03 16:20,co2_max,1267,48,momentaan 16:20; min 662; nu 1292 stijgend
+2026-11-03 16:20,co2_uren_gt1200,0.08,48,sinds ~16:12
+2026-11-03 16:20,vocht_max,64.3,48,min 51.3 nu; 17.1 -> 21.3 C door airco
+2026-11-03 16:20,schimmel_indicator,68,1,78 -> 62 -> 68; buiten 89% / 12-13 C
+2026-11-03 16:20,ha_herstarts,2,1,"14:59, 15:37"
+2026-11-03 16:20,lokaal_mislukt,68,191162,geen nieuwe; uitval 0; 267 verbindingen
+2026-11-03 16:20,sturen_bevestigd,437,438,7/7 nieuw
+2026-11-03 16:20,filtergebruik_pct,0,1,
+2026-11-03 16:20,automation_traces_fout,0,5,5 finished; 1 detail gecontroleerd
+2026-11-03 16:20,apparaat_pm25_bereik,59,1,2 tot 16:05; volgt piek
