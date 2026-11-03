@@ -51,3 +51,13 @@ def test_geen_moduswisselmelding_bij_lege_accu(make_coordinator, hass):
     c._maybe_notify_mode_change(NU)
     assert verstuurd == []
     assert c.mode_change_log[-1]["reason"] == "waardeplan_leeg"
+
+
+def test_uitleg_leeg_belooft_geen_nul():
+    """v5.176.2: bij 0,17 kWh en zwakste module op 11 % zei de tekst
+    'geen bruikbare energie' en 'op de ondergrens' - dat klopte niet."""
+    from custom_components.energy_management_system.const import REASON_REGISTRY
+    uitleg = REASON_REGISTRY["waardeplan_leeg"]["uitleg"]
+    assert "geen bruikbare" not in uitleg
+    assert "staat op de ondergrens" not in uitleg
+    assert "boven de ondergrens" in uitleg

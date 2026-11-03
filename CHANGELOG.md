@@ -34674,3 +34674,11 @@ Gemeld Ruud 03-11 21:08, na v5.176.0. Melding `plan_tekort_hersteld` terwijl de 
 Niet veranderd: de sturing. De accu blijft vanavond op 12 % omdat het waardeplan de rest bewaart voor de duurdere avond van morgen; de plantabel ontlaadt dan tot 10 %.
 
 Tests: `test_v51752_status_en_plan.py` (grenzen 0,17, 0,3 en 0,4 kWh).
+
+## v5.176.2 — uitleg "Accu leeg" klopt weer
+
+Gemeld leerronde 03-11 21:53 (kaart claude-ems, live op v5.176.0). De uitleg bij `waardeplan_leeg` zei "Er zit geen bruikbare energie meer in de accu: de zwakste module staat op de ondergrens", terwijl er 0,17 kWh bruikbaar was en de zwakste module op 11 % stond (ondergrens 10 %). 'Leeg' telt in `accu_is_leeg` tot ondergrens + `TEKORT_LEEG_MARGE_PROCENT` (3 %) of onder `TEKORT_LEEG_INHOUD_KWH`; de tekst zegt nu dat het om dat laatste restje boven de grens gaat, dat als marge blijft staan.
+
+Alleen tekst; sturing en grenzen gelijk.
+
+Tests: `test_v51753_waardeplan_leeg.py` (+1).

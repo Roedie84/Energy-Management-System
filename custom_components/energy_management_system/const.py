@@ -2755,13 +2755,19 @@ REASON_REGISTRY: dict[str, dict] = {
     # v5.175.3 (akkoord Ruud 03-11): 'houden' met een lege accu. Gemeld:
     # "Waarom spaart de accu nu? Leeg gaat hij toch" - er was niets meer te
     # bewaren. Zelfde stand en sturing als 'waardeplan_houden'.
+    # v5.176.2 (gemeld 03-11 21:53): de tekst zei "geen bruikbare energie,
+    # zwakste module op de ondergrens" bij 0,17 kWh bruikbaar en de zwakste
+    # module op 11 % (grens 10 %). 'Leeg' telt tot ondergrens +
+    # TEKORT_LEEG_MARGE_PROCENT of onder TEKORT_LEEG_INHOUD_KWH (accu_is_leeg);
+    # de tekst zegt nu dat het om dat laatste restje boven de grens gaat.
     "waardeplan_leeg": {
         "mode": OPTION_SMART_CHARGING,
         "titel": "Accu leeg – huis op het net",
         "uitleg": (
-            "Er zit geen bruikbare energie meer in de accu: de zwakste "
-            "module staat op de ondergrens. Het huis draait op het net tot "
-            "er weer geladen wordt; de zon mag de accu wel vullen."
+            "De accu zit vlak boven de ondergrens: er zit hooguit een klein "
+            "restje boven de grens. Dat restje blijft als marge staan. Het "
+            "huis draait op het net tot er weer geladen wordt; de zon mag de "
+            "accu wel vullen."
         ),
         "ernst": "info",
         "getallen": True,

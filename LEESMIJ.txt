@@ -1,3 +1,11 @@
+EMS v5.176.2 - uitleg 'Accu leeg' klopt weer
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De uitleg bij 'Accu leeg – huis op het net' zei "geen bruikbare energie" en
+  "zwakste module op de ondergrens", ook als er nog een klein restje boven de
+  grens zat. De tekst zegt nu dat dat restje als marge blijft staan. Alleen tekst.
+
 EMS v5.176.1 - geen valse "kump neet meer tekort"
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
