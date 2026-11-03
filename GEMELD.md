@@ -220,3 +220,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 23:51 | ha herstarten om ems 5.168.0 te activeren
 02-11 23:51 | L-EMS-056 ems spiegel beschikbare energie ruw vs gecorrigeerd (valse fout bij lege module)
 02-11 23:51 | L-EMS-057 ems airco-besluit niet op verwarmen 22-04 (akkoord)
+03-11 06:51 | L-EMS-058 ems bewolking per dag middelen over zonuren i.p.v. stand 23:59:50 (akkoord)
+03-11 06:51 | L-GS-039 gold scalper 'vandaag' bij resultaat per periode alleen met trades van vandaag (akkoord)
