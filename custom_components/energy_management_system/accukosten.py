@@ -159,7 +159,9 @@ def doorreken(
     partijen niet meer weg: niets toerekenen over het gat, daarna gelijkzetten;
     dagen met zo'n gat tellen niet mee in de datacorrectie.
     """
-    if not (0 < eta_laad <= 1 and 0 < eta_ontlaad <= 1):
+    # v5.170.1: ontladen in SoC-eenheden mag boven 1,0 (v5.169.0); met <= 1
+    # viel de hele doorrekening weg ("geen rendement").
+    if not (0 < eta_laad <= 1 and 0 < eta_ontlaad <= ONTLAAD_RENDEMENT_MAX):
         return {"beschikbaar": False, "reden": "geen rendement"}
     partijen: list[Partij] = []
     tel = _Teller()

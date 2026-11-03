@@ -34511,3 +34511,9 @@ Live (HomeWizard 04-10 08:00 t/m 03-11 07:00: erin 212,6, eruit 177,5 kWh, inhou
 Niet gedaan: het vaste eigenverbruik van de accu tijdens bedrijf (BMS/omvormer, waarschijnlijk dezelfde orde als het sluimeren) zit nog in de conversie; dat is uit de tellers niet te scheiden van het omzetverlies.
 
 Tests: `test_v5170_rondrit_zonder_sluimer.py` (7: reeks met echte omzetting 86 % en 6 W sluimer bij sparen - totaal 84,4 %, conversie 86,1 %; zonder sluimer vallen beide samen; net tegen cellen en opschalen; terugval zonder meting, zonder reeks, zonder rendement, buiten 60-95 %; alle beslissers rekenen met de conversie, sensorkenmerken; geen dubbeltelling met `_sluimer_bij_sparen`; verversen uit de statistiek en terugval bij een fout).
+
+## v5.170.1 — kostenoverzicht accu werkt weer met ontladen boven 100 % (fout uit v5.169.0)
+
+Live na de herstart van 03-11 07:22: `accukosten` gaf `beschikbaar: False, reden: geen rendement`. Sinds v5.169.0 mag het ontlaadrendement in SoC-eenheden boven 1,0 (live 1,012), maar `doorreken` weigerde alles boven 1,0. Daardoor vielen het kostenoverzicht, de datacorrectie en de netlaadmarge (0 in plaats van de geleerde waarde) weg. Nu toegestaan tot `ONTLAAD_RENDEMENT_MAX` (1,20).
+
+Tests: `test_v51701_doorreken_ontladen_boven_1.py` (faalt op v5.170.0, slaagt nu).
