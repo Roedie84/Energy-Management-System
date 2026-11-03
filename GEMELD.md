@@ -247,3 +247,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 14:51 | sensor.keuken_sm_x200_* 49 entiteiten opschonen
 03-11 14:51 | dubbele select.achtertuin_achtertuin_scene(_2)
 03-11 14:51 | vier weer-integraties terugbrengen (forecast_thuis, knmi_thuis, openweathermap, stormchase)
+03-11 15:51 | dubbele hue-scènes (woonkamer_rusten/_2, woonkamer vs zitgedeelte)
