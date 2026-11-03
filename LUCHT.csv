@@ -1991,3 +1991,24 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-03 00:20,filtergebruik_pct,0,1,
 2026-11-03 00:20,automation_traces_fout,0,5,2 finished 3 failed_conditions
 2026-11-03 00:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.45-2.35
+2026-11-03 04:20,pm25_gem,0.43,48,5-min statistiek 00:20-04:20
+2026-11-03 04:20,pm25_mediaan,0.42,48,
+2026-11-03 04:20,pm25_p95,0.55,48,
+2026-11-03 04:20,pm25_max,0.84,48,momentaan 04:10-04:15; ramen dicht; niemand
+2026-11-03 04:20,pm25_uren_gt15,0.00,48,
+2026-11-03 04:20,pm25_uren_gt25,0.00,48,
+2026-11-03 04:20,stand_mid_min,240,48,gem pm25 0.43; hele ronde
+2026-11-03 04:20,stand_unavailable_min,0,0,
+2026-11-03 04:20,pm25_gem_afwezig,0.43,48,geen aanwezigheid; tv uit
+2026-11-03 04:20,pm25_dag_tm_nu,0.44,52,5-min 00:00-04:20
+2026-11-03 04:20,co2_gem,1270,48,5-min; ramen dicht; niemand
+2026-11-03 04:20,co2_max,1539,48,momentaan 00:20
+2026-11-03 04:20,co2_uren_gt1200,2.58,48,onder 1200 vanaf ~02:55
+2026-11-03 04:20,vocht_max,65.8,48,min 65.4; 18.4 -> 17.5 C
+2026-11-03 04:20,schimmel_indicator,84,1,84-86; buiten 99% / 9.4 C
+2026-11-03 04:20,ha_herstarts,0,1,sensor.uptime 23:05 ongewijzigd
+2026-11-03 04:20,lokaal_mislukt,68,187123,geen nieuwe; uitval 0; 261 verbindingen
+2026-11-03 04:20,sturen_bevestigd,422,423,geen nieuwe opdrachten
+2026-11-03 04:20,filtergebruik_pct,0,1,
+2026-11-03 04:20,automation_traces_fout,0,5,5 failed_conditions (nachtvenster)
+2026-11-03 04:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.3-0.8

@@ -638,4 +638,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ hele ronde > 1.200 (gem 1.772, max 1.907, nu 1.533), ramen dicht. Vocht 59,7-65,5% terwijl temperatuur 21,6 → 18,4 °C zakt, schimmelindicator 85-87, buiten 99% / 9,7 °C. Morgen vroeg luchten; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 16). H2 auto bij koken 5x: 61, 22,6, 7,2, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=20): reiniger aan houdt het laag (dag 1,49 tegen 5,08 uit). Herstartvoorstel ingetrokken: 13:12 bleef de enige van 3 afwezige herstarts met extra wissels, n=1, geen patroon.
 
-laatste ronde: 03-11 00:25, gemeten t/m 00:20
+## 03-11 04:25 (ronde 86)
+- PM2.5 00:20-04:20: gem 0,43, mediaan 0,42, P95 0,55, max 0,84 (04:10-04:15) (n=48); 0 uur > 15. Dag t/m nu ~0,44; 7d (27/10-02/11) 2,54 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit, geen aanwezigheid.
+- Stand: hele ronde mid (240 min, gem 0,43), 0 min unavailable. Vlak op achtergrondniveau 0,29-0,64; geen opruimtoets, dus geen nieuwe halvering.
+- Werking: 5/5 traces failed_conditions (nachtvenster, verwacht), geen fout; 0 wissels. 0 HA-herstarts (start 23:05 staat nog). Lokaal 68 mislukt op 187.123 (geen nieuwe), uitval 0, 261 verbindingen, sturen 422/423 (geen opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,3-0,8.
+- CO₂ 1.533 → 1.084 (gem 1.270), 2,6 u > 1.200 (onder 1.200 vanaf ~02:55), ramen dicht, niemand. Vocht 65,4-65,8% bij 18,4 → 17,5 °C, schimmelindicator 86 → 84, buiten 99% / 9,4 °C. Ochtend luchten en verwarmen; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 16). H2 auto bij koken 5x: 61, 22,6, 7,2, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=21): reiniger aan houdt het laag; nacht op mid rond 0,4. Deze ronde geen nieuwe toets voor H1/H2.
+
+laatste ronde: 03-11 04:25, gemeten t/m 04:20
