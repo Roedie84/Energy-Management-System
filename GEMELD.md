@@ -222,3 +222,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 02-11 23:51 | L-EMS-057 ems airco-besluit niet op verwarmen 22-04 (akkoord)
 03-11 06:51 | L-EMS-058 ems bewolking per dag middelen over zonuren i.p.v. stand 23:59:50 (akkoord)
 03-11 06:51 | L-GS-039 gold scalper 'vandaag' bij resultaat per periode alleen met trades van vandaag (akkoord)
+03-11 07:51 | L-EMS-059 ems lege accu ook als tekort bij bruikbaar < 0,1 kwh, los van soc (akkoord)
+03-11 07:51 | stormchase zwakke regenkernen einde bui springt en 'volgende bui' zonder regen, regencorrectie toetsen
