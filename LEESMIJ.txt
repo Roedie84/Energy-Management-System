@@ -1,3 +1,28 @@
+EMS v5.174.0 - betere prijsverwachting met een bandbreedte
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Prijsverwachting: het EMS kijkt nu ook naar de prijs van hetzelfde uur
+  op de laatste bekende dag en een week eerder, en heeft een apart model
+  voor morgen, overmorgen en de rest van de week. Optioneel tellen ook de
+  wind in Denemarken, op de Britse Noordzee en in Noord-Frankrijk en het
+  gasniveau mee. Welke combinatie, kiest het EMS elke dag zelf: alleen wat
+  op de afgelopen drie weken echt beter voorspelt, blijft.
+- In een proef op de eigen prijzen van juli tot november (met het weer van
+  het KNMI-station, dus grover dan in HA) werd de gemiddelde afwijking
+  voor morgen 4,3 in plaats van 5,8 ct en voor over een week 6,4 in plaats
+  van 8,7 ct.
+- Bandbreedte: bij elke verwachting staat nu een onder- en bovengrens
+  (P10 en P90): in 8 van de 10 uren hoort de echte prijs ertussen te
+  liggen. Die komt uit de eigen fouten van de afgelopen weken en de 51
+  varianten van de Europese weersverwachting. Het EMS meet hoe vaak het
+  klopt en past de breedte daarop aan.
+- Sturing: de verwachting stuurt nog steeds niets; het plan rekent alleen
+  met gepubliceerde prijzen. De bandbreedte staat klaar ('band_voor_plan')
+  voor als het plan ooit verder vooruit gaat kijken.
+- Ter vergelijking staan de cijfers van jeroen.nl erbij (zonder belasting
+  en btw; het EMS toont beide).
+
 EMS v5.173.0 - minder database-rijen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -7987,6 +7987,25 @@ ACCU_AC_MIN_RENDEMENT = 0.75
 # v5.100: de prijsverwachting hooguit eens per drie uur (Open-Meteo en de
 # training kosten een paar seconden in een executor).
 PRIJSVERWACHTING_MINUTEN = 180
+# v5.174.0: de uitleg bij de prijsverwachting (in const, want de getter
+# staat in de coordinator en die mag niet groeien).
+PRIJSVERWACHTING_TOELICHTING = (
+    "Verwachte uurprijzen voor de dagen waarvan de prijzen nog niet bekend zijn, uit wind, "
+    "zon en temperatuur (Open-Meteo: Nederland, Duitsland/Belgie en - als de terugtoets dat "
+    "beter vindt - Denemarken, Groot-Brittannie en Noord-Frankrijk), uur, weekdag en "
+    "feestdag, het prijsniveau van de week, de gasprijs, en (v5.174.0) de prijs van hetzelfde "
+    "uur op de laatste bekende dag en een week eerder. Een model per dag vooruit (morgen, "
+    "overmorgen, de rest van de week); welke opzet, beslist elke dag de terugtoets "
+    "('opzet_scores_ct'). De band (P10-P90) komt uit de restfout van de terugtoets en de 51 "
+    "leden van het ECMWF-ensemble, geschaald op de gemeten dekking (doel 80%). "
+    "Afwijkingen zijn incl. belasting en btw; excl. is gedeeld door 1,21 (de energiebelasting "
+    "valt weg in een verschil). Ter vergelijking jeroen.nl (groothandelsprijs, over een jaar): "
+    "morgen 1,64 ct, over zeven dagen 2,66 ct excl., laatste 30 dagen 3,42 ct, band 71% "
+    "gedekt. Alleen meten: de verwachting stuurt niets; 'band_voor_plan' geeft per uur de "
+    "voorzichtige waarden (ontladen tegen P30, laden tegen P70) voor als het plan ooit "
+    "verder kijkt dan de bekende prijzen. 'Rijp' als de verwachting van twee dagen vooruit "
+    "over minstens veertien dagen 15% beter is dan 'zoals gisteren'."
+)
 # v5.101.1: na een mislukte poging (Open-Meteo onbereikbaar) eerder opnieuw.
 PRIJSVERWACHTING_OPNIEUW_MINUTEN = 15
 

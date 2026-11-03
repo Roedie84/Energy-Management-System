@@ -306,6 +306,7 @@ from .const import (
     REDEN_KORTE_NAAM,
     PRIJSVERWACHTING_MINUTEN,
     PRIJSVERWACHTING_OPNIEUW_MINUTEN,
+    PRIJSVERWACHTING_TOELICHTING,
     REASON_TO_MODE,
     ACHTERHOEKS_TITELS,
     ACHTERHOEKS_TITELS_PER_ACTIE,
@@ -53485,7 +53486,8 @@ class EnergyManagementSystemCoordinator:
              "status": "betrouwbaar" if pv.get("rijp") else "indicatief", "rijp": bool(pv.get("rijp")),
              "waarde": (f"{live.get('winst_procent')}% beter dan zoals-gisteren over {live.get('dagen')} dagen"
                         if live.get("dagen") else "wacht op vergeleken dagen"),
-             "zou_veranderen": "de lange horizon: sparen of niet voor dagen zonder gepubliceerde prijs"},
+             "zou_veranderen": ("de lange horizon: sparen of niet voor dagen zonder gepubliceerde prijs "
+                                "(met de band: ontladen tegen P30, laden tegen P70)")},
             {"naam": "Regels van 2027 (na de saldering)", "bron": "repetitie",
              "status": "betrouwbaar" if (rep.get("dagen") or 0) >= 7 else "onvoldoende_data",
              "rijp": False, "waarde": rep.get("oordeel"),
@@ -54038,6 +54040,7 @@ class EnergyManagementSystemCoordinator:
                     antwoord.raise_for_status()
                     ruw = await antwoord.json()
             weer = P.weer_uit_open_meteo(ruw)
+            ensemble = await self._prijs_ensemble(sessie)
             if isinstance(self.dagarchief, dict) and self.dagarchief.get("dagen"):
                 from . import dagarchief as D
 
@@ -54046,17 +54049,28 @@ class EnergyManagementSystemCoordinator:
             prijzen = dict(self.prijsgeschiedenis)
             doe_backtest = self._prijs_backtest_dag != vandaag.isoformat()
             gas = await self._gasprijzen_per_dag(vandaag)
-            uit = await self.hass.async_add_executor_job(
-                _reken_prijsverwachting, P, prijzen, weer, vandaag, bekend_tot or vandaag, doe_backtest, gas
+            # v5.174.0: de band geschaald op de gemeten dekking van de laatste weken
+            from . import prijsband as B
+
+            kalibratie = await self.hass.async_add_executor_job(
+                B.kalibreer, self.prijsverwachting_archief, prijzen, vandaag
             )
+            uit = await self.hass.async_add_executor_job(
+                _reken_prijsverwachting, P, prijzen, weer, vandaag, bekend_tot or vandaag, doe_backtest, gas,
+                ensemble, None if doe_backtest else self._prijs_keuze, kalibratie
+            )
+            if uit.get("keuze"):
+                self._prijs_keuze = uit["keuze"]
+            uit["kalibratie"] = kalibratie
+            uit["ensemble_uren"] = len(ensemble or {})
             # v5.112.0: bijstellen op de eigen fout van de laatste week
             uit["bijstelling"] = await self.hass.async_add_executor_job(
                 P.stel_bij, uit.get("dagen"), self.prijsverwachting_archief, prijzen, vandaag
             )
             for datum, d in (uit.get("dagen") or {}).items():
-                if d.get("vooruit") in (1, 2):
+                if 1 <= (d.get("vooruit") or 0) <= P.VERWACHT_DAGEN:
                     P.archiveer(self.prijsverwachting_archief, datum, d["vooruit"], d.get("model"), d.get("naief"),
-                                d.get("ruw"))
+                                d.get("ruw"), band=d.get("band"), k=d.get("k"))
             P.ruim_archief_op(self.prijsverwachting_archief, vandaag)
             live = await self.hass.async_add_executor_job(
                 P.live_beoordeling, self.prijsverwachting_archief, prijzen
@@ -54089,6 +54103,27 @@ class EnergyManagementSystemCoordinator:
         finally:
             self._prijsverwachting_bezig = False
 
+    _prijs_keuze: dict | None = None
+    _prijs_ensemble_fout: str | None = None
+
+    async def _prijs_ensemble(self, sessie) -> dict | None:
+        """v5.174.0: de 51 leden van het ECMWF-ensemble (Open-Meteo), klein
+        gehouden. Mislukt het, dan een band uit de restfout alleen."""
+        from . import prijsband as B
+
+        try:
+            async with asyncio.timeout(30):
+                async with sessie.get(B.ensemble_url()) as antwoord:
+                    antwoord.raise_for_status()
+                    ruw = await antwoord.json()
+            ens = await self.hass.async_add_executor_job(B.ensemble_uit_open_meteo, ruw)
+            self._prijs_ensemble_fout = None if ens else "ensemble zonder leden"
+            return ens or None
+        except Exception as fout:  # noqa: BLE001 - de band valt terug op de restfout
+            self._prijs_ensemble_fout = f"{type(fout).__name__}: {fout}"
+            _LOGGER.debug("Ensemble voor de prijsband niet opgehaald", exc_info=True)
+            return None
+
     def get_prijsverwachting(self) -> dict:
         from . import prijsverwachting as P
 
@@ -54104,10 +54139,15 @@ class EnergyManagementSystemCoordinator:
             "dagen": {
                 datum: {**{k: v for k, v in (d.get("model") or {}).items() if k != "uren"},
                         "vooruit_dagen": d.get("vooruit"),
-                        "uren": [[u["uur"], round(u["prijs_eur"] * 100, 1)] for u in (d.get("model") or {}).get("uren") or []]}
+                        "uren": [[u["uur"], round(u["prijs_eur"] * 100, 1)] for u in (d.get("model") or {}).get("uren") or []],
+                        # v5.174.0: P10 en P90 per uur (ct) en waar de band vandaan komt
+                        "band": [[u["uur"], round(u["p10"] * 100, 1), round(u["p90"] * 100, 1)]
+                                 for u in (d.get("band") or {}).get("uren") or []],
+                        "band_bron": (d.get("band") or {}).get("bron")}
                 for datum, d in dagen.items()
             },
             "kwartieren": self._prijs_kwartierreeks(dagen),
+            **self._prijs_band_attributen(pv),
             "nauwkeurigheid_live": pv.get("live"),
             "backtest_21_dagen": pv.get("backtest"),
             "rijp": bool(live.get("rijp")),
@@ -54118,23 +54158,70 @@ class EnergyManagementSystemCoordinator:
             "uren_prijsgeschiedenis": pv.get("uren_prijsgeschiedenis"),
             "reden": pv.get("reden"),
             "fout": pv.get("fout"),
-            "toelichting": (
-                "Verwachte uurprijzen voor de dagen waarvan de prijzen nog niet bekend zijn, uit "
-                "wind, zon, temperatuur, uur en weekdag (Open-Meteo) en het prijsniveau van de "
-                "afgelopen week. Alleen meten: het stuurt niets. 'Rijp' als de verwachting van "
-                "twee dagen vooruit over minstens veertien dagen 15% beter is dan 'zoals gisteren'."
-            ),
+            "toelichting": PRIJSVERWACHTING_TOELICHTING,
         }
+
+    def _prijs_band_attributen(self, pv: dict) -> dict:
+        """v5.174.0: opzet, terugtoets per dag vooruit, dekking en de band."""
+        from . import prijsmodel as M
+
+        keuze = self._prijs_keuze or {}
+        per_opzet = keuze.get("per_opzet") or {}
+        try:
+            belasting = round(float(self._gemeten_belastingdeel_eur_per_kwh() or 0.0) * 100, 2)
+        except Exception:  # noqa: BLE001 - alleen ter informatie
+            belasting = None
+        return {
+            "opzet": pv.get("opzet"),
+            "opzet_scores_ct": keuze.get("scores"),
+            "per_vooruit": M.tabel_per_vooruit(per_opzet.get(pv.get("opzet")), pv.get("live")),
+            "per_vooruit_basis": M.tabel_per_vooruit(per_opzet.get("basis"), None),
+            "referentie_jeroen_nl": M.REFERENTIE_JEROEN,
+            "belastingdeel_ct": belasting,
+            "band_kalibratie": pv.get("kalibratie"),
+            "band_schaal": pv.get("band_schaal"),
+            "band_ensemble_uren": pv.get("ensemble_uren"),
+            "band_ensemble_fout": self._prijs_ensemble_fout,
+            "band_voor_plan": self._prijs_band_voor_plan(pv.get("dagen") or {}),
+        }
+
+    def _prijs_band_voor_plan(self, dagen: dict) -> list:
+        """v5.174.0: per verwacht uur de voorzichtige waarden voor een plan
+        (ontladen tegen P30, laden tegen P70) - zie `prijsband.risicowaarden`.
+        Nog door niets gebruikt: de verwachting meet alleen (zie de toelichting)."""
+        from . import prijsband as B
+
+        uit = []
+        for _datum, d in sorted(dagen.items()):
+            punt = {u["sleutel"]: u for u in (d.get("model") or {}).get("uren") or []}
+            for u in (d.get("band") or {}).get("uren") or []:
+                if u["sleutel"] in punt:
+                    r = B.risicowaarden({**u, "prijs_eur": punt[u["sleutel"]]["prijs_eur"]})
+                    uit.append([u["sleutel"], round(r["ontladen_eur"] * 100, 1), round(r["laden_eur"] * 100, 1)])
+        return uit
 
     def _prijs_kwartierreeks(self, dagen: dict) -> dict | None:
         """v5.108.0: vanaf nu per kwartier - bekende prijzen, dan de verwachting."""
         from . import prijsverwachting as P
 
         try:
-            verwacht = []
+            verwacht, p10, p90 = [], [], []
             for _datum, d in sorted((dagen or {}).items()):
                 verwacht += P.kwartieren_van_dag(d.get("model"), self._prijs_kwartiervorm)
-            return P.kwartierreeks(self._prijs_kwartierparen(), verwacht, dt_util.utcnow())
+                band = (d.get("band") or {}).get("uren") or []
+                for naam, lijst in (("p10", p10), ("p90", p90)):
+                    lijst += P.kwartieren_van_dag(
+                        {"uren": [{"sleutel": u["sleutel"], "prijs_eur": u[naam]} for u in band]},
+                        self._prijs_kwartiervorm)
+            bekend, nu = self._prijs_kwartierparen(), dt_util.utcnow()
+            reeks = P.kwartierreeks(bekend, verwacht, nu)
+            # v5.174.0: de band per kwartier, op dezelfde tijdas (bekend = geen onzekerheid)
+            if reeks and p10:
+                for naam, lijst in (("p10_ct", p10), ("p90_ct", p90)):
+                    extra = P.kwartierreeks(bekend, lijst, nu) or {}
+                    if extra.get("start") == reeks["start"]:
+                        reeks[naam] = extra.get("ct")
+            return reeks
         except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
             _LOGGER.debug("Kwartierreeks prijsverwachting mislukt", exc_info=True)
             return None
@@ -56184,10 +56271,36 @@ def _stat_moment(rij: dict) -> datetime:
     return start.astimezone(timezone.utc)
 
 
+def _prijs_bandschaal(kalibratie: dict | None, keuze: dict | None) -> float:
+    """v5.174.0: de live geleerde schaal van de band zodra er een week
+    gemeten is; daarvoor die uit de terugtoets."""
+    k = kalibratie or {}
+    if k.get("dagen", 0) >= 7 and k.get("uren", 0) >= 24 * 7:
+        return float(k.get("schaal") or 1.0)
+    return float((keuze or {}).get("schaal_terugtoets") or 1.0)
+
+
 def _reken_prijsverwachting(P, prijzen: dict, weer: dict, vandaag, bekend_tot, backtest: bool,
-                            gas: dict | None = None) -> dict:
-    """Prijsverwachting (en eens per dag de terugtoets), buiten de event loop."""
-    uit = P.maak_verwachting(prijzen, weer, vandaag, bekend_tot, gas)
+                            gas: dict | None = None, ensemble: dict | None = None,
+                            keuze: dict | None = None, kalibratie: dict | None = None) -> dict:
+    """Prijsverwachting (en eens per dag de terugtoets), buiten de event loop.
+
+    v5.174.0: de terugtoets toetst alle opzetten (`prijsmodel.kies_opzet`) en
+    kiest; de verwachting gebruikt die keuze en de restfout per dag vooruit
+    voor de band. Tussen twee toetsen blijft de laatste keuze staan.
+    """
+    from . import prijsmodel as M
+
+    nieuw = None
     if backtest:
-        uit["backtest"] = P.backtest(prijzen, weer, dagen=21, vooruit=2, gas=gas)
+        nieuw = M.kies_opzet(prijzen, weer, gas, oorsprongen=21)
+        keuze = nieuw
+    keuze = keuze or {}
+    schaal = _prijs_bandschaal(kalibratie, keuze)
+    uit = P.maak_verwachting(prijzen, weer, vandaag, bekend_tot, gas, opzet=keuze.get("opzet"),
+                             residuen=keuze.get("residuen"), ensemble=ensemble, schaal=schaal)
+    uit["band_schaal"] = schaal
+    if nieuw is not None:
+        uit["backtest"] = nieuw.get("backtest") or P.backtest(prijzen, weer, dagen=21, vooruit=2, gas=gas)
+        uit["keuze"] = nieuw
     return uit

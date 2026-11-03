@@ -43,6 +43,12 @@ PUNTEN = ((52.6, 4.0), (52.1, 5.2), (53.2, 6.6))
 #: en België; wind in Noord-Duitsland en zon in Zuid-Duitsland zetten de prijs
 #: hier net zo goed. Duitse Bocht, Noord-, Midden- en Zuid-Duitsland, België.
 BUUR_PUNTEN = ((54.3, 8.0), (53.3, 10.0), (51.0, 10.5), (48.7, 11.0), (50.8, 4.4))
+#: v5.174.0: de verre buren als derde groep (geleerd van jeroen.nl, die 19
+#: punten in zes landen gebruikt): Jutland, Horns Rev (Deense Noordzee), de
+#: Doggersbank (Britse Noordzee), Zuid-Engeland en Noord-Frankrijk. Of ze
+#: meetellen, beslist de terugtoets (`prijsmodel.OPZETTEN`). Nederland heeft
+#: al een punt op zee (IJmuiden, 52.6/4.0).
+VER_PUNTEN = ((56.0, 8.4), (55.5, 7.7), (54.8, 2.0), (51.6, -1.2), (50.3, 2.6))
 OPEN_METEO_URL = (
     "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
     "&hourly=wind_speed_100m,shortwave_radiation,temperature_2m"
@@ -67,8 +73,8 @@ RIJP_WINST_PROCENT = 15.0
 
 def open_meteo_url(verleden: int = VERLEDEN_DAGEN, vooruit: int = VOORUIT_DAGEN) -> str:
     return OPEN_METEO_URL.format(
-        lat=",".join(str(p[0]) for p in PUNTEN + BUUR_PUNTEN),
-        lon=",".join(str(p[1]) for p in PUNTEN + BUUR_PUNTEN),
+        lat=",".join(str(p[0]) for p in PUNTEN + BUUR_PUNTEN + VER_PUNTEN),
+        lon=",".join(str(p[1]) for p in PUNTEN + BUUR_PUNTEN + VER_PUNTEN),
         verleden=verleden, vooruit=vooruit,
     )
 
@@ -87,10 +93,16 @@ def weer_uit_open_meteo(antwoord) -> dict:
     lijst = antwoord if isinstance(antwoord, list) else [antwoord]
     uit = _weer_gemiddeld(lijst[:len(PUNTEN)])
     # v5.110.0: de buurlanden apart (wind en zon), bij hetzelfde uur
-    for sleutel, w in _weer_gemiddeld(lijst[len(PUNTEN):]).items():
+    buur = len(PUNTEN) + len(BUUR_PUNTEN)
+    for sleutel, w in _weer_gemiddeld(lijst[len(PUNTEN):buur]).items():
         if sleutel in uit:
             uit[sleutel]["wind_buur"] = w["wind"]
             uit[sleutel]["zon_buur"] = w["zon"]
+    # v5.174.0: de verre buren (Denemarken, Groot-Brittannie, Noord-Frankrijk)
+    for sleutel, w in _weer_gemiddeld(lijst[buur:]).items():
+        if sleutel in uit:
+            uit[sleutel]["wind_ver"] = w["wind"]
+            uit[sleutel]["zon_ver"] = w["zon"]
     return uit
 
 
@@ -435,18 +447,89 @@ def uitpakken(kort: dict | None) -> dict | None:
 
 
 def archiveer(archief: dict, datum: str, vooruit: int, model: dict | None, zoals_gisteren: dict | None,
-              ruw: dict | None = None) -> None:
+              ruw: dict | None = None, band: dict | None = None, k: int | None = None) -> None:
     """De EERSTE verwachting per datum en vooruitkijktijd bewaren; een latere
     verwachting voor dezelfde dag en dezelfde termijn overschrijft hem niet
-    (anders toets je achteraf de beste in plaats van die van toen)."""
-    if not model or not zoals_gisteren:
+    (anders toets je achteraf de beste in plaats van die van toen).
+
+    v5.174.0: ook drie tot en met zeven dagen vooruit, dan zonder de naieve
+    verwachting (die volgt achteraf uit de prijzen, met `k`: hoeveel dagen na
+    de laatste bekende dag), en met de onzekerheidsband.
+    """
+    if not model or (not zoals_gisteren and vooruit <= 2):
         return
     plek = archief.setdefault(datum, {})
     sleutel = f"d{vooruit}"
     if sleutel not in plek:
-        plek[sleutel] = {"model": compact(model), "naief": compact(zoals_gisteren)}
-        if ruw is not None:
+        plek[sleutel] = {"model": compact(model)}
+        if zoals_gisteren:
+            plek[sleutel]["naief"] = compact(zoals_gisteren)
+        if ruw is not None and vooruit <= 2:
             plek[sleutel]["ruw"] = compact(ruw)   # v5.112.0: zonder bijstelling
+        if band:
+            from .prijsband import compact_band
+
+            plek[sleutel]["band"] = compact_band(band)
+        if k is not None:
+            plek[sleutel]["k"] = int(k)
+
+
+def _live_uitkomst(plek: dict, datum: str, echt: dict, prijzen: dict, vooruit: int) -> dict | None:
+    m = uitpakken(plek.get("model"))
+    dag = date.fromisoformat(datum)
+    k = int(plek.get("k") or vooruit)
+    n = uitpakken(plek.get("naief")) or _naief_terug(prijzen, dag, k)
+    if not m or not n:
+        return None
+    mv, mn = vergelijk(m, echt), vergelijk(n, echt)
+    if not (mv and mn):
+        return None
+    r = uitpakken(plek.get("ruw"))
+    week = _naief_terug(prijzen, dag, 7)
+    mix = _mix(n, week)
+    uit = {"model": mv, "naief": mn, "ruw": vergelijk(r, echt) if r else None,
+           "week": vergelijk(week, echt) if week else None, "mix": vergelijk(mix, echt) if mix else None}
+    band = plek.get("band")
+    if band:
+        punt = dict((plek.get("model") or {}).get("uren") or [])
+        s = float(band.get("s") or 1.0)
+        tel = [(s * lo <= echt[x] - punt[x] <= s * hi) for x, lo, hi in band.get("u") or []
+               if x in echt and x in punt]
+        if tel:
+            uit["dekking"] = (sum(tel), len(tel))
+    return uit
+
+
+def _naief_terug(prijzen: dict, dag: date, terug: int) -> dict | None:
+    """Elk uur zoals `terug` dagen eerder (zoals die dag toen bekend was)."""
+    vorige = {_lokaal(s).hour: prijzen[s] for s in uren_van_dag(dag - timedelta(days=terug)) if s in prijzen}
+    if len(vorige) < 20:
+        return None
+    uren = [{"uur": f"{_lokaal(s).hour:02d}:00", "sleutel": s, "prijs_eur": vorige[_lokaal(s).hour]}
+            for s in uren_van_dag(dag) if _lokaal(s).hour in vorige]
+    return samenvatting(dag, uren) if uren else None
+
+
+def _mix(a: dict | None, b: dict | None) -> dict | None:
+    if not a or not b:
+        return None
+    pb = {u["sleutel"]: u["prijs_eur"] for u in b["uren"]}
+    uren = [{**u, "prijs_eur": (u["prijs_eur"] + pb[u["sleutel"]]) / 2} for u in a["uren"] if u["sleutel"] in pb]
+    return samenvatting(date.fromisoformat(a["datum"]), uren) if uren else None
+
+
+def _extra_naieven(uitkomsten: list[dict]) -> dict:
+    """v5.174.0: zoals vorige week, de mix en de dekking van de band."""
+    uit: dict = {}
+    for naam in ("week", "mix"):
+        v = [u[naam]["gemiddelde_afwijking_eur"] for u in uitkomsten if u.get(naam)]
+        if v:
+            uit[f"afwijking_zoals_{'vorige_week' if naam == 'week' else 'mix'}_ct"] = round(statistics.fmean(v) * 100, 2)
+    tel = [u["dekking"] for u in uitkomsten if u.get("dekking")]
+    if tel:
+        uit["dekking_band_procent"] = round(100.0 * sum(b for b, _n in tel) / sum(n for _b, n in tel), 1)
+        uit["dekking_band_uren"] = sum(n for _b, n in tel)
+    return uit
 
 
 def ruim_archief_op(archief: dict, vandaag: date, dagen: int = 45) -> None:
@@ -456,23 +539,30 @@ def ruim_archief_op(archief: dict, vandaag: date, dagen: int = 45) -> None:
 
 
 def live_beoordeling(archief: dict, prijzen: dict) -> dict:
-    """Per vooruitkijktijd: de bewaarde verwachtingen tegenover de echte prijzen."""
+    """Per vooruitkijktijd: de bewaarde verwachtingen tegenover de echte prijzen.
+
+    v5.174.0: d1 tot en met d7, met naast 'zoals gisteren' ook 'zoals vorige
+    week' en het gemiddelde van die twee, en de dekking van de band.
+    """
     uit = {}
-    for sleutel in ("d1", "d2"):
+    per_dag: dict = {}
+    for s, p in prijzen.items():
+        per_dag.setdefault(_lokaal(s).date().isoformat(), {})[s] = p
+    for vooruit in range(1, VERWACHT_DAGEN + 1):
+        sleutel = f"d{vooruit}"
         uitkomsten = []
         for datum in sorted(archief):
-            plek = (archief[datum] or {}).get(sleutel)
-            if not plek:
+            plek = (archief[datum] or {}).get(sleutel) if isinstance(archief[datum], dict) else None
+            echt = per_dag.get(datum) or {}
+            if not plek or len(echt) < 20:
                 continue
-            echt = {s: p for s, p in prijzen.items() if _lokaal(s).date().isoformat() == datum}
-            m, n = uitpakken(plek.get("model")), uitpakken(plek.get("naief"))
-            if not m or not n or len(echt) < 20:
-                continue
-            mv, mn = vergelijk(m, echt), vergelijk(n, echt)
-            if mv and mn:
-                r = uitpakken(plek.get("ruw"))
-                uitkomsten.append({"model": mv, "naief": mn, "ruw": vergelijk(r, echt) if r else None})
+            u = _live_uitkomst(plek, datum, echt, prijzen, vooruit)
+            if u:
+                uitkomsten.append(u)
+        if not uitkomsten and vooruit > 2:
+            continue
         uit[sleutel] = beoordeel(uitkomsten)
+        uit[sleutel].update(_extra_naieven(uitkomsten))
         uit[sleutel]["laatste"] = uitkomsten[-1]["model"] if uitkomsten else None
         uit[sleutel]["per_dag"] = [dagrij(u) for u in uitkomsten][-14:]
         ruw = [u["ruw"]["gemiddelde_afwijking_eur"] for u in uitkomsten if u.get("ruw")]
@@ -545,6 +635,10 @@ def stel_bij(dagen: dict, archief: dict, prijzen: dict, vandaag: date) -> dict:
         if d.get("model") and "ruw" not in d:
             d["ruw"] = d["model"]
             d["model"] = pas_bijstelling_toe(d["model"], gebruik[min(max(d.get("vooruit") or 1, 1), 2)])
+            if d.get("band"):
+                from .prijsband import verschuif
+
+                d["band"] = verschuif(d["band"], (d.get("model") or {}).get("uren") or [])
     return {"d1": bij[1], "d2": bij[2]}
 
 
@@ -739,46 +833,85 @@ def snoei(prijzen: dict, vandaag: date, dagen: int = 130) -> dict:
 
 
 def maak_verwachting(prijzen: dict, weer: dict, vandaag: date, bekend_tot: date,
-                     gas: dict | None = None) -> dict:
+                     gas: dict | None = None, opzet: str | None = None, residuen: dict | None = None,
+                     ensemble: dict | None = None, schaal: float = 1.0) -> dict:
     """Train op alles wat bekend is en verwacht de dagen na `bekend_tot`
     (de laatste dag met gepubliceerde prijzen) tot en met zeven dagen vooruit.
 
     Geeft per datum de verwachting en de 'zoals gisteren'-verwachting, en
     hoeveel dagen vooruit die datum lag (voor het archief).
+
+    v5.174.0: met de opzet die de terugtoets koos (`prijsmodel`), een model
+    per dag vooruit, en per dag de onzekerheidsband (`prijsband`): uit de
+    restfout van de terugtoets (`residuen`, per k) en - als het lukte - de
+    51 leden van het ECMWF-ensemble.
     """
-    rijen, doelen = dataset(prijzen, weer, gas=gas)
-    if len(rijen) < MIN_UREN:
-        return {"beschikbaar": False, "reden": f"{len(rijen)} uren met prijs en weer, minimaal {MIN_UREN}"}
-    coefs = fit(rijen, doelen)
+    from . import prijsband as B
+    from . import prijsmodel as M
+
+    naam = opzet if opzet in M.OPZETTEN else M.STANDAARD_OPZET
+    o = M.OPZETTEN[naam]
+    ctx = M.Context(prijzen, gas)
+    rijen = M.bouw_rijen(prijzen, weer, ctx, o)
+    n = len(rijen[1][0])
+    if n < MIN_UREN:
+        return {"beschikbaar": False, "reden": f"{n} uren met prijs en weer, minimaal {MIN_UREN}"}
+    modellen = M.train(prijzen, weer, ctx, o, rijen)
+    coefs = modellen.get(1)
     if coefs is None:
         return {"beschikbaar": False, "reden": "model niet op te lossen"}
     dagen = {}
     dag = bekend_tot + timedelta(days=1)
     while dag <= vandaag + timedelta(days=VERWACHT_DAGEN):
-        v = verwacht_dag(coefs, weer, prijzen, dag, gas)
-        if v:
-            dagen[dag.isoformat()] = {"model": v, "naief": naief(prijzen, dag),
-                                      "vooruit": (dag - vandaag).days}
+        uren = M.voorspel_dag(modellen, o, weer, ctx, dag, bekend_tot)
+        if uren:
+            dagen[dag.isoformat()] = {
+                "model": samenvatting(dag, uren), "naief": naief(prijzen, dag),
+                "vooruit": (dag - vandaag).days, "k": (dag - bekend_tot).days,
+                "band": B.band_dag(uren, modellen, o, ctx, weer, dag, bekend_tot, residuen or {},
+                                   ensemble, schaal),
+            }
         dag += timedelta(days=1)
     return {
         "beschikbaar": bool(dagen),
         "dagen": dagen,
-        "uren_training": len(rijen),
-        "gevoeligheid": {
-            "wind_ct_per_10_kmh_bij_20_kmh": round((coefs[1] + coefs[2] * (2 * 2 + 1)) * 100, 2),
-            "zon_ct_per_100_wm2": round(coefs[3] * 100, 2),
-            "weekend_ct": round(coefs[5] * 100, 2),
-            "buurlanden_wind_ct_per_10_kmh": round(coefs[7] * 100, 2),
-            "buurlanden_zon_ct_per_100_wm2": round(coefs[8] * 100, 2),
-            "gas_ct_per_10_ct_m3": round(coefs[9] * 100, 2),
-        },
+        "opzet": naam,
+        "uren_training": n,
+        "gevoeligheid": _gevoeligheid(coefs, o),
         "gas_dagen": len(gas or {}),
-        "reden": None if dagen else (
-            "geen prijsniveau: minder dan drie dagen prijzen in de weken ervoor"
-            if all(niveau_voor(prijzen, vandaag + timedelta(days=d) - timedelta(days=t)) is None
-                   for d in range(1, 4) for t in range(0, 22))
-            else "geen weer voor de komende dagen"),
+        "reden": None if dagen else _reden_zonder_dagen(prijzen, vandaag),
     }
+
+
+def _gevoeligheid(coefs: list[float], opzet: dict | None = None) -> dict:
+    uit = {
+        "wind_ct_per_10_kmh_bij_20_kmh": round((coefs[1] + coefs[2] * (2 * 2 + 1)) * 100, 2),
+        "zon_ct_per_100_wm2": round(coefs[3] * 100, 2),
+        "weekend_ct": round(coefs[5] * 100, 2),
+        "buurlanden_wind_ct_per_10_kmh": round(coefs[7] * 100, 2),
+        "buurlanden_zon_ct_per_100_wm2": round(coefs[8] * 100, 2),
+        "gas_ct_per_10_ct_m3": round(coefs[9] * 100, 2),
+    }
+    i = 10
+    if opzet and opzet.get("ver"):
+        uit["verre_buren_wind_ct_per_10_kmh"] = round(coefs[i] * 100, 2)
+        uit["verre_buren_zon_ct_per_100_wm2"] = round(coefs[i + 1] * 100, 2)
+        i += 2
+    if opzet and opzet.get("gasniveau"):
+        uit["gasniveau_ct_per_10_ct_m3"] = round(coefs[i] * 10, 2)
+        i += 1
+    if opzet and opzet.get("vertraging"):
+        # het kenmerk is prijs x 10: de coefficient is het deel dat doorwerkt
+        uit["deel_van_gisteren"] = round(coefs[i] * 10, 3)
+        uit["deel_van_vorige_week"] = round(coefs[i + 1] * 10, 3)
+    return uit
+
+
+def _reden_zonder_dagen(prijzen: dict, vandaag: date) -> str:
+    if all(niveau_voor(prijzen, vandaag + timedelta(days=d) - timedelta(days=t)) is None
+           for d in range(1, 4) for t in range(0, 22)):
+        return "geen prijsniveau: minder dan drie dagen prijzen in de weken ervoor"
+    return "geen weer voor de komende dagen"
 
 
 def kaart(dagen: dict, backtest: dict | None, live: dict | None,
