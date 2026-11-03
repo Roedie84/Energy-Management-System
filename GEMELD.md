@@ -224,3 +224,7 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 06:51 | L-GS-039 gold scalper 'vandaag' bij resultaat per periode alleen met trades van vandaag (akkoord)
 03-11 07:51 | L-EMS-059 ems lege accu ook als tekort bij bruikbaar < 0,1 kwh, los van soc (akkoord)
 03-11 07:51 | stormchase zwakke regenkernen einde bui springt en 'volgende bui' zonder regen, regencorrectie toetsen
+03-11 08:51 | ems soc wisselt 15/16% zonder vermogen, beschikbaar en besparing vandaag springen (afvlakken of op kwh)
+03-11 08:51 | ems mini-laadblok 0,03 kwh 'manual' onder minimale hoeveelheid niet tonen of schakelen
+03-11 08:51 | ems besparing t.o.v. zonder sturing 0,89 vs eigen 1,99 vs kostprijsmodel 1,51 (omvormer-rustverbruik)
+03-11 08:51 | ems ontladen stopt op ~15-16% terwijl min_soc 10%, ~0,58 kwh blijft staan (instelling)
