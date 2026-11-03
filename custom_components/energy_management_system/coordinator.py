@@ -12365,7 +12365,8 @@ class EnergyManagementSystemCoordinator:
             return self._waarom_celbescherming(reden)
 
         if reden in (
-            "waardeplan_laden", "waardeplan_verkopen", "waardeplan_huis", "waardeplan_houden"
+            "waardeplan_laden", "waardeplan_verkopen", "waardeplan_huis", "waardeplan_houden",
+            "waardeplan_leeg",
         ):
             # v5.158.0
             return self._waarom_waardeplan()
@@ -38289,7 +38290,11 @@ class EnergyManagementSystemCoordinator:
             self.last_reason = "waardeplan_huis"
         else:
             await self._async_apply_operation(OPTION_SMART_CHARGING)
-            self.last_reason = "waardeplan_houden"
+            # v5.175.3: een lege accu bewaart niets - alleen de naam wijkt af.
+            if self._waardeplan_accu_leeg(now):
+                self.last_reason = "waardeplan_leeg"
+            else:
+                self.last_reason = "waardeplan_houden"
         self.last_waardeplan = plan
         self._update_financial_tracking(now, entries, self.last_reason, discharge_power, charge_power)
         self._update_shortfall_detection(
@@ -38297,6 +38302,17 @@ class EnergyManagementSystemCoordinator:
         )
         self._finish_decision_tick(now)
         return True
+
+    def _waardeplan_accu_leeg(self, now: datetime) -> bool:
+        """Staat de accu leeg, met dezelfde maat als de tekortmeting? (v5.175.3)"""
+        try:
+            inhoud = self.beschikbare_energie_kwh()
+            return accu_is_leeg(
+                self.accustand_procent(), inhoud,
+                self.effectieve_ondergrens_procent(now) + TEKORT_LEEG_MARGE_PROCENT,
+            )
+        except Exception:  # noqa: BLE001 - bij twijfel de gewone naam
+            return False
 
     def _waarom_waardeplan(self) -> list[str]:
         """Waarom-regels bij het waardeplan (v5.158.0)."""
@@ -49780,6 +49796,9 @@ class EnergyManagementSystemCoordinator:
 
         notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
         if not notify_service:
+            return
+        # v5.175.3: een lege accu meldt de tekortmelding al; geen moduswissel.
+        if self.last_reason == "waardeplan_leeg":
             return
 
         # v3.99.7: het vermogen alleen in een handmatige stand. In een

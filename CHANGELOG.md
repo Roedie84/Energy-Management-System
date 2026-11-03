@@ -34643,3 +34643,11 @@ Aanleiding: analysekaart EMS 03-11 18:10 (controleronde). Live nagekeken.
 Niet gedaan: de inhoud blijft op stappen van 0,1 kWh, dus de SoC-regel loopt bij kleine overschotten nog achter of voor op `accu_ac_w`; doorschuiven van het restje raakt de planning zelf.
 
 Tests: `test_v51752_status_en_plan.py` (6).
+
+## v5.175.3 — 'houden' met een lege accu heet 'Accu leeg – huis op het net'
+
+Akkoord Ruud 03-11. Gemeld: "Waarom spaart de accu nu? Leeg gaat hij toch" - stand 'bewaren (waardeplan)' bij 12 % (zwakste module op 10 %, 2,96 V) en 0,00 kWh bruikbaar.
+
+Nieuwe reden `waardeplan_leeg`: dezelfde stand (smart_charging) als `waardeplan_houden`, gekozen als `_waardeplan_accu_leeg` (dezelfde maat als de tekortmeting: `accu_is_leeg` met de effectieve ondergrens). Staat in `NACHT_BEWUST_NIET_ONTLADEN_REDENEN` net als 'houden', niet in `REDENEN_BEWUSTE_NETAFNAME`. Geen moduswisselmelding voor deze reden (wel in `mode_change_log`); de tekortmelding dekt het.
+
+Tests: `test_v51753_waardeplan_leeg.py` (4).

@@ -717,6 +717,8 @@ NACHT_BEWUST_NIET_ONTLADEN_REDENEN = frozenset(
         # v5.158.0: het waardeplan houdt bewust vast of laadt uit het net.
         "waardeplan_laden",
         "waardeplan_houden",
+        # v5.175.3: dezelfde stand bij een lege accu, alleen anders genoemd.
+        "waardeplan_leeg",
     }
 )
 
@@ -2749,6 +2751,24 @@ REASON_REGISTRY: dict[str, dict] = {
         "waarom_vraag": "Waarom gebruik je de accu nu niet?",
         "korte_naam": "waardeplan bewaren",
         "emoji": "🧮⏸️",
+    },
+    # v5.175.3 (akkoord Ruud 03-11): 'houden' met een lege accu. Gemeld:
+    # "Waarom spaart de accu nu? Leeg gaat hij toch" - er was niets meer te
+    # bewaren. Zelfde stand en sturing als 'waardeplan_houden'.
+    "waardeplan_leeg": {
+        "mode": OPTION_SMART_CHARGING,
+        "titel": "Accu leeg – huis op het net",
+        "uitleg": (
+            "Er zit geen bruikbare energie meer in de accu: de zwakste "
+            "module staat op de ondergrens. Het huis draait op het net tot "
+            "er weer geladen wordt; de zon mag de accu wel vullen."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "leeg – huis op het net",
+        "waarom_vraag": "Waarom levert de accu niets?",
+        "korte_naam": "accu leeg",
+        "emoji": "🪫",
     },
     "emergency_low_battery": {
         "mode": OPTION_MANUAL,
