@@ -2012,3 +2012,26 @@ datumtijd,kpi,waarde,n,opmerking
 2026-11-03 04:20,filtergebruik_pct,0,1,
 2026-11-03 04:20,automation_traces_fout,0,5,5 failed_conditions (nachtvenster)
 2026-11-03 04:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.3-0.8
+2026-11-03 08:20,pm25_gem,0.90,48,5-min statistiek 04:20-08:20
+2026-11-03 08:20,pm25_mediaan,0.90,48,
+2026-11-03 08:20,pm25_p95,1.33,48,
+2026-11-03 08:20,pm25_max,1.76,48,momentaan 08:00-08:10; hoogste 5-min gem 1.38
+2026-11-03 08:20,pm25_uren_gt15,0.00,48,
+2026-11-03 08:20,pm25_uren_gt25,0.00,48,
+2026-11-03 08:20,stand_mid_min,122,25,gem pm25 0.70
+2026-11-03 08:20,stand_auto_min,112,23,gem pm25 1.11
+2026-11-03 08:20,stand_unavailable_min,6.3,0,5 HA-herstarts
+2026-11-03 08:20,pm25_gem_aanwezig,1.03,17,blok met occupancy; 39 min aanwezig
+2026-11-03 08:20,pm25_gem_afwezig,0.82,31,tv uit
+2026-11-03 08:20,pm25_dag_tm_nu,0.66,100,gewogen 5-min 00:00-08:20
+2026-11-03 08:20,co2_gem,1029,48,5-min; ramen dicht
+2026-11-03 08:20,co2_max,1128,48,momentaan 08:00-08:05; min 954
+2026-11-03 08:20,co2_uren_gt1200,0.00,48,
+2026-11-03 08:20,vocht_max,65.9,48,min 64.8; 17.3-17.5 C
+2026-11-03 08:20,schimmel_indicator,84,1,83-85; buiten 99% / 9.5 C
+2026-11-03 08:20,ha_herstarts,5,1,"06:07, 07:22, 07:30, 07:35, 08:17"
+2026-11-03 08:20,lokaal_mislukt,68,188433,geen nieuwe; uitval 0; 264 verbindingen
+2026-11-03 08:20,sturen_bevestigd,429,430,7/7 nieuw
+2026-11-03 08:20,filtergebruik_pct,0,1,
+2026-11-03 08:20,automation_traces_fout,0,5,4 finished 1 running bij uitlezen; oudere weg door herstart 08:17
+2026-11-03 08:20,apparaat_pm25_bereik,2,1,apparaat vast op 2 bij Ultimate 0.4-1.8
