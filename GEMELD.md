@@ -230,3 +230,16 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 08:51 | ems ontladen stopt op ~15-16% terwijl min_soc 10%, ~0,58 kwh blijft staan (instelling)
 03-11 11:51 | ems monte carlo/tekort rekent met goedkoopste blok dat niet in waardeplan staat (mc 0->100%, cockpit blok 10:15)
 03-11 11:51 | L-EMS-060 ems bewolking_vandaag overleeft herstart niet (notify in noteer_bewolking)
+03-11 12:52 | ems optie presence_motion_sensor_entities zolder_motion_detected -> zolder_beweging
+03-11 12:52 | recorder-exclude gold scalper signaal, mand, vermogensvloer, kosten (rijen zonder wijziging)
+03-11 12:52 | labels veiligheid 2 beveiliging-automations (mislukte login, oven/vaatwasser niemand thuis)
+03-11 12:52 | automation-categorieën aanmaken (0 op 55)
+03-11 12:52 | hernoemen automation.luchtreiniger_mid_bij_koken -> luchtreiniger_auto_bij_koken_en_vieze_lucht
+03-11 12:52 | hernoemen automation.lamp_aan_looppad_zonsondergang -> lamp_looppad_aan_uit
+03-11 12:52 | hernoemen sensor.hw_p1_vermogen_100w -> hw_p1_vermogen_regel
+03-11 12:52 | hernoemen switch.*_cloud_connection -> *_cloud_verbinding (quooker, p1, watermeter)
+03-11 12:52 | hernoemen update.*_update_2/_3 zonder cijfer (ems, gold scalper, stormchase)
+03-11 12:52 | themas dubbel tablet-glas themes_tablet_glas.yaml weg + ongebruikte smarti, dark teal, mushroom
+03-11 12:52 | hacs neerslag app verwijderen
+03-11 12:52 | lege labels verwijderen (brandstof, adguard, batterij sim, mijn tuin)
+03-11 12:52 | verborgen yaml-dashboard energy-management-system uit configuration.yaml
