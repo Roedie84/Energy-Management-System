@@ -648,11 +648,11 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 
 ## 03-11 08:25 (ronde 87)
 - PM2.5 04:20-08:20: gem 0,90, mediaan 0,90, P95 1,33, max 1,76 (08:00-08:10) (n=48); 0 uur > 15. Dag t/m nu ~0,66; 7d (27-10/02-11) 2,54 (nulmeting okt 2025 9,1).
-- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit. Nacht 0,5-0,8; ochtendactiviteit vanaf 06:08, stijging naar 1,0-1,4 vanaf ~06:40. VOC-index 41 → 165 (vanaf 06:50).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit. Nacht 0,5-0,8; ochtendactiviteit vanaf 06:08, stijging naar 1,0-1,4 vanaf ~06:20. VOC-index 41 → 165 (vanaf 06:10).
 - Stand: mid 122 min (gem 0,70, n=25), auto 112 min (gem 1,11, n=23), 6,3 min unavailable. Aanwezig 1,03 (n=17) vs afwezig 0,82 (n=31): bron (mensen), geen standeffect.
 - Op auto na vertrek 07:59-08:14 geen daling (1,23 → 1,35 → 1,25): 3e keer in de wachttijd (n=3), op dit lage niveau klein; mid daarna te kort voor een halvering.
 - Werking: mid 3x precies 15 min na laatste aanwezigheid (06:23:43 → 06:38:43, 06:55:23 → 07:10:23, 07:58:59 → 08:13:59); auto direct 06:44:11, ~1,5 min later 06:10:09 en 07:13:23. 5 HA-herstarts (06:07, 07:22, 07:30, 07:35, 08:17), stand steeds ~1,3 min unavailable, geen extra wissels. 5 traces zonder fout (1 liep nog; oudere weg door herstart 08:17). Lokaal 68 mislukt op 188.433 (geen nieuwe), uitval 0, 264 verbindingen, sturen 429/430 (7/7 nieuw), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,4-1,8.
-- CO₂ 1.029 gem (max 1.128, min 954), 0 u > 1.200, ramen dicht; loopt sinds 07:00 op met aanwezigheid. Vocht 64,8-65,9% bij 17,3-17,5 °C (verwarming uit), schimmelindicator 83-85, buiten 99% / 9,5 °C. Luchten en verwarmen; luchtreiniger lost dit niet op.
+- CO₂ 1.029 gem (max 1.128, min 954), 0 u > 1.200, ramen dicht; loopt sinds ~07:15 op met aanwezigheid. Vocht 64,8-65,9% bij 17,3-17,5 °C (verwarming uit), schimmelindicator 83-85, buiten 99% / 9,5 °C. Luchten en verwarmen; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 16). H2 auto bij koken 5x: 61, 22,6, 7,2, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=22): reiniger aan houdt het laag; wachttijd op auto zonder daling nu n=3, op achtergrondniveau zonder belang. Geen toets voor H1/H2.
 
 laatste ronde: 03-11 08:25, gemeten t/m 08:20
