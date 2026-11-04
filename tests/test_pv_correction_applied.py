@@ -41,7 +41,9 @@ def test_the_hourly_ratio_is_applied_to_the_forecast():
     start = bron.index("hourly_ratio = self.learned_pv_hourly_ratio")
     blok = bron[start : start + 400]
 
-    assert "segment_kwh *= hourly_ratio" in blok
+    # v5.186.0: de factor komt uit `_zon_bias_factor`, ook voor vandaag.
+    assert "return hourly_ratio" in blok
+    assert "segment_kwh *= self._zon_bias_factor(entry_start, daily_bias_percent)" in bron
 
 
 def test_the_daily_bias_is_the_fallback():
@@ -50,8 +52,8 @@ def test_the_daily_bias_is_the_fallback():
     start = bron.index("hourly_ratio = self.learned_pv_hourly_ratio")
     blok = bron[start : start + 400]
 
-    assert "elif daily_bias_percent is not None" in blok
-    assert "segment_kwh *= 1 + daily_bias_percent / 100" in blok
+    assert "if daily_bias_percent is not None" in blok
+    assert "return 1 + daily_bias_percent / 100" in blok
 
 
 def test_todays_remaining_hours_are_rescaled():
@@ -61,7 +63,8 @@ def test_todays_remaining_hours_are_rescaled():
 
     assert "remaining_correction_ratio" in bron
     # v5.96: samen met de realisatie (de voorzichtigste van de twee).
-    assert "remaining_correction_ratio if remaining_correction_ratio is not None else 1.0" in bron
+    # v5.186.0 (punt 36): die min-regel alleen nog voor "veilig".
+    assert "delen = [rest if rest is not None else 1.0]" in bron
 
 
 # --- de status is zichtbaar ------------------------------------------

@@ -70,6 +70,20 @@ from . import waardeplan as waardeplan_mod
 from . import salderingspositie as salderingspositie_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .nilm_glue import NilmMixin
+from .const import (  # v5.186.0 (spoor C)
+    PV_BEGRENSD_ONDER_PROCENT,
+    PV_GAT_ZONHOOGTE_GRADEN,
+    PV_UURBIAS_MIN_GEMETEN,
+    UURPROFIEL_MIN_GEMETEN_UREN,
+    WITGOED_FRACTIE_MAX,
+    WITGOED_ZWAAR_W,
+    ZON_RECENT_MAX,
+    ZON_RECENT_MIN,
+    ZON_RECENT_MIN_KWH,
+    ZON_RECENT_VERVAL_UREN,
+    ZON_REST_MAX,
+    ZON_REST_MIN,
+)
 from .klimaat import rolluikstand_procent, rolluiklabel  # noqa: F401 - re-export
 from .klimaat import KlimaatMixin
 from .legacy_sturing import LegacySturingMixin
@@ -3009,6 +3023,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
 
         # --- verbruik ---
         self.hourly_consumption_profile = {}
+        self.witgoed_uuraandeel = {}  # v5.186.0: in de pas met het uurprofiel
         self.night_consumption_history = []
         self.temp_consumption_history = []
         self.temp_consumption_prediction_error_history = []
@@ -11363,6 +11378,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             # v5.184.4: met een geleerd profiel de rest zoals het apparaat hem
             # verbruikt (opwarmen vooraan), anders gelijk over de resttijd.
             prof = (self.witgoed_profielen or {}).get(naam)
+            if prof and (eind is not None or planning.get("duur_minuten")):
+                # v5.186.0 (punt 43): het profiel naar de duur van DEZE cyclus
+                # (verstreken + rest tot de eindtijd van Home Connect, of de
+                # duur van het programma) - de eindtijd werd met een profiel genegeerd.
+                prof = witgoedprofiel.rek(prof, verstreken_min + rest_min if eind is not None else duur_geleerd)
             rest_prof = witgoedprofiel.rest_fracties(prof, verstreken_min) if prof else []
             if rest_prof:
                 totaal += witgoedprofiel.kwh_in_periode(rest_kwh, nu, rest_prof, start, einde)
@@ -11387,9 +11407,15 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             and self._vaste_post_tot is not None
             and nu < self._vaste_post_tot
         ):
-            totaal += LOPEND_APPARAAT_VASTE_POST_KWH[
-                self._vaste_post_bron
-            ] * _overlap(nu, self._vaste_post_tot)
+            # v5.186.0 (punt 31): alleen wat boven het koken uitkomt dat het
+            # uurprofiel (gemiddelde, v5.74) al voor dit uur meeneemt. Gemeten
+            # over het hele postuur, zodat de post binnen het uur stil staat.
+            post = LOPEND_APPARAAT_VASTE_POST_KWH[self._vaste_post_bron]
+            al = self._activiteit_in_profiel_kwh(
+                self._vaste_post_tot - timedelta(hours=LOPEND_APPARAAT_VASTE_POST_UREN),
+                self._vaste_post_tot,
+            )
+            totaal += max(0.0, post - al) * _overlap(nu, self._vaste_post_tot)
         return totaal
 
     def geplande_witgoed_kwh_in_periode(
@@ -11398,9 +11424,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         """Hoeveel gepland witgoedverbruik valt er in deze periode?
         (v1.61.0)
 
-        Hierop leunen de reserve, de energiebrug en de verkooptoets: die
-        rekenen met het geleerde uurprofiel, en daar zit een geplande
-        wasbeurt niet in.
+        Hierop leunen de reserve, de energiebrug en de verkooptoets.
+
+        v5.186.0 (punt 31): het uurprofiel is sinds v5.74 het gemiddelde van
+        het hele huis en bevat dus ook het gemiddelde witgoed. Een gepland of
+        lopend apparaat telt daarom met zijn eigen cyclus, en zijn aandeel in
+        het profiel gaat eraf - zie `_basis_uur_kw`.
 
         v5.72.1: de planning hoort bij NU, niet bij het begin van de periode.
         De vaatwasser geeft een uitgestelde start in seconden VANAF NU
@@ -20439,6 +20468,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         live_power_w = self._read_corrected_consumption_power()
         if live_power_w is None:
             return
+        now = now or dt_util.now()
         # v5.147.0 (akkoord Ruud 29-10): het gemeten vermogen van vaatwasser
         # en wasmachine telt niet mee in de live verbruikscorrectie.
         #
@@ -20451,23 +20481,43 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # ~0,6 kW). Een wascyclus is geen hoger verbruiksniveau van het
         # huis; de cyclus zelf telt al één keer mee via `_gepland_witgoed`.
         live_power_w = max(0.0, live_power_w - self._witgoed_vermogen_w())
+        # v5.186.0 (punt 35): de airco telt als "zeker" in de airco-extra's
+        # (`airco_ritme.gebruik_kwh`); dan niet nog eens via deze correctie.
+        if self._airco_zeker_meegeteld(now):
+            live_power_w = max(0.0, live_power_w - (self._airco_vermogen_w() or 0.0))
         self._recent_consumption_readings_kw.append(live_power_w / 1000)
         # v5.14.2: een venster in TIJD - zie `_correctie_monsters`.
-        self._recent_consumption_readings_kw = self._recent_consumption_readings_kw[
-            -self._correctie_monsters():
+        # v5.186.0: met een tijdstempel per meting, zodat een gemiste of
+        # trage ronde het venster niet oprekt.
+        tijden = getattr(self, "_recent_consumption_tijden", None)
+        if tijden is None or len(tijden) != len(self._recent_consumption_readings_kw) - 1:
+            tijden = [now] * (len(self._recent_consumption_readings_kw) - 1)
+        tijden.append(now)
+        grens = now - timedelta(minutes=CONSUMPTION_CORRECTION_WINDOW_MINUTES)
+        houden = [i for i, t in enumerate(tijden) if t >= grens][-self._correctie_monsters():]
+        self._recent_consumption_readings_kw = [
+            self._recent_consumption_readings_kw[i] for i in houden
         ]
+        self._recent_consumption_tijden = [tijden[i] for i in houden]
 
     def _witgoed_vermogen_w(self) -> float:
         """Wat vaatwasser en wasmachine nu samen trekken, gemeten (v5.147.0)."""
-        totaal = 0.0
-        for conf in (CONF_DISHWASHER_POWER_SENSOR, CONF_WASHING_MACHINE_POWER_SENSOR):
+        return sum(self._witgoed_vermogen_per_apparaat_w().values())
+
+    def _witgoed_vermogen_per_apparaat_w(self) -> dict[str, float]:
+        """Per apparaat met een vermogenssensor wat het nu trekt (v5.186.0).
+        Een apparaat zonder lezing telt als 0 W."""
+        uit: dict[str, float] = {}
+        for naam, conf in (
+            ("vaatwasser", CONF_DISHWASHER_POWER_SENSOR),
+            ("wasmachine", CONF_WASHING_MACHINE_POWER_SENSOR),
+        ):
             entity_id = self.config.get(conf)
             if not entity_id:
                 continue
             w = self._read_sensor_float(entity_id)
-            if w is not None and w > 0:
-                totaal += w
-        return totaal
+            uit[naam] = w if w is not None and w > 0 else 0.0
+        return uit
 
     def _update_quooker_tracking(self, now: datetime) -> None:
         """Track how long the Quooker's power draw has been continuously
@@ -20516,21 +20566,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         but a real load worth reacting to immediately on the nights it
         does run.
         """
-        dishwasher_entity = self.config.get(CONF_DISHWASHER_POWER_SENSOR)
-        if dishwasher_entity:
-            power_w = self._read_sensor_float(dishwasher_entity)
-            if power_w is not None and power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
-                return "vaatwasser"
-
-        washing_machine_entity = self.config.get(CONF_WASHING_MACHINE_POWER_SENSOR)
-        if washing_machine_entity:
-            power_w = self._read_sensor_float(washing_machine_entity)
-            if power_w is not None and power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
-                return "wasmachine"
-
-        if self._is_quooker_sustained_active(now):
-            return "quooker"
-
+        # v5.186.0 (punt 42): de airco eerst. Een vaatwasser in de droogfase
+        # (20-30 W) telde als zwaar verbruik en zette de correctie voor een
+        # draaiende airco op 1,0. Witgoed telt hier pas vanaf WITGOED_ZWAAR_W.
         # v5.5: via `_airco_draait`, want in ontvochtigingsstand levert
         # deze unit helemaal geen `hvac_action`.
         for entity_sleutel, bron in (
@@ -20539,6 +20577,18 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         ):
             if self._airco_draait(self.config.get(entity_sleutel)):
                 return bron
+
+        for conf, bron in (
+            (CONF_DISHWASHER_POWER_SENSOR, "vaatwasser"),
+            (CONF_WASHING_MACHINE_POWER_SENSOR, "wasmachine"),
+        ):
+            entity = self.config.get(conf)
+            power_w = self._read_sensor_float(entity) if entity else None
+            if power_w is not None and power_w >= WITGOED_ZWAAR_W:
+                return bron
+
+        if self._is_quooker_sustained_active(now):
+            return "quooker"
 
         oven_entity = self.config.get(CONF_OVEN_STATE_SENSOR)
         if oven_entity:
@@ -20622,7 +20672,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         return 1.0 + (ratio - 1.0) * max(0.0, gemiddeld_gewicht)
 
 
-    def _get_smoothed_consumption_correction_ratio(self, current_hour: int) -> float:
+    def _get_smoothed_consumption_correction_ratio(self, current_hour: int | None = None) -> float:
         """How much higher (if at all) recent live consumption has been
         running compared to the learned average for this hour - based
         on the *median* of a short rolling window (see
@@ -20662,7 +20712,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if not self._recent_consumption_readings_kw:
             return 1.0
 
-        current_hour_learned_kw = self.learned_hourly_avg_kw(current_hour)
+        # v5.186.0 (punt 32): tegen het uur van NU (tenzij expliciet gevraagd),
+        # met hetzelfde profiel als de basis (dagtype) en zonder het gemeten
+        # witgoed - dat telt in de live meting ook niet mee (v5.147.0).
+        nu = dt_util.now()
+        uur = nu.hour if current_hour is None else current_hour
+        current_hour_learned_kw = self._profiel_zonder_witgoed_kw(uur, nu)
         if not current_hour_learned_kw or current_hour_learned_kw <= 0:
             return 1.0
 
@@ -20688,7 +20743,13 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         ):
             return 1.0
 
-        if self.last_heavy_load_source in SUSTAINED_HEAVY_LOAD_SOURCES:
+        # v5.186.0 (punt 35): telt de airco al als zeker in de airco-extra's,
+        # dan zit hij niet in de metingen (zie `_track_recent_consumption_reading`)
+        # en geldt de gewone mediaan.
+        direct = self.last_heavy_load_source in SUSTAINED_HEAVY_LOAD_SOURCES and not (
+            self.last_heavy_load_source == "airco" and self._airco_zeker_meegeteld(nu)
+        )
+        if direct:
             # v0.63.78, reported: "Basisverbruik ... schiet tussen ca.
             # 16:00 en 17:00 omhoog door koken etc." - a known heavy
             # consumer is confirmed active right now (see
@@ -21214,6 +21275,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             if gap_minutes > MAX_HOUR_TRACKING_GAP_MINUTES:
                 self._hour_energy_kwh = 0.0
                 self._hour_duration_hours = 0.0
+                self._hour_witgoed_kwh = {}
                 self._current_tracked_hour = current_hour
                 self._hour_last_sample = now
                 return
@@ -21229,8 +21291,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 elapsed_to_boundary = max(
                     (hour_boundary - self._hour_last_sample).total_seconds() / 3600, 0
                 )
-                self._hour_energy_kwh += (power_w / 1000) * elapsed_to_boundary
-                self._hour_duration_hours += elapsed_to_boundary
+                self._tel_uurenergie(power_w, elapsed_to_boundary)
 
             self._finalize_hourly_bucket(hour_boundary - timedelta(minutes=1))
             self._current_tracked_hour = current_hour
@@ -21238,24 +21299,43 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             elapsed_in_new_hour = max(
                 (now - hour_boundary).total_seconds() / 3600, 0
             )
+            # _finalize_hourly_bucket zette de tellers al op nul.
             if power_w is not None and elapsed_in_new_hour > 0:
-                self._hour_energy_kwh = (power_w / 1000) * elapsed_in_new_hour
-                self._hour_duration_hours = elapsed_in_new_hour
-            else:
-                self._hour_energy_kwh = 0.0
-                self._hour_duration_hours = 0.0
+                self._tel_uurenergie(power_w, elapsed_in_new_hour)
             self._hour_last_sample = now
             return
 
         elapsed_hours = max((now - self._hour_last_sample).total_seconds() / 3600, 0)
         if power_w is not None and elapsed_hours > 0:
-            self._hour_energy_kwh += (power_w / 1000) * elapsed_hours
-            self._hour_duration_hours += elapsed_hours
+            self._tel_uurenergie(power_w, elapsed_hours)
         self._hour_last_sample = now
 
+    def _tel_uurenergie(self, power_w: float, uren: float) -> None:
+        """Telt een stuk meting bij het lopende uur, en apart wat vaatwasser en
+        wasmachine daarin trokken (v5.186.0, punt 31: het witgoedaandeel van
+        het uurprofiel, zie `_witgoed_fractie`)."""
+        if uren <= 0:
+            return
+        self._hour_energy_kwh += (power_w / 1000) * uren
+        self._hour_duration_hours += uren
+        per_apparaat = getattr(self, "_hour_witgoed_kwh", None)
+        if per_apparaat is None:
+            per_apparaat = self._hour_witgoed_kwh = {}
+        for naam, w in self._witgoed_vermogen_per_apparaat_w().items():
+            # v5.186.0: nooit meer dan het huis zelf (sensoren uit de pas)
+            w = min(max(0.0, w), max(0.0, power_w))
+            per_apparaat[naam] = per_apparaat.get(naam, 0.0) + w / 1000 * uren
+
     def _finalize_hourly_bucket(self, moment: datetime | None = None) -> None:
-        if self._current_tracked_hour is not None and self._hour_duration_hours > 0:
+        # v5.186.0 (punt 37): een uur telt pas als er minstens
+        # UURPROFIEL_MIN_GEMETEN_UREN van gemeten is. Na een herstart om 12:40
+        # telde het stukje 12:40-13:00 als heel uur 12 in het profiel.
+        if (
+            self._current_tracked_hour is not None
+            and self._hour_duration_hours >= UURPROFIEL_MIN_GEMETEN_UREN
+        ):
             avg_power_kw = self._hour_energy_kwh / self._hour_duration_hours
+            self._leg_witgoedaandeel_vast(self._current_tracked_hour)
             bucket = self.hourly_consumption_profile.setdefault(
                 self._current_tracked_hour, []
             )
@@ -21283,6 +21363,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
 
         self._hour_energy_kwh = 0.0
         self._hour_duration_hours = 0.0
+        self._hour_witgoed_kwh = {}
 
     def learned_hourly_avg_kw(self, hour: int) -> float | None:
         """Learned power (kW) for a given hour-of-day (0-23), as the
@@ -21354,6 +21435,129 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # v5.74: dezelfde maat als `learned_hourly_avg_kw`.
         return statistics.mean(previous_values)
 
+    # --- v5.186.0 (punt 31): het witgoedaandeel van het uurprofiel ---------
+    #
+    # Sinds v5.74 is het uurprofiel het GEMIDDELDE van het hele huisverbruik,
+    # vaatwasser en wasmachine inbegrepen. Gepland en lopend witgoed kwam daar
+    # nog eens bovenop: op een dag met een geplande vaatwasser telde zijn
+    # gemiddelde aandeel dubbel. Het profiel blijft het totaal (alle andere
+    # lezers ongewijzigd); per uur wordt apart bijgehouden wat het gemeten
+    # witgoed daarin was. Is een apparaat gepland of loopt het, dan gaat zijn
+    # aandeel eraf en telt de cyclus zelf. Anders blijft het aandeel staan: een
+    # beurt die nergens gepland staat, komt gemiddeld ook.
+    #
+    # Overgang: het aandeel wordt in de pas met het profiel opgebouwd; de
+    # oudere dagen in het profiel hebben (nog) geen aandeel en tellen als 0 -
+    # het oude gedrag - tot ze er na LEARNING_HISTORY_DAYS uit zijn.
+
+    #: "apparaat-uur" -> gemeten witgoedvermogen (kW) per afgesloten uur
+    witgoed_uuraandeel: dict | None = None
+
+    def _witgoed_apparaten(self) -> list[str]:
+        """De apparaten met een vermogenssensor (v5.186.0)."""
+        return [
+            naam for naam, conf in (
+                ("vaatwasser", CONF_DISHWASHER_POWER_SENSOR),
+                ("wasmachine", CONF_WASHING_MACHINE_POWER_SENSOR),
+            ) if self.config.get(conf)
+        ]
+
+    def _leg_witgoedaandeel_vast(self, uur: int) -> None:
+        """Het witgoed van het afgesloten uur, in de pas met het uurprofiel."""
+        if self.witgoed_uuraandeel is None:
+            self.witgoed_uuraandeel = {}
+        duur = self._hour_duration_hours
+        per = getattr(self, "_hour_witgoed_kwh", None) or {}
+        for naam in self._witgoed_apparaten():
+            sleutel = f"{naam}-{uur}"
+            reeks = self.witgoed_uuraandeel.setdefault(sleutel, [])
+            reeks.append(round(per.get(naam, 0.0) / duur, 4) if duur > 0 else 0.0)
+            self.witgoed_uuraandeel[sleutel] = reeks[-LEARNING_HISTORY_DAYS:]
+
+    def _witgoed_fractie(self, naam: str, uur: int) -> float:
+        """Welk deel van het uurprofiel van `uur` dit apparaat was (v5.186.0).
+
+        Over de dagen waarvan beide reeksen een waarde hebben (de laatste k);
+        zonder aandeel 0 - dan blijft het profiel zoals het was.
+        """
+        reeks = (self.witgoed_uuraandeel or {}).get(f"{naam}-{uur}") or []
+        totaal = (self.hourly_consumption_profile or {}).get(uur) or []
+        k = min(len(reeks), len(totaal))
+        if k <= 0:
+            return 0.0
+        noemer = sum(totaal[-k:])
+        if noemer <= 0:
+            return 0.0
+        return min(WITGOED_FRACTIE_MAX, max(0.0, sum(reeks[-k:]) / noemer))
+
+    def _bekend_witgoed(self) -> frozenset:
+        """De apparaten die gepland staan of nu lopen (v5.186.0) - die tellen
+        met hun eigen cyclus, niet met hun aandeel in het profiel. Per ronde."""
+        ronde = getattr(self, "_forecast_cache_ronde", None)
+        bewaard = getattr(self, "_bekend_witgoed_cache", None)
+        if ronde is not None and bewaard is not None and bewaard[0] == ronde:
+            return bewaard[1]
+        namen = set()
+        try:
+            for regel in self.get_planned_appliance_load().get("apparaten", []):
+                if regel.get("apparaat") and float(regel.get("kwh") or 0.0) > 0:
+                    namen.add(regel["apparaat"])
+        except Exception:  # noqa: BLE001 - zonder planning het oude gedrag
+            _LOGGER.debug("Witgoedplanning niet leesbaar", exc_info=True)
+        for naam, staat, gestart in (
+            ("vaatwasser", self._dishwasher_state, self._dishwasher_cycle_started_at),
+            ("wasmachine", self._washing_machine_state, self._washing_machine_cycle_started_at),
+        ):
+            if staat == "actief" and gestart is not None:
+                namen.add(naam)
+        uit = frozenset(namen)
+        self._bekend_witgoed_cache = (ronde, uit)
+        return uit
+
+    def _basis_uur_kw(self, uur: int, moment: datetime) -> float | None:
+        """Het uurprofiel voor een energiesom, zonder het aandeel van witgoed
+        dat apart (gepland of lopend) meetelt (v5.186.0, punt 31). Verder dan
+        APPLIANCE_PLAN_MAX_HOURS vooruit blijft het aandeel staan."""
+        kw = self.verbruik_uur_kw(uur, moment)
+        if kw is None:
+            return None
+        bekend = self._bekend_witgoed()
+        if not bekend or moment >= dt_util.now() + timedelta(hours=APPLIANCE_PLAN_MAX_HOURS):
+            return kw
+        fractie = sum(self._witgoed_fractie(naam, uur) for naam in bekend)
+        return kw * (1.0 - min(WITGOED_FRACTIE_MAX, fractie))
+
+    def _profiel_zonder_witgoed_kw(self, uur: int, moment: datetime) -> float | None:
+        """Het uurprofiel zonder ALLE gemeten witgoed (v5.186.0) - de maat voor
+        de live correctie, die het witgoedvermogen ook niet meetelt (v5.147.0)."""
+        kw = self.verbruik_uur_kw(uur, moment)
+        if kw is None:
+            return None
+        fractie = sum(self._witgoed_fractie(naam, uur) for naam in self._witgoed_apparaten())
+        return kw * (1.0 - min(WITGOED_FRACTIE_MAX, fractie))
+
+    def _activiteit_in_profiel_kwh(self, van: datetime, tot: datetime) -> float:
+        """Wat het uurprofiel in [van, tot) boven de basislast heeft (v5.186.0).
+
+        Voor de vaste post van oven, kookplaat en Quooker: koken zit (zonder
+        eigen vermogenssensor) gewoon in het profiel. De vaste post telt alleen
+        voor zover hij daarboven uitkomt. Basislast = het laagste uur van het
+        profiel. Zonder volledig profiel 0 (de vaste post telt dan helemaal).
+        """
+        waarden = [self._profiel_zonder_witgoed_kw(u, van) for u in range(24)]
+        if any(w is None for w in waarden):
+            return 0.0
+        basis = min(waarden)
+        totaal = 0.0
+        cursor = van
+        while cursor < tot:
+            grens = cursor.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            eind = min(grens, tot)
+            kw = self._profiel_zonder_witgoed_kw(cursor.hour, cursor) or 0.0
+            totaal += max(0.0, kw - basis) * (eind - cursor).total_seconds() / 3600
+            cursor = eind
+        return totaal
+
     def _vacation_adjusted_kwh(self, kwh: float) -> float:
         """Scale down an estimated consumption amount while vacation mode
         is on - see the 'Vacation consumption reduction (%)' option.
@@ -21387,6 +21591,23 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             yield
         finally:
             self._correctie_budget = None
+
+    @contextmanager
+    def _eigen_correctiebudget(self):
+        """Een eigen budget voor de reserve, ook binnen een plan (v5.186.0, punt 33).
+
+        De reserve wordt per ronde bewaard en door de sturing gelezen. Liep de
+        eerste berekening binnen het waardeplan, dan had het plan het gedeelde
+        budget al (deels) opgemaakt en kreeg de reserve minder correctie dan
+        buiten het plan - de reserve hing af van wie hem het eerst vroeg.
+        """
+        bewaard = getattr(self, "_correctie_budget", None)
+        self._correctie_budget = None
+        try:
+            with self._gedeeld_correctiebudget():
+                yield
+        finally:
+            self._correctie_budget = bewaard
 
     def _correctie_uit_budget(self, extra_kwh: float) -> float:
         """Extra verbruik door de live correctie, binnen het gedeelde budget
@@ -21455,14 +21676,18 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             segment_end = min(hour_end, end)
             fraction_hours = (segment_end - cursor).total_seconds() / 3600
 
-            avg_kw = self.verbruik_uur_kw(cursor.hour, cursor)
+            # v5.186.0 (punt 31): zonder het aandeel van apart getelde witgoed.
+            avg_kw = self._basis_uur_kw(cursor.hour, cursor)
             if avg_kw is None:
                 return None
 
             total_kwh += avg_kw * fraction_hours
             cursor = segment_end
 
-        correction_ratio = self._get_smoothed_consumption_correction_ratio(start.hour)
+        # v5.186.0 (punt 32): de verhouding van NU, niet van het uur van `start`.
+        correction_ratio = self._get_smoothed_consumption_correction_ratio(
+            dt_util.now().hour
+        )
         if correction_ratio != 1.0:
             # v1.68.0: de live correctie geldt alleen voor de KOMENDE
             # UREN, niet voor de hele horizon.
@@ -21518,6 +21743,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # maar een geplande wasbeurt draait even hard tijdens de
         # vakantie - en als je weg bent staat er ook niets gepland.
         gepland = self.geplande_witgoed_kwh_in_periode(start, end)
+        # v5.186.0 (punt 31): en het lopende witgoed, net als de wandeling -
+        # het profiel neemt het niet meer mee zodra het apart telt.
+        gepland += self.lopend_witgoed_kwh_in_periode(start, end)
         return self._vacation_adjusted_kwh(total_kwh) + gepland
 
     # -- Solcast hourly PV production forecast -----------------------------
@@ -21593,7 +21821,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 lo, hi = item.get("pv_estimate10"), item.get("pv_estimate90")
                 if lo is not None and hi is not None:
                     try:
-                        band[period_start] = (float(lo), float(hi))
+                        band.setdefault(period_start, (float(lo), float(hi)))  # v5.186.0
                     except (TypeError, ValueError):
                         pass
 
@@ -21601,6 +21829,13 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if not entries:
             return []
 
+        # v5.186.0 (punt 38): één waarde per halfuur. Een gebufferde
+        # voorspelling van gisteren voor "morgen" draagt de halfuren van
+        # vandaag; staat de sensor van vandaag er ook, dan wint die (eerst gelezen).
+        uniek: dict = {}
+        for begin, kw in entries:
+            uniek.setdefault(begin, kw)
+        entries = list(uniek.items())
         entries.sort(key=lambda e: e[0])
 
         # Derive each interval's end from the next entry's start (assume
@@ -21721,7 +21956,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if sum_today_remaining <= 0.01:
             return None
 
-        return remaining_value / sum_today_remaining
+        # v5.186.0: begrensd. Een teller die bij een bijna lege rest (eind van
+        # de middag) of na een herstart uit de pas loopt, gaf een factor 3 tot 9.
+        return max(ZON_REST_MIN, min(ZON_REST_MAX, remaining_value / sum_today_remaining))
 
     _pv_band_kw_per_start: dict | None = None
 
@@ -21760,6 +21997,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 band = self._pv_band_per_interval()
         nu = dt_util.now()
         vast = {
+            "veilig": veilig,
             "positie": positie,
             "band": band,
             "bias": self.zonbias_percent(),
@@ -21767,6 +22005,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             "rest": self._get_pv_remaining_correction_ratio(nu, pv_entries),
             # v5.96: zon van vandaag tot nu tegen de verwachting.
             "realisatie": self._zon_realisatie(nu, pv_entries),
+            # v5.186.0 (punt 36): de laatste uren tegen de gecorrigeerde verwachting.
+            "recent": self._zon_recent(nu),
         }
         self._pv_vast_cache = (sleutel, vast)
         return vast
@@ -21840,7 +22080,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
 
         Returns 0.0 if no PV forecast sensor is configured or no data
         covers the period (i.e. "assume no solar" - the previous, more
-        conservative behaviour).
+        conservative behaviour). v5.186.0 (punt 38): het waardeplan vraagt
+        eerst `_pv_gat_in`; overdag zonder voorspelling knipt het daar.
         """
         if end <= start:
             return 0.0
@@ -21877,7 +22118,6 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # Deze fout raakt élke schatting vooruit: ook de reserve en de
         # verkooptoets lazen te veel zon.
         nu = vast["nu"]
-        remaining_correction_ratio = vast["rest"]
         today = nu.date()
 
         total_kwh = 0.0
@@ -21905,28 +22145,129 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             # De live teller gaat over wat er van vandaag NOG komt. Een
             # uur van vandaag dat al voorbij is, zit niet in die teller
             # en hoort de verhouding dus niet te krijgen.
-            realisatie = vast.get("realisatie")
-            if (
-                entry_start.date() == today
-                and entry_end > nu
-                and (remaining_correction_ratio is not None or realisatie is not None)
-            ):
-                # v5.96: de voorzichtigste van de Solcast-teller en wat er
-                # vandaag tot nu werkelijk opgewekt is.
-                segment_kwh *= min(
-                    remaining_correction_ratio if remaining_correction_ratio is not None else 1.0,
-                    realisatie if realisatie is not None else 1.0,
+            if entry_start.date() == today and entry_end > nu:
+                segment_kwh *= self._zon_factor_vandaag(
+                    vast, entry_start, daily_bias_percent, veilig and positie is not None and entry_start in band
                 )
             else:
-                hourly_ratio = self.learned_pv_hourly_ratio(self._utc_uur(entry_start))
-                if hourly_ratio is not None:
-                    segment_kwh *= hourly_ratio
-                elif daily_bias_percent is not None:
-                    segment_kwh *= 1 + daily_bias_percent / 100
+                segment_kwh *= self._zon_bias_factor(entry_start, daily_bias_percent)
 
             total_kwh += segment_kwh
 
         return max(0.0, total_kwh)
+
+    def _pv_gat_in(self, van: datetime, tot: datetime) -> bool:
+        """Ontbreekt de zonvoorspelling voor dit stuk terwijl de zon op is?
+        (v5.186.0, punt 38)
+
+        `_estimate_pv_kwh_for_period` gaf dan stil 0,0 kWh: het waardeplan
+        rekende met een dag zonder zon en kocht daarop in. Voor het plan is dat
+        een gat (de horizon wordt daar geknipt); de reserve houdt 0 (voorzichtig).
+        """
+        if not (self.config.get(CONF_SOLAR_FORECAST_SENSOR) or self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR)):
+            return False
+        entries = self._get_pv_forecast_entries()
+        if entries and any(a < tot and b > van for a, b, _k in self._pv_rakende_halfuren(entries, van, tot)):
+            return False
+        try:
+            stand = self._bereken_zonstand(van + (tot - van) / 2)
+        except Exception:  # noqa: BLE001 - zonder zonstand geen gat
+            return False
+        if stand is None or stand[1] < PV_GAT_ZONHOOGTE_GRADEN:
+            return False
+        nu = dt_util.now()
+        eind_morgen = nu.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=2)
+        # Na morgen heeft Solcast hier geen halfuren: knippen, maar geen melding.
+        if van < eind_morgen:
+            self._pv_gat = {"vanaf": van, "gezien": nu}
+        return True
+
+    def _pv_gat_aandachtspunt(self, now: datetime | None = None) -> str | None:
+        """v5.186.0 (punt 38): een aandachtspunt zolang de zon voor vandaag of
+        morgen ontbreekt (in het afgelopen half uur nog gezien)."""
+        gat = getattr(self, "_pv_gat", None)
+        now = now or dt_util.now()
+        if not gat or now - gat["gezien"] > timedelta(minutes=30):
+            return None
+        return (
+            f"De zonvoorspelling ontbreekt vanaf {tijd_met_dag(gat['vanaf'], now)} terwijl "
+            "de zon dan op is; het waardeplan rekent tot daar en de reserve rekent er zonder zon."
+        )
+
+    def _zon_bias_factor(self, moment: datetime, daily_bias_percent: float | None) -> float:
+        """De geleerde correctie op Solcast voor dit uur: per uur, anders per
+        dag(soort), anders geen."""
+        hourly_ratio = self.learned_pv_hourly_ratio(self._utc_uur(moment))
+        if hourly_ratio is not None:
+            return hourly_ratio
+        if daily_bias_percent is not None:
+            return 1 + daily_bias_percent / 100
+        return 1.0
+
+    def _zon_factor_vandaag(
+        self, vast: dict, moment: datetime, daily_bias_percent: float | None, met_band: bool
+    ) -> float:
+        """De factor voor een nog komend halfuur van vandaag (v5.186.0, punt 36).
+
+        Gemeten (plantoetsing, 30 dagen): de zon van vandaag stond op 28 dagen
+        te hoog, mediaan 13 %. Oorzaak: voor vandaag gold ALLEEN de
+        Solcast-teller (rest van vandaag gedeeld door dezelfde Solcast-reeks,
+        dus vrijwel altijd 1,0) en de realisatie sinds middernacht, begrensd op
+        1 en pas na 0,5 kWh - de geleerde correctie (per uur of per dag) werd
+        voor vandaag nooit toegepast. Een plan van 00:00 of 07:00 rekende dus
+        met de ruwe Solcast.
+
+        - verwacht: de geleerde correctie, en daarop de zon van de laatste uren
+          tegen die gecorrigeerde verwachting (ZON_RECENT_MIN-ZON_RECENT_MAX),
+          die naar 1 uitdooft over ZON_RECENT_VERVAL_UREN. Zonder recente meting
+          de Solcast-teller (begrensd).
+        - veilig: de voorzichtigste van teller, realisatie sinds middernacht en
+          (zonder band) de geleerde correctie - de min-regel van v5.96.
+        """
+        rest = vast.get("rest")
+        bias = self._zon_bias_factor(moment, daily_bias_percent)
+        if vast.get("veilig"):
+            delen = [rest if rest is not None else 1.0]
+            if vast.get("realisatie") is not None:
+                delen.append(vast["realisatie"])
+            if not met_band:
+                delen.append(bias)
+            return min(delen)
+        recent = vast.get("recent")
+        if recent is not None:
+            afstand = max(0.0, (moment - vast["nu"]).total_seconds() / 3600)
+            gewicht = max(0.0, 1.0 - afstand / ZON_RECENT_VERVAL_UREN)
+            return bias * (1.0 + gewicht * (recent - 1.0))
+        return bias * (rest if rest is not None else 1.0)
+
+    def _ruwe_zon_kwh(self, van: datetime, tot: datetime) -> float:
+        """Solcast zonder correctie over [van, tot) (v5.186.0)."""
+        totaal = 0.0
+        for a, b, kwh in self._get_pv_forecast_entries() or []:
+            duur = (b - a).total_seconds()
+            stuk = (min(b, tot) - max(a, van)).total_seconds()
+            if duur > 0 and stuk > 0:
+                totaal += kwh * stuk / duur
+        return totaal
+
+    def _zon_recent(self, nu: datetime) -> float | None:
+        """Zon van het laatste afgesloten uur en het lopende uur, gedeeld door
+        de gecorrigeerde verwachting over dezelfde stukken (v5.186.0, punt 36).
+        Begrensde uren en te korte metingen tellen niet; None onder
+        ZON_RECENT_MIN_KWH verwacht."""
+        werkelijk = verwacht = 0.0
+        for u in (getattr(self, "_pv_recente_uren", None) or [])[-1:]:
+            if u.get("geldig") and nu - u["eind"] <= timedelta(hours=2):
+                werkelijk += u["werkelijk_kwh"]
+                verwacht += u["verwacht_kwh"] * self._zon_bias_factor(u["begin"], self.zonbias_percent())
+        duur = float(getattr(self, "_pv_hour_duration_hours", 0.0) or 0.0)
+        if duur >= 0.25 and not getattr(self, "_pv_hour_begrensd", False):
+            van = nu - timedelta(hours=duur)
+            werkelijk += float(self._pv_hour_energy_kwh or 0.0)
+            verwacht += self._ruwe_zon_kwh(van, nu) * self._zon_bias_factor(van, self.zonbias_percent())
+        if verwacht < ZON_RECENT_MIN_KWH:
+            return None
+        return max(ZON_RECENT_MIN, min(ZON_RECENT_MAX, werkelijk / verwacht))
 
     def _get_efficiency_discounted_pv_offset(
         self, start: datetime, end: datetime
@@ -22060,8 +22401,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # _get_smoothed_consumption_correction_ratio) so a brief spike
         # can't scale a 15+ hour estimate to an absurd value.
         correctie_extra_totaal = 0.0
+        # v5.186.0 (punt 32): één keer, tegen het uur van NU. Het waardeplan
+        # vraagt per kwartier; met `start.hour` werd het verbruik van nu (21:00,
+        # 0,55 kW) voor een kwartier van 23:00 tegen 0,30 kW gelegd: 1,8x.
         consumption_correction_ratio = self._get_smoothed_consumption_correction_ratio(
-            start.hour
+            dt_util.now().hour
         )
 
         segmenten = []
@@ -22074,7 +22418,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             segment_end = min(hour_end, end)
             fraction_hours = (segment_end - cursor).total_seconds() / 3600
 
-            avg_kw = self.verbruik_uur_kw(cursor.hour, cursor)
+            avg_kw = self._basis_uur_kw(cursor.hour, cursor)  # v5.186.0 (punt 31)
             if avg_kw is None:
                 return None
 
@@ -22340,11 +22684,16 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             if gap_minutes > MAX_HOUR_TRACKING_GAP_MINUTES:
                 self._pv_hour_energy_kwh = 0.0
                 self._pv_hour_duration_hours = 0.0
+                self._pv_hour_begrensd = False
                 self._pv_current_tracked_hour = current_hour
                 self._pv_hour_last_sample = now
                 return
 
         pv_power_w = self._read_sensor_float(pv_entity)
+        # v5.186.0 (punt 30): een uur met begrensde panelen (negatieve prijs:
+        # 0 %, of vanaf 2027 de grens voor nul teruglevering) zegt niets over
+        # Solcast. Eén begrensde meting maakt het hele uur onbruikbaar.
+        begrensd = self._pv_begrensd_nu()
 
         if current_hour != self._pv_current_tracked_hour:
             # Split the elapsed interval exactly at the hour boundary (see
@@ -22359,8 +22708,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 self._pv_hour_energy_kwh += (pv_power_w / 1000) * elapsed_to_boundary
                 self._pv_hour_duration_hours += elapsed_to_boundary
 
+            if begrensd:
+                self._pv_hour_begrensd = True
             self._finalize_pv_hourly_bucket(now)
             self._pv_current_tracked_hour = current_hour
+            self._pv_hour_begrensd = begrensd
 
             elapsed_in_new_hour = max(
                 (now - hour_boundary).total_seconds() / 3600, 0
@@ -22380,11 +22732,58 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if pv_power_w is not None and elapsed_hours > 0:
             self._pv_hour_energy_kwh += (pv_power_w / 1000) * elapsed_hours
             self._pv_hour_duration_hours += elapsed_hours
+        if begrensd:
+            self._pv_hour_begrensd = True
         self._pv_hour_last_sample = now
+
+    def _pv_begrensd_nu(self) -> bool:
+        """Worden de panelen nu begrensd? (v5.186.0, punt 30)
+
+        Bij een negatieve prijs (`_is_negative_price_active`, panelen op 0 %),
+        bij de grens voor nul teruglevering vanaf 2027
+        (`_teruglevering_begrensd`), tijdens een lopende ramp, of als de
+        omvormergrens onder PV_BEGRENSD_ONDER_PROCENT staat.
+        """
+        if getattr(self, "_is_negative_price_active", False) or getattr(
+            self, "_teruglevering_begrensd", False
+        ):
+            return True
+        taak = getattr(self, "_solar_ramp_task", None)
+        try:
+            if taak is not None and not taak.done():
+                return True
+        except Exception:  # noqa: BLE001 - een vreemde taak telt niet
+            pass
+        entity = self.config.get(CONF_SOLAR_POWER_LIMIT_ENTITY)
+        grens = self._read_sensor_float(entity) if entity else None
+        return grens is not None and grens < PV_BEGRENSD_ONDER_PROCENT
+
+    def _noteer_recent_pv_uur(self, now: datetime, actual_kwh: float, geldig: bool) -> None:
+        """Het afgesloten zonuur voor `_zon_recent` (v5.186.0, punt 36)."""
+        eind = now.replace(minute=0, second=0, microsecond=0)
+        duur = min(1.0, float(self._pv_hour_duration_hours or 0.0))
+        begin = eind - timedelta(hours=duur)
+        reeks = list(getattr(self, "_pv_recente_uren", None) or [])
+        reeks.append({
+            "begin": begin, "eind": eind, "werkelijk_kwh": actual_kwh,
+            "verwacht_kwh": self._ruwe_zon_kwh(begin, eind), "geldig": geldig,
+        })
+        self._pv_recente_uren = reeks[-3:]
 
     def _finalize_pv_hourly_bucket(self, now: datetime) -> None:
         if self._pv_current_tracked_hour is not None and self._pv_hour_duration_hours > 0:
             actual_kwh = self._pv_hour_energy_kwh
+            # v5.186.0 (punt 30): hoeveel van het uur gemeten is, en of de
+            # panelen begrensd waren. Na een herstart om 12:40 werd 20 minuten
+            # opwek tegen de voorspelling van het hele uur gelegd (0,33).
+            gemeten = min(1.0, self._pv_hour_duration_hours)
+            bruikbaar = gemeten >= PV_UURBIAS_MIN_GEMETEN and not getattr(
+                self, "_pv_hour_begrensd", False
+            )
+            try:
+                self._noteer_recent_pv_uur(now, actual_kwh, bruikbaar)
+            except Exception:  # noqa: BLE001 - mag het leren nooit breken
+                _LOGGER.debug("Recent zonuur niet vastgelegd", exc_info=True)
             # The hour that just completed is the previous local hour,
             # on the date it happened on (usually today, but handles the
             # 23:00 -> 00:00 rollover correctly too).
@@ -22392,6 +22791,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             forecast_kwh = self._get_forecast_kwh_for_hour(
                 completed_hour_date, self._pv_current_tracked_hour
             )
+            if not bruikbaar:
+                forecast_kwh = None  # niets leren, ook het regressiewoud niet
+            elif forecast_kwh is not None:
+                # het gemeten deel tegen hetzelfde deel van de voorspelling
+                forecast_kwh *= gemeten
             # v2.4.0: alleen leren waar er iets te leren valt.
             #
             # De drempel stond op 0,01 kWh - tien wattuur. Een
@@ -22433,7 +22837,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 _LOGGER.exception("Kon het PV-modelmonster niet vastleggen")
 
             if forecast_kwh is not None and forecast_kwh >= PV_HOURLY_BIAS_MIN_KWH:
-                ratio = actual_kwh / forecast_kwh
+                # v5.186.0 (punt 30): bij elk nieuw monster begrensd, niet pas
+                # bij het laden (`_ruim_pv_uurbias_op`).
+                ratio = max(
+                    PV_HOURLY_BIAS_MIN_RATIO,
+                    min(PV_HOURLY_BIAS_MAX_RATIO, actual_kwh / forecast_kwh),
+                )
                 # v5.24: bewaard onder het UTC-uur, niet het klokuur - zie
                 # `_migreer_pv_uurbias_naar_utc`. Het METEN blijft per
                 # klokuur, zodat het werkelijke uur tegen de voorspelling
@@ -38911,6 +39320,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         try:
             if punt := self._waardeplan_aandachtspunt():
                 uit.append(punt)
+            if punt := self._pv_gat_aandachtspunt():  # v5.186.0 (punt 38)
+                uit.append(punt)
         except Exception:  # noqa: BLE001 - een aandachtspunt mag niets breken
             pass
         # v5.3: een geweerde weerbron hoorde hier, niet als telefoonmelding.
@@ -47281,6 +47692,11 @@ def witgoed_kwh_in_periode(regel: dict, start: datetime, einde: datetime,
     kwh = float(regel.get("kwh") or 0.0)
     if profiel:
         # v5.184.4: het geleerde profiel van dit apparaat (witgoedprofiel.py)
+        # v5.186.0 (punt 43): gerekt naar de geplande duur als die bekend is
+        # (eind uit de planning, anders de duur van het programma).
+        eind = dt_util.parse_datetime(regel.get("eind") or "") if regel.get("eind") else None
+        duur = (eind - moment).total_seconds() / 60 if eind is not None and eind > moment else regel.get("duur_minuten")
+        profiel = witgoedprofiel.rek(profiel, float(duur) if duur else None)
         return witgoedprofiel.kwh_in_periode(kwh, moment, profiel, start, einde)
     eind = dt_util.parse_datetime(regel.get("eind") or "") if regel.get("eind") else None
     if eind is None or eind <= moment:

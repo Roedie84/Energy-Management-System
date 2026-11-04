@@ -609,6 +609,29 @@ LEARNING_HISTORY_DAYS = 7
 # weekend) rekent het verbruiksprofiel met dat dagtype.
 DAGTYPE_MIN_WAARNEMINGEN = 4
 
+# --- v5.186.0 (spoor C): verbruiks- en zonverwachting --------------------
+#: punt 37: een uur telt pas in het uurprofiel vanaf zoveel gemeten uur
+UURPROFIEL_MIN_GEMETEN_UREN = 0.75
+#: punt 31: hooguit dit deel van een uur gaat er als witgoedaandeel af
+WITGOED_FRACTIE_MAX = 0.8
+#: punt 42: vanaf dit vermogen telt vaatwasser/wasmachine als zwaar verbruik
+#: voor de live correctie (droogfase en stand-by blijven eronder)
+WITGOED_ZWAAR_W = 100.0
+#: punt 30: een zonuur leert de uurcorrectie pas als zoveel ervan gemeten is
+PV_UURBIAS_MIN_GEMETEN = 0.9
+#: punt 30: onder deze omvormergrens (%) heet de opwek begrensd
+PV_BEGRENSD_ONDER_PROCENT = 95.0
+#: punt 36: de recente zonverhouding (laatste uren) voor "verwacht"
+ZON_RECENT_MIN = 0.5
+ZON_RECENT_MAX = 1.3
+ZON_RECENT_MIN_KWH = 0.2
+ZON_RECENT_VERVAL_UREN = 4.0
+#: klein: de Solcast-verhouding rest van vandaag, begrensd
+ZON_REST_MIN = 0.3
+ZON_REST_MAX = 1.5
+#: punt 38: boven deze zonhoogte (graden) is ontbrekende zon een gat
+PV_GAT_ZONHOOGTE_GRADEN = 3.0
+
 # Hoe lang de afwijkingsgeschiedenis van de zonvoorspelling bewaard
 # blijft (v4.10). Het LEREN gebeurt over LEARNING_HISTORY_DAYS - dat
 # venster is bewust kort, want de zonnestanden schuiven met het seizoen.
@@ -3948,6 +3971,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_appliance_cycle_history": {"type": "plain"},
     # v5.184.4: geleerd verbruiksprofiel per apparaat (fractie per kwartier)
     "witgoed_profielen": {"type": "plain"},
+    # v5.186.0: het gemeten witgoed per uur, in de pas met het uurprofiel
+    "witgoed_uuraandeel": {"type": "plain"},
     "presence_timeline": {"type": "plain"},
     "presence_state": {"type": "plain"},
     "quarter_plan_first_seen": {"type": "plain"},

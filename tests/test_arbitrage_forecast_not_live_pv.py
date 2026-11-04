@@ -183,8 +183,9 @@ def test_get_expected_pv_power_prefers_live_remaining_correction(
     result = coordinator._get_expected_pv_power_w(now)
 
     # Live-correctie (3.0x) moet voorrang krijgen boven de geleerde
-    # ratio (1.05x) - 2000W * 3.0 = 6000W, niet 2000W * 1.05 = 2100W.
-    assert round(result, 1) == 6000.0
+    # ratio (1.05x). v5.186.0: de teller is begrensd op ZON_REST_MAX (1,5) -
+    # 2000W * 1.5 = 3000W, niet 2000W * 1.05 = 2100W.
+    assert round(result, 1) == 3000.0
 
 
 def test_get_expected_pv_power_falls_back_to_learned_bias_without_live_sensor(

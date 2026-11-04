@@ -2119,18 +2119,7 @@ class KlimaatMixin:
         if tot is None or tot <= now:
             return leeg
         try:
-            vermogen = self._airco_vermogen_w()
-            loopt = vermogen is not None and vermogen >= airco_ritme.VERMOGEN_AAN_W
-            loopt_tot = None
-            if loopt:
-                m = airco_ritme.minuten_uit_klok(
-                    self.instelling(CONF_AIRCO_UIT_OM, DEFAULT_AIRCO_UIT_OM)
-                )
-                if m is not None:
-                    grens = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=m)
-                    loopt_tot = grens if grens > now else now.replace(
-                        minute=0, second=0, microsecond=0
-                    ) + timedelta(hours=1)
+            loopt, loopt_tot = self._airco_loopt_tot(now)
             ritme = self._airco_ritme()
             return airco_ritme.gebruik_kwh(
                 ritme, now, tot,
@@ -2141,6 +2130,112 @@ class KlimaatMixin:
             )
         except Exception:  # noqa: BLE001 - de reserve mag hier nooit op breken
             return leeg
+
+    # --- v5.186.0 (punt 34): de klimaat-extra's ook in de planenergie ------
+    #
+    # De airco-extra's (ochtendverwarming, verwacht gebruik) en het
+    # temperatuurmodel zaten alleen in de reserve (`_bereken_dynamische_reserve_kwh`),
+    # niet in het verbruik van de plankwartieren. Het plan liet de accu dan
+    # langzamer leeglopen dan de reserve (de vloer) aannam. Nu per uur verdeeld.
+
+    def _klimaat_extra_kwh_in(self, van: datetime, tot: datetime) -> float:
+        """De klimaat-extra's die in [van, tot) vallen (v5.186.0, punt 34)."""
+        try:
+            kaart = self._klimaat_extra_per_uur()
+        except Exception:  # noqa: BLE001 - het plan mag hier nooit op breken
+            _LOGGER.debug("Klimaat-extra's per uur niet bepaald", exc_info=True)
+            return 0.0
+        totaal = 0.0
+        for kwh, a, b in kaart:
+            if b <= van or a >= tot or kwh <= 0:
+                continue
+            lengte = (b - a).total_seconds()
+            if lengte > 0:
+                totaal += kwh * (min(b, tot) - max(a, van)).total_seconds() / lengte
+        return totaal
+
+    def _klimaat_extra_per_uur(self) -> list[tuple[float, datetime, datetime]]:
+        """(kWh, van, tot) per stuk; per ronde en minuut één keer berekend."""
+        now = dt_util.now()
+        sleutel = (getattr(self, "_forecast_cache_ronde", None), now.replace(second=0, microsecond=0))
+        bewaard = getattr(self, "_klimaat_extra_cache", None)
+        if bewaard is not None and bewaard[0] == sleutel:
+            return bewaard[1]
+        from .const import WAARDEPLAN_HORIZON_UUR
+
+        tot = now + timedelta(hours=WAARDEPLAN_HORIZON_UUR + 1)
+        stukken = self._airco_extra_stukken(now, tot)
+        stukken += self._temperatuur_extra_stukken(now, tot, stukken)
+        self._klimaat_extra_cache = (sleutel, stukken)
+        return stukken
+
+    def _airco_extra_stukken(self, now: datetime, tot: datetime) -> list:
+        """Het verwachte airco-gebruik per uur en de ochtendverwarming,
+        verdeeld naar het uur waarin die verwarmt."""
+        stukken = []
+        for u in self._airco_gebruik_extra_kwh(now, tot).get("uren") or []:
+            begin = datetime.fromisoformat(u["begin"]) if u.get("begin") else None
+            if begin is not None:
+                stukken.append((float(u["kwh"]), max(begin, now), min(begin + timedelta(hours=1), tot)))
+        ochtend = self._airco_ochtend_extra_kwh(now, tot).get("extra_kwh") or 0.0
+        if ochtend > 0:
+            ritme, tempo = self._airco_ritme(), self._airco_ochtend_tempo(now)
+            per_uur = []
+            uur = now.replace(minute=0, second=0, microsecond=0)
+            while uur < tot:
+                a, b = max(uur, now), min(uur + timedelta(hours=1), tot)
+                per_uur.append((airco_ritme.ochtend_kwh(ritme, a, b, self._woonkamer_verwacht_op, tempo), a, b))
+                uur += timedelta(hours=1)
+            som = sum(k for k, _a, _b in per_uur)
+            if som > 0:
+                stukken += [(ochtend * k / som, a, b) for k, a, b in per_uur if k > 0]
+        return stukken
+
+    def _temperatuur_extra_stukken(self, now: datetime, tot: datetime, airco: list) -> list:
+        """Het temperatuurmodel per nacht (VASTE_NACHT_VAN_UUR-VASTE_NACHT_TOT_UUR,
+        het venster waarop het model leert), gelijk over de nacht verdeeld."""
+        from .const import VASTE_NACHT_TOT_UUR, VASTE_NACHT_VAN_UUR
+
+        stukken = []
+        dag = (now - timedelta(days=1)).replace(hour=VASTE_NACHT_VAN_UUR, minute=0, second=0, microsecond=0)
+        while dag < tot:
+            a = max(dag, now)
+            b = min((dag + timedelta(days=1)).replace(hour=VASTE_NACHT_TOT_UUR), tot)
+            if b > a:
+                al = sum(
+                    k * max(0.0, (min(y, b) - max(x, a)).total_seconds()) / max(1.0, (y - x).total_seconds())
+                    for k, x, y in airco
+                )
+                extra = self._temperatuur_extra_kwh(a, b, al).get("extra_kwh") or 0.0
+                if extra > 0:
+                    stukken.append((extra, a, b))
+            dag += timedelta(days=1)
+        return stukken
+
+    def _airco_loopt_tot(self, now: datetime) -> tuple[bool, datetime | None]:
+        """Draait de airco nu, en tot wanneer telt hij als zeker (v5.83; uit
+        `_airco_gebruik_extra_kwh` gehaald in v5.186.0)."""
+        vermogen = self._airco_vermogen_w()
+        loopt = vermogen is not None and vermogen >= airco_ritme.VERMOGEN_AAN_W
+        if not loopt:
+            return False, None
+        m = airco_ritme.minuten_uit_klok(self.instelling(CONF_AIRCO_UIT_OM, DEFAULT_AIRCO_UIT_OM))
+        if m is None:
+            return True, None
+        grens = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=m)
+        loopt_tot = grens if grens > now else now.replace(
+            minute=0, second=0, microsecond=0
+        ) + timedelta(hours=1)
+        return True, loopt_tot
+
+    def _airco_zeker_meegeteld(self, now: datetime) -> bool:
+        """Telt de draaiende airco nu als zeker in de airco-extra's? (v5.186.0,
+        punt 35). Dan hoort hij niet ook in de live verbruikscorrectie."""
+        try:
+            loopt, loopt_tot = self._airco_loopt_tot(now)
+        except Exception:  # noqa: BLE001 - bij twijfel het oude gedrag
+            return False
+        return loopt and loopt_tot is not None and loopt_tot > now
 
     def _airco_ritme_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
         """Het dagritme naast het gewone besluit (v5.65) - zie `airco_ritme`.
