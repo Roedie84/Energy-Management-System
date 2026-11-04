@@ -305,4 +305,6 @@ def test_discharge_value_sensor_also_gets_the_feedin_premium(make_coordinator, h
     # Base value: 1 kWh * 0.40 = 0.40. Plus premium on the exported
     # 0.8 kWh: 0.8 * 0.02 = 0.016.
     assert coordinator.total_discharge_value_eur == pytest.approx(0.416, abs=1e-6)
-    assert coordinator.total_feedin_premium_eur == pytest.approx(0.016, abs=1e-6)
+    # v5.186.0: de premieteller hoort bij het kostprijsmodel; hier niet
+    # nog eens optellen (werd dubbel geteld).
+    assert coordinator.total_feedin_premium_eur == 0.0

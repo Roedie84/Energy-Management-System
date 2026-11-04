@@ -487,10 +487,19 @@ def test_every_sensor_appears_somewhere_on_the_dashboard():
         "Advies-gereedheid (10 modules)": "advies_gereedheid_8_modules",
     }
 
+    # v5.186.0: verouderde sensoren van de oude "actieve sturing" staan
+    # bewust niet meer op het dashboard (vervangen door netladen_maand en de
+    # besparing); de entiteiten blijven voor wie ze elders gebruikt.
+    VEROUDERD = {
+        "Charge cost (grid charging)",
+        "Discharge value (expensive quarters)",
+    }
+
     ontbreekt = sorted(
         n
         for n in namen
-        if slug(n) not in dashboard
+        if n not in VEROUDERD
+        and slug(n) not in dashboard
         and HISTORISCH.get(n, slug(n)) not in dashboard
     )
 

@@ -54,7 +54,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import callback
@@ -83,6 +83,41 @@ ZUINIG_OPWARM_S = 300
 ZUINIG_MIN_S = 25
 
 _LEEG = (None, (), "", "unknown", "unavailable")
+
+# v5.186.0: hoe lang de attributen van één EMS-ronde hergebruikt worden.
+ZUINIG_ATTR_CACHE_S = 55
+
+
+def _omhul_attributen(fget):
+    """`extra_state_attributes` met een cache per EMS-ronde (v5.186.0).
+
+    De poort rekende de (soms zware) attributen elke tik uit voor de
+    vingerafdruk, en Home Assistant bij het schrijven meteen nog een keer.
+    Nu: binnen één schrijfbeurt altijd hergebruik, en bij de eigen tik
+    zolang de coordinator geen nieuwe ronde had (sleutel = tijd van de
+    laatste geslaagde ronde), hoogstens ZUINIG_ATTR_CACHE_S. Een directe
+    schrijfbeurt (na een ronde of een dienst) rekent altijd vers.
+    """
+
+    def lees(self):
+        sleutel = self._zuinig_rondesleutel()
+        beurt = self.__dict__.get("_zuinig_beurt")
+        cache = self.__dict__.get("_zuinig_attr_cache")
+        nu = time.monotonic()
+        if cache is not None and (
+            (beurt is not None and cache[1] == beurt)
+            or (self.__dict__.get("_zuinig_via_tik") and sleutel is not None
+                and cache[0] == sleutel and nu - cache[2] < ZUINIG_ATTR_CACHE_S)
+        ):
+            return cache[3]
+        waarde = fget(self)
+        self.__dict__["_zuinig_attr_cache"] = (sleutel, beurt, nu, waarde)
+        return waarde
+
+    lees._zuinig_omhuld = True
+    lees.__doc__ = fget.__doc__
+    lees.__name__ = getattr(fget, "__name__", "extra_state_attributes")
+    return lees
 
 
 def _afgerond(waarde, diepte: int = 0):
@@ -171,6 +206,18 @@ class ZuinigSchrijven:
     _zuinig_overgeslagen: int = 0
     _zuinig_eerste: float | None = None
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        eigen = cls.__dict__.get("extra_state_attributes")
+        if isinstance(eigen, property) and eigen.fget is not None and not getattr(eigen.fget, "_zuinig_omhuld", False):
+            cls.extra_state_attributes = property(_omhul_attributen(eigen.fget))
+
+    def _zuinig_rondesleutel(self):
+        """Wanneer de coordinator voor het laatst een ronde afrondde (v5.186.0)."""
+        coordinator = getattr(self, "_coordinator", None) or getattr(self, "coordinator", None)
+        sleutel = getattr(coordinator, "last_successful_update", None)
+        return sleutel if isinstance(sleutel, datetime) else None
+
     def _zuinig_staat(self) -> dict:
         toestand = getattr(self, "state", None)
         if toestand is None and not hasattr(type(self), "state"):
@@ -192,6 +239,14 @@ class ZuinigSchrijven:
             self._zuinig_schrijf()
             return
         self._zuinig_start_tik()
+        # v5.186.0: één schrijfbeurt = één keer de attributen uitrekenen.
+        self.__dict__["_zuinig_beurt"] = object()
+        try:
+            self._zuinig_beslis_en_schrijf()
+        finally:
+            self.__dict__["_zuinig_beurt"] = None
+
+    def _zuinig_beslis_en_schrijf(self) -> None:
         try:
             staat = self._zuinig_staat()
         except Exception:  # noqa: BLE001 - laat Home Assistant de fout tonen
@@ -244,6 +299,7 @@ class ZuinigSchrijven:
             return
         self._zuinig_vorige = None
         self._zuinig_geschreven = time.monotonic()
+        self.__dict__.pop("_zuinig_attr_cache", None)  # v5.186.0: verse stand
         self._zuinig_schrijf()
 
     @callback
@@ -262,4 +318,8 @@ class ZuinigSchrijven:
     def _zuinig_tik(self, _nu=None) -> None:
         if getattr(self, "hass", None) is None:
             return
-        self.async_write_ha_state()
+        self.__dict__["_zuinig_via_tik"] = True
+        try:
+            self.async_write_ha_state()
+        finally:
+            self.__dict__["_zuinig_via_tik"] = False

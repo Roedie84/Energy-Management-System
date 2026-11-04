@@ -45,8 +45,9 @@ def test_melding_per_module_uit(make_coordinator):
     c._dispatch_notification = lambda **k: verstuurd.append(k.get("message") or "")
     c.zet_module_melding("AB3000 00996", False)
     c._evaluate_new_notifications(NU)
-    drift = [m for m in verstuurd if "wijkt" in m and "Module" in m]
-    assert drift and "1" not in drift[0].split("wijkt")[0]
+    # v5.186.0: de melding noemt de modules bij naam (geen "Module 1").
+    drift = [m for m in verstuurd if "aanhoudend af" in m]
+    assert drift and "00996" not in drift[0].split("aanhoudend")[0]
     c.zet_module_melding("AB3000 00996", True)
     assert c.battery_module_stil == []
 

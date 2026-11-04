@@ -20,7 +20,7 @@ def test_onbeschikbaar_voor_eerste_ronde():
 def test_beschikbaar_na_eerste_ronde():
     s = CounterfactualSavingsTotalSensor(_coord(_wacht_op_eerste_ronde=False), "e")
     assert s.available is True
-    assert s.native_value == 42.3284
+    assert s.native_value == 42.33  # v5.186.0: 2 decimalen
 
 
 def test_zonder_vlag_beschikbaar():

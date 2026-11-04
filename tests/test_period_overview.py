@@ -72,9 +72,10 @@ def test_a_week_adds_up(make_coordinator, hass):
 
     week = c.get_period_overview(NU)["perioden"]["week"]
 
-    assert week["dagen"] == 6
-    assert week["opwek_kwh"] == 120.0
-    assert week["accu_ontladen_kwh"] == 30.0
+    # v5.186.0: 7 afgesloten dagen, zoals het kostenoverzicht.
+    assert week["dagen"] == 7
+    assert week["opwek_kwh"] == 140.0
+    assert week["accu_ontladen_kwh"] == 35.0
 
 
 def test_savings_is_a_difference_not_a_sum(make_coordinator, hass):
@@ -84,8 +85,8 @@ def test_savings_is_a_difference_not_a_sum(make_coordinator, hass):
 
     week = c.get_period_overview(NU)["perioden"]["week"]
 
-    # 6 dagen x (-1,00 zonder sturing min -2,00 werkelijk) = +6,00
-    assert week["besparing_eur"] == 6.0
+    # 7 dagen x (-1,00 zonder sturing min -2,00 werkelijk) = +7,00
+    assert week["besparing_eur"] == 7.0
 
 
 def test_today_counts_from_the_live_counters(make_coordinator, hass):
@@ -138,7 +139,7 @@ def test_a_day_missing_a_field_does_not_break_it(make_coordinator, hass):
     # periode die op nul uitkomt. Die nullen waren geen meting maar een
     # gat, en dat hoort zichtbaar te zijn.
     assert week["accu_ontladen_kwh"] is None
-    assert week["opwek_kwh"] == 120.0
+    assert week["opwek_kwh"] == 140.0
 
 
 # --- v1.92.0: gemiddelden en historische cijfers ---------------------
@@ -455,7 +456,7 @@ def test_a_measured_day_still_gives_savings(make_coordinator, hass):
     """Live gemeten dagen hebben de tegenfeitelijke kosten wel."""
     c = _coordinator(make_coordinator)
 
-    assert c.get_period_overview(NU)["perioden"]["week"]["besparing_eur"] == 6.0
+    assert c.get_period_overview(NU)["perioden"]["week"]["besparing_eur"] == 7.0
 
 
 # --- v1.98.0: de tellers waren al gewist -----------------------------

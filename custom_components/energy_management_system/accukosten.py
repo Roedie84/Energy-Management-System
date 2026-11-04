@@ -296,7 +296,9 @@ def voorraad_kostprijs(partijen: list, eta_laad: float) -> dict:
 def _dagtel(tel, dag) -> dict:
     return tel.per_dag.setdefault(dag, {"net_in_kwh": 0.0, "net_inkoop_eur": 0.0,
                                         "geleverd_kwh": 0.0, "opbrengst_eur": 0.0,
-                                        "net_marge_eur": 0.0, "net_uit_ac_kwh": 0.0})
+                                        "net_marge_eur": 0.0, "net_uit_ac_kwh": 0.0,
+                                        # v5.186.0: marge op de LAADdag
+                                        "net_marge_laaddag_eur": 0.0})
 
 
 def _verwerk(partijen, tel, dag, r, delta, eta_laad, eta_ontlaad, slijtage_eur) -> None:
@@ -396,6 +398,10 @@ def _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijta
         if p.bron == "net":
             dagtel["net_uit_ac_kwh"] += ac
             dagtel["net_marge_eur"] += ac * (gerealiseerd - p.inkoop_eur)
+            # v5.186.0: dezelfde marge ook op de dag dat deze partij geladen
+            # werd, zodat "netladen deze maand" inkoop en marge van dezelfde
+            # ladingen naast elkaar zet.
+            _dagtel(tel, p.dag)["net_marge_laaddag_eur"] += ac * (gerealiseerd - p.inkoop_eur)
             if p.verwacht_eur is not None:
                 t["verwacht_eur"] += ac * p.verwacht_eur
                 t["verwacht_ac_kwh"] += ac
@@ -465,8 +471,11 @@ def _samenvatting(tel: _Teller, partijen: list, eta: float, slijtage_eur: float,
             "opbrengst_ct": _per_kwh(d["opbrengst_eur"], d["geleverd_kwh"]),
             "net_marge_eur": round(d["net_marge_eur"], 2),
         })
-    # v5.185.1: netladen per kalendermaand (de marge op de dag van ontladen),
-    # voor het cockpitblok dat het oude "actieve sturing" vervangt.
+    # v5.185.1: netladen per kalendermaand, voor het cockpitblok dat het oude
+    # "actieve sturing" vervangt.
+    # v5.186.0: de marge hoort bij de LAADdag (zelfde ladingen als de inkoop);
+    # wat nog in de accu zit heeft nog geen marge. De marge op de ontlaaddag
+    # staat apart.
     maand = {}
     if nu is not None:
         try:
@@ -481,7 +490,9 @@ def _samenvatting(tel: _Teller, partijen: list, eta: float, slijtage_eur: float,
                 "dagen": len(sel),
                 "net_erin_kwh": round(erin, 2),
                 "net_inkoop_eur": round(sum(d["net_inkoop_eur"] for d in sel), 2),
-                "net_marge_eur": round(sum(d["net_marge_eur"] for d in sel), 2),
+                "net_marge_eur": round(sum(d.get("net_marge_laaddag_eur", 0.0) for d in sel), 2),
+                "net_marge_ontlaaddag_eur": round(sum(d["net_marge_eur"] for d in sel), 2),
+                "marge_op": "laaddag",
             }
     return {
         "beschikbaar": True,

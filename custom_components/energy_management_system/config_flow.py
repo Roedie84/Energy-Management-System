@@ -290,6 +290,15 @@ def _validate_input(user_input: dict) -> dict[str, str]:
         except (TypeError, ValueError):
             errors[CONF_SALDEREN_END_DATE] = "invalid_date"
 
+    # v5.186.0: ook de contractstartdatum controleren (was vrije tekst
+    # zonder controle; een typefout liet het contractjaar stil wegvallen).
+    contractstart = user_input.get(CONF_CONTRACT_START_DATE)
+    if contractstart:
+        try:
+            date.fromisoformat(str(contractstart))
+        except (TypeError, ValueError):
+            errors[CONF_CONTRACT_START_DATE] = "invalid_date"
+
     kosten = user_input.get(CONF_FEEDIN_COST_EUR_PER_KWH)
     if kosten not in (None, ""):
         try:

@@ -1011,6 +1011,9 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# v5.186.0: een kostenmeter die vóór dit uur terugspringt is een dagsensor.
+KOSTEN_METER_RESET_TOT_UUR = 4
+
 
 def _lokaal_vast(moment: datetime) -> datetime:
     """Lokale kloktijd met een VASTE utc-offset (v5.126.1, L-EMS-036).
@@ -1508,6 +1511,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         self._daily_report_day_key: date | None = None
         self._daily_report_counters: dict = {}
         self._daily_cost_day_key: date | None = None
+        # v5.186.0: lopende dagstand met datum (bewaard).
+        self._laatste_dagstand: dict | None = None
 
         # Accu-modulegezondheid (v0.63.123). Per module een dict met
         # geleerde dag-historie en CUSUM-status per grootheid.
@@ -1997,8 +2002,6 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         self.energy_history_sources: dict = {}
         # v1.76.0: de export gesplitst op het moment zelf.
         self.solar_export_today_kwh: float = 0.0
-        # v1.90.0: dagreeks van opwek en export, voor het weekcijfer.
-        self.pv_daily_history: list[dict] = []
         self.battery_export_today_kwh: float = 0.0
         # v1.16.9: hoeveel de accu vandaag heeft ONTLADEN. Nodig om
         # export toe te wijzen: wat de accu levert kan geen zon-export
@@ -5683,6 +5686,36 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                     )
         return True, "toegestaan"
 
+    def _al_vandaag_gemeld(self, kind: str, now: datetime) -> bool:
+        """Is deze melding vandaag (lokale kalenderdag) al verstuurd? (v5.186.0)"""
+        laatst = dt_util.parse_datetime(self.notification_last_sent.get(kind) or "")
+        if laatst is None:
+            return False
+        return dt_util.as_local(laatst).date() == dt_util.as_local(now).date()
+
+    def _meld_negatieve_prijzen(self, now: datetime, entries, stuur) -> None:
+        """Negatieve prijzen vandaag (v1.2.0).
+
+        v5.186.0: alleen de kwartieren die nog komen (het lopende telt mee);
+        voorbije negatieve kwartieren telden mee in het aantal en in "vanaf".
+        En één keer per kalenderdag.
+        """
+        if not entries or self._al_vandaag_gemeld("negative_prices", now):
+            return
+        negatief = [
+            e for e in entries
+            if e[0].date() == now.date() and e[2] < 0 and e[0] + timedelta(minutes=15) > now
+        ]
+        if not negatief:
+            return
+        eerste = min(negatief, key=lambda e: e[0])
+        stuur(
+            "negative_prices",
+            "⚡ Negatieve prijzen vandaag",
+            f"Nog {len(negatief)} kwartier(en) met een negatieve prijs, "
+            f"vanaf {tijd_met_dag(eerste[0])}. Verbruiken levert dan geld op.",
+        )
+
     def _uitzonderlijke_piekprijs_bericht(
         self, entries: list[PriceEntry], now: datetime
     ) -> str | None:
@@ -5835,17 +5868,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
 
         # --- prijzen ---
         entries = self._get_forecast_entries()
-        if entries:
-            vandaag = [e for e in entries if e[0].date() == now.date()]
-            negatief = [e for e in vandaag if e[2] < 0]
-            if negatief:
-                eerste = min(negatief, key=lambda e: e[0])
-                stuur(
-                    "negative_prices",
-                    "⚡ Negatieve prijzen vandaag",
-                    f"{len(negatief)} kwartier(en) met een negatieve prijs, "
-                    f"vanaf {tijd_met_dag(eerste[0])}. Verbruiken levert dan geld op.",
-                )
+        self._meld_negatieve_prijzen(now, entries, stuur)
 
         # --- systeem ---
         if self.last_error:
@@ -5897,7 +5920,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # v5.26.2: morgen - de ingestelde sensor is die voor MORGEN - met de
         # getallen uit dezelfde som als het oordeel, en de huidige belofte.
         ruw = self._read_sensor_float(self.config.get(CONF_SOLAR_FORECAST_SENSOR))
-        if ruw is not None and self._is_low_solar_expected():
+        # v5.186.0: één keer per kalenderdag (kwam twee keer per dag).
+        if ruw is not None and self._is_low_solar_expected() and not self._al_vandaag_gemeld("low_solar_day", now):
             zon = self._zon_tegen_drempel(ruw)
             typisch = (
                 f", tegen {zon['typisch_kwh']:.1f} kWh op een typische dag "
@@ -6113,19 +6137,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if now.hour >= 22:
             stuur("daily_summary", "📊 Dagoverzicht", self._dagoverzicht_tekst())
 
-        if now.day == 1 and now.hour >= 9:
-            maand_bespaard = (
-                self.counterfactual_cost_current_month_eur
-                - self.actual_cost_current_month_eur
-            )
-            stuur(
-                "monthly_summary",
-                "📅 Maandoverzicht",
-                f"De afgelopen maand kostte {self.actual_cost_current_month_eur:.2f} € "
-                f"tegenover {self.counterfactual_cost_current_month_eur:.2f} € "
-                f"zonder accu - een verschil van {maand_bespaard:.2f} €. "
-                "Zie het Financieel-tabblad voor de opbouw.",
-            )
+        # v5.186.0: over de afgesloten maand, niet de net gestarte.
+        maandtekst = self.maandoverzicht_tekst(now) if now.day == 1 and now.hour >= 9 else None
+        if maandtekst:
+            stuur("monthly_summary", "📅 Maandoverzicht", maandtekst)
 
         profiel = self.get_pv_installation_profile()
         if profiel.get("wijkt_af"):
@@ -6145,7 +6160,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             stuur(
                 "battery_module_drift",
                 "🔋 Accumodule loopt uit de pas",
-                f"Module {', '.join(sorted(modules_met_drift))} wijkt "
+                # v5.186.0: naam en apparaat-id zoals in de cockpit.
+                f"{', '.join(self._module_drift_labels(modules_met_drift))} "
+                f"{'wijkt' if len(modules_met_drift) == 1 else 'wijken'} "
                 "aanhoudend af van de andere modules. Zie het tabblad "
                 "Accumodules voor de details.",
             )
@@ -7455,21 +7472,58 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if self._daily_cost_day_key == vandaag:
             # Zelfde dag: de lopende stand onthouden, zodat er bij de
             # wissel een verse waarde klaarstaat.
-            self._laatste_dagstand = self._huidige_dagkosten()
+            # v5.186.0: met de datum, en bewaard over een herstart.
+            self._laatste_dagstand = {**self._huidige_dagkosten(), "datum": vandaag.isoformat()}
             return
 
-        stand = getattr(self, "_laatste_dagstand", None) or self._huidige_dagkosten()
-        self.daily_cost_history.append(
-            {
-                "datum": self._daily_cost_day_key.isoformat(),
-                "stroom_eur": stand["stroom_eur"],
-                "gas_eur": stand["gas_eur"],
-            }
-        )
+        self._voeg_kostendagen_toe(vandaag)
         self.daily_cost_history = self.daily_cost_history[-DAILY_COST_HISTORY_DAYS:]
         self._daily_cost_day_key = vandaag
         self._laatste_dagstand = None
         self.schedule_persisted_state_save()
+
+    def _voeg_kostendagen_toe(self, vandaag) -> None:
+        """Schrijft de afgesloten dag(en) in `daily_cost_history` (v5.186.0).
+
+        Alleen een stand van DIE dag telt: na een herstart rond middernacht
+        boekte de oude fallback de kosten van vandaag op gisteren. Zonder
+        stand (en voor dagen dat Home Assistant uit stond) een lege dag,
+        zodat een plek in de reeks ook een kalenderdag blijft.
+        """
+        dag = self._daily_cost_day_key
+        stand = getattr(self, "_laatste_dagstand", None)
+        if not isinstance(stand, dict) or stand.get("datum") not in (None, dag.isoformat()):
+            stand = None
+        bestaand = {r.get("datum") for r in self.daily_cost_history if isinstance(r, dict)}
+        while dag < vandaag:
+            if dag.isoformat() not in bestaand:
+                self.daily_cost_history.append({
+                    "datum": dag.isoformat(),
+                    "stroom_eur": stand.get("stroom_eur") if stand else None,
+                    "gas_eur": stand.get("gas_eur") if stand else None,
+                })
+            stand = None
+            dag += timedelta(days=1)
+            if (vandaag - dag).days > DAILY_COST_HISTORY_DAYS:
+                dag = vandaag - timedelta(days=DAILY_COST_HISTORY_DAYS)
+
+    def _kostendagen(self, historie: list, dagen: int, overslaan: int = 0) -> list:
+        """De `dagen` kalenderdagen vóór de laatste `overslaan` (v5.186.0).
+
+        Op datum, met de laatste dag in de reeks als anker: een gat in de
+        reeks telt dan niet als een dag uit een eerdere week. Regels zonder
+        datum (heel oude opslag): op positie zoals voorheen.
+        """
+        if not historie:
+            return []
+        try:
+            laatste = date.fromisoformat(historie[-1]["datum"])
+            eind = laatste - timedelta(days=overslaan)
+            begin = eind - timedelta(days=dagen - 1)
+            return [r for r in historie if begin <= date.fromisoformat(r["datum"]) <= eind]
+        except (KeyError, TypeError, ValueError):
+            tot = len(historie) - overslaan
+            return historie[max(0, tot - dagen):max(0, tot)]
 
     def _huidige_dagkosten(self) -> dict:
         """Stroom- en gaskosten van vandaag tot nu toe (v1.8.0)."""
@@ -7568,16 +7622,19 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             ),
         }
 
+        # v5.186.0: vensters op datum, niet op positie (`_kostendagen`).
         for naam, sleutel in (("stroom", "stroom_eur"), ("gas", "gas_eur")):
             blok: dict = {}
-            blok["week"] = self._som(historie[-7:], sleutel)
-            blok["maand"] = self._som(historie[-30:], sleutel)
-            blok["jaar"] = self._som(historie[-365:], sleutel)
+            blok["week"] = self._som(self._kostendagen(historie, 7), sleutel)
+            blok["maand"] = self._som(self._kostendagen(historie, 30), sleutel)
+            blok["jaar"] = self._som(self._kostendagen(historie, 365), sleutel)
 
             # Dagtrend: gisteren tegen eergisteren - twee volledige dagen.
-            if len(historie) >= 2:
-                gisteren = historie[-1].get(sleutel)
-                eergisteren = historie[-2].get(sleutel)
+            gist_rij = self._kostendagen(historie, 1)
+            eergist_rij = self._kostendagen(historie, 1, overslaan=1)
+            if gist_rij and eergist_rij:
+                gisteren = gist_rij[0].get(sleutel)
+                eergisteren = eergist_rij[0].get(sleutel)
                 if gisteren is not None and eergisteren is not None:
                     blok["gisteren"] = gisteren
                     blok["eergisteren"] = eergisteren
@@ -7587,8 +7644,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
 
             # Weektrend: de laatste zeven dagen tegen de zeven daarvoor.
             if len(historie) >= 14:
-                deze = self._som(historie[-7:], sleutel)
-                vorige = self._som(historie[-14:-7], sleutel)
+                deze = blok["week"]
+                vorige = self._som(self._kostendagen(historie, 7, overslaan=7), sleutel)
                 if deze is not None and vorige is not None:
                     blok["vorige_week"] = vorige
                     blok["weektrend_procent"] = self._procentuele_verandering(
@@ -24755,6 +24812,14 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             r.pop("tekort", None)
         if r.get("ondergrens_procent") is None:
             r.pop("ondergrens_procent", None)
+        # v5.186.0: lege vermogens weg (cockpit leest ontbrekend als leeg) en
+        # zon/totaal op 2 decimalen, zoals cockpit en dashboard ze tonen.
+        for veld in ("accu_w", "net_w"):
+            if veld in r and r[veld] is None:
+                r.pop(veld)
+        for veld in ("zon_kwh", "cumulatief_eur"):
+            if isinstance(r.get(veld), float):
+                r[veld] = round(r[veld], 2)
         return r
 
     def _plan_startvoorraad_kwh(self) -> float | None:
@@ -29268,39 +29333,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             # dus het ijkpunt moet mee - anders telt de opwek van
             # gisteren vanaf middernacht gewoon door.
             self._reset_pv_energy_meter_day()
-            # v1.90.0: de dag afsluiten in een reeks, vóór de tellers op
-            # nul gaan.
-            #
-            # Gevraagd: "de zonne-energie van gisteren, opgeslagen in de
-            # batterij, is vannacht gebruikt - dat is toch ook
-            # zelfconsumptie?"
-            #
-            # Ja, en de formule telt dat ook zo: wat niet is
-            # teruggeleverd geldt als zelf verbruikt. Maar de DAGGRENS
-            # vertekent. Op 14 augustus 08:23 stond er 0,109 kWh opwek
-            # tegen 0,448 kWh export - allemaal uit de accu, dus zon van
-            # gisteren. Dat drukt de zelfconsumptie van vandaag terwijl
-            # het over gisteren gaat.
-            #
-            # Over een week valt dat tegen elkaar weg: wat aan het begin
-            # wordt meegeteld, valt aan het eind af.
-            if self.pv_production_today_kwh > 0 or self.pv_export_today_kwh > 0:
-                self.pv_daily_history.append(
-                    {
-                        "datum": (
-                            self._self_sufficiency_day_key.isoformat()
-                            if self._self_sufficiency_day_key
-                            else None
-                        ),
-                        "opwek_kwh": round(self.pv_production_today_kwh, 3),
-                        "export_kwh": round(self.pv_export_today_kwh, 3),
-                        "zon_export_kwh": round(self.solar_export_today_kwh, 3),
-                        "gemeten_splitsing": self._solar_export_gemeten(),
-                    }
-                )
-                self.pv_daily_history = self.pv_daily_history[
-                    -SELF_CONSUMPTION_WINDOW_DAYS:
-                ]
+            # v5.186.0: de ongebruikte reeks pv_daily_history is weg (de dag
+            # staat in energy_daily_history via `_sluit_energiedag_af`).
 
             # v1.90.0: de dag die wordt afgesloten eerst vastleggen.
             #
@@ -29325,9 +29359,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                     _LOGGER.exception("Kon de PV-bandbreedte niet vastleggen")
             self._energiedagstand = {}
             # v2.3.0: de kostenmeter opnieuw ijken op de stand van nu.
-            self._kosten_meter_dagbegin = self._read_sensor_float(
-                self.config.get(CONF_COST_ENERGY_SENSOR)
-            )
+            # v5.186.0: een dagsensor ijkt op 0 (zie `_kosten_meter_ijkpunt`).
+            self._kosten_meter_dagbegin = self._kosten_meter_ijkpunt()
             self.pv_export_today_kwh = 0.0
             self.solar_export_today_kwh = 0.0
             self.battery_export_today_kwh = 0.0
@@ -29653,7 +29686,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             )
         if hersteld:
             _LOGGER.info("%d dagregel(s): saldo hersteld naar netto_eur (v5.185.0)", hersteld)
-            self.schedule_persisted_state_save()
+        # v5.186.0: één keer opslaan, ook na alleen een verplaatsing (die
+        # viel door de dubbele regel onder `if hersteld`).
+        if verplaatst or hersteld:
             self.schedule_persisted_state_save()
 
     def _weer_onmogelijke_dagen(self) -> None:
@@ -29870,10 +29905,19 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         start = self._contract_start()
         if start is None:
             return None
-        begin = start.replace(year=vandaag.year)
+        begin = self._zelfde_dag_in_jaar(start, vandaag.year)
         if begin > vandaag:
-            begin = start.replace(year=vandaag.year - 1)
+            begin = self._zelfde_dag_in_jaar(start, vandaag.year - 1)
         return begin
+
+    @staticmethod
+    def _zelfde_dag_in_jaar(dag, jaar):
+        """`dag` in `jaar`; 29 februari wordt 28 februari in een gewoon jaar
+        (v5.186.0: `replace(year=...)` gaf daar een ValueError)."""
+        try:
+            return dag.replace(year=jaar)
+        except ValueError:
+            return dag.replace(year=jaar, day=28)
 
     # v1.91.0: wat er per periode wordt opgeteld, met eenheid en of een
     # hogere waarde beter is. Eén tabel in plaats van losse features per
@@ -30528,8 +30572,32 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if waarde < begin:
             # De teller is gereset (dagsensor om middernacht, of een
             # meterwissel): de stand zelf is dan de aangroei.
+            # v5.186.0: en het ijkpunt meteen op 0. Een dagsensor die pas na
+            # middernacht reset liet "kosten vandaag" anders met de stand van
+            # gisteren zakken zodra hij die weer passeerde. Reset in de eerste
+            # uren = dagsensor: de volgende dagwissels ijken direct op 0.
+            self._kosten_meter_dagbegin = 0.0
+            if dt_util.now().hour < KOSTEN_METER_RESET_TOT_UUR:
+                self._kosten_meter_dagreset = True
             return round(waarde, 2)
         return round(waarde - begin, 2)
+
+    def _kosten_meter_ijkpunt(self) -> float | None:
+        """Ijkpunt van de kostenmeter bij de dagwissel (v5.186.0).
+
+        Een dagsensor van de leverancier (`last_reset`, of eerder gezien
+        resetten in de eerste uren) loopt soms nog even met de stand van
+        gisteren door. Die ijkt op 0; een levenslange teller op de stand nu.
+        """
+        entity_id = self.config.get(CONF_COST_ENERGY_SENSOR)
+        if not entity_id:
+            return None
+        toestand = self.hass.states.get(entity_id)
+        if getattr(self, "_kosten_meter_dagreset", False) or (
+            toestand is not None and toestand.attributes.get("last_reset")
+        ):
+            return 0.0
+        return self._read_sensor_float(entity_id)
 
     def get_prijsoverzicht(self, now: datetime | None = None) -> dict:
         """Gemiddelde in- en verkoopprijzen, incl en excl btw (v5.15).
@@ -30600,10 +30668,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         reeks = self.energy_daily_history or []
 
         def _dagen_vanaf(vanaf):
+            # v5.186.0: alleen afgesloten dagen (vandaag staat in `vandaag`).
             return [
                 r
                 for r in reeks
-                if date.fromisoformat(r["datum"]) >= vanaf
+                if vanaf <= date.fromisoformat(r["datum"]) < vandaag
             ]
 
         def _saldo(regel: dict):
@@ -30753,19 +30822,21 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 self.counterfactual_cost_today_eur - self.actual_cost_today_eur,
                 2,
             ),
-            # v3.32.0: dezelfde vorm als de andere perioden. De rij van
-            # vandaag komt uit de lopende tellers en werd apart gebouwd,
-            # dus miste hij dit veld - waardoor de tabel van links naar
-            # rechts niet gelijk te lezen was.
-            "dagen_met_waarde": {
-                sleutel: 1 for sleutel, _n, _e in self.PERIODE_GROOTHEDEN
-            }
-            | {"besparing_eur": 1},
+            # v5.186.0: het saldo en de leveranciersbedragen ontbraken.
+            "netto_eur": round(self.actual_cost_today_eur, 2),
+            **self._prijsdag_velden(vandaag),
         }
+        # v3.32.0: dezelfde vorm als de andere perioden.
+        # v5.186.0: 1 alleen waar vandaag werkelijk een waarde heeft.
+        vandaag_rij["dagen_met_waarde"] = {
+            sleutel: int(vandaag_rij.get(sleutel) is not None)
+            for sleutel, _n, _e in self.PERIODE_GROOTHEDEN
+        } | {"besparing_eur": 1}
 
         perioden = {
             "vandaag": vandaag_rij,
-            "week": _tel(_dagen_vanaf(vandaag - timedelta(days=6))),
+            # v5.186.0: 7 afgesloten dagen, zoals het kostenoverzicht.
+            "week": _tel(_dagen_vanaf(vandaag - timedelta(days=7))),
             "maand": _tel(_dagen_vanaf(vandaag.replace(day=1))),
             "jaar": _tel(_dagen_vanaf(vandaag.replace(month=1, day=1))),
         }

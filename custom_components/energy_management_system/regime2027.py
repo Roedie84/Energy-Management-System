@@ -293,7 +293,14 @@ def samenvatting(dagen: list[dict], laatste: int = 30) -> dict:
 
     liggen = som("regels_laten_liggen_eur")
     opbrengst = som("accu_levert_op_2027_eur")
-    aandeel = (liggen / (opbrengst + liggen) * 100) if liggen is not None and opbrengst and opbrengst + liggen > 0 else None
+    # v5.186.0: het aandeel over dezelfde dagen (beide velden bekend), zoals
+    # v5.99.9 dat voor de periodes deed; anders gemengde dagensets.
+    paren = [d for d in goed if d.get("regels_laten_liggen_eur") is not None
+             and d.get("accu_levert_op_2027_eur") is not None]
+    p_liggen = sum(d["regels_laten_liggen_eur"] for d in paren)
+    p_opbrengst = sum(d["accu_levert_op_2027_eur"] for d in paren)
+    aandeel = (p_liggen / (p_opbrengst + p_liggen) * 100) if paren and p_opbrengst and p_opbrengst + p_liggen > 0 else None
+    met_opbrengst = sum(1 for d in goed if d.get("accu_levert_op_2027_eur") is not None)
     if len(goed) < 7:
         oordeel = f"pas {len(goed)} dag(en) doorgerekend; na zeven dagen zegt het iets"
     elif aandeel is not None and aandeel <= 15:
@@ -309,7 +316,8 @@ def samenvatting(dagen: list[dict], laatste: int = 30) -> dict:
         "overgang_levert_op_eur": som("overgang_levert_op_eur"),
         "regels_laten_liggen_eur": liggen,
         "gemist_aandeel_procent": round(aandeel, 1) if aandeel is not None else None,
-        "per_dag_2027_eur": round(opbrengst / len(goed), 2) if opbrengst is not None else None,
+        # v5.186.0: gedeeld door de dagen MET een waarde.
+        "per_dag_2027_eur": round(opbrengst / met_opbrengst, 2) if opbrengst is not None else None,
         "slechtste_dagen": [{"datum": d.get("datum"), "laten_liggen_eur": d["regels_laten_liggen_eur"]} for d in slechtste],
         "oordeel": oordeel,
         # v5.121.0 (punt 3): wat de extra teruglevering op de P1-meter in 2027 kost

@@ -2624,19 +2624,19 @@ views:
       square: false
       cards:
       - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters') }}
-        secondary: Waarde ontladen
+        primary: '{% set b = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''besparing_deze_maand_eur'') %}{{ ''—'' if b is none else ''€ %.2f''|format(b) }}'
+        secondary: 'Besparing deze maand{% set t = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''besparing_totaal_gecorrigeerd_eur'') %}{% if t is not none %} · totaal € {{ ''%.2f''|format(t) }}{% endif %}'
         icon: mdi:cash-plus
         icon_color: green
-        entity: sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
+        entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
         tap_action:
           action: more-info
       - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.woonkamer_energy_management_system_charge_cost_grid_charging') }}
-        secondary: Netlaadkosten
-        icon: mdi:cash-minus
-        icon_color: red
-        entity: sensor.woonkamer_energy_management_system_charge_cost_grid_charging
+        primary: '{% set n = (state_attr(''sensor.woonkamer_energy_management_system_learned_battery_efficiency'', ''accukosten'') or {}).get(''netladen_maand'') or {} %}{{ ''—'' if n.get(''net_marge_eur'') is none else ''€ %.2f''|format(n.net_marge_eur) }}'
+        secondary: '{% set n = (state_attr(''sensor.woonkamer_energy_management_system_learned_battery_efficiency'', ''accukosten'') or {}).get(''netladen_maand'') or {} %}Marge netladen deze maand{% if n.get(''net_erin_kwh'') is not none %} · {{ ''%.1f''|format(n.net_erin_kwh) }} kWh voor € {{ ''%.2f''|format(n.net_inkoop_eur) }}{% endif %}'
+        icon: mdi:battery-charging-outline
+        icon_color: blue
+        entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
         tap_action:
           action: more-info
     - type: grid

@@ -2,14 +2,15 @@
 
 Zelfde route als StormchaseNL en Gold Scalper: het script wordt door de
 integratie zelf geserveerd en als Lovelace-bron vastgelegd, met de versie
-en de starttijd in de URL zodat een browser na een update nooit een oud
-script uit de cache blijft gebruiken.
+en (v5.186.0) een hash van de inhoud in de URL: na een update nooit een oud
+script uit de cache, en een herstart zonder wijziging houdt de cache.
 
 De Home Assistant-imports staan in de functies: de toetsen laden dit
 pakket met een nagebootste `homeassistant` zonder frontend.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -55,6 +56,21 @@ async def _async_bron(hass, versie_url: str) -> bool:
         return False
 
 
+def _inhoudsmerk(bron: Path) -> str:
+    """Korte hash van het script: zelfde bestand = zelfde URL (v5.186.0)."""
+    try:
+        return hashlib.sha1(bron.read_bytes()).hexdigest()[:8]
+    except OSError:
+        return "0"
+
+
+async def _async_inhoudsmerk(hass, bron: Path) -> str:
+    uitvoeren = getattr(hass, "async_add_executor_job", None)
+    if uitvoeren is None:
+        return _inhoudsmerk(bron)
+    return await uitvoeren(_inhoudsmerk, bron)
+
+
 async def async_registreer_cockpit(hass, versie: str) -> None:
     """Serveer het cockpitscript en zorg dat de frontend het laadt."""
     bron = Path(__file__).parent / "www" / COCKPIT_FILE
@@ -64,7 +80,6 @@ async def async_registreer_cockpit(hass, versie: str) -> None:
     try:
         from homeassistant.components.frontend import add_extra_js_url
         from homeassistant.components.http import StaticPathConfig
-        from homeassistant.util import dt as dt_util
     except ImportError as err:  # pragma: no cover - zonder frontend geen dashboard
         _LOGGER.debug("Geen frontend: %s", err)
         return
@@ -81,13 +96,17 @@ async def async_registreer_cockpit(hass, versie: str) -> None:
             _LOGGER.debug("Pad stond er al: %s", err)
         hass.data[_GEREGISTREERD] = True
 
-    versie_url = f"{COCKPIT_URL}?v={versie}&t={int(dt_util.utcnow().timestamp())}"
+    # v5.186.0: ?v=<versie>-<inhoud>, geen starttijd meer. Met de starttijd
+    # veranderde de bron-URL bij elke herstart (cache steeds leeg), en het
+    # script laadde twee keer: als bron én via add_extra_js_url. Dat tweede
+    # alleen nog als de bron niet vast te leggen is.
+    versie_url = f"{COCKPIT_URL}?v={versie}-{await _async_inhoudsmerk(hass, bron)}"
     via_bron = await _async_bron(hass, versie_url)
-    try:
-        add_extra_js_url(hass, versie_url)
-    except Exception as err:  # noqa: BLE001 - mag de opstart niet blokkeren
-        _LOGGER.debug("Script niet aan de frontend meegegeven: %s", err)
     if not via_bron:
+        try:
+            add_extra_js_url(hass, versie_url)
+        except Exception as err:  # noqa: BLE001 - mag de opstart niet blokkeren
+            _LOGGER.debug("Script niet aan de frontend meegegeven: %s", err)
         _LOGGER.info(
             "Het cockpitscript staat niet in de Lovelace-bronnen; het laadt via "
             "de frontend. Lukt dat niet, voeg dan %s toe als JavaScript-module "
