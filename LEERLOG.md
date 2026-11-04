@@ -1073,7 +1073,7 @@ laatste ronde: 04-11 15:40, gemeten t/m 04-11 16:00
 - Zon dag **6,62 kWh** (Solcast 7,27, **−9,0 %**, voorlopig). Import 5,25, export 0,57 t/m 19:00. SoC 50 → 16 % tussen 15:45 en 19:41, accu leeg rond 20:15.
 - Planvolging 54,5 % (n=77), twin 0,598 (grote fouten 15:30/16:30 uit ochtendplannen; laatste 0,091). Besparing −€ 0,03. MC tot blok 99,7 % (det. 2,08 kWh, horizon 00:00), soort live 'planning'.
 - **H-EMS-18:** 19:36 viel 13:00-13:15 uit het plan (reden 'opstartfase'); 16:12/16:59/17:20 niet te meten, want `laadplan_gewijzigd` bewaart alleen de laatste en attributen staan niet in de recorder → **L-EMS-067 (zelf te bouwen, dagafsluiting)**. `reserve_sprongen` 19:36: lange horizon 4,80 → 6,33 kWh.
-- Witgoedadvies: unknown na elke herstart, terug op het volgende kwartier (13× vandaag, 3-25 min). Geen stilstand.
+- Witgoedadvies: unknown na elke herstart, terug op het volgende kwartier (13× vandaag, 1-25 min). Geen stilstand.
 - L-EMS-061: accu nog niet op 10 %, 20:15 volgende ronde. L-EMS-063: toets morgenochtend. L-EMS-064: n=0. Stilstand: **geen echte** (10 wachten, 0 doen). Airco 'niets', knop uit → rekent.
 - Niet gemeten: euro's van de kookfout 16:45, SoC-voorspelling en kwartierbeslissingen tegen optimum (dagafsluiting).
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart). H-EMS-14 geparkeerd.

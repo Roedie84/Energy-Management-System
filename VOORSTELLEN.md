@@ -480,7 +480,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 
 ## L-EMS-066 · net van het lopende kwartier te hoog na een berekening midden in het kwartier (meetfout, regressie v5.183.2)
 - Status: **open, zelf te bouwen** (04-11 19:40; dagafsluiting 05-11 03:40, geen tussenrelease: alleen weergave).
-- Onderbouwing (live, n=2): 19:41 accu 683 + net 415 bij huis 680 W, 19:43 683 + 413 bij 682 W; P1 gemeten ~4-80 W. `_rij_dekking` zet `accu_kwh` sinds v5.183.2 op de dekking over de rest van het kwartier; `_waardeplan_net_kwh` rekent de accustap nog als heel kwartier. Net ≈ huis × (1 − rij_uren/0,25): 680 × (1 − 0,1/0,25) = 408 W.
+- Onderbouwing (live, n=2): 19:41 accu 683 + net 415 bij huis 680 W, 19:43 683 + 413 bij 682 W; P1 gemeten ~4-80 W. `_accu_ac_slim` zet `accu_kwh` sinds v5.183.2 op de dekking over de rest van het kwartier; `_waardeplan_net_kwh` rekent de accustap nog als heel kwartier. Net ≈ huis × (1 − rij_uren/0,25): 680 × (1 − 0,1/0,25) = 408 W.
 - Bouw: bij een rij met `accu_stap_kwh` de accu mee schalen als het huis-min-zon-deel (of `net_kwh` van de rij zelf gebruiken). Controleer ook `_rij_zon`. Sturing ongewijzigd; raakt plantabel en `cumulatief_eur` van het lopende kwartier.
 - Meten: rij 0 accu + net + zon = huis binnen 20 W, ook midden in een kwartier.
 
