@@ -132,6 +132,12 @@ class Accu:
     #: v5.177.0 (A10): de (reken)prijs per kWh voor de uren direct na de
     #: horizon, uit de prijsverwachting. None = 75e percentiel van het plan.
     eindprijs_eur: float | None = None
+    #: v5.181.2 (g): mag het plan uit de accu verkopen in een kwartier met
+    #: zonoverschot? Verkopen zet de accu handmatig en dan gaat de zon mee het
+    #: net op. De huis-eerst-regel (v5.179.1) verbiedt zon terugleveren; daar
+    #: hoort deze ook uit, anders gaat de zon via een mini-verkoop alsnog het
+    #: net op (live 04-11 12:00: 0,2 kWh verkocht om 0,32 kWh zon te exporteren).
+    verkopen_bij_zon: bool = True
 
 
 @dataclass
@@ -321,6 +327,8 @@ def _stap_toegestaan(accu: Accu, b: float, overschot: float, tekort: float, gren
         return False
     if b < 0 and not accu.verkopen and -b > tekort + 1e-9:
         return False
+    if b < 0 and not accu.verkopen_bij_zon and overschot > EPS_KWH:
+        return False   # v5.181.2 (g): zie Accu.verkopen_bij_zon
     min_laad = _min_laad_kwh(accu, uren)
     if b > 0 and min_laad > 0:
         net = b - overschot
@@ -532,7 +540,10 @@ def zon_export_laat_huis_tekort(rijen: list[dict], leeg_kwh: float = 0.01) -> bo
     gezien = False
     for r in rijen:
         actie = r.get("actie")
-        if actie == "zon_export":
+        # v5.181.2 (g): een verkoop met zonoverschot levert de zon ook terug
+        # (het net krijgt meer dan de accu levert).
+        zon_mee = actie == "verkopen" and -(r.get("net_kwh") or 0.0) > -(r.get("accu_kwh") or 0.0) + 0.01
+        if actie == "zon_export" or zon_mee:
             gezien = True
             continue
         if not gezien:
@@ -586,8 +597,74 @@ def vloeren_gelijktrekken(kwartieren: list[Kwartier], bodem_kwh: float = 0.0) ->
     return uit
 
 
+def zinloze_verkopen(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu) -> list[int]:
+    """Verkoopkwartieren die de accu later duurder terugvult (v5.181.2, g).
+
+    Live 04-11 12:01: verkopen om 12:00 (rekenprijs 26,6 ct + 2 ct premie)
+    en vanaf 12:15 de accu weer vullen met zon die 26-30 ct aan teruglevering
+    had opgebracht. Rondrit (83,5 %), slijtage (4,22 ct) en marge (2 ct)
+    maken dat altijd verlies; het plan koos het op een gelijkspel van een
+    tiende cent, via de zon die met de verkoop mee het net op ging.
+
+    Een verkoop blijft alleen staan als hij per kWh inhoud meer oplevert
+    (prijs x ontlaadrendement - slijtage - marge) dan het goedkoopste latere
+    bijvullen kost: zon tegen de gemiste teruglevering, net tegen de
+    inkoopprijs plus de netlaadmarge, beide gedeeld door het laadrendement.
+    """
+    eta_l, _eta_o = rendementen(accu)
+    uit = []
+    for t, r in enumerate(rijen):
+        if r.get("actie") != "verkopen":
+            continue
+        inhoud = -(r.get("inhoud_delta_kwh") or 0.0)
+        ac = -(r.get("accu_kwh") or 0.0)
+        if inhoud <= 1e-9 or ac <= 1e-9:
+            continue
+        k = kwartieren[t]
+        prijs = k.teruglever_eur if getattr(k, "teruglever_accu_eur", None) is None else k.teruglever_accu_eur
+        opbrengst = (ac / inhoud) * (prijs - accu.slijtage_eur - accu.verkoopmarge_eur)
+        bijvullen = None
+        for u in range(t + 1, len(rijen)):
+            ru, ku = rijen[u], kwartieren[u]
+            if (ru.get("accu_kwh") or 0.0) <= EPS_KWH:
+                continue
+            if ru.get("actie") == "laden_net":
+                kost = (ku.inkoop_eur + accu.netlaadmarge_eur) / eta_l
+            elif ru.get("actie") in ("zon", "zon_export"):
+                kost = ku.teruglever_eur / eta_l
+            else:
+                continue
+            bijvullen = kost if bijvullen is None else min(bijvullen, kost)
+        if bijvullen is not None and opbrengst <= bijvullen + 1e-9:
+            uit.append(t)
+    return uit
+
+
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
-    """Het goedkoopste accuplan over de gegeven kwartieren."""
+    """Het goedkoopste accuplan over de gegeven kwartieren.
+
+    v5.181.2 (g): met een toets achteraf - een verkoop die de accu later
+    duurder terugvult (`zinloze_verkopen`) wordt in dat kwartier verboden
+    (vloer boven vol) en het plan opnieuw berekend; hooguit een paar rondes.
+    """
+    res = _plan(kwartieren, accu)
+    verboden: set[int] = set()
+    for _ in range(4):
+        if not res.beschikbaar:
+            break
+        nieuw = set(zinloze_verkopen(res.kwartieren, kwartieren, accu)) - verboden
+        if not nieuw:
+            break
+        verboden |= nieuw
+        dicht = accu.bruikbaar_kwh + STAP_KWH
+        kwartieren = [replace(k, verkoop_vloer_kwh=dicht) if t in verboden else k
+                      for t, k in enumerate(kwartieren)]
+        res = _plan(kwartieren, accu)
+    return res
+
+
+def _plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
+    """Het goedkoopste accuplan over de gegeven kwartieren (zonder de toets)."""
     n = len(kwartieren)
     if n == 0:
         return Uitkomst(False, "geen prijzen vooruit")

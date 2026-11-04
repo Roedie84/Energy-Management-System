@@ -408,6 +408,8 @@ class WaardeplanSturingMixin:
                 and waardeplan_mod.zon_export_laat_huis_tekort(res.kwartieren)):
             return res
         accu.zon_export_afdwingbaar = False
+        # v5.181.2 (g): en ook niet via een verkoop (de zon gaat dan mee).
+        accu.verkopen_bij_zon = False
         opnieuw = waardeplan_mod.plan(kwartieren, accu)
         if not opnieuw.beschikbaar:
             return res
