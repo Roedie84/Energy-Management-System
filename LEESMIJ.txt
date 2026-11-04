@@ -1,3 +1,13 @@
+EMS v5.178.0 - compacte energiecockpit
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- De cockpit is ongeveer een derde korter. Alle getallen en statussen blijven zichtbaar;
+  alleen dubbele waarden zijn weg en lange uitleg zit achter een uitklapper.
+- Bovenaan drie tegels: Accu nu (met zon/net/huis/accu), Plan vandaag (tijdlijn) en Geld.
+- Planning en de prijzen van 7 dagen zijn een grafiek met tabbladen.
+- Zon, verkopen en reserve zijn samengevoegd; alle knoppen staan compact bij Bediening.
+
 EMS v5.177.0 - grote controle: plan stuurt overal, minder meldingen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

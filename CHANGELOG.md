@@ -34739,3 +34739,15 @@ Akkoord Ruud 04-11 07:11 (controle A1–A15, B1, B2) en 07:53 (L-EMS-063).
 - A14: grote sensorattributen ingekort (prijsverwachting, diagnose_sturing, kwartierplanning, klimaatprojectie, gacs, nilm); het SVG-plaatje `plaat` van de cockpit-sensor en de markdownkaart in het oude dashboard zijn weg.
 
 Tests: 7 nieuwe testbestanden `test_v5177_*.py`.
+
+## v5.178.0 — compacte energiecockpit
+
+Akkoord Ruud 04-11 07:11 (B3), met de eis dat alle informatie zichtbaar blijft (07:32).
+
+- Kop: status, aanwezigheid, accustand, prijs nu met de duur-drempel, goedkoopste en duurste komende kwartier en het goedkoopste blok; vervangt de tegel Stroomprijs.
+- Drie tegels: Accu · nu (ring, stand, bruikbaar/capaciteit, zon/net/huis/accu als cellen, resttijd, kasprijs; redenen onder "Waarom?"), Plan vandaag (tijdlijn per kwartier, plan tegen meting, laadplanwijziging, netladen en besparing), Geld (alle bedragen in twee kolommen; toelichtingen ingeklapt).
+- Prijs en lading: tabbladen Vandaag / Morgen / 7 dagen (keuze per browser onthouden), staven gekleurd naar wat de accu doet, Vooruitblik eronder; de dubbele bloktabel is weg.
+- Zon, verkopen en reserve samengevoegd tot een raster van 9 getallen; accumodules twee regels per module met alle celwaarden; Huis en apparaten in drie kolommen; alle 13 knoppen compact.
+- Hoogte (testgegevens): desktop 2322 → 1529 px (−34 %), mobiel 6488 → 4062 px (−37 %).
+
+Tests: `test_v5178_cockpit_compact.py` (structuur + node-render); vier tests op de oude indeling bijgewerkt.
