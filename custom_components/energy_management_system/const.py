@@ -7564,6 +7564,9 @@ WAARDEPLAN_WEG_AANDACHT_MINUTEN = 30
 # v5.177.0 (A10): zoveel uur na de horizon telt de prijsverwachting voor de
 # waarde van wat er aan het eind in de accu zit (75e percentiel).
 WAARDEPLAN_EINDPRIJS_UREN = 12
+# v5.177.0 (A13): was de weerentiteit bij het opstarten nog niet geladen, dan
+# na zoveel minuten opnieuw (in plaats van een ERROR en 30 minuten wachten).
+WEER_OPNIEUW_MINUTEN = 2
 CELBESCHERMING_START_V = 2.90
 CELBESCHERMING_BUFFER_KWH = 0.5
 CELBESCHERMING_VRIJ_KWH = 2.0
@@ -7941,8 +7944,6 @@ APPARAAT_LOOPT_NOG = frozenset({"run", "pause", "delayedstart", "actionrequired"
 # toestand is het tijdstip van de laatste druk).
 DASHBOARD_ONBEKEND_IS_NORMAAL = frozenset(
     {
-        # Geen ontlaadgrens actief: de kaart toont "geen grens actief".
-        "sensor.energy_management_system_battery_protection",
         # Nog te weinig waarnemingen in dit bakje: "nog niet genoeg
         # waarnemingen".
         "sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur",

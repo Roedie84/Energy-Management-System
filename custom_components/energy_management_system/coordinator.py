@@ -695,6 +695,7 @@ from .const import (
     WAARDEPLAN_SLIJTAGE_TERUGVAL_CT,
     WAARDEPLAN_WEG_AANDACHT_MINUTEN,
     WAARDEPLAN_EINDPRIJS_UREN,
+    WEER_OPNIEUW_MINUTEN,
     VASTE_NACHT_VAN_UUR,
     VASTE_NACHT_TOT_UUR,
     HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH,
@@ -48067,6 +48068,19 @@ class EnergyManagementSystemCoordinator:
 
         return {**exact, "basis": "geen"}
 
+    #: v5.177.0 (A13): de weerentiteit was er nog niet (opstarten).
+    _weer_opnieuw_proberen: bool = False
+    _weer_niet_klaar_gemeld: bool = False
+
+    def _weer_nog_niet_klaar(self, entity_id: str, err: Exception) -> bool:
+        """Is de weerentiteit gewoon nog niet geladen? (v5.177.0, A13)"""
+        if "did not match any entities" in str(err):
+            return True
+        try:
+            return self.hass.states.get(entity_id) is None
+        except Exception:  # noqa: BLE001
+            return False
+
     async def _async_fetch_hourly_outdoor_forecast(
         self, entity_id: str
     ) -> list[tuple[datetime, float]] | None:
@@ -48087,7 +48101,21 @@ class EnergyManagementSystemCoordinator:
                 blocking=True,
                 return_response=True,
             )
-        except Exception:  # noqa: BLE001 - a forecast fetch must never crash the tick
+        except Exception as err:  # noqa: BLE001 - a forecast fetch must never crash the tick
+            # v5.177.0 (A13): bij het opstarten is de weerentiteit vaak nog
+            # niet geladen ("Service call requested response data but did not
+            # match any entities"). Dat is geen fout: een waarschuwing (één
+            # keer) en over een paar minuten opnieuw. Andere fouten blijven
+            # een uitzondering in het log.
+            if self._weer_nog_niet_klaar(entity_id, err):
+                self._weer_opnieuw_proberen = True
+                if not self._weer_niet_klaar_gemeld:
+                    self._weer_niet_klaar_gemeld = True
+                    _LOGGER.warning(
+                        "Weerentiteit %s is nog niet beschikbaar (%s); de uurverwachting "
+                        "wordt over enkele minuten opnieuw opgehaald", entity_id, err,
+                    )
+                return None
             _LOGGER.exception(
                 "Kon geen uurlijkse weersvoorspelling ophalen bij %s", entity_id
             )
@@ -48200,7 +48228,14 @@ class EnergyManagementSystemCoordinator:
             self.climate_forecast_note = self._climate_forecast_fetch_note
             return
 
+        self._weer_opnieuw_proberen = False
         forecast = await self._async_fetch_hourly_outdoor_forecast(weather_entity)
+        if self._weer_opnieuw_proberen:
+            # v5.177.0 (A13): over WEER_OPNIEUW_MINUTEN opnieuw, niet pas na
+            # het gewone interval.
+            self._climate_forecast_last_fetch = now - timedelta(
+                minutes=max(0, CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES - WEER_OPNIEUW_MINUTEN)
+            )
         if not forecast:
             # v5.114.0: de vorige verwachting blijft gelden voor de uren die nog komen
             nog = [r for r in (self._climate_cached_forecast or []) if r and r[0] > now]

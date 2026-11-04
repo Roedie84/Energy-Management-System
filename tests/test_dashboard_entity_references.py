@@ -262,7 +262,8 @@ def test_they_are_actually_referenced():
     straks geen fouten maar ook geen gegevens."""
     yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
 
-    for eid in ("last_decision_reason", "upcoming_schedule", "battery_protection"):
+    # v5.177.0 (A13): battery_protection is verwijderd (altijd 'unknown').
+    for eid in ("last_decision_reason", "upcoming_schedule"):
         assert f"sensor.energy_management_system_{eid}" in yaml_tekst, eid
 
 

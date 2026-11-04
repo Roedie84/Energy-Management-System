@@ -71,10 +71,30 @@ ATTR_CONSUMPTION_HISTORY = "history_kw"
 ATTR_SAMPLE_COUNT = "sample_count"
 
 
+def _ruim_accubescherming_op(hass: HomeAssistant, entry_id: str) -> None:
+    """Haal de vervallen sensor "Battery protection" uit het register (v5.177.0, A13).
+
+    Hij toonde het geschaalde verkoopvermogen van de oude dure-kwartierregel;
+    sinds het waardeplan stuurt, wordt dat nooit meer gezet en stond hij
+    altijd op 'unknown' (alleen het attribuut soc_percent). Zonder deze
+    opruiming bleef er een wees "niet beschikbaar" staan.
+    """
+    try:
+        from homeassistant.helpers import entity_registry as er
+
+        register = er.async_get(hass)
+        entity_id = register.async_get_entity_id("sensor", DOMAIN, f"{entry_id}_battery_protection")
+        if entity_id:
+            register.async_remove(entity_id)
+    except Exception:  # noqa: BLE001 - opruimen mag het opstarten nooit breken
+        pass
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
+    _ruim_accubescherming_op(hass, entry.entry_id)
     tracker = hass.data[DOMAIN][f"{entry.entry_id}_solar_tracker"]
 
     entities: list[SensorEntity] = [
@@ -94,7 +114,6 @@ async def async_setup_entry(
         UpcomingTimelineSensor(coordinator, entry.entry_id),
         ExpectedOperationModeSensor(coordinator, entry.entry_id),
         EnergyBridgeCheckSensor(coordinator, entry.entry_id),
-        BatteryProtectionSensor(coordinator, entry.entry_id),
         DischargeValueSensor(coordinator, entry.entry_id),
         ChargeCostSensor(coordinator, entry.entry_id),
         BatterySavingsSensor(coordinator, entry.entry_id),
@@ -1097,30 +1116,6 @@ class EnergyBridgeCheckSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             log = last_state.attributes.get("transition_log")
             if isinstance(log, list):
                 self._coordinator.energy_bridge_transition_log = log[-50:]
-
-
-class BatteryProtectionSensor(_CoordinatorDiagnosticSensor):
-    """Shows the SoC-based scaling applied to the forced discharge power
-    during expensive quarters (taper down to 0 as SoC nears the
-    configured minimum, to avoid over-draining the battery).
-    """
-
-    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
-
-    _attr_name = "Battery protection"
-    _attr_icon = "mdi:battery-heart-variant"
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        super().__init__(coordinator, entry_id, "battery_protection")
-
-    @property
-    def native_value(self) -> float | None:
-        return self._coordinator.last_discharge_power_applied
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        return {"soc_percent": self._coordinator.last_soc_percent}
 
 
 class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
