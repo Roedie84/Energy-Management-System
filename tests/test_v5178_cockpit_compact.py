@@ -55,7 +55,8 @@ def test_plan_vandaag_met_tijdlijn_en_planvolging_zichtbaar():
 
 
 def test_tabbladen_met_aria_en_onthouden():
-    assert 'const TABS = [["vandaag", "Vandaag"], ["morgen", "Morgen"], ["week", "7 dagen"]];' in JS
+    # v5.181.4: één tab met alle bekende prijzen in plaats van Vandaag/Morgen
+    assert 'const TABS = [["prijzen", "Prijzen"], ["week", "7 dagen"]];' in JS
     p = _methode("_planning")
     assert 'role="tablist"' in p and 'role="tab"' in p and "aria-selected" in p and "aria-pressed" in p
     # de Vooruitblik staat zichtbaar onder de dag-grafiek, alleen de uitleg is ingeklapt
@@ -174,5 +175,6 @@ console.log(JSON.stringify({
     r = json.loads(uit.stdout.strip().splitlines()[-1])
     assert r["strip"] >= 24 and r["legenda"] and r["planvolg"] and r["netladen"] and r["scheelt"]
     assert r["knoppen"] == 3 and r["aan"] == 1                # alle drie zichtbaar, kalibratie aan
-    assert r["tabs"] == 3 and r["weekUit"] is True and r["geselecteerd"] == 1
+    assert r["tabs"] == 2 and r["weekUit"] is True  # v5.181.4: Prijzen + 7 dagen
+    assert r["geselecteerd"] == 1
     assert r["vooruitblik"] is True

@@ -169,10 +169,10 @@ def test_weergave_rij_cockpit_gelijk_aan_python():
 
 def test_alle_plekken_uit_dezelfde_weergave():
     stand = JS.split("  _stand(live) {", 1)[1].split("\n  }\n", 1)[0]
-    assert "this._huidigeRij()" in stand and "kwartierWeergave(rij, reden)" in stand
+    assert "this._huidigeRij()" in stand and "kwartierWeergave(this._rijNu(rij, live), reden)" in stand
     assert 'aan("leermodus")' in stand and "handmatigWeergave(" in stand
     vb = JS.split("  _vooruitBlokken(rijen, tijden, uren, socNu) {", 1)[1].split("\n  }\n", 1)[0]
-    assert "kwartierWeergave(r)" in vb and "modus(r.modus)" not in vb
+    assert "kwartierWeergave(lopend ? this._rijNu(r) : r)" in vb and "modus(r.modus)" not in vb
     accu = JS.split("  _accu() {", 1)[1].split("\n  }\n", 1)[0]
     assert "const kort = stand.label ? stand.label" in accu
     assert "this._vooruitBlokken(rijenNu" in accu and "this._blokken()" not in accu
@@ -215,7 +215,7 @@ for (let i = 0; i < 16; i++) {
 let states = { plan: { state: "ok", attributes: { kwartierplanning: rijen } }, reden: { state: "waardeplan_houden" } };
 o._ids = {};
 o._s = (k) => states[k];
-o._live = () => ({ accu: 10, zon: 0, net: 0, huis: 0 });
+o._live = () => ({ accu: -300, zon: 0, net: 0, huis: 0 });  // v5.181.4: lopend kwartier uit de meting
 const tijden = rijen.map((r) => new Date(r.start));
 const a = o._stand();
 const blokken = o._vooruitBlokken(rijen, tijden, 6, 35);
@@ -235,7 +235,7 @@ console.log(JSON.stringify({ a: a.label, k: a.k, b0: blokken[0].label, b1: blokk
     r = json.loads(uit.stdout.strip().splitlines()[-1])
     assert r["k"] == "zon" and r["b0"] == "Zon laden"
     assert r["a"] == "Zon laden – lading bewaren voor later"
-    assert r["b1"] == "Rust"
+    assert r["b1"] == "Bewaren voor later"  # v5.181.4
     assert r["hand"] == "Handmatig: slim laden – EMS stuurt niet"
 
 

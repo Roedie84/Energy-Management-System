@@ -34840,3 +34840,13 @@ Meldingen Ruud 04-11 11:29–12:01.
 - Eenheden bij de assen: "ct/kWh" en "accu %"; eigen logo van de integratie in de kop.
 
 Tests: `test_v5181_2_middagverkoop.py`, `test_v5181_2_verkoopvloer.py`, `test_v5181_2_cockpit.py`.
+
+## v5.181.4 — cockpit: "Bewaren" overal gelijk, lopend kwartier uit de meting, één prijzentab
+
+Melding Ruud 04-11 13:13 (screenshot): de tegel zei "Bewaren voor later", de Vooruitblik en de grafiek "Rust" voor hetzelfde kwartier, terwijl de accu 164 W uit de zon laadde.
+
+- Nieuwe stand `bewaren` in `standweergave` en `DOEN`: een sparen-planrij (smart_charging (sparen)) zonder laden of ontladen. Met een bekende reden dezelfde zin als de tegel ("Bewaren voor de piek", ...); `waardeplan_leeg` gaat voor.
+- Het lopende kwartier (`_stand` en het eerste blok van de Vooruitblik) gebruikt het gemeten accuvermogen in plaats van het geplande (`_rijNu`). De grafiek blijft het plan tonen.
+- Prijs en lading (Ruud 13:28): de tabs Vandaag en Morgen zijn samengevoegd tot "Prijzen": alle bekende kwartierprijzen achter elkaar, morgen zodra die bekend zijn. "7 dagen" blijft. Een onthouden keuze "vandaag"/"morgen" valt terug op "Prijzen".
+
+Tests: `test_v5181_4_bewaren.py`; `test_v5181_2_cockpit.py` aangepast.

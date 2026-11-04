@@ -1,3 +1,14 @@
+EMS v5.181.4 - cockpit: "Bewaren" overal gelijk, lopend kwartier uit de meting, één prijzentab
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Sparen zonder laden of ontladen heet nu overal "Bewaren voor later" (tegel, grafiek,
+  tijdlijn, Vooruitblik), met een eigen kleur. "Rust" blijft voor de slimme stand.
+- Het lopende kwartier volgt het gemeten accuvermogen: laadt de zon de accu terwijl
+  het plan 0 W verwachtte, dan staat er "Zon laden" in tegel en Vooruitblik.
+- Prijs en lading: geen aparte tabs Vandaag en Morgen meer. "Prijzen" toont alle bekende
+  kwartierprijzen achter elkaar (morgen zodra die bekend zijn); "7 dagen" blijft.
+
 EMS v5.181.3 - geen zinloze middagverkoop, verkopen in de duurste kwartieren, cockpit eenduidig
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

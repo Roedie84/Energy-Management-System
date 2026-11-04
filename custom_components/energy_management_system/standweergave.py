@@ -21,6 +21,7 @@ from __future__ import annotations
 # Dezelfde sleutels en namen als DOEN in de cockpit.
 STANDEN: dict[str, str] = {
     "rust": "Rust",
+    "bewaren": "Bewaren voor later",
     "zon": "Zon laden",
     "net": "Net laden",
     "voeden": "Huis voeden",
@@ -59,13 +60,15 @@ def soort(plan_modus: str | None, accu_w: float | None, tekort: bool = False) ->
         return "net"
     if tekort:
         return "leeg"
+    # v5.181.4: sparen zonder laden of ontladen heet overal "bewaren".
+    stil = "bewaren" if ("sparen" in m or "smart_charging" in m) else "rust"
     if accu_w is not None:
         if accu_w <= -DREMPEL_W:
             return "zon"
         if accu_w >= DREMPEL_W:
             return "voeden"
-        return "rust"
-    return "voeden" if m.startswith("smart_discharging") else "rust"
+        return stil
+    return "voeden" if m.startswith("smart_discharging") else stil
 
 
 def weergave(
@@ -76,10 +79,11 @@ def weergave(
 ) -> dict:
     """{"k": sleutel, "label": zin} voor tegel, kopchip, tijdlijn en uitleg."""
     k = soort(plan_modus, accu_w, tekort)
-    if reden == "waardeplan_leeg" and k == "rust":
+    stil = k in ("rust", "bewaren")
+    if reden == "waardeplan_leeg" and stil:
         k = "leeg"
     toelichting = TOELICHTING.get(reden or "")
-    if k == "rust" and reden in RUST_LABEL:
+    if stil and k != "leeg" and reden in RUST_LABEL:
         label = RUST_LABEL[reden]
     elif k == "zon" and toelichting:
         label = f"{STANDEN[k]} – {toelichting}"

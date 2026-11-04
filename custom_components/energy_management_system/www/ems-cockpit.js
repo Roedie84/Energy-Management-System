@@ -834,11 +834,14 @@ const LOGO_URL = "/energy_management_system/ems-logo.png";
 const LOGO_URL_2X = "/energy_management_system/ems-logo@2x.png";
 
 /* v5.178.0: de tabbladen van Prijs en lading, onthouden per browser. */
-const TABS = [["vandaag", "Vandaag"], ["morgen", "Morgen"], ["week", "7 dagen"]];
+/* v5.181.4 (Ruud 04-11): geen aparte tabs Vandaag/Morgen meer; "Prijzen" toont
+   alle bekende kwartierprijzen achter elkaar (vandaag en, zodra bekend, morgen). */
+const TABS = [["prijzen", "Prijzen"], ["week", "7 dagen"]];
 
 /* v5.178.0: wat de accu per kwartier doet, voor de tijdlijn en de grafiek. */
 const DOEN = {
   rust: { label: "Rust", kleur: "var(--blauw)" },
+  bewaren: { label: "Bewaren voor later", kleur: "#7d8fd0" },
   zon: { label: "Zon laden", kleur: "var(--amber)" },
   net: { label: "Net laden", kleur: "var(--groen)" },
   voeden: { label: "Huis voeden", kleur: "var(--cyaan)" },
@@ -853,8 +856,11 @@ const doen = (r) => {
   if (m.k === "laden") return "net";
   if (r.tekort) return "leeg";
   const a = num(r.accu_w);
-  if (a != null) return a <= -50 ? "zon" : a >= 50 ? "voeden" : "rust";
-  return m.k === "ontladen" ? "voeden" : "rust";
+  // v5.181.4: sparen zonder laden of ontladen heet overal "bewaren" (was
+  // "Rust" in tijdlijn en Vooruitblik, "Bewaren voor later" in de tegel).
+  const stil = m.k === "sparen" ? "bewaren" : "rust";
+  if (a != null) return a <= -50 ? "zon" : a >= 50 ? "voeden" : stil;
+  return m.k === "ontladen" ? "voeden" : stil;
 };
 /* v5.181.1 (punt 9): wat de accu nu doet, in een zin voor tegel, kopchip,
    tijdlijn en uitleg. Dezelfde tabellen als standweergave.py (een toets houdt
@@ -877,10 +883,11 @@ const STAND_RUST = {
 const standSoort = (planModus, accuW, tekort) => doen({ modus: planModus, accu_w: accuW, tekort });
 const standWeergave = (reden, planModus, accuW, tekort = false) => {
   let k = standSoort(planModus, accuW, tekort);
-  if (reden === "waardeplan_leeg" && k === "rust") k = "leeg";
+  const stil = k === "rust" || k === "bewaren";
+  if (reden === "waardeplan_leeg" && stil) k = "leeg";
   const toel = STAND_TOELICHTING[reden || ""];
   let label;
-  if (k === "rust" && STAND_RUST[reden]) label = STAND_RUST[reden];
+  if (stil && k !== "leeg" && STAND_RUST[reden]) label = STAND_RUST[reden];
   else if (k === "zon" && toel) label = `${DOEN[k].label} \u2013 ${toel}`;
   else label = DOEN[k].label;
   return { k, label, kleur: DOEN[k].kleur };
@@ -1414,8 +1421,16 @@ class EmsCockpitCard extends HTMLElement {
       return { reden, ...handmatigWeergave(hand) };
     }
     const rij = this._huidigeRij();
-    if (rij) return { reden, ...kwartierWeergave(rij, reden) };
+    // v5.181.4: het lopende kwartier volgt het gemeten vermogen (laadt de zon
+    // de accu, dan staat er "Zon laden", ook als het plan 0 W verwachtte).
+    if (rij) return { reden, ...kwartierWeergave(this._rijNu(rij, live), reden) };
     return { reden, ...standWeergave(reden, st.plan_modus, (live || this._live()).accu) };
+  }
+
+  /* v5.181.4: de planrij van nu met het gemeten accuvermogen. */
+  _rijNu(rij, live) {
+    const a = num((live || this._live()).accu);
+    return a == null ? rij : { ...rij, accu_w: a };
   }
 
   /* v5.181.2 (a): de planrij van het lopende kwartier, of null. */
@@ -1877,7 +1892,7 @@ class EmsCockpitCard extends HTMLElement {
     if (this._tabKeuze == null) {
       let t = null;
       try { t = localStorage.getItem("ems-cockpit-tab"); } catch (e) { t = null; }
-      this._tabKeuze = TABS.some(([k]) => k === t) ? t : "vandaag";
+      this._tabKeuze = TABS.some(([k]) => k === t) ? t : "prijzen";
     }
     return this._tabKeuze;
   }
@@ -1885,46 +1900,36 @@ class EmsCockpitCard extends HTMLElement {
   _planning() {
     const rijen = this._planRijen().filter((r) => num(r.prijs_ct) != null);
     const tijden = planTijden(rijen);
-    const middernacht = new Date();
-    middernacht.setHours(24, 0, 0, 0);
-    const m0 = middernacht.getTime();
-    const deel = { vandaag: [], morgen: [] };
-    tijden.forEach((d, i) => {
-      const t = d.getTime();
-      if (t < m0) deel.vandaag.push(i);
-      else if (t < m0 + 86400000) deel.morgen.push(i);
-    });
     const kw = attr(this._s("prijsverwachting"), "kwartieren");
     const heeft = {
-      vandaag: deel.vandaag.length > 0,
-      morgen: deel.morgen.length > 0,
+      prijzen: rijen.length > 0,
       week: !!(kw && Array.isArray(kw.ct) && kw.ct.length > 1),
     };
     let tab = this._tab();
-    if (!heeft[tab]) tab = (TABS.find(([k]) => heeft[k]) || ["vandaag"])[0];
+    if (!heeft[tab]) tab = (TABS.find(([k]) => heeft[k]) || ["prijzen"])[0];
     const knoppen =
       `<div class="tabs" role="tablist" aria-label="Periode">` +
       TABS.map(([k, naam]) =>
         `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === tab}" aria-pressed="${k === tab}"` +
-        `${heeft[k] ? "" : ` disabled title="${k === "morgen" ? "Nog geen prijzen voor morgen" : "Geen gegevens"}"`}>${naam}</button>`
+        `${heeft[k] ? "" : ` disabled title="Geen gegevens"`}>${naam}</button>`
       ).join("") +
       `</div>`;
     const kop = paneelKop("grafiek", "Prijs en lading", knoppen, "detail-planning");
 
-    // Vandaag en morgen: de grafiek met de Vooruitblik eronder. 7 dagen: de
+    // Prijzen: alle bekende kwartieren met de Vooruitblik eronder. 7 dagen: de
     // prijsverwachting met hoe goed die is.
     let lichaam;
     if (tab === "week" && heeft.week) lichaam = this._week();
     else {
-      lichaam = heeft[tab]
-        ? this._planGrafiek(deel[tab].map((i) => rijen[i]), deel[tab].map((i) => tijden[i]))
+      lichaam = heeft.prijzen
+        ? this._planGrafiek(rijen, tijden)
         : `<div class="sub">Nog geen kwartierplanning.</div>`;
       if (rijen.length) lichaam += this._vooruitblik(rijen, tijden);
     }
 
     const drempel = num(attr(this._s("uitleg"), "expensive_price_threshold"));
     const uitleg =
-      `<div class="meternoot">Vandaag en morgen: staaf = prijs per kwartier (ct/kWh) in de kleur van wat de accu dan doet; ` +
+      `<div class="meternoot">Prijzen: alle bekende kwartierprijzen (morgen zodra die bekend zijn); staaf = prijs per kwartier (ct/kWh) in de kleur van wat de accu dan doet; ` +
       `witte lijn = verwachte accustand, geel = verwachte zon${drempel != null ? `, stippellijn = drempel voor duur (${ct(drempel)} ct)` : ""}. ` +
       `7 dagen: vol = bekend, in de kleur van het plan; licht = verwachting, gekleurd naar de dagregel ` +
       `(goedkoopste deel = laden, boven de drempel voor duur = verkopen). Alleen meten.</div>`;
@@ -2055,7 +2060,9 @@ class EmsCockpitCard extends HTMLElement {
         return;
       }
       // v5.181.2 (a): gegroepeerd op de weergave per kwartier (staaf en tijdlijn)
-      const m = kwartierWeergave(r);
+      // v5.181.4: het lopende kwartier met het gemeten vermogen, net als de tegel.
+      const lopend = t0 <= Date.now();
+      const m = kwartierWeergave(lopend ? this._rijNu(r) : r);
       let b = blokken[blokken.length - 1];
       if (!b || b.k !== m.k) {
         b = { k: m.k, label: DOEN[m.k].label, kleur: m.kleur, start: tijden[i], eind: null,
