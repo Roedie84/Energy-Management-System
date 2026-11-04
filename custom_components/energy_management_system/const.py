@@ -2328,7 +2328,12 @@ MARGE_TELT_NIET_MEE_SOORTEN = ("economisch", "onbekend")
 # blijft de accu voor het huis, en de echte pieken (70-80 ct) worden nog
 # wel verkocht.
 CONF_VERKOOP_MIN_WINST_CT = "verkoop_min_winst_ct"
-DEFAULT_VERKOOP_MIN_WINST_CT = 10.0
+# v5.177.0 (B1, akkoord Ruud): 2 ct/kWh (was 10). Het waardeplan rekent
+# rendement en slijtage al mee; 10 ct hield bijna elke verkoop tegen.
+DEFAULT_VERKOOP_MIN_WINST_CT = 2.0
+#: v5.177.0 (B1): een opgeslagen 10 ct (de oude standaard) wordt eenmalig 2 ct.
+VERKOOP_MIN_WINST_OUDE_STANDAARD_CT = 10.0
+CONF_VERKOOP_MIN_WINST_GEMIGREERD = "verkoop_min_winst_v5177"
 VERKOOP_NA_BLOK_MIN_WINST_EUR = DEFAULT_VERKOOP_MIN_WINST_CT / 100
 
 # Fallback threshold (kWh) for the emergency low-battery charge trigger,
@@ -2775,6 +2780,25 @@ REASON_REGISTRY: dict[str, dict] = {
         "waarom_vraag": "Waarom levert de accu niets?",
         "korte_naam": "accu leeg",
         "emoji": "🪫",
+    },
+    # v5.177.0 (A11): zon terugleveren in plaats van opslaan - tijdens de
+    # saldering levert een kWh terug de inkoopprijs op; opslaan loont dan
+    # alleen als het later meer oplevert dan prijs / rendement + slijtage.
+    "waardeplan_terugleveren": {
+        "mode": OPTION_MANUAL,
+        "titel": "Zon terugleveren (waardeplan)",
+        "uitleg": (
+            "Het zonoverschot gaat dit kwartier het net op in plaats van de "
+            "accu in: terugleveren levert nu meer op dan de stroom later uit "
+            "de accu waard is, na rendement en slijtage. De accu staat "
+            "handmatig op 0 W (of laadt een vast deel)."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "zon terugleveren (waardeplan)",
+        "waarom_vraag": "Waarom gaat de zon nu niet de accu in?",
+        "korte_naam": "waardeplan terugleveren",
+        "emoji": "🧮☀️",
     },
     "emergency_low_battery": {
         "mode": OPTION_MANUAL,
@@ -7522,7 +7546,24 @@ WAARDEPLAN_HORIZON_UUR = 36
 # Wijkt de inhoud meer af van het plan, dan binnen het kwartier opnieuw rekenen.
 WAARDEPLAN_HERREKEN_AFWIJKING_KWH = 0.5
 # Onder dit vermogen geen handmatige opdracht (laden of verkopen).
-WAARDEPLAN_MIN_VERMOGEN_W = 150
+# v5.177.0 (A12): gelijk aan de grens van het plan (WAARDEPLAN_MIN_ACTIE_W,
+# hieronder): planner en sturing gebruiken één grens, zodat het plan nooit een
+# vermogen bevat dat de sturing niet stuurt. Was 150 tegen 400.
+WAARDEPLAN_MIN_VERMOGEN_W = 400.0
+# v5.177.0 (A12): netladen pas vanaf dit vermogen (W, netkant). Onder 500 W
+# haalde laden 72 % tegen 85 % bij 500-1500 W: minder kwartieren, hoger vermogen.
+WAARDEPLAN_MIN_LAAD_W = 500.0
+# v5.177.0 (A5): zoveel kwartieren moet het plan minstens hebben; bij een gat in
+# verbruik, zon of prijs knipt het plan de horizon daar af in plaats van weg te vallen.
+WAARDEPLAN_MIN_KWARTIEREN = 4
+# v5.177.0 (A5): slijtage (ct per kWh uit de accu) als de slijtageberekening
+# niets geeft: 3 x EUR 729 over 8,64 kWh x 6000 cycli = 4,22 ct.
+WAARDEPLAN_SLIJTAGE_TERUGVAL_CT = 4.22
+# v5.177.0 (A5): zo lang (minuten) zonder waardeplan wordt een aandachtspunt.
+WAARDEPLAN_WEG_AANDACHT_MINUTEN = 30
+# v5.177.0 (A10): zoveel uur na de horizon telt de prijsverwachting voor de
+# waarde van wat er aan het eind in de accu zit (75e percentiel).
+WAARDEPLAN_EINDPRIJS_UREN = 12
 CELBESCHERMING_START_V = 2.90
 CELBESCHERMING_BUFFER_KWH = 0.5
 CELBESCHERMING_VRIJ_KWH = 2.0
@@ -8129,6 +8170,7 @@ SOC_DEMPER_STROOM_FRACTIE = 0.5
 # Zendure op manual. 400 W = 0,1 kWh per kwartier; onder ~500 W ontlaadt de
 # Zendure op ~69 % en elke wissel is een schrijfactie.
 WAARDEPLAN_MIN_ACTIE_W = 400.0
+assert WAARDEPLAN_MIN_VERMOGEN_W == WAARDEPLAN_MIN_ACTIE_W  # v5.177.0 (A12): één grens
 
 # Punt 4: de effectieve ondergrens. Stopt de accu met leveren terwijl het huis
 # nog van het net neemt en de stand de accu laat leveren (smart), ruim boven de

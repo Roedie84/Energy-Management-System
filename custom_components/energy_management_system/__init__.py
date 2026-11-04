@@ -17,6 +17,12 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, PLATFORMS
 from .const import CONF_BATTERY_POWER_SENSOR, CONF_INVERT_BATTERY_POWER_SIGN
+from .const import (
+    CONF_VERKOOP_MIN_WINST_CT,
+    CONF_VERKOOP_MIN_WINST_GEMIGREERD,
+    DEFAULT_VERKOOP_MIN_WINST_CT,
+    VERKOOP_MIN_WINST_OUDE_STANDAARD_CT,
+)
 from .coordinator import EnergyManagementSystemCoordinator
 from .solar_forecast import SolarForecastAccuracyTracker
 from .zendure_lokaal import ZendureLokaalMeelezer
@@ -161,8 +167,32 @@ EIGEN_SERVICES = (
     "accumodule_melding",
 )
 
+def migreer_verkoop_min_winst(opties: dict, data: dict | None = None) -> dict | None:
+    """v5.177.0 (B1, akkoord Ruud): de standaard verkoopmarge gaat van 10 naar
+    2 ct/kWh. Het optieformulier slaat de standaard mee op, dus een opgeslagen
+    10 is niet van een bewuste keuze te onderscheiden: precies 10 wordt
+    eenmalig 2; elke andere waarde blijft. Een vlag voorkomt dat een later
+    bewust gekozen 10 opnieuw wordt omgezet. None = niets te doen."""
+    if opties.get(CONF_VERKOOP_MIN_WINST_GEMIGREERD):
+        return None
+    nieuw = {**opties, CONF_VERKOOP_MIN_WINST_GEMIGREERD: True}
+    try:
+        oud = opties.get(CONF_VERKOOP_MIN_WINST_CT, (data or {}).get(CONF_VERKOOP_MIN_WINST_CT))
+        if oud is not None and abs(float(oud) - VERKOOP_MIN_WINST_OUDE_STANDAARD_CT) < 1e-9:
+            nieuw[CONF_VERKOOP_MIN_WINST_CT] = DEFAULT_VERKOOP_MIN_WINST_CT
+    except (TypeError, ValueError):
+        pass
+    return nieuw
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Management System from a config entry."""
+    # v5.177.0 (B1): eenmalig de oude standaard verkoopmarge omzetten.
+    try:
+        if (nieuw := migreer_verkoop_min_winst(dict(entry.options or {}), dict(entry.data or {}))) is not None:
+            hass.config_entries.async_update_entry(entry, options=nieuw)
+    except Exception as err:  # noqa: BLE001 - een migratie mag de start nooit tegenhouden
+        _LOGGER.warning("Verkoopmarge niet gemigreerd: %s", err)
     config = {**entry.data, **entry.options}
 
     # v5.71: de cockpit (kaart en strategie) aan de frontend geven.

@@ -48,6 +48,18 @@ def terugleverwaarde_2027(kaal_eur: float | None, terugleverkosten_eur: float = 
     return kaal_eur + PREMIE_EUR + ZONNEBONUS_FRACTIE * max(0.0, kaal_eur) - (terugleverkosten_eur or 0.0)
 
 
+def terugleverwaarde_accu_2027(kaal_eur: float | None, terugleverkosten_eur: float = 0.0) -> float | None:
+    """Wat een kWh UIT DE ACCU het net op vanaf 2027 oplevert (v5.177.0, A9).
+
+    Kaal + premie, zonder de zonnebonus: die betaalt Zonneplan alleen over
+    zonnestroom, niet over teruglevering uit een thuisaccu (zie de notitie bij
+    `_update_battery_savings_tracking` in de coordinator).
+    """
+    if kaal_eur is None:
+        return None
+    return kaal_eur + PREMIE_EUR - (terugleverkosten_eur or 0.0)
+
+
 def marginale_waarde(
     *,
     overschot_w: float | None,

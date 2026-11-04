@@ -172,8 +172,11 @@ def test_verkopen_boven_de_reserve(make_coordinator, hass):
 
 
 def test_niet_verkopen_onder_de_reserve(make_coordinator, hass):
-    """Het huis gaat voor: onder de verkoopreserve wordt niets verkocht."""
-    c, t = _c(make_coordinator, _plan("verkopen", -0.6, 0.5), inhoud=2.0, reserve=2.5)
+    """Het huis gaat voor: onder de verkoopreserve wordt niets verkocht.
+    v5.177.0 (A1): de vloer die het plan zelf gebruikte (verkoop_vloer_kwh)."""
+    plan = _plan("verkopen", -0.6, 0.5)
+    plan["nu"]["verkoop_vloer_kwh"] = 2.5
+    c, t = _c(make_coordinator, plan, inhoud=2.0, reserve=2.5)
     asyncio.run(c._waardeplan_als_nodig(NU, []))
     assert c.last_reason == "waardeplan_huis"
     assert t[-1] == ("stand", OPTION_SMART)
