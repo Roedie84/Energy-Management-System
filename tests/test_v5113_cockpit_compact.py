@@ -40,5 +40,7 @@ def test_per_dag_ingeklapt_en_blijft_zo():
 
 
 def test_raster_kent_elk_paneel():
+    # v5.179: geen grid-areas meer maar een raster van 12 kolommen (spans);
+    # smal bepaalt `order` de volgorde.
     for p in ("planning", "verkoop", "modules", "huis", "bediening"):
-        assert f".p-{p} {{ grid-area: {p}; }}" in JS
+        assert f".p-{p} {{ order: " in JS

@@ -33,9 +33,11 @@ def test_de_chip_zegt_staat_sinds_en_waarom():
     assert 'if (!a || !a.beschikbaar || !a.nu) return "";' in chip
 
 
-def test_compacter_dan_voorheen():
-    assert _px(".pb {", "padding") == [0, 14]
-    assert _px(".regel {", "padding") == [6, 9]
-    assert _px(".mini {", "padding") == [7, 10]
-    assert ".gwrap { position: relative; display: grid; grid-template-columns: 34px 1fr 34px; grid-template-rows: 180px 22px; }" in JS
-    assert "gap: 14px" not in JS.split(".raster {")[1].split("}")[0]
+def test_een_spatieschaal():
+    """v5.179: alle afstanden uit de schaal 4/8/12/16/24; kaarten 16 px binnenruimte."""
+    assert _px(".regel {", "padding") == [8, 12]
+    kaart = JS.split(".tegel, .paneel {")[1].split("}")[0]
+    assert "padding: 16px" in kaart and "border-radius: var(--r)" in kaart
+    assert "--r: 12px;" in JS
+    assert "gap: 12px" in JS.split(".raster {")[1].split("}")[0]
+    assert ".gwrap { position: relative; display: grid; grid-template-columns: 32px 1fr 36px; grid-template-rows: 180px 24px; }" in JS
