@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron
 
 sys.path.insert(0, str(Path(pkg.__file__).parent))
 
@@ -660,7 +661,7 @@ def test_every_plate_is_delivered_as_a_base64_image():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     for functie in re.findall(
         r"def (get_\w*svg\w*)\(self.*?(?=\n    def )", bron, re.S
     ):

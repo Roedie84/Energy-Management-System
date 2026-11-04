@@ -19,6 +19,7 @@ from custom_components.energy_management_system.const import (
     WEATHER_ENSEMBLE_OVERPERFORM_RATIO,
     WEATHER_ENSEMBLE_UNDERPERFORM_RATIO,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NOW = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
 
@@ -165,7 +166,7 @@ def test_recording_reuses_the_disagreement_thresholds(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     functie = bron[bron.index("def _record_weather_ensemble_agreement") :][:1600]
 
     for drempel in (

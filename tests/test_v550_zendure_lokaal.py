@@ -11,6 +11,7 @@ from pathlib import Path
 
 import custom_components.energy_management_system as pkg
 from custom_components.energy_management_system import zendure_lokaal as zl
+from tests._coordinator_bron import coordinator_bron
 
 MAP = Path(pkg.__file__).parent
 
@@ -136,7 +137,7 @@ def test_schrijft_nooit_naar_de_accu():
 def test_de_sturing_leest_alleen_via_de_terugval():
     """v5.82: de coordinator leest de meelezer op precies één plek: de
     terugval bij een onbeschikbare Zendure-entiteit. Zie test_v582.py."""
-    coord = (MAP / "coordinator.py").read_text()
+    coord = coordinator_bron()
     assert coord.count('getattr(self, "zendure_lokaal", None)') == 1
     assert "meelezer.vervanging(entity_id)" in coord
 

@@ -13,6 +13,7 @@ from custom_components.energy_management_system.const import (
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     PROEFSTAND_MIN_TREND_DAYS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 # --- Repairs ---------------------------------------------------------
@@ -170,7 +171,7 @@ def test_the_reserve_goes_through_one_place():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "def bruikbare_capaciteit_kwh" in bron
     assert bron.count("self.bruikbare_capaciteit_kwh()") >= 2

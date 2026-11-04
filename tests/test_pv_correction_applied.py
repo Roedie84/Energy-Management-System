@@ -12,6 +12,7 @@ niet alleen in een sensor staat.
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron
 
 PAKKET = Path(pkg.__file__).parent
 
@@ -36,7 +37,7 @@ def test_the_hourly_ratio_is_applied_to_the_forecast():
     """De kern: `_get_expected_pv_kwh` vermenigvuldigt het segment met
     de geleerde verhouding. Zonder die regel zou de correctie alleen
     getoond worden."""
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("hourly_ratio = self.learned_pv_hourly_ratio")
     blok = bron[start : start + 400]
 
@@ -45,7 +46,7 @@ def test_the_hourly_ratio_is_applied_to_the_forecast():
 
 def test_the_daily_bias_is_the_fallback():
     """Alleen als er voor dat uur nog geen uurcorrectie is."""
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("hourly_ratio = self.learned_pv_hourly_ratio")
     blok = bron[start : start + 400]
 
@@ -56,7 +57,7 @@ def test_the_daily_bias_is_the_fallback():
 def test_todays_remaining_hours_are_rescaled():
     """Vandaag telt wat er al werkelijk is opgewekt zwaarder dan een
     geleerd gemiddelde."""
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "remaining_correction_ratio" in bron
     # v5.96: samen met de realisatie (de voorzichtigste van de twee).

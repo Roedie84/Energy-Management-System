@@ -5,6 +5,7 @@ zodat we hem nog beter kunnen maken?"
 
 Drie dingen die deze week aantoonbaar tijd kostten.
 """
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_the_running_version_is_in_the_export(make_coordinator, hass):
@@ -30,7 +31,7 @@ def test_the_version_is_read_outside_the_event_loop():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def get_installation_facts")
     blok = bron[kop : bron.index("\n    @staticmethod", kop)]
 

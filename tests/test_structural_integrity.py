@@ -16,6 +16,7 @@ automatically, without needing a live Home Assistant instance.
 """
 import ast
 from pathlib import Path
+from tests._coordinator_bron import coordinator_bron, is_deel, lees
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INTEGRATION_DIR = REPO_ROOT / "custom_components" / "energy_management_system"
@@ -69,7 +70,12 @@ def test_no_orphaned_self_method_calls():
     intact, but the method definition it pointed to had been
     accidentally merged into a different function."""
     for path in _iter_python_files():
-        tree = ast.parse(path.read_text(), filename=str(path))
+        # B4: de mixin-modules horen bij de coordinator; hun self-aanroepen
+        # gaan naar methodes in coordinator.py en omgekeerd. Daarom de
+        # coordinator als één geheel (`lees`) en de delen niet apart.
+        if is_deel(path):
+            continue
+        tree = ast.parse(lees(path), filename=str(path))
 
         defined_methods = set()
         for node in ast.walk(tree):
@@ -254,7 +260,7 @@ def test_no_call_uses_an_undefined_local_name():
         pad = Path(pkg.__file__).parent / bestand
         if not pad.exists():
             continue
-        boom = ast.parse(pad.read_text())
+        boom = ast.parse(lees(pad))
         # Alleen toewijzingen op het HOOGSTE niveau. `boom.body` bevat
         # ook de klasse, en `ast.walk` daarop levert elke naam uit elke
         # methode - waardoor `hour` als bekend gold en de fout niet werd
@@ -404,7 +410,7 @@ def test_no_staticmethod_uses_self():
         pad = Path(pkg.__file__).parent / bestand
         if not pad.exists():
             continue
-        for knoop in ast.walk(ast.parse(pad.read_text())):
+        for knoop in ast.walk(ast.parse(lees(pad))):
             if not isinstance(knoop, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             statisch = any(
@@ -431,7 +437,7 @@ def test_no_method_with_self_is_called_as_static():
     import custom_components.energy_management_system as pkg
 
     pad = Path(pkg.__file__).parent / "coordinator.py"
-    boom = ast.parse(pad.read_text())
+    boom = ast.parse(lees(pad))
 
     # Namen van gewone methoden (met self, zonder staticmethod).
     gewoon = {
@@ -489,7 +495,7 @@ def test_no_staticmethod_uses_self():
         if not pad.exists():
             continue
 
-        for knoop in ast.walk(ast.parse(pad.read_text())):
+        for knoop in ast.walk(ast.parse(lees(pad))):
             if not isinstance(knoop, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
 
@@ -668,7 +674,7 @@ def test_battery_power_is_always_read_sign_corrected():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     boom = ast.parse(bron)
 
     # Wie de sensor rechtstreeks leest, MOET het teken zelf verrekenen.
@@ -748,7 +754,7 @@ def test_every_self_attribute_exists_on_the_class():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     boom = ast.parse(bron)
     kl = next(
         n

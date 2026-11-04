@@ -6,6 +6,7 @@ maar dit klopt natuurlijk niet". Quick 65 liep tot 16:16; om 15:58 kwam
 drempel. De Home Connect-bedrijfstoestand stond nog op "run".
 """
 from datetime import datetime, timedelta, timezone
+from tests._coordinator_bron import coordinator_bron
 
 DAY0 = datetime(2026, 10, 8, 13, 6, tzinfo=timezone.utc)
 
@@ -54,7 +55,7 @@ def test_pauze_en_uitgestelde_start_lopen_nog():
 def test_herkent_home_connect_ook_aan_de_unique_id():
     from pathlib import Path
     import custom_components.energy_management_system as pkg
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     assert 'endswith(\n                            "BSH.Common.Status.OperationState"' in bron
 
 

@@ -17,6 +17,7 @@ from custom_components.energy_management_system.const import (
     LOG_PRIORITEITEN,
     NOTIFICATION_TYPES,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 15, 12, 0, tzinfo=timezone.utc)
 
@@ -114,7 +115,7 @@ def test_no_second_series_is_kept():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def get_event_log")
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
 
@@ -133,7 +134,7 @@ def test_a_critical_notification_breaks_through_silent_mode():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "time-sensitive" in bron
     assert "LOG_PRIORITEITEN.get(kind) == LOG_PRIO_KRITIEK" in bron

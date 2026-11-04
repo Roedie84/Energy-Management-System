@@ -25,6 +25,7 @@ De oude paren zijn te herkennen: vier velden, want het uur is er in
 v4.13 als vijfde bij gekomen. Die gaan bij het laden weg.
 """
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_paren_zonder_uur_gaan_weg_bij_het_laden(make_coordinator, hass):
@@ -105,7 +106,7 @@ def test_geen_lezer_laat_twee_vormen_toe():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     tolerant = re.findall(r"len\(\w+\)\s*(?:not )?in \([\d, ]+\)", bron)
 
     assert not tolerant, tolerant

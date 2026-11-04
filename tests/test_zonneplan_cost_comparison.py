@@ -17,6 +17,7 @@ from custom_components.energy_management_system.const import (
     RELIABILITY_RELIABLE,
     RELIABILITY_UNRELIABLE,
 )
+from tests._coordinator_bron import coordinator_bron
 
 PRIJS = "sensor.zonneplan_current_quarter_hourly_electricity_tariff"
 AFNAME = "sensor.zonneplan_electricity_delivery_costs_today"
@@ -208,7 +209,7 @@ def test_both_sides_measure_the_same_meter():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("actual_cost_eur = self._grid_flow_cost_eur(")
     blok = bron[start : start + 200]
 

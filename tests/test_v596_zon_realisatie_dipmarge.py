@@ -10,11 +10,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from custom_components.energy_management_system.const import DIP_MARGE, ZON_REALISATIE_MIN_KWH
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=2))
 NU = datetime(2026, 10, 13, 13, 0, tzinfo=TZ)
-BRON = (Path(__file__).resolve().parents[1] / "custom_components" / "energy_management_system"
-        / "coordinator.py").read_text(encoding="utf-8")
+BRON = coordinator_bron()
 
 
 def _entries(kwh_per_halfuur):

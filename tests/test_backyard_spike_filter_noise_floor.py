@@ -22,6 +22,7 @@ from custom_components.energy_management_system.const import (
     BACKYARD_TEMP_SPIKE_MIN_DEVIATION_C,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NOW = datetime(2026, 8, 6, 10, 0, tzinfo=timezone.utc)
 SENSOR = "sensor.achtertuin_temp"
@@ -133,7 +134,7 @@ def test_both_conditions_are_required(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("deviation_c = abs(raw_temp")
     blok = bron[start : start + 1400]
 

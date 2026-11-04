@@ -17,6 +17,7 @@ from custom_components.energy_management_system.const import (
     HEALTH_STATUS_GOED,
     HEALTH_STATUS_SLECHT,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 15, 12, 0, tzinfo=timezone.utc)
 
@@ -111,7 +112,7 @@ def test_the_watchdog_runs_on_its_own_clock():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "self._watchdog," in bron
     assert bron.count("async_track_time_interval(") >= 2
@@ -124,7 +125,7 @@ def test_the_watchdog_forces_a_round(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def _watchdog")
     blok = bron[kop : bron.index("\n    def ", kop)]
 

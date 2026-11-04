@@ -28,6 +28,7 @@ opleverde:
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 21, 15, 35, tzinfo=timezone.utc)
 
@@ -189,7 +190,7 @@ def test_geen_drempel_boven_de_opslaggrens():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     for veld in ("night_consumption_history", "reserve_shortfall_history"):
         m = re.search(
             r"len\(self\." + veld + r"[^)]*\)[^,]*,\s*\w+,\s*(\w+)", bron

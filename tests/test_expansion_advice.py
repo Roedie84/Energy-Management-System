@@ -22,6 +22,7 @@ from custom_components.energy_management_system.const import (
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MIN_SOC_PERCENT,
 )
+from tests._coordinator_bron import coordinator_bron
 
 # Het werkelijke geleerde profiel uit de export.
 ECHT_PROFIEL = {
@@ -211,7 +212,7 @@ def test_it_uses_the_averaging_method(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("def get_expansion_advice")
     blok = bron[start : start + 2000]
 

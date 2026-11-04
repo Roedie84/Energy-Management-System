@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron
 
 PAKKET = Path(pkg.__file__).parent
 
@@ -31,7 +32,7 @@ PAKKET = Path(pkg.__file__).parent
 def test_elke_listener_wordt_opgezegd():
     """De ratel: elk `_unsub_`-veld dat wordt GEZET, moet in
     `async_unload` worden opgezegd."""
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
     gezet = set(re.findall(r"self\.(_unsub_\w+) = async_track", bron))
     i = bron.index("async def async_unload(self)")
     j = bron.index("\n    async def ", i + 10)
@@ -42,7 +43,7 @@ def test_elke_listener_wordt_opgezegd():
 
 def test_de_bewegingslistener_wordt_opgezegd():
     """Het gevonden geval."""
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("async def async_unload(self)")
     j = bron.index("\n    async def ", i + 10)
 

@@ -22,6 +22,7 @@ from custom_components.energy_management_system.const import (
     PERSISTED_INT_FIELDS,
     PERSISTED_PLAIN_FIELDS,
 )
+from tests._coordinator_bron import coordinator_bron, lees
 
 STORE_KEY = "energy_management_system_state"
 NOW = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
@@ -331,7 +332,7 @@ def test_unload_forces_an_immediate_save():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     unload = bron.index("async def async_unload")
     assert "async_save_persisted_state_now" in bron[unload : unload + 2000]
 
@@ -390,7 +391,7 @@ def _opgebouwde_velden():
 
     import custom_components.energy_management_system as pkg
 
-    tree = ast.parse((Path(pkg.__file__).parent / "coordinator.py").read_text())
+    tree = ast.parse(coordinator_bron())
     coord = next(
         n
         for n in ast.walk(tree)
@@ -686,7 +687,7 @@ def test_every_accumulating_field_is_accounted_for():
     import custom_components.energy_management_system as pkg
 
     map_ = Path(pkg.__file__).parent
-    bron = (map_ / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("    def __init__(")
     staart = bron.index("\n    async def ", kop)
 
@@ -778,7 +779,7 @@ def test_no_naive_clock_anywhere():
         # waaróm iets niet zo hoort.
         code = "\n".join(
             regel.split("#")[0]
-            for regel in (map_ / bestand).read_text().splitlines()
+            for regel in lees(map_ / bestand).splitlines()
         )
         assert "datetime.now()" not in code, bestand
         assert "datetime.utcnow()" not in code, bestand

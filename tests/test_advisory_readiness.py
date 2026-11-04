@@ -9,6 +9,7 @@ data: dat is wat er werkelijk toe doet, en het blijft gelden ongeacht
 hoe het dashboard het toont.
 """
 from datetime import datetime, timezone
+from tests._coordinator_bron import coordinator_bron
 
 DAY0 = datetime(2026, 8, 4, tzinfo=timezone.utc)
 
@@ -342,7 +343,7 @@ def test_the_acting_module_actually_sends_a_command():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     # v5.25.2: de oude extra-dipregel stuurt niet meer; laden in een dip
     # loopt via `_dipbesluit` en `_laad_uit_het_net_als_nodig`. Die stuurt
     # het commando en zet een eigen reden.
@@ -362,7 +363,7 @@ def test_advisory_modules_never_reach_the_decision_tree():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     # Per module het veld waarin de uitkomst landt.
     uitkomsten = {

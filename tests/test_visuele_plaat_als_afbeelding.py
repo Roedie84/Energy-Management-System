@@ -44,6 +44,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron
 
 PAKKET = Path(pkg.__file__).parent
 sys.path.insert(0, str(PAKKET))
@@ -184,7 +185,7 @@ def test_the_coordinator_never_returns_a_bare_plate():
     markdown-kaart terechtkomen. Geeft één ervan de kale bouwfunctie
     terug, dan is de klacht meteen weer terug.
     """
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     for naam in (
         "get_overview_svg",

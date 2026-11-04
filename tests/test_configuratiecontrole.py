@@ -31,6 +31,7 @@ from custom_components.energy_management_system.const import (
     CONF_SOC_SENSOR,
     DEFAULT_BATTERY_CYCLE_LIFE,
 )
+from tests._coordinator_bron import coordinator_bron
 
 MAP = Path(pkg.__file__).parent
 
@@ -74,7 +75,7 @@ def test_no_call_site_uses_the_unsafe_form():
     # Via de boomstructuur, niet via de tekst: in de toelichting van
     # `instelling()` staat het patroon met opzet, als voorbeeld van wat
     # er mis was. Een zoekopdracht op tekst vindt dat ook.
-    boom = ast.parse((MAP / "coordinator.py").read_text())
+    boom = ast.parse(coordinator_bron())
     onveilig = []
     for knoop in ast.walk(boom):
         if not (

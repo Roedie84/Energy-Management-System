@@ -22,6 +22,7 @@ from custom_components.energy_management_system.const import (
     SELL_RESERVE_SAFETY_FACTOR,
     SOLAR_POOR_DAY_KWH,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 1, 15, 7, 0, tzinfo=timezone.utc)
 
@@ -160,7 +161,7 @@ def test_it_is_wired_into_the_expensive_quarter_decision():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     # v5.28.4: via `_verkoopruimte_met_piek`, die alleen nog `may_sell_now`
     # laat beslissen - het huis gaat voor.
@@ -369,7 +370,7 @@ def test_the_margin_never_drops_below_the_old_floor(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     # v4.1: de vloer zit in de ene reserve, niet meer apart in de
     # verkooptoets.
     kop = bron.index("def _get_dynamic_discharge_reserve_kwh")
@@ -519,7 +520,7 @@ def test_no_place_applies_a_margin_of_its_own():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     code = "\n".join(r.split("#")[0] for r in bron.splitlines())
 
     # Elke vermenigvuldiging met de vaste factor moet in een max() met

@@ -16,6 +16,7 @@ from custom_components.energy_management_system.const import (
     TEKORTSOORT_PLANNING,
     VERKOOP_NA_BLOK_MIN_WINST_EUR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=2))
 AVOND = datetime(2026, 10, 10, 18, 45, tzinfo=TZ)
@@ -55,9 +56,7 @@ def test_planning_telt_wel_onbekend_niet_meer(make_coordinator):
 
 
 def test_de_reserve_rekent_met_de_marge_tekortnachten(make_coordinator):
-    bron = open(
-        "custom_components/energy_management_system/coordinator.py", encoding="utf-8"
-    ).read()
+    bron = coordinator_bron()
     assert "recent_shortfalls = self.marge_tekortnachten()" in bron
     assert SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY == 5.0
 
@@ -176,9 +175,7 @@ def test_nooit_boven_de_gewone_reserve(make_coordinator, monkeypatch):
 
 
 def test_verkooptoets_plan_en_vermogen_gebruiken_de_verkoopreserve():
-    bron = open(
-        "custom_components/energy_management_system/coordinator.py", encoding="utf-8"
-    ).read()
+    bron = coordinator_bron()
     # verkooptoets
     assert "verkoopinfo = self.verkoopreserve(now, blok_start)" in bron
     # plan

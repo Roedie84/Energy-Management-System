@@ -31,9 +31,10 @@ from custom_components.energy_management_system.const import (
     PERSISTED_INT_FIELDS,
     PERSISTED_PLAIN_FIELDS,
 )
+from tests._coordinator_bron import coordinator_bron, lees
 
 PAKKET = Path(pkg.__file__).parent
-COORD = (PAKKET / "coordinator.py").read_text()
+COORD = coordinator_bron()
 ALLE_BEWAARD = (
     set(PERSISTED_PLAIN_FIELDS)
     | set(PERSISTED_INT_FIELDS)
@@ -97,7 +98,7 @@ def test_geen_dubbele_sleutel_in_de_export():
     """Wat er bij v4.18 gebeurde: `handmatige_ingrepen` stond twee keer
     in de exportdict en de ene overschreef de andere."""
     for naam in ("diagnostics.py", "coordinator.py", "sensor.py"):
-        boom = ast.parse((PAKKET / naam).read_text())
+        boom = ast.parse(lees(PAKKET / naam))
         for knoop in ast.walk(boom):
             if not isinstance(knoop, ast.Dict):
                 continue
@@ -176,7 +177,7 @@ def test_geen_dubbele_methodenaam_in_de_klasse():
     draait in een halve seconde.
     """
     for naam in ("coordinator.py", "sensor.py", "switch.py", "button.py"):
-        boom = ast.parse((PAKKET / naam).read_text())
+        boom = ast.parse(lees(PAKKET / naam))
         for knoop in ast.walk(boom):
             if not isinstance(knoop, ast.ClassDef):
                 continue

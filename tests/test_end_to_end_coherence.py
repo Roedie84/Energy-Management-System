@@ -24,6 +24,7 @@ from custom_components.energy_management_system.const import (
     CONF_PV_ENERGY_SENSOR,
     CONF_PV_POWER_SENSOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 PAKKET = Path(pkg.__file__).parent
 START = datetime(2026, 8, 9, 6, 0, tzinfo=timezone.utc)
@@ -121,7 +122,7 @@ def test_the_control_logic_is_untouched():
     wanneer de accu laadt en ontlaadt - die horen ongemoeid te blijven,
     en zijn eerder expliciet afgeschermd.
     """
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     for functie in (
         "_get_dynamic_discharge_reserve_kwh",

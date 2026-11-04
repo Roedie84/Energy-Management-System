@@ -34,6 +34,7 @@ noemenswaardig is bijgekocht.
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 18, 3, 0, tzinfo=timezone.utc)
 
@@ -84,7 +85,7 @@ def test_het_moment_alleen_zet_nog_geen_tekortdag(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     # v5.33: de beoordeling staat vlak boven het record (één gekoppelde
     # meting); het record neemt de uitkomst over. De vlag beslist niet meer.
     assert "tekortdag = self._telt_als_tekortdag(tekortnacht)" in bron

@@ -18,6 +18,7 @@ from custom_components.energy_management_system.const import (
     ACHTERHOEKS_WOORDEN,
     NOTIFICATION_TYPES,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 # --- de vertaling ----------------------------------------------------
@@ -137,7 +138,7 @@ def test_nothing_changes_when_off(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("if self.achterhoeks:")
 
     # v1.46.0: de titel wordt opgezocht op `kind`, of - bij een
@@ -183,7 +184,7 @@ def test_both_phone_and_history_are_translated():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("def _dispatch_notification")
     blok = bron[start : start + 2500]
 
@@ -403,7 +404,7 @@ def test_the_action_also_appears_in_the_message():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index('kind="battery_cooling"')
     blok = bron[kop - 1200 : kop]
 
@@ -425,7 +426,7 @@ def _soorten_met_opgebouwde_titel() -> set[str]:
 
     import custom_components.energy_management_system as pkg
 
-    boom = ast.parse((Path(pkg.__file__).parent / "coordinator.py").read_text())
+    boom = ast.parse(coordinator_bron())
     uit = set()
     for knoop in ast.walk(boom):
         if not (

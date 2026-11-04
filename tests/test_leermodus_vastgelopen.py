@@ -33,6 +33,7 @@ het opstarten wordt een inconsistente toestand opgeruimd.
 from datetime import datetime, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 17, 14, 25, tzinfo=timezone.utc)
 
@@ -111,7 +112,7 @@ def test_het_opruimen_gebeurt_na_het_herstel(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("def herstel_de_opslag_na_de_sensoren")
     j = bron.index("\n    def ", i + 10)
 

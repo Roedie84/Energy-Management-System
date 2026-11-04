@@ -1,6 +1,7 @@
 """L-EMS-056 - de spiegel Beschikbare energie vergelijkt niet meer ruw met
 gecorrigeerd. Gemeten 02-11 23:30: `fout 1` door 0,576 tegen 0,025 kWh."""
 from pathlib import Path
+from tests._coordinator_bron import coordinator_bron
 
 
 def _coord(make_coordinator, gemeten, sprong):
@@ -28,8 +29,6 @@ def test_geen_meting_blijft_geen_meting(make_coordinator, hass):
 
 
 def test_de_tak_gebruikt_de_gecorrigeerde_lezing():
-    bron = Path(__file__).resolve().parents[1].joinpath(
-        "custom_components/energy_management_system/coordinator.py"
-    ).read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert "self.last_available_kwh = self._read_sensor_float(" not in bron
     assert "self.last_available_kwh = self._beschikbaar_voor_spiegel(" in bron

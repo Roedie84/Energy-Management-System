@@ -18,6 +18,7 @@ from custom_components.energy_management_system.const import (
     CONF_MIN_SOC_PERCENT,
     NOTIFICATION_TYPES,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 11, 18, 0, tzinfo=timezone.utc)
 
@@ -143,7 +144,7 @@ def test_a_failing_notification_never_breaks_the_control():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("self._meld_planningswijzigingen(now)")
     blok = bron[start - 200 : start + 200]
 

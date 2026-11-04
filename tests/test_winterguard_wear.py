@@ -19,6 +19,7 @@ dat laden dus ongeveer een cent per kWh in plaats van dat het bespaarde.
 from custom_components.energy_management_system.const import (
     LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def _marge(nu, later, rendement=0.845, slijtage=0.0422):
@@ -55,7 +56,7 @@ def test_the_code_reads_the_wear_overview():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("self.last_extra_dip_margin_eur_per_kwh = None")
     blok = bron[kop : kop + 3500]
 

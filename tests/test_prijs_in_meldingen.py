@@ -24,6 +24,7 @@ import custom_components.energy_management_system as pkg
 import pytest
 
 from custom_components.energy_management_system.const import PRICE_SCALE_FACTOR
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 10, 0, 0, tzinfo=timezone.utc)
 
@@ -72,7 +73,7 @@ def test_geen_enkele_tekst_toont_een_rauwe_reeksprijs():
     was te smal - de deling staat soms tien regels boven de tekst."""
     import ast
 
-    boom = ast.parse((Path(pkg.__file__).parent / "coordinator.py").read_text())
+    boom = ast.parse(coordinator_bron())
     fouten = []
     for knoop in ast.walk(boom):
         if not isinstance(knoop, (ast.FunctionDef, ast.AsyncFunctionDef)):

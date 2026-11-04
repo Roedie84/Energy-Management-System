@@ -23,6 +23,7 @@ from custom_components.energy_management_system.tijdtekst import (
     periode_met_dag,
     tijd_met_dag,
 )
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=2))
 NU = datetime(2026, 10, 22, 16, 49, tzinfo=TZ)  # donderdag
@@ -61,7 +62,7 @@ def test_plan_tijd_tekst_gebruikt_de_weekdag(make_coordinator):
 
 
 def test_teksten_met_blok_noemen_de_dag():
-    bron = (MAP / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     for oud in ("blok van {blok:%H:%M}", "Om {cheap_block_start:%H:%M}", "om {om:%H:%M} laadt",
                 '"tot_tekst": dt_util.as_local(tot).strftime("%H:%M")'):
         assert oud not in bron
@@ -164,7 +165,7 @@ def test_nacht_niet_actief_bij_kleine_piek_of_overdag(make_coordinator, monkeypa
 
 
 def test_spaarbesluit_rekent_met_de_nachtmarge():
-    bron = (MAP / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert 'marge = DIP_MARGE if nacht.get("actief") else 1.0' in bron
     assert "plan = self.spaarplan(now, entries, cheap_block_start, marge=marge)" in bron
 

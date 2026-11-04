@@ -16,6 +16,7 @@ from custom_components.energy_management_system.const import (
     PRESENCE_ABSENCE_AFTER_MINUTES,
     PRESENCE_MIN_OBSERVATIONS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 10, 8, 0, tzinfo=timezone.utc)
 SENSOREN = ["binary_sensor.gang", "binary_sensor.woonkamer"]
@@ -164,7 +165,7 @@ def test_it_runs_every_tick():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "self._update_presence(now)" in bron
 

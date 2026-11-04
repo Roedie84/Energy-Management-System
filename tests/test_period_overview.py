@@ -1,4 +1,5 @@
 import json
+from tests._coordinator_bron import coordinator_bron
 """Alle cijfers over dag, week, maand, jaar en contractjaar (v1.91.0).
 
 Gevraagd: "Misschien dag/week/maand/jaar voor alle relevante sensoren
@@ -183,7 +184,7 @@ def test_history_is_read_from_statistics_not_power(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     # v2.2.2: tot de volgende definitie; de functie is gegroeid voorbij
     # elk vast aantal tekens.
@@ -208,7 +209,7 @@ def test_the_bootstrap_never_overwrites_measured_days():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     # v1.97.0: op de FUNCTIEGRENS zoeken, niet op een aantal tekens.
     # Dat brak zodra de functie groeide - een valkuil die al in de
@@ -254,7 +255,7 @@ def test_the_unit_is_read_not_assumed():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     blok = bron[kop : bron.index("\n    def ", kop)]
 
@@ -281,7 +282,7 @@ def test_consumption_is_not_invented(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     blok = bron[kop : bron.index("\n    def ", kop)]
 
@@ -404,7 +405,7 @@ def test_the_battery_row_can_come_from_a_meter():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     blok = bron[kop : bron.index("\n    def ", kop)]
 
@@ -418,7 +419,7 @@ def test_co2_is_derived_not_measured():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     blok = bron[kop : bron.index("\n    def ", kop)]
 
@@ -518,7 +519,7 @@ def test_the_snapshot_is_taken_after_the_counters(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert bron.index("_update_self_sufficiency_tracking(") < bron.index(
         "self._onthoud_energiedagstand(now.date())"
@@ -592,7 +593,7 @@ def test_a_newly_configured_meter_triggers_a_reread():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     blok = bron[kop : min(
         x
@@ -625,7 +626,7 @@ def test_the_bootstrap_reports_per_source(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     blok = bron[kop : min(
         x
@@ -696,7 +697,7 @@ def test_the_bootstrap_leaves_a_note_in_every_path(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_energy_history")
     blok = bron[kop : min(
         x
@@ -736,7 +737,7 @@ def test_the_day_is_closed_under_the_previous_date(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("af_te_sluiten_dag = self._self_sufficiency_day_key")
     # Tot de volgende definitie; het afsluiten staat verderop in
     # dezelfde functie dan een vast aantal tekens toelaat.

@@ -11,6 +11,7 @@ spiegel daarna. De correctie zelf werd wel losgelaten.
 """
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=1))
 
@@ -100,9 +101,7 @@ def test_correctie_gaat_los_als_de_module_herstelt(make_coordinator, hass):
 
 
 def test_de_ronde_zet_de_meting_opnieuw_na_de_moduletoestand():
-    bron = Path(__file__).resolve().parents[1].joinpath(
-        "custom_components/energy_management_system/coordinator.py"
-    ).read_text(encoding="utf-8")
+    bron = coordinator_bron()
     blok = bron[bron.index("        self._update_battery_module_health(now)\n"):][:600]
     assert "self.last_available_kwh = self._beschikbaar_voor_spiegel(" in blok
     assert "_gemeten_beschikbaar = self._spiegel_beschikbaar(" in bron

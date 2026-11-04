@@ -22,6 +22,7 @@ from custom_components.energy_management_system.const import (
     COOLING_DRIFT_PERCENT_PER_DEGREE,
     COOLING_TEMP_MIN_DAYS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 # De werkelijke dagreeks uit de export.
 DIEPVRIES = [
@@ -160,7 +161,7 @@ def test_the_temperature_is_recorded_per_day():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "outdoor_temp_history" in bron
 
@@ -171,7 +172,7 @@ def test_the_margin_is_used_in_the_drift_check():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("groot_genoeg = reference_avg_w")
     blok = bron[start : start + 1200]
 

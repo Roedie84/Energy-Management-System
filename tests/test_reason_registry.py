@@ -28,9 +28,10 @@ from pathlib import Path
 
 import custom_components.energy_management_system as pkg
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 PAKKET = Path(pkg.__file__).parent
-COORD = (PAKKET / "coordinator.py").read_text()
+COORD = coordinator_bron()
 
 
 def test_de_registry_is_de_bron_van_de_standvertaling():

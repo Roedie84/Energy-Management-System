@@ -14,6 +14,7 @@ import jinja2
 import yaml
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import lees
 
 BASIS = Path(pkg.__file__).parent
 
@@ -56,7 +57,7 @@ def test_geen_melding_belooft_wat_niet_meer_gebeurt():
     vervallen) en "zo nodig bijladen" / "laadt eerder bij" (sinds v5.26.1
     alleen als het loont)."""
     for naam in ("coordinator.py", "const.py"):
-        tekst = (BASIS / naam).read_text()
+        tekst = lees(BASIS / naam)
         for belofte in (
             "buiten het goedkope blok bijgeladen als de prijsmarge",
             "Er wordt zo nodig bijgeladen",

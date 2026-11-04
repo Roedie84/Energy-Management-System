@@ -42,6 +42,7 @@ zwaar voor een moment dat op zichzelf geen gevolg heeft.
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc)
 
@@ -203,7 +204,7 @@ def test_de_logtekst_zegt_niet_meer_dat_een_moment_een_tekortdag_is():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("Onverwachte netimport van %.0f W")
     blok = bron[i - 400 : i + 500]
 

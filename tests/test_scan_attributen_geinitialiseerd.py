@@ -29,12 +29,13 @@ from pathlib import Path
 import pytest
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron, lees
 
 MAP = Path(pkg.__file__).parent
 
 
 def _klasse(pad: Path, naam_bevat: str):
-    boom = ast.parse(pad.read_text())
+    boom = ast.parse(lees(pad))
     for knoop in ast.walk(boom):
         if isinstance(knoop, ast.ClassDef) and naam_bevat in knoop.name:
             return knoop
@@ -140,7 +141,7 @@ def test_the_coordinator_initialises_everything_it_reads():
     beginwaarde - en dat lezen kwam in één pad eerst.
     """
     pad = MAP / "coordinator.py"
-    bron = pad.read_text()
+    bron = lees(pad)
 
     ontbreekt = _ongezette_attributen(_klasse(pad, "Coordinator"), bron)
 

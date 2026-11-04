@@ -14,6 +14,7 @@ from custom_components.energy_management_system.const import (
     CONF_KNMI_WEATHER_ENTITY,
     CONF_OPENWEATHERMAP_WEATHER_ENTITY,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def _coordinator(make_coordinator, hass, sensor, weer):
@@ -72,7 +73,7 @@ def test_nothing_is_adjusted_automatically():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def get_outdoor_sensor_check")
     blok = bron[kop : bron.index("def _weather_outdoor_temperature_c")]
 

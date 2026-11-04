@@ -23,6 +23,7 @@ from custom_components.energy_management_system.const import (
     APPLIANCE_STATE_LABELS,
     DECISION_REASON_LABELS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 PAKKET = Path(pkg.__file__).parent
 
@@ -76,7 +77,7 @@ def test_every_decision_reason_has_a_label():
     alsnog `expensive_quarter_soc_protected` op het scherm."""
     import re
 
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
     gebruikt = set(re.findall(r'last_reason = "([a-z_]+)"', bron))
 
     ontbreekt = sorted(gebruikt - set(DECISION_REASON_LABELS))
@@ -95,7 +96,7 @@ def test_the_labels_are_dutch_and_readable():
 def test_the_codes_themselves_are_unchanged():
     """De logica vergelijkt op deze waarden; ze vertalen in de sensor zou
     elke vergelijking breken."""
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert 'last_reason = "expensive_quarter"' in bron
     assert '"wacht_op_goedkoop_blok"' in bron

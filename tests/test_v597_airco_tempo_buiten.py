@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 from custom_components.energy_management_system import airco_ritme as ar
+from tests._coordinator_bron import coordinator_bron
 
 def _c(make_coordinator):
     c = make_coordinator({})
@@ -55,8 +56,7 @@ def test_tempo_nu_uit_de_projectie(make_coordinator):
 
 def test_koppelingen():
     from pathlib import Path
-    bron = (Path(__file__).resolve().parent.parent / "custom_components" / "energy_management_system"
-            / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert "tempo_c_per_uur=self._airco_ochtend_tempo(now)," in bron
     assert "tempo_c_per_uur=self._airco_tempo_nu()," in bron
     assert "self._woonkamer_verwacht_op, self._airco_ochtend_tempo(now)" in bron

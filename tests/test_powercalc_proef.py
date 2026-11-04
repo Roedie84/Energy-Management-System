@@ -27,6 +27,7 @@ from custom_components.energy_management_system.const import (
     POWERCALC_MIN_METINGEN,
     RELIABILITY_INSUFFICIENT,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def _sensoren(hass, waarden):
@@ -149,7 +150,7 @@ def test_de_proef_stuurt_niets(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def get_powercalc_proef")
     blok = bron[kop : kop + 3500]
 

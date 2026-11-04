@@ -18,6 +18,7 @@ from custom_components.energy_management_system import accukosten as A
 from custom_components.energy_management_system import rondrit as R
 from custom_components.energy_management_system import waardeplan as W
 from tests._v5167_reeks import DAG0, bouw
+from tests._coordinator_bron import coordinator_bron
 
 ETA_L, ETA_O = 0.82, 1.04          # echte rondrit 0,8528
 
@@ -251,5 +252,5 @@ async def test_recorderfout_houdt_het_anker(make_coordinator, hass):
 
 def test_staartstap_zit_in_de_recorderstap():
     from pathlib import Path
-    bron = (Path(A.__file__).parent / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert '"dagverloop uit recorder", self._async_recorder_staartstappen(now)' in bron

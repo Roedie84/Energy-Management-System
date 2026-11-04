@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from custom_components.energy_management_system.coordinator import EnergyManagementSystemCoordinator as C
+from tests._coordinator_bron import coordinator_bron
 
 JS = (Path(__file__).resolve().parent.parent / "custom_components" / "energy_management_system"
       / "www" / "ems-cockpit.js").read_text(encoding="utf-8")
@@ -24,8 +25,7 @@ def test_koppelingnaam_is_de_entiteitnaam():
 
 
 def test_prijsbron_weg_met_buffer_is_let_op():
-    bron = (Path(__file__).resolve().parent.parent / "custom_components" / "energy_management_system"
-            / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     deel = bron[bron.index("    def _ems_status(self)"):bron.index('return "STORING", f"noodzakelijke koppeling weg')]
     assert "if self._prijs_uit_cache and all(" in deel and "laatst bekende prijzen in gebruik" in deel
 

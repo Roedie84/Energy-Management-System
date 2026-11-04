@@ -18,6 +18,7 @@ from custom_components.energy_management_system.const import (
     OPTION_SMART_CHARGING,
 )
 from custom_components.energy_management_system.coordinator import effectieve_ondergrens
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=1))
 NU = datetime(2026, 11, 3, 8, 0, tzinfo=TZ)
@@ -149,7 +150,7 @@ def test_waardeplan_rekent_boven_de_bodem():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert "bruikbaar = capaciteit * (100 - self.effectieve_ondergrens_procent(now)) / 100" in bron
 
 

@@ -18,6 +18,7 @@ from custom_components.energy_management_system.const import (
     PRICE_SCALE_FACTOR,
     RELIABILITY_INSUFFICIENT,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc)
 
@@ -150,7 +151,7 @@ def test_the_wear_cost_does_not_decide_between_house_and_grid():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def get_wear_cost_overview")
 
     # v1.76.0: van 4000 naar 6000 tekens - de toelichting is gegroeid en
@@ -369,7 +370,7 @@ def test_the_daytype_profile_is_filled_from_history():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async def async_bootstrap_night_consumption_from_history")
     staart = bron[kop : bron.index("async def async_unload")]
 
@@ -384,7 +385,7 @@ def test_the_bootstrap_only_runs_when_empty():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "need_daytype_bootstrap = not self.daytype_consumption_profile" in bron
 
@@ -574,6 +575,6 @@ def test_de_gereedheid_die_de_melding_zoekt_bestaat():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     assert 'gereed = "klaar om mee te doen"' in bron
     assert 'gereed = "mag meesturen"' not in bron

@@ -18,6 +18,7 @@ from custom_components.energy_management_system.const import (
     WATER_SOFTENER_MIN_DURATION_MINUTES,
     WATER_SOFTENER_MIN_LITERS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 APPARATEN = ("sensor.vw", "sensor.wm", "sensor.qk", "sensor.cv_ketel_vermogen")
 
@@ -214,7 +215,7 @@ def test_both_criteria_are_required():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("WATER_SOFTENER_NIGHT_WINDOW_START_HOUR\n")
     blok = bron[start : bron.index("):", start)]
 
@@ -265,7 +266,7 @@ def test_the_coordinator_reads_the_setting():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("WATER_SOFTENER_NIGHT_WINDOW_START_HOUR\n")
     blok = bron[start - 800 : bron.index("):", start)]
 

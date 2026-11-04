@@ -10,6 +10,7 @@ blijven werken. Dat is het verschil met `force_manual`, dat de hele
 aansturing overneemt.
 """
 from datetime import datetime, timedelta, timezone
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 12, 9, 0, tzinfo=timezone.utc)
 
@@ -105,7 +106,7 @@ def test_it_leaves_the_reserve_alone():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     # Alleen de code, zonder commentaar en zonder docstrings - daar
     # staat juist de uitleg waaróm dit geen force_manual is.

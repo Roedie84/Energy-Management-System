@@ -17,6 +17,7 @@ dit klopt" is.
 from custom_components.energy_management_system.const import (
     CUSUM_MIN_HISTORY_FOR_REFERENCE,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def _apparaat_met_alarm(c, entity_id="sensor.koelkast_schuur_vermogen"):
@@ -122,7 +123,7 @@ def test_the_attention_point_explains_the_way_out():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("apparaat/apparaten mogelijk ")
     blok = bron[start : start + 700]
 

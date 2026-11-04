@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from custom_components.energy_management_system import accukosten as A
+from tests._coordinator_bron import coordinator_bron
 
 PKG = Path(__file__).resolve().parent.parent / "custom_components" / "energy_management_system"
 ETA_L, ETA_O, SLIJT = 0.92, 0.927, 0.042
@@ -148,7 +149,7 @@ def _bron(naam):
 
 
 def test_coordinator_gebruikt_de_correctie_alleen_bij_netladen():
-    bron = _bron("coordinator.py")
+    bron = coordinator_bron()
     assert bron.count("slijtage_ct = self._laadkosten_ct()") == 2       # laadbesluit en dip
     assert '"slijtage_ct": self._laadkosten_ct(),' in bron               # kwartierplan
     # verkopen blijft op de slijtage alleen

@@ -15,6 +15,7 @@ omvalt legde de aansturing plat.
 import asyncio
 
 from custom_components.energy_management_system.const import CONF_PRICE_SENSOR
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_a_failing_step_does_not_stop_the_others(make_coordinator, hass):
@@ -66,7 +67,7 @@ def test_no_tail_step_is_left_unguarded():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("# v3.8.0: elk staartonderdeel apart afgeschermd.")
     blok = bron[kop : kop + 3000]
 

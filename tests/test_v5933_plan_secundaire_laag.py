@@ -6,6 +6,7 @@ de secundaire laag (top 45% van de dagprijsrange, met ruimte boven de
 verkoopreserve). Het plan kende alleen de primaire drempel.
 """
 from datetime import datetime, timedelta, timezone
+from tests._coordinator_bron import coordinator_bron
 
 DAG = datetime(2026, 8, 3, tzinfo=timezone.utc)
 
@@ -80,7 +81,6 @@ def test_primaire_laag_zoals_voorheen(make_coordinator):
 def test_plan_en_beslissing_gebruiken_dezelfde_secundaire_toets():
     from pathlib import Path
 
-    bron = (Path(__file__).resolve().parents[1] / "custom_components" / "energy_management_system"
-            / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert "if self._is_worth_discharging_at_secondary_tier(entries, start, ruimte, ontlaad_w):" in bron
     assert "if (ruimte := self._plan_verkoopruimte(" in bron

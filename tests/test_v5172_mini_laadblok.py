@@ -10,6 +10,7 @@ import pytest
 
 from custom_components.energy_management_system import waardeplan as W
 from custom_components.energy_management_system.const import WAARDEPLAN_MIN_ACTIE_W
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=1))
 NU = datetime(2026, 11, 3, 12, 0, tzinfo=TZ)
@@ -78,7 +79,7 @@ def test_een_kort_kwartier_heeft_een_evenredig_kleinere_grens():
 def test_coordinator_geeft_de_grens_mee():
     from pathlib import Path
 
-    bron = Path(W.__file__).with_name("coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert "min_actie_w=WAARDEPLAN_MIN_ACTIE_W" in bron
 
 

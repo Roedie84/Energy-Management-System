@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron
 
 PAKKET = Path(pkg.__file__).parent
 
@@ -55,7 +56,7 @@ def test_it_explains_why_the_tile_differs():
 def test_the_code_uses_percentage_points_consistently():
     """In de coordinator wordt "procentpunt" al correct gebruikt voor
     weerbronnen en drift; het dashboard liep daarop achter."""
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     for fragment in ("verschil_procentpunt", "procentpunt "):
         assert fragment in bron, fragment

@@ -29,6 +29,7 @@ veiligste terugval is.
 from datetime import datetime, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 13, 12, 0, tzinfo=timezone.utc)
 
@@ -89,7 +90,7 @@ def test_elke_schrijfactie_naar_de_accu_is_afgeschermd():
 
     import custom_components.energy_management_system as pkg
 
-    boom = ast.parse((Path(pkg.__file__).parent / "coordinator.py").read_text())
+    boom = ast.parse(coordinator_bron())
 
     class Zoek(ast.NodeVisitor):
         def __init__(self):

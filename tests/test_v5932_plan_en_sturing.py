@@ -10,6 +10,7 @@ stond op sparen. De planvolging noemde 1,8 kW laden tegen 2,4 kW gepland
 from datetime import datetime, timedelta, timezone
 
 from custom_components.energy_management_system import planvolging as pv
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=2))
 BLOK = datetime(2026, 10, 12, 11, 30, tzinfo=TZ)
@@ -77,8 +78,7 @@ def test_buiten_het_blok_verandert_er_niets(make_coordinator):
 def test_netregels_geven_het_blok_mee():
     from pathlib import Path
 
-    bron = (Path(__file__).resolve().parents[1] / "custom_components" / "energy_management_system"
-            / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert '"blok": (self.last_cheap_block_start, self.last_cheap_block_end),' in bron
     assert "if begin is None or begin <= kwartier or begin >= blok_eind:" in bron
 

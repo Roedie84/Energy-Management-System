@@ -34,6 +34,7 @@ import pytest
 from custom_components.energy_management_system.const import (
     HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN,
 )
+from tests._coordinator_bron import coordinator_bron
 
 T0 = datetime(2026, 9, 2, 19, 48, tzinfo=timezone.utc)
 
@@ -184,7 +185,7 @@ def test_elke_reden_heeft_een_stand():
         REDENEN_ZONDER_STAND,
     )
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     redenen = set(re.findall(r'last_reason = "(\w+)"', bron))
 
     ontbreekt = redenen - set(REASON_TO_MODE) - set(REDENEN_ZONDER_STAND)

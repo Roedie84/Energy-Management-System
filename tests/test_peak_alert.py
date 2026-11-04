@@ -22,6 +22,7 @@ from custom_components.energy_management_system.const import (
     PEAK_ALERT_MIN_OF_MEDIAN,
     PRICE_SCALE_FACTOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 17, 6, 0, tzinfo=timezone.utc)
 
@@ -97,7 +98,7 @@ def test_the_message_names_both_prices_and_the_time_left():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index('"low_soc_before_peak",')
     blok = bron[kop : kop + 900]
 

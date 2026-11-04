@@ -6,6 +6,7 @@ from custom_components.energy_management_system.const import (
     MC_KANS_BASIS_IN_BLOK,
     PRICE_SCALE_FACTOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=1))
 NU = datetime(2026, 10, 27, 17, 0, tzinfo=TZ)
@@ -89,6 +90,5 @@ def test_in_blok_telt_apart_en_niet_in_de_brier(make_coordinator):
 
 def test_de_ronde_bewaart_ook_tijdens_het_blok():
     from pathlib import Path
-    bron = (Path(__file__).parents[1] / "custom_components" / "energy_management_system"
-            / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert "basis=MC_KANS_BASIS_TOT_BLOK if start <= now else MC_KANS_BASIS_IN_BLOK" in bron

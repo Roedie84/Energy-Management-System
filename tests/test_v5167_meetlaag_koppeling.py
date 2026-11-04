@@ -18,6 +18,7 @@ from custom_components.energy_management_system import accukosten as A
 from custom_components.energy_management_system import kwartierenergie as K
 from custom_components.energy_management_system.coordinator import EnergyManagementSystemCoordinator as C
 from custom_components.energy_management_system.meetlog import MeetLog
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=1))
 DAG = "2026-11-02"
@@ -140,6 +141,6 @@ def test_kwartiermeting_slaat_een_lange_pauze_over():
 
 def test_sluimer_meldt_de_bronnen():
     from pathlib import Path
-    bron = (Path(A.__file__).parent / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert 'uit["kwartieren_uit_de_kwartiermeting"]' in bron
     assert 'regel.update(self._accu_kwartiermeting(now, kwartier))' in bron

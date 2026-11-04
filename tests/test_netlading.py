@@ -19,6 +19,7 @@ from custom_components.energy_management_system.const import (
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_PV_POWER_SENSOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc)
 
@@ -128,7 +129,7 @@ def test_the_counters_reset_at_midnight():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("self.grid_charge_today_kwh = 0.0")
     blok = bron[kop : kop + 220]
 
@@ -178,7 +179,7 @@ def test_no_unused_sun_calculation_remains():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def _meet_werkelijke_netlading")
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
 

@@ -13,6 +13,7 @@ entiteit waar het dashboard naar verwijst, en staat ze niet leeg?
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron
 
 PAKKET = Path(pkg.__file__).parent
 
@@ -233,7 +234,7 @@ def test_the_doubled_quotes_are_handled(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("def get_dashboard_health")
     # v3.2.0: tot de volgende definitie. Een vast aantal tekens breekt
     # zodra de functie groeit - de valkuil die al in de overdracht staat.
@@ -332,7 +333,7 @@ def test_the_check_covers_every_domain():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("def get_dashboard_health")
     blok = bron[start : bron.index("\n    def ", start + 10)]
 

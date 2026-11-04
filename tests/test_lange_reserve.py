@@ -19,6 +19,7 @@ from custom_components.energy_management_system.const import (
     LANGE_RESERVE_MIN_METINGEN,
     PRICE_SCALE_FACTOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 18, 9, 18, tzinfo=timezone.utc)
 
@@ -131,7 +132,7 @@ def test_it_steers_nothing():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def _meet_lange_reserve")
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
     code = "\n".join(r.split("#")[0] for r in blok.splitlines())

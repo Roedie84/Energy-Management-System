@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron, lees
 
 PAKKET = Path(pkg.__file__).parent
 
@@ -26,7 +27,7 @@ def test_de_modulelezer_bindt_zijn_lusvariabele(make_coordinator, hass):
     accumodule - een verkeerde waarde belandt als "module wijkt af" bij
     de leverancier.
     """
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("for index in range(aantal):")
     blok = bron[i : i + 400]
 
@@ -37,7 +38,7 @@ def test_geen_dubbele_sleutel_in_een_dict(make_coordinator, hass):
     """MIDDEL uit doorloop 1, switch.py:326: `vermogen_w` stond twee keer
     in hetzelfde literal. De tweede overschreef de eerste."""
     for naam in ("switch.py", "sensor.py", "button.py", "coordinator.py"):
-        boom = ast.parse((PAKKET / naam).read_text())
+        boom = ast.parse(lees(PAKKET / naam))
         for knoop in ast.walk(boom):
             if not isinstance(knoop, ast.Dict):
                 continue
@@ -63,7 +64,7 @@ def test_geen_berekening_zonder_lezer(make_coordinator, hass):
     """MIDDEL uit doorloop 1: vier variabelen werden berekend en nooit
     gebruikt - restanten van v4.2, toen de brug stopte met de kaarttabel
     schrijven. Twee overbodige berekeningen per ronde."""
-    boom = ast.parse((PAKKET / "coordinator.py").read_text())
+    boom = ast.parse(coordinator_bron())
     dood = []
     for fn in ast.walk(boom):
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):

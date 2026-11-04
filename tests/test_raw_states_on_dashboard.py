@@ -18,6 +18,7 @@ from pathlib import Path
 import custom_components.energy_management_system as pkg
 import pytest
 import yaml
+from tests._coordinator_bron import lees
 
 PAKKET = Path(pkg.__file__).parent
 
@@ -240,7 +241,7 @@ def test_every_requested_attribute_exists_in_the_code():
     # de coordinator leveren er ook. Alleen in sensor.py kijken gaf zeven
     # valse treffers.
     bron = "".join(
-        (PAKKET / naam).read_text()
+        lees(PAKKET / naam)
         for naam in ("sensor.py", "switch.py", "button.py", "coordinator.py")
     )
 

@@ -21,6 +21,7 @@ from custom_components.energy_management_system.const import (
     RELIABILITY_UNRELIABLE,
     WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NOW = datetime(2026, 8, 7, 14, 0, tzinfo=timezone.utc)
 METNO = "weather.forecast_thuis"
@@ -101,7 +102,7 @@ def test_the_same_thresholds_are_used_as_for_the_ensemble():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("def _record_weather_ensemble_agreement")
     blok = bron[start : start + 3000]
 

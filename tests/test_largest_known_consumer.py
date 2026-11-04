@@ -15,6 +15,7 @@ Nu een eigen berekening over de bevestigde NILM-apparaten: van alles met
 een eigen vermogensmeting degene die nu het meeste trekt.
 """
 from custom_components.energy_management_system.sensor import ExplanationSensor
+from tests._coordinator_bron import coordinator_bron
 
 
 def _bevestig(coordinator, hass, entity_id, naam, watt):
@@ -126,7 +127,7 @@ def test_the_overview_uses_the_new_source():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def get_overview_svg")
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
     code = "\n".join(r.split("#")[0] for r in blok.splitlines())

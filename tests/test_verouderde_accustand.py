@@ -33,6 +33,7 @@ import pytest
 from custom_components.energy_management_system.coordinator import (
     EnergyManagementSystemCoordinator as C,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_the_live_sensor_wins(make_coordinator, hass):
@@ -132,7 +133,7 @@ def test_only_the_helper_still_mentions_the_field():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     # v3.49.0: de spiegelcontrole leest het veld met opzet - dat is
     # precies zijn taak. Hij vergelijkt het interne getal met de sensor
     # om te MELDEN dat ze uiteenlopen, en dan moet hij er wel bij

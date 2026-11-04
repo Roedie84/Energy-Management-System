@@ -32,11 +32,12 @@ from custom_components.energy_management_system.const import (
     PERSISTED_INTKEY_DICT_FIELDS,
     PERSISTED_PLAIN_FIELDS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def _velden_met_intsleutels() -> set[str]:
     """Elk veld dat in `__init__` als `dict[int, ...]` is aangekondigd."""
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     return set(re.findall(r"self\.(\w+):\s*dict\[int,", bron))
 
 
@@ -66,7 +67,7 @@ def test_de_omzetting_komt_na_het_gewone_laden():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     gewoon = bron.index("for veld in PERSISTED_PLAIN_FIELDS + PERSISTED_INT_FIELDS")
     # de eerste vermelding zit in het WEGSCHRIJVEN; die van het laden
     # komt daarna.

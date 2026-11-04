@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from custom_components.energy_management_system.const import LAADBLOK_HERLAAD_DREMPEL
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=2))
 NU = datetime(2026, 10, 14, 2, 15, tzinfo=TZ)
@@ -71,8 +72,7 @@ def test_lopende_lading_wordt_niet_afgebroken(make_coordinator):
 
 
 def test_plan_gebruikt_dezelfde_toets():
-    bron = (Path(__file__).resolve().parents[1] / "custom_components"
-            / "energy_management_system" / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     assert 'netregels["laadde_vorig"] = modus == "manual (laden)"' in bron
     assert '"laadde_vorig": self._laadt_uit_het_net()' in bron
 

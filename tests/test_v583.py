@@ -9,6 +9,7 @@ from pathlib import Path
 
 import custom_components.energy_management_system as pkg
 from custom_components.energy_management_system import airco_ritme as ar
+from tests._coordinator_bron import coordinator_bron
 
 MAP = Path(pkg.__file__).parent
 TZ = timezone(timedelta(hours=2))
@@ -64,7 +65,7 @@ def test_leeg_ritme_niets():
 
 
 def test_reserve_neemt_het_mee():
-    coord = (MAP / "coordinator.py").read_text()
+    coord = coordinator_bron()
     assert 'needed_kwh += airco_gebruik["extra_kwh"]' in coord
     assert '"airco_gebruik_extra_kwh": airco_gebruik["extra_kwh"]' in coord
     # niet dubbel via het temperatuurmodel

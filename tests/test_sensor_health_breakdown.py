@@ -14,6 +14,7 @@ oplossing vraagt.
 from custom_components.energy_management_system.const import (
     ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W,
 )
+from tests._coordinator_bron import coordinator_bron
 
 # De echte reeks uit de export.
 ECHTE_REEKS = [
@@ -353,7 +354,7 @@ def test_it_runs_after_loading_the_stored_state():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("self._state_store_loaded = True")
 
     # v1.49.0: NA het terugzetten van de opslag, niet ervoor.

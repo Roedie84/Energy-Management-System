@@ -25,6 +25,7 @@ from custom_components.energy_management_system.const import (
     PERSISTED_INT_FIELDS,
     PERSISTED_PLAIN_FIELDS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 MAP = Path(pkg.__file__).parent
 BEWAARD = set(
@@ -195,7 +196,7 @@ def test_shared_lists_hold_one_kind_of_element():
 
     import custom_components.energy_management_system as pkg
 
-    boom = ast.parse((Path(pkg.__file__).parent / "coordinator.py").read_text())
+    boom = ast.parse(coordinator_bron())
 
     # Per FUNCTIE, niet per naam: `regels` heet in tien functies zo en
     # betekent overal iets anders. Alleen binnen dezelfde functie - of
@@ -279,7 +280,7 @@ def test_no_volatile_marker_guards_a_persisted_series():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     toetsen = Path(__file__).parent / "test_state_persistence.py"
     tekst = toetsen.read_text()
     vluchtig = set(

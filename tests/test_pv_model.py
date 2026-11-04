@@ -14,6 +14,7 @@ from custom_components.energy_management_system.pv_model import (
     RegressieWoud,
     gemiddelde_absolute_fout,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_it_learns_a_simple_relation():
@@ -83,7 +84,7 @@ def test_the_split_is_on_time_not_at_random(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def _bereken_pv_model_evaluatie")  # v3.99.20: het trainen zit hier
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
 
@@ -98,7 +99,7 @@ def test_it_is_compared_against_the_current_method(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def _bereken_pv_model_evaluatie")  # v3.99.20: het trainen zit hier
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
 
@@ -122,7 +123,7 @@ def test_it_steers_nothing():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def _bereken_pv_model_evaluatie")  # v3.99.20: het trainen zit hier
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
     code = "\n".join(r.split("#")[0] for r in blok.splitlines())

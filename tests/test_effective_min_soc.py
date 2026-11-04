@@ -18,6 +18,7 @@ from custom_components.energy_management_system.const import (
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_MIN_SOC_PERCENT,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def _coordinator(make_coordinator, hass, gemeten="10", ingesteld=15.0):
@@ -83,7 +84,7 @@ def test_every_calculation_uses_it():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert bron.count("effective_min_soc_percent()") >= 5
 
@@ -99,7 +100,7 @@ def test_a_shortfall_quarter_is_flagged(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert '"tekort": tekort,' in bron
     assert '"tekort_kwartieren"' in bron

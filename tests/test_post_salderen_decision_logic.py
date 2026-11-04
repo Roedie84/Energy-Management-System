@@ -27,6 +27,7 @@ from custom_components.energy_management_system.const import (
     POST_SALDEREN_MIN_SURPLUS_TO_CAPTURE_W,
     POST_SALDEREN_MIN_USEFUL_DISCHARGE_W,
 )
+from tests._coordinator_bron import coordinator_bron
 
 TIJDENS = datetime(2026, 8, 6, 18, 0, tzinfo=timezone.utc)
 DAARNA = datetime(2027, 8, 6, 18, 0, tzinfo=timezone.utc)
@@ -215,7 +216,7 @@ def test_both_new_reasons_have_an_explanation(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     for reden in ("post_salderen_solar_capture", "expensive_quarter_no_own_load"):
         assert f'reason == "{reden}"' in bron
@@ -228,7 +229,7 @@ def test_the_gate_is_the_salderen_date_itself(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     for functie in (
         "def should_capture_surplus_over_selling",
         "def cap_discharge_to_own_consumption",

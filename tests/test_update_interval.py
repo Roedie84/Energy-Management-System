@@ -14,6 +14,7 @@ from custom_components.energy_management_system.const import (
     UPDATE_INTERVAL_MIN_SECONDS,
     UPDATE_INTERVAL_MINUTES,
 )
+from tests._coordinator_bron import coordinator_bron
 
 STANDAARD = UPDATE_INTERVAL_MINUTES * 60
 
@@ -88,7 +89,7 @@ def test_the_tick_is_scheduled_with_the_configured_interval():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("async_track_time_interval(")
     blok = bron[kop : kop + 200]
 

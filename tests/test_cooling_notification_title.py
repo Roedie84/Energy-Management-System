@@ -16,6 +16,7 @@ from custom_components.energy_management_system.const import (
     ACHTERHOEKS_TITELS,
     ACHTERHOEKS_TITELS_PER_ACTIE,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_the_dutch_title_already_said_it():
@@ -25,7 +26,7 @@ def test_the_dutch_title_already_said_it():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "koeling AAN" in bron
     assert "koeling UIT" in bron
@@ -81,7 +82,7 @@ def test_the_action_is_derived_from_the_dutch_title():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("if self.achterhoeks:")
     blok = bron[kop : kop + 900]
 

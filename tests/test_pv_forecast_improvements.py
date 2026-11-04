@@ -19,6 +19,7 @@ from custom_components.energy_management_system.const import (
     PV_HOURLY_BIAS_MIN_KWH,
     PV_HOURLY_BIAS_MIN_RATIO,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 # --- 1. Verhoudingen uit te kleine getallen ---------------------------
@@ -39,7 +40,7 @@ def test_the_learning_uses_the_threshold():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def _finalize_pv_hourly_bucket")
     # v3.6.1: tot de volgende definitie - het commentaar is gegroeid
     # voorbij elk vast aantal tekens.
@@ -144,7 +145,7 @@ def test_it_uses_the_existing_margin_not_a_second_one():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("margin_bonus_percent = max(")
     blok = bron[kop - 400 : kop + 300]
 
@@ -204,7 +205,7 @@ def test_the_message_no_longer_claims_the_whole_day():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index('"cheap_block_soon",', bron.index("minuten_tot"))
     blok = bron[kop : kop + 700]
 

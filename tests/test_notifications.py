@@ -18,6 +18,7 @@ from custom_components.energy_management_system.const import (
     CONF_APPLIANCE_NOTIFY_SERVICE,
     NOTIFICATION_TYPES,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NOW = datetime(2026, 8, 7, 12, 0, tzinfo=timezone.utc)
 
@@ -265,7 +266,7 @@ def test_every_dispatch_call_passes_a_kind():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     aanroepen = [
         m.end()
         for m in re.finditer(r"self\._dispatch_notification\(", bron)
@@ -303,7 +304,7 @@ def test_every_kind_used_in_code_exists_in_the_registry():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     gebruikt = set(re.findall(r'kind="([a-z_]+)"', bron))
     bekend = {k for k, _, _, _, _ in NOTIFICATION_TYPES}
 

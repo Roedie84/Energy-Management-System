@@ -34,6 +34,7 @@ Met het filter blijven er 48 over, en die lijst is meteen zinnig:
 meterkast 17,4 W, hoge kast 8,8 W, cv-ketel 6,3 W.
 """
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 
 def _meet(c, hass, sensoren):
@@ -111,7 +112,7 @@ def test_het_filter_wordt_in_de_meting_gebruikt(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("def _meet_nachtelijke_basislast")
     j = bron.index("\n    def ", i + 10)
 

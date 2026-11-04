@@ -11,6 +11,7 @@ Twee verschillende grootheden in één rij.
 from custom_components.energy_management_system.const import (
     CONF_COST_ENERGY_SENSOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def _coordinator(make_coordinator, hass, stand=None):
@@ -71,7 +72,7 @@ def test_the_row_uses_one_source(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("vandaag_rij = {")
     blok = bron[kop : bron.index("}", bron.index('"besparing_eur"', kop))]
 
@@ -89,7 +90,7 @@ def test_savings_still_uses_the_counterfactual(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("vandaag_rij = {")
     blok = bron[kop : kop + 1500]
 

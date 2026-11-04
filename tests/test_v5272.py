@@ -4,6 +4,7 @@ import random
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=2))
 START = datetime(2026, 10, 1, 13, 30, tzinfo=TZ)
@@ -75,7 +76,7 @@ def test_het_plan_verkoopt_niet_boven_de_reserve_op_een_zonarme_dag():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     # v5.93.3: in `_plan_verkoopruimte`, voor beide prijslagen.
     assert 'if netregels["zonarm"].get(start.date(), False):' in bron
     assert "verwacht_vandaag, al_opgewekt, nog_te_komen = self._zon_vandaag_totaal(now)" in bron

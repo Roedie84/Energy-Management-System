@@ -28,6 +28,7 @@ from custom_components.energy_management_system.const import (
     CONF_BATTERY_POWER_SENSOR,
     CONF_BATTERY_TEMPERATURE_SENSOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NOW = datetime(2026, 8, 6, 14, 0, tzinfo=timezone.utc)
 FAN = "switch.ventilatoren_thuisaccu"
@@ -305,7 +306,7 @@ def test_no_price_touches_the_cooling_decision():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     for naam in (
         "evaluate_battery_cooling",
         "_battery_cooling_should_turn_on",

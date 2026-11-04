@@ -14,6 +14,7 @@ from custom_components.energy_management_system.const import (
     CONF_DISHWASHER_START_IN,
     CONF_WASHING_MACHINE_END_AT,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 12, 20, 0, tzinfo=timezone.utc)
 
@@ -140,7 +141,7 @@ def test_it_reads_but_never_starts():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def get_planned_appliance_load")
     staart = bron[kop : bron.index("def _leer_cyclusverbruik")]
     code = "\n".join(r.split("#")[0] for r in staart.splitlines())

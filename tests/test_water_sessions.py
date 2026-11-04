@@ -1,3 +1,4 @@
+from tests._coordinator_bron import coordinator_bron
 
 
 # --- v3.0.1: de dagteller rolt om op de klok -------------------------
@@ -48,7 +49,7 @@ def test_the_rollover_runs_on_the_clock_not_on_an_event():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     # De omrol hangt aan de tick via `_evaluate_new_notifications`, die
     # elke ronde draait. Wat telt is dat hij op `now` loopt en niet op
     # het binnenkomen van een sessie.

@@ -17,6 +17,7 @@ from custom_components.energy_management_system.const import (
     WHY_MAX_REASONS,
     WHY_QUESTIONS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 12, 19, 45, tzinfo=timezone.utc)
 
@@ -126,7 +127,7 @@ def test_no_language_model_is_involved():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def _waarom_regels")
     staart = bron[kop : bron.index("def get_aging_drivers")]
 

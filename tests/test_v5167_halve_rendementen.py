@@ -13,6 +13,7 @@ from custom_components.energy_management_system import accukosten as A
 from custom_components.energy_management_system import waardeplan as W
 from custom_components.energy_management_system.coordinator import EnergyManagementSystemCoordinator as C
 from tests._v5167_reeks import bouw
+from tests._coordinator_bron import coordinator_bron
 
 
 def _reeks(eta_l=0.82, eta_o=1.0, dagen=4):
@@ -119,6 +120,6 @@ def test_waardeplan_terugval_voor_een_onbetrouwbare_band_is_het_gemeten_ontladen
 
 def test_coordinator_geeft_het_ontlaadrendement_aan_het_waardeplan():
     from pathlib import Path
-    bron = (Path(A.__file__).parent / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     # v5.169.0: tot ONTLAAD_RENDEMENT_MAX (1,20) in plaats van 1,0
     assert 'uit["rendement_ontladen"] = min(A.ONTLAAD_RENDEMENT_MAX, ontladen / 100)' in bron

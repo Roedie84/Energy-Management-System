@@ -32,6 +32,7 @@ from custom_components.energy_management_system.const import (
     SOLAR_DEFER_SAFETY_FACTOR,
     SOLAR_DEFER_TARGET_FULL_HOUR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 OCHTEND = datetime(2026, 8, 10, 10, 0, tzinfo=timezone.utc)
 
@@ -199,7 +200,7 @@ def test_it_is_wired_into_the_decision():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "plan_solar_capture_moment(now)" in bron
     assert 'self.last_reason = "solar_capture_deferred"' in bron

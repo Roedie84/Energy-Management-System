@@ -6,6 +6,7 @@ dingen die niet kloppen.
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 15, 10, 36, tzinfo=timezone.utc)
 
@@ -135,7 +136,7 @@ def test_elke_dagvlag_van_een_apparaat_wordt_bewaard():
         PERSISTED_PLAIN_FIELDS,
     )
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     vlaggen = set(re.findall(r'"(_\w+_complete_today)"', bron))
     datums = set(re.findall(r'"(_\w+_complete_date)"', bron))
 

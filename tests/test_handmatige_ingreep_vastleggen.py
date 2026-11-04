@@ -32,6 +32,7 @@ rekening van de sturing schrijft.
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 16, 12, 31, tzinfo=timezone.utc)
 
@@ -205,7 +206,7 @@ def test_geen_twee_dingen_in_een_veld():
         assert not dubbel, f"diagnostics.py:{knoop.lineno} {dubbel}"
 
     # 2. de twee lijsten zijn echt gescheiden
-    coord = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    coord = coordinator_bron()
     schrijvers = collections.Counter(
         m for m in ("self.handmatige_ingrepen.append", "self.eigen_ingrepen.append")
         for _ in range(coord.count(m))

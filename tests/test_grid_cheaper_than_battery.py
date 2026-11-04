@@ -16,6 +16,7 @@ from custom_components.energy_management_system.const import (
     OPTION_SMART_CHARGING,
     PRICE_SCALE_FACTOR,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 12, 3, 0, tzinfo=timezone.utc)
 ALLE_MODI = ["manual", "smart", "smart_discharging", "smart_charging"]
@@ -233,7 +234,7 @@ def test_it_is_still_computed_every_tick():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     code = "\n".join(r.split("#")[0] for r in bron.splitlines())
 
     assert "self._net_is_goedkoper_dan_de_accu(now, entries)" in code

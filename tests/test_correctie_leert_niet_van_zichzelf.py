@@ -25,6 +25,7 @@ Deze toetsen houden dat dicht: ze stellen een sterke bias in en kijken of
 de leerbron daardoor verandert. Dat hoort niet.
 """
 from datetime import datetime, timezone
+from tests._coordinator_bron import coordinator_bron
 
 DAG = datetime(2026, 9, 21, tzinfo=timezone.utc)
 
@@ -66,7 +67,7 @@ def test_de_klimaatbias_leert_tegen_de_ruwe_weervoorspelling():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("async def _async_fetch_hourly_outdoor_forecast")
     j = bron.index("\n    async def ", i + 10) if "\n    async def " in bron[i + 10 :] else len(bron)
     j = min(j, bron.index("\n    def ", i + 10))

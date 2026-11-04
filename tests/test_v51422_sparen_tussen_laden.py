@@ -8,6 +8,7 @@ nu. Het plan nam alleen de kwartieren tot het EERSTE laadmoment over en liet
 from datetime import datetime, timedelta, timezone
 
 from custom_components.energy_management_system.const import PRICE_SCALE_FACTOR
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=1))
 NU = datetime(2026, 10, 28, 21, 30, tzinfo=TZ)
@@ -71,6 +72,5 @@ def test_zonder_laadplan_of_blok_niets(make_coordinator, monkeypatch):
 
 
 def test_plan_gebruikt_het():
-    bron = open("custom_components/energy_management_system/coordinator.py",
-                encoding="utf-8").read()
+    bron = coordinator_bron()
     assert "| self._plan_sparen_tussen_laden(now, entries)" in bron

@@ -9,6 +9,7 @@ omdat dat de accu raakt.
 """
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tests._coordinator_bron import coordinator_bron
 
 ROOT = Path(__file__).resolve().parents[1]
 BRON = ROOT / "custom_components" / "energy_management_system"
@@ -78,7 +79,7 @@ def test_geplande_ontlading_in_het_blok_telt_niet_negatief(make_coordinator):
 
 
 def test_simulatie_gebruikt_het_startmoment():
-    bron = (BRON / "coordinator.py").read_text(encoding="utf-8")
+    bron = coordinator_bron()
     i = bron.index("start, extra_beschikbaar, cheap_block_start = self._monte_carlo_vanaf(")
     stuk = bron[i:i + 6000]
     assert "cursor = start" in stuk

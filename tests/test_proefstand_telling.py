@@ -19,6 +19,7 @@ doen. `stuurt_sinds` staat er wel in, maar de gereedheidstekst keek er
 niet naar.
 """
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_de_samenvatting_telt_alle_kandidaten(make_coordinator, hass):
@@ -37,7 +38,7 @@ def test_de_samenvatting_heeft_geen_eigen_lijst():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("def _proefstand_samenvatting")
     j = bron.index("\n    def ", i + 10)
 

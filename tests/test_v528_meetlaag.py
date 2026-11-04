@@ -19,6 +19,7 @@ import custom_components.energy_management_system as pkg
 from custom_components.energy_management_system import kwartierenergie, meetlog, schaduw, tarief
 from custom_components.energy_management_system.const import PRICE_SCALE_FACTOR
 from gouden_scenarios import SCENARIOS, draai
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=2))
 NU = datetime(2026, 10, 1, 0, 0, tzinfo=TZ)
@@ -576,7 +577,7 @@ def test_de_leeftijd_per_teller_wordt_bewaard():
 
 
 def test_de_kwartiertimer_draait_op_de_event_loop():
-    bron = (MAP / "coordinator.py").read_text()
+    bron = coordinator_bron()
     assert "    @callback\n    def _meetlaag_kwartier(" in bron
 
 
@@ -727,7 +728,7 @@ def test_onder_de_reserve_wordt_nooit_verkocht(make_coordinator, hass):
 
 
 def test_het_plan_verkoopt_alleen_boven_de_reserve():
-    bron = (MAP / "coordinator.py").read_text()
+    bron = coordinator_bron()
     # v5.70: boven de VERKOOPreserve - het deel tot het blok blijft beschermd,
     # zie test_v570_verkoopreserve.py.
     # v5.93.3: de ruimte komt uit `_plan_verkoopruimte`.

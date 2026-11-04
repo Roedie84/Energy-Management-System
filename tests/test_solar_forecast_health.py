@@ -19,6 +19,7 @@ from custom_components.energy_management_system.const import (
     SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
     SOLAR_BIAS_DRIFT_MIN_DAYS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 class _Tracker:
@@ -143,7 +144,7 @@ def test_the_margin_uses_the_same_fraction_as_the_decision():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("def get_low_solar_margin")
     blok = bron[start : start + 1600]
 
@@ -166,7 +167,7 @@ def test_every_notification_type_is_actually_dispatched():
         NOTIFICATION_TYPES,
     )
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     verstuurd = set(re.findall(r'kind="([a-z_]+)"', bron))
     verstuurd |= set(re.findall(r'stuur\(\s*"([a-z_]+)"', bron))
     # v1.23.4: de planningsmeldingen gaan via een hulpfunctie die de

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from custom_components.energy_management_system.const import PENDEL_LOS_S
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=1))
 T0 = datetime(2026, 11, 3, 16, 0, tzinfo=TZ)
@@ -107,7 +108,7 @@ def test_tijdgewogen_gemiddelde_blijft_voor_de_diagnose():
 
 def test_schakelaar_en_vlag_zijn_weg():
     switch = (BRON / "switch.py").read_text(encoding="utf-8")
-    coord = (BRON / "coordinator.py").read_text(encoding="utf-8")
+    coord = coordinator_bron()
     assert "class P1PendeldempingSwitch" not in switch
     assert "P1PendeldempingSwitch(" not in switch
     assert "self.p1_pendeldemping" not in coord

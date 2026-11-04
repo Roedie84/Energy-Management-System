@@ -25,6 +25,7 @@ en de laatste bron valt nooit uit - geen voorspelling is erger dan een
 matige.
 """
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 
 def _bron(c, entity_id, percentage, waarnemingen=200):
@@ -127,7 +128,7 @@ def test_de_poort_zit_in_het_ensemble(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("def _weer_de_slechte_bronnen")
     j = bron.index("\n    def ", i + 10)
 

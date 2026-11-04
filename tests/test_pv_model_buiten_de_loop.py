@@ -21,6 +21,7 @@ Drie dingen:
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 8, 12, 0, tzinfo=timezone.utc)
 
@@ -31,7 +32,7 @@ def test_de_lezer_traint_niet(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("    def get_pv_model_evaluation(self)")
     j = bron.index("\n    def ", i + 10)
     assert "woud.leer(" not in bron[i:j]

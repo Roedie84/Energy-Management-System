@@ -27,6 +27,7 @@ from custom_components.energy_management_system.const import (
     CONF_BATTERY_STATE_SENSOR,
     CONF_INVERT_BATTERY_POWER_SIGN,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 # --- 1. de werkstand ------------------------------------------------
@@ -161,7 +162,7 @@ def test_the_discharge_counter_resets_daily():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("self._self_sufficiency_day_key = today_key")
 
     assert "battery_discharge_today_kwh = 0.0" in bron[start : start + 400]

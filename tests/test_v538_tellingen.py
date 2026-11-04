@@ -7,6 +7,7 @@ Uit de uuranalyse van 7 oktober 14:15:
 - de grootverbruikers bevatten de eigen accu-meetstekker;
 - diagnose zei "config 70/0/1", de cockpit "koppelingen 71/71".
 """
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_de_lopende_nacht_beslist_niet_het_signaal(make_coordinator, hass):
@@ -59,5 +60,5 @@ def test_de_cockpit_noemt_slapende_koppelingen():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     assert 'f" ({slaapt} slaapt)"' in bron

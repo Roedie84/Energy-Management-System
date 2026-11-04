@@ -13,8 +13,9 @@ import re
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+from tests._coordinator_bron import coordinator_bron
 
-BRON = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+BRON = coordinator_bron()
 
 
 def _setup_blok() -> str:

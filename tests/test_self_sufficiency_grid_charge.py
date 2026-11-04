@@ -8,6 +8,7 @@ geïmporteerd bij 2,87 kWh verbruik - het verschil zat in de ACCU, want de
 winterguard had bijgeladen. De formule nam aan dat alle import naar het
 huis gaat.
 """
+from tests._coordinator_bron import coordinator_bron
 
 
 def _c(make_coordinator, verbruik, importeren, netlading=0.0):
@@ -65,7 +66,7 @@ def test_the_counter_rolls_over_at_midnight():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("self.grid_import_today_kwh = 0.0")
     blok = bron[kop : kop + 200]
 
@@ -87,7 +88,7 @@ def test_the_consistency_check_uses_the_same_formula(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("# --- 1. Zelfvoorziening moet volgen uit import en verbruik ---")
     blok = bron[kop : kop + 900]
 

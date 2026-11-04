@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from homeassistant.util import dt as dt_util
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 27, 20, 40)
 
@@ -133,7 +134,7 @@ def test_no_reader_uses_the_raw_field(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     lezers = [
         r.strip()
         for r in bron.split("\n")

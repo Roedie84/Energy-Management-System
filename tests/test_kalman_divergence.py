@@ -15,6 +15,7 @@ from custom_components.energy_management_system.const import (
     KALMAN_DIVERGENCE_MEANINGFUL_PERCENT,
     KALMAN_DIVERGENCE_MIN_SAMPLES,
 )
+from tests._coordinator_bron import coordinator_bron
 
 
 def _vul(c, signaal, verschil, ruw, aantal=KALMAN_DIVERGENCE_MIN_SAMPLES):
@@ -134,7 +135,7 @@ def test_it_stays_advisory(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     for regel in bron.split("\n"):
         if "kalman_divergence" in regel:
             assert "_async_apply" not in regel

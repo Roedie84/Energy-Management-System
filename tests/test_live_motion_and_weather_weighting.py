@@ -25,6 +25,7 @@ from custom_components.energy_management_system.const import (
     WEATHER_BEST_SOURCE_MIN_LEAD_PP,
     WEATHER_DISAGREEMENT_PREFER_BEST_PP,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 8, 10, 10, 0, tzinfo=timezone.utc)
 
@@ -106,7 +107,7 @@ def test_the_listener_is_registered():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "self._handle_motion_event" in bron
     assert "_unsub_motion_state" in bron
@@ -119,7 +120,7 @@ def test_the_tick_remains_a_fallback():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("def _update_presence")
     blok = bron[start : start + 2500]
 

@@ -9,6 +9,7 @@ het plan de middag nog als blok zag en wel laadde - en dat om 14:45 tegen
 from datetime import datetime, timedelta, timezone
 
 from custom_components.energy_management_system.const import PRICE_SCALE_FACTOR
+from tests._coordinator_bron import coordinator_bron
 
 TZ = timezone(timedelta(hours=2))
 DAG = datetime(2026, 10, 4, tzinfo=TZ)
@@ -91,6 +92,6 @@ def test_beslissing_en_plan_gebruiken_dezelfde_stap():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     assert "return self._laad_op_goedkoopste(now, uit)" in bron
     assert "regel = self._laad_op_goedkoopste(einde - timedelta(minutes=15), regel)" in bron

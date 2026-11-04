@@ -17,6 +17,7 @@ verstuurd. Het bericht staat er niet eens op. De sensor geeft nu alleen
 wat de kaart nodig heeft, plus een ingekort bericht voor wie erop tikt.
 """
 import json
+from tests._coordinator_bron import coordinator_bron
 
 
 def test_de_historie_op_de_sensor_is_klein(make_coordinator, hass):
@@ -61,7 +62,7 @@ def test_geen_leesactie_in_de_event_loop():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     i = bron.index("def _instelling_leesbaar")
     j = bron.index("\n    def ", i + 10)
     assert "read_text" not in bron[i:j]

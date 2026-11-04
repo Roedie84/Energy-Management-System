@@ -16,6 +16,7 @@ from custom_components.energy_management_system.const import CONF_PRICE_SENSOR
 from custom_components.energy_management_system.coordinator import (
     EnergyManagementSystemCoordinator as Coordinator,
 )
+from tests._coordinator_bron import coordinator_bron, lees
 
 PAKKET = Path(pkg.__file__).parent
 
@@ -79,7 +80,7 @@ def test_no_task_is_created_from_a_thread(make_coordinator, hass):
     """
     import re
 
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     for naam in ("_handle_interval", "_handle_state_change"):
         kop = bron.index(f"    def {naam}(")
@@ -185,7 +186,7 @@ def test_no_blocking_file_access_outside_the_executor():
         pad = PAKKET / bestand
         if not pad.exists():
             continue
-        regels = pad.read_text().splitlines()
+        regels = lees(pad).splitlines()
         for nummer, regel in enumerate(regels, 1):
             code = regel.split("#")[0]
             if not re.search(r"\.(read_text|write_text|read_bytes)\(", code):
@@ -226,7 +227,7 @@ def test_no_blocking_file_access_outside_the_executor():
 def test_the_dashboard_template_is_read_once_at_startup():
     """Het sjabloon verandert alleen bij een update, dus het hoeft maar
     één keer gelezen te worden."""
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "async_load_dashboard_template" in bron
     assert "_dashboard_template_cache" in bron
@@ -248,7 +249,7 @@ def test_a_swallowed_startup_error_becomes_visible():
     Opvangen blijft goed; het opstarten mag hier niet op stuklopen. Maar
     zwijgen niet.
     """
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("await self.async_bootstrap_energy_history()")
     blok = bron[kop : kop + 1200]
 
@@ -261,7 +262,7 @@ def test_every_startup_step_that_is_caught_reports_itself():
     fout ergens achter te laten waar hij in de diagnostiek terechtkomt."""
     import re
 
-    bron = (PAKKET / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("    async def async_setup(self) -> None:")
     blok = bron[kop : bron.index("\n    async def ", kop + 40)]
 

@@ -20,6 +20,7 @@ aan - dezelfde vorm als de verkooptoets.
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 9, 13, 12, 0, tzinfo=timezone.utc)
 
@@ -72,7 +73,7 @@ def test_de_beslisboom_gebruikt_de_dode_zone():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
 
     assert "_is_negatieve_prijs(" in bron
     assert not re.search(r"is_negative_price = \(\s*current_price_per_kwh is not None and current_price_per_kwh < 0", bron)

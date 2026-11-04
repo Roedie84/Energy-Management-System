@@ -10,6 +10,7 @@ geijkt (v1.27.0) zonder dat iets aansloeg. Een dagelijkse vergelijking
 van voorspeld en werkelijk had dat er binnen een dag uitgehaald.
 """
 from datetime import datetime, timedelta, timezone
+from tests._coordinator_bron import coordinator_bron
 
 OCHTEND = datetime(2026, 8, 11, 9, 0, tzinfo=timezone.utc)
 
@@ -239,7 +240,7 @@ def test_it_only_reports_and_never_adjusts():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("def _update_plan_review")
     staart = bron[kop : bron.index("def get_plan_review")]
 
@@ -494,7 +495,7 @@ def test_the_cleanup_runs_after_the_state_is_restored():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     kop = bron.index("    async def async_setup(self) -> None:")
     staart = bron.index("\n    async def ", kop + 40)
     blok = bron[kop:staart]

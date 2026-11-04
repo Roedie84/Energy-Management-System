@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from custom_components.energy_management_system.const import (
     WATER_SOFTENER_MIN_LITERS,
 )
+from tests._coordinator_bron import coordinator_bron
 
 NOW = datetime(2026, 8, 8, 5, 47, tzinfo=timezone.utc)
 
@@ -121,7 +122,7 @@ def test_a_small_night_session_is_not_a_regeneration(make_coordinator, hass):
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    bron = coordinator_bron()
     start = bron.index("WATER_SOFTENER_NIGHT_WINDOW_START_HOUR\n")
     # v1.18.0: niet op een vast aantal tekens zoeken - het
     # toelichtingsblok groeit mee met elke correctie en schoof de
