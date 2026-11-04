@@ -153,9 +153,15 @@ const zoekEntiteiten = (hass) => {
     if (extern[naam]) ids[sleutel] = extern[naam];
   }
   const modules = Array.isArray(extern.modules_soc) ? extern.modules_soc : [];
+  // v5.181.1 (punt 8): modulevermogens en apparaatvermogens live in de browser
+  const modulesW = Array.isArray(extern.modules_vermogen) ? extern.modules_vermogen : [];
+  for (const k of ["vaatwasser_w", "wasmachine_w", "stofzuiger_w", "fietsen_w", "lader_w", "airco_w"]) {
+    if (extern[k]) ids[k] = extern[k];
+  }
   return {
     ids,
     modules,
+    modulesW,
     omkeren: !!extern.accu_omkeren,
     gevonden: !!bron,
     bronId: bron ? bron.entity_id : null,
@@ -844,22 +850,112 @@ const doen = (r) => {
   if (a != null) return a <= -50 ? "zon" : a >= 50 ? "voeden" : "rust";
   return m.k === "ontladen" ? "voeden" : "rust";
 };
+/* v5.181.1 (punt 9): wat de accu nu doet, in een zin voor tegel, kopchip,
+   tijdlijn en uitleg. Dezelfde tabellen als standweergave.py (een toets houdt
+   ze gelijk): de planrij (handmatig laden, verkopen, terugleveren) bepaalt, en
+   anders het gemeten vermogen; de reden geeft hooguit een toelichting. */
+const STAND_TOELICHTING = {
+  waardeplan_houden: "lading bewaren voor later",
+  battery_saved_for_peak: "lading bewaren voor de piek",
+  sparen_in_blok: "lading bewaren voor na het blok",
+  celbescherming_houden: "lading vasthouden (celbescherming)",
+};
+const STAND_RUST = {
+  waardeplan_houden: "Bewaren voor later",
+  battery_saved_for_peak: "Bewaren voor de piek",
+  sparen_in_blok: "Bewaren voor na het blok",
+  celbescherming_houden: "Lading vasthouden",
+};
+const KOP_UIT_WEERGAVE = ["waardeplan_houden", "waardeplan_huis", "waardeplan_leeg",
+  "battery_saved_for_peak", "sparen_in_blok", "celbescherming_houden"];
+const standSoort = (planModus, accuW, tekort) => {
+  const m = String(planModus || "");
+  if (m.startsWith("manual (verkopen)")) return "verkopen";
+  if (m.startsWith("manual (terugleveren)")) return "terug";
+  if (m.startsWith("manual (laden)")) return "net";
+  if (tekort) return "leeg";
+  if (accuW != null) return accuW <= -50 ? "zon" : accuW >= 50 ? "voeden" : "rust";
+  return m.startsWith("smart_discharging") ? "voeden" : "rust";
+};
+const standWeergave = (reden, planModus, accuW, tekort = false) => {
+  let k = standSoort(planModus, accuW, tekort);
+  if (reden === "waardeplan_leeg" && k === "rust") k = "leeg";
+  const toel = STAND_TOELICHTING[reden || ""];
+  let label;
+  if (k === "rust" && STAND_RUST[reden]) label = STAND_RUST[reden];
+  else if (k === "zon" && toel) label = `${DOEN[k].label} \u2013 ${toel}`;
+  else label = DOEN[k].label;
+  return { k, label, kleur: DOEN[k].kleur };
+};
+
+/* v5.181.1 (punt 8): gepland (EMS, elke ronde) tegen gemeten (live in de
+   browser). Dezelfde regels als planvolging.beoordeel. */
+const PV_DREMPEL_W = 150;
+const handmatig = (m) => String(m || "").startsWith("manual");
+const kwTekst = (w) => `${fmt(Math.abs(w) / 1000, 1)} kW`;
+const richting = (w) => (Math.abs(w) < PV_DREMPEL_W ? "in rust" : w < 0 ? `laadt ${kwTekst(w)}` : `ontlaadt ${kwTekst(w)}`);
+const planvolgingLive = (ems, live) => {
+  if (!ems || !ems.beschikbaar || live.accu == null || num(ems.gepland_accu_w) == null) return ems;
+  const gepland = num(ems.gepland_accu_w);
+  const verschil = live.accu - gepland;
+  const zonD = live.zon == null || num(ems.gepland_zon_w) == null ? null : live.zon - num(ems.gepland_zon_w);
+  const huisD = live.huis == null || num(ems.gepland_huis_w) == null ? null : live.huis - num(ems.gepland_huis_w);
+  const plan = ems.modus;
+  const bijdragen = handmatig(plan) ? {} : { zon: -(zonD || 0), verbruik: huisD || 0 };
+  const rest = verschil - Object.values(bijdragen).reduce((a, b) => a + b, 0);
+  const andere = live.stand != null && plan != null && handmatig(live.stand) !== handmatig(plan);
+  let oorzaak;
+  let status;
+  if (Math.abs(verschil) < PV_DREMPEL_W) { oorzaak = "geen"; status = "volgens plan"; }
+  else if (andere) { oorzaak = "sturing"; status = "afwijking sturing"; }
+  else if (Math.abs(rest) >= PV_DREMPEL_W) { oorzaak = "accu"; status = "afwijking accu"; }
+  else {
+    oorzaak = Object.keys(bijdragen).reduce((a, b) => (Math.abs(bijdragen[b]) > Math.abs(bijdragen[a] || 0) ? b : a), "zon");
+    status = "verklaard";
+  }
+  const kop = `Accu ${richting(live.accu)}`;
+  const reden = oorzaak === "geen" ? "volgens plan"
+    : oorzaak === "zon" ? `${zonD > 0 ? "meer" : "minder"} zon dan voorspeld`
+    : oorzaak === "verbruik" ? `huis verbruikt ${huisD > 0 ? "meer" : "minder"} dan verwacht`
+    : oorzaak === "sturing" ? "de sturing koos een andere stand"
+    : `de accu wijkt zelf ${kwTekst(rest)} af`;
+  return {
+    ...ems,
+    gemeten_accu_w: Math.round(live.accu),
+    gemeten_zon_w: live.zon == null ? null : Math.round(live.zon),
+    verschil_w: Math.round(verschil),
+    verschil_tekst: null,
+    zon_verschil_w: zonD == null ? null : Math.round(zonD),
+    zon_verschil_tekst: null,
+    oorzaak,
+    status,
+    tekst: oorzaak === "geen" ? `${kop}, volgens plan` : `${kop} \u2013 ${reden}`,
+    live: true,
+  };
+};
+
 /* Eindtijd; middernacht als 24:00. */
 const eindKlok = (d) => (d.getHours() === 0 && d.getMinutes() === 0 ? "24:00" : klok(d));
 
+/* v5.181.1 (punt 8): minimale tijd tussen twee tekenbeurten (2 per seconde). */
+const TEKEN_MIN_MS = 500;
+
 /* Per paneel de sleutels waar het van afhangt. */
 const AFHANKELIJK = {
-  kop: ["status", "cockpit", "prijs", "modus", "verwacht", "gezondheid", "uitleg", "plan", "blok", "aanwezig"],
+  kop: ["status", "cockpit", "prijs", "modus", "verwacht", "gezondheid", "uitleg", "plan", "blok", "aanwezig",
+    "accu_vermogen"],
   meldingen: ["status", "tekort"],
   accu: ["soc", "beschikbaar", "capaciteit", "accu_vermogen", "pv", "net", "huis", "gacs", "reden", "verwacht",
-    "uitleg", "modus", "schema", "plan", "accuprijs"],
-  planvandaag: ["plan", "schema", "soc", "besparing", "uitleg"],
+    "uitleg", "modus", "schema", "plan", "accuprijs", "cockpit"],
+  // v5.181.1 (punt 7): de planvolging komt elke ronde van de cockpitsensor.
+  planvandaag: ["plan", "schema", "soc", "besparing", "uitleg", "cockpit", "accu_vermogen", "pv", "net", "modus"],
   geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief", "rendement", "gacs"],
   planning: ["plan", "schema", "uitleg", "blok", "soc", "prijsverwachting"],
   verkoop: ["gacs", "mc", "tekort", "uitleg", "blok", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk",
     "pvNauw", "bewolking", "pv"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
-  huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "vaatwasserPlan", "wasmachinePlan", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip"],
+  huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "vaatwasserPlan", "wasmachinePlan", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip",
+    "vaatwasser_w", "wasmachine_w", "stofzuiger_w", "fietsen_w", "lader_w", "airco_w"],
   bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "laderOverrule", "meldingenAan", "achterhoeks"],
   voet: ["meetlog", "gezondheid", "status", "cockpit"],
@@ -962,6 +1058,7 @@ class EmsCockpitCard extends HTMLElement {
       const uit = zoekEntiteiten(hass);
       this._ids = uit.ids;
       this._moduleIds = uit.modules;
+      this._moduleWIds = uit.modulesW;
       this._omkeren = uit.omkeren;
       this._gevonden = uit.gevonden;
       this._bronId = uit.bronId;
@@ -978,6 +1075,14 @@ class EmsCockpitCard extends HTMLElement {
       if (s !== this._vorige[id]) {
         gewijzigd.add(id);
         this._vorige[id] = s;
+      }
+    }
+    // v5.181.1 (punt 8): de modulesensoren live
+    for (const id of [...(this._moduleIds || []), ...(this._moduleWIds || [])]) {
+      const s = hass.states[id];
+      if (s !== this._vorige[id]) {
+        this._vorige[id] = s;
+        this._vuil.add("modules");
       }
     }
     if (gewijzigd.size) {
@@ -1110,7 +1215,16 @@ class EmsCockpitCard extends HTMLElement {
         setTimeout(doe, 250);
         return;
       }
+      // v5.181.1 (punt 8): live metingen komen per seconde binnen; hoogstens
+      // twee tekenbeurten per seconde, en alleen panelen die echt veranderen
+      // (de html-vergelijking in _teken).
+      const wacht = TEKEN_MIN_MS - (Date.now() - (this._laatstGetekend || 0));
+      if (wacht > 0) {
+        setTimeout(doe, wacht);
+        return;
+      }
       this._gepland = false;
+      this._laatstGetekend = Date.now();
       this._teken();
     };
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(doe);
@@ -1209,6 +1323,35 @@ class EmsCockpitCard extends HTMLElement {
     return this._omkeren ? -v : v;
   }
 
+  /* v5.181.1 (punt 8): een live momentopname uit de bronentiteiten (zon, net,
+     accu, laadstand), bij elke update van Home Assistant. Het huis uit
+     dezelfde opname: zon + net + accu (accu + is ontladen, na omkeren - zoals
+     het EMS). Ontbreekt een bron, dan de opname van de laatste EMS-ronde. */
+  _live() {
+    const ems = attr(this._s("cockpit"), "stroom") || {};
+    const accu = this._accuW();
+    const zon = getal(this._s("pv"));
+    const net = getal(this._s("net"));
+    const live = {
+      accu: accu != null ? accu : num(ems.accu_w),
+      zon: zon != null ? Math.max(0, zon) : num(ems.zon_w),
+      net: net != null ? net : num(ems.net_w),
+      soc: getal(this._s("soc")),
+      stand: bruikbaar(this._s("modus")) ? this._s("modus").state : null,
+    };
+    live.huis = live.accu != null && live.zon != null && live.net != null
+      ? Math.max(0, live.zon + live.net + live.accu)
+      : num(ems.huis_w);
+    return live;
+  }
+
+  /* v5.181.1 (punt 9): de stand zoals de hele cockpit hem noemt. */
+  _stand(live) {
+    const st = attr(this._s("cockpit"), "stand") || {};
+    const reden = st.reden || (bruikbaar(this._s("reden")) ? this._s("reden").state : null);
+    return { reden, ...standWeergave(reden, st.plan_modus, (live || this._live()).accu) };
+  }
+
   _planRijen() {
     const rijen = attr(this._s("plan"), "kwartierplanning");
     return Array.isArray(rijen) ? rijen : [];
@@ -1287,7 +1430,10 @@ class EmsCockpitCard extends HTMLElement {
 
     const accuModus = this._s("modus");
     const m = modus(attr(this._s("uitleg"), "expected_mode") || (bruikbaar(accuModus) ? accuModus.state : ""));
-    const modusChip = chip(`<span class="stip" style="--kleur:${m.kleur}"></span>Accu: ${esc(m.label)}`, "groot");
+    // v5.181.1 (punt 9): dezelfde weergave als de tegel "Accu nu"
+    const stand = this._stand();
+    const kopStand = KOP_UIT_WEERGAVE.includes(stand.reden) ? stand : { label: m.label, kleur: m.kleur };
+    const modusChip = chip(`<span class="stip" style="--kleur:${kopStand.kleur}"></span>Accu: ${esc(kopStand.label)}`, "groot");
 
     // v5.178.0: de prijs staat in de kop (de tegel Stroomprijs is weg)
     const prijs = getal(this._s("prijs"));
@@ -1389,15 +1535,21 @@ class EmsCockpitCard extends HTMLElement {
     const ruw = getal(this._s("beschikbaar"));
     const besch = ruw == null ? null : Math.max(0, ruw);
     const cap = getal(this._s("capaciteit"));
-    const w = this._accuW();
-    const pv = getal(this._s("pv"));
-    const net = getal(this._s("net"));
-    const huis = getal(this._s("huis"));
+    // v5.181.1 (punt 4): een momentopname van het EMS (zon, net, accu, huis
+    // uit dezelfde ronde); zonder opname de losse sensoren zoals voorheen.
+    const live = this._live();
+    const w = live.accu;
+    const pv = live.zon;
+    const net = live.net;
+    const huis = live.huis;
+    const stand = this._stand(live);
     const kleur = "var(--violet)";
     const waarom = this._gacs("waarom_nu");
     const verwacht = attr(this._s("uitleg"), "expected_mode") || (bruikbaar(this._s("verwacht")) ? this._s("verwacht").state : "");
     const m = modus(verwacht);
-    const kort = waarom.kop ? hoofd(waarom.kop) : waarom.kort ? hoofd(waarom.kort) : m.label;
+    // v5.181.1 (punt 9): in een slimme stand wat er werkelijk gebeurt
+    const kort = KOP_UIT_WEERGAVE.includes(stand.reden) ? stand.label
+      : waarom.kop ? hoofd(waarom.kop) : waarom.kort ? hoofd(waarom.kort) : m.label;
     const redenen = Array.isArray(waarom.redenen) ? waarom.redenen.slice(0, 3) : [];
     const blok = this._blokken()[1];
     const haalt = attr(this._s("gacs"), "haalt_de_accu_het");
@@ -1406,6 +1558,8 @@ class EmsCockpitCard extends HTMLElement {
       besch != null ? `${fmt(besch, 2)} kWh bruikbaar${cap != null ? ` van ${fmt(cap, 2)}` : ""}` : "",
       this._planUitkomst(soc),
     ].filter(Boolean).join(PUNT);
+    // v5.181.1 (punt 1): rekent het EMS wel maar stuurt het niet, dan zeggen we dat.
+    const niet = (attr(this._s("uitleg"), "waardeplan") || {}).niet_gestuurd;
     const daarna = blok
       ? `<div class="sub">Daarna: <b>${esc(modus(blok.mode).label)}</b> vanaf ${esc(blok.van_tekst || klokDag(blok.start) || "")}</div>`
       : "";
@@ -1428,7 +1582,8 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="tegel">` +
       paneelKop("accu", "Accu nu") +
       `<div class="accu-t"><div class="soc" data-info="soc" title="Laadstand">${socBlok(soc, kleur)}</div>` +
-      `<div class="regels-k" data-info="verhaal"><div class="tekst-m">${esc(kort)}</div><div class="sub">${esc(regel)}</div>${daarna}</div></div>` +
+      `<div class="regels-k" data-info="verhaal"><div class="tekst-m">${esc(kort)}</div><div class="sub">${esc(regel)}</div>${daarna}` +
+      (niet ? `<div class="sub">Niet naar de accu gestuurd: <b>${esc(niet)}</b></div>` : "") + `</div></div>` +
       vier +
       `<div class="regels-k">` +
       (resttijd ? `<div class="rest">Bij het huidige vermogen ${esc(resttijd)}</div>` : "") +
@@ -1558,8 +1713,12 @@ class EmsCockpitCard extends HTMLElement {
 
   /* Gepland tegen gemeten accuvermogen (v5.91) */
   _planvolgingRegel() {
-    const pv = attr(this._s("plan"), "planvolging");
-    const nu = pv && pv.nu;
+    const pv = attr(this._s("plan"), "planvolging") || {};
+    // v5.181.1 (punt 7): 'nu' van de cockpitsensor - elke ronde, uit dezelfde
+    // opname als de tegel "Accu nu"; de kwartierplanning schrijft trager.
+    const ems = attr(this._s("cockpit"), "planvolging_nu");
+    // v5.181.1 (punt 8): gemeten = live uit de bronnen, gepland = EMS-ronde
+    const nu = planvolgingLive(ems && ems.beschikbaar ? ems : pv.nu, this._live());
     if (!nu || !nu.beschikbaar) return "";
     const kl = nu.status === "volgens plan" ? "ok" : nu.status === "verklaard" ? "" : "let";
     // v5.93.2: "andere keuze" als de sturing iets anders koos dan het plan
@@ -1587,7 +1746,7 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="rk">Accu</div>` +
       `<div class="rij3">` +
       `<div class="${accuK(nu.gepland_accu_w)}"><div class="l">Gepland</div><div class="w">${rw(nu.gepland_accu_w)}</div></div>` +
-      `<div class="${accuK(nu.gemeten_accu_w)}"><div class="l">Gemeten</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
+      `<div class="${accuK(nu.gemeten_accu_w)}"><div class="l">Gemeten nu</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
       `<div class="${accuK(verschil)}"><div class="l">Verschil</div><div class="w">${verschil == null ? STREEP : watt(Math.abs(verschil))}</div>` +
       `<div class="s">${nu.verschil_tekst ? esc(nu.verschil_tekst) : verschil == null || Math.abs(verschil) < 50 ? "geen" : verschil < 0 ? "meer laden" : "meer ontladen"}</div></div>` +
       `</div>` +
@@ -1716,10 +1875,18 @@ class EmsCockpitCard extends HTMLElement {
 
     // Laadstand als lijn, zon als vlak (0..100 in beide richtingen)
     const x = (i) => ((i + 0.5) / n) * 100;
-    const socPunten = rijen
-      .map((r, i) => (num(r.soc_procent) == null ? null : `${x(i).toFixed(2)},${(100 - num(r.soc_procent)).toFixed(2)}`))
-      .filter(Boolean)
-      .join(" ");
+    // v5.181.1 (punt 8): de lijn begint op de nu-lijn bij de live laadstand
+    // (04-11 10:56: ~19 % bij "nu" terwijl de accu op ~31 % stond).
+    const t0 = tijden[0].getTime();
+    const tEind = tijden[n - 1].getTime() + 15 * 60000;
+    const nuX = ((Date.now() - t0) / (tEind - t0)) * 100;
+    const socLive = getal(this._s("soc"));
+    const socPunt = (i, r) => `${x(i).toFixed(2)},${(100 - num(r.soc_procent)).toFixed(2)}`;
+    const punten = rijen.map((r, i) => (num(r.soc_procent) == null ? null : { x: x(i), p: socPunt(i, r) })).filter(Boolean);
+    const socPunten = (socLive != null && nuX >= 0 && nuX <= 100
+      ? [...punten.filter((q) => q.x < nuX).map((q) => q.p), `${nuX.toFixed(2)},${(100 - socLive).toFixed(2)}`,
+        ...punten.filter((q) => q.x > nuX).map((q) => q.p)]
+      : punten.map((q) => q.p)).join(" ");
     const zonMax = Math.max(0.05, ...rijen.map((r) => num(r.zon_kwh) || 0));
     const zonPunten =
       `0,100 ` +
@@ -1879,6 +2046,7 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="sub laadplan">Laadplanning gewijzigd: <b>${esc(wanneer)}</b> (${esc(geleden(w.om) || "")})` +
       ` \u00b7 nu: ${esc(w.blokken || "")}` +
       (w.was ? ` \u00b7 was: ${esc(w.was)}` : "") +
+      (w.reden ? ` \u00b7 reden: ${esc(w.reden)}` : "") +
       `</div>`
     );
   }
@@ -1994,7 +2162,12 @@ class EmsCockpitCard extends HTMLElement {
         `<div class="pb"><div class="meta">${rechts}</div></div><div class="leegmelding">${start ? "Modulegegevens laden nog (EMS net gestart)." : "Geen modulegegevens."}</div>`;
     }
     const regels = mods.map((m) => {
-      const soc = num(m.soc_percent);
+      // v5.181.1 (punt 8): laadstand en vermogen live uit de modulesensoren
+      const i = num(m.module) != null ? num(m.module) - 1 : -1;
+      const liveSoc = i >= 0 && this._moduleIds && this._moduleIds[i] ? getal(this._hass.states[this._moduleIds[i]]) : null;
+      const liveW = i >= 0 && this._moduleWIds && this._moduleWIds[i] ? getal(this._hass.states[this._moduleWIds[i]]) : null;
+      if (liveW != null) m = { ...m, vermogen_w: liveW };
+      const soc = liveSoc != null ? liveSoc : num(m.soc_percent);
       const laag = num(m.cel_min_v) != null && num(m.cel_min_v) < 3.0;
       const drift = Array.isArray(m.drift_op) && m.drift_op.length;
       const zwak = drift || laag;

@@ -47,7 +47,8 @@ def test_externe_bronnen_onder_de_namen_van_de_kaart():
 
 
 def test_lege_configuratie_geeft_alleen_de_tekenvlag():
-    assert externe_bronnen({}) == {"accu_omkeren": False}
+    # v5.181.1: plus de tekenafspraak na het omkeren (voor huis = zon + net + accu).
+    assert externe_bronnen({}) == {"accu_omkeren": False, "accu_teken": "positief_is_ontladen"}
 
 
 def test_eigen_entiteiten_op_hun_vaste_sleutel():

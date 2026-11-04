@@ -21,11 +21,14 @@ from .const import (
     CONF_FEEDIN_COST_EUR_PER_KWH,
     CONF_MANUAL_CHARGE_POWER,
     CONF_MANUAL_DISCHARGE_POWER,
+    CONF_MANUAL_POWER_NUMBER,
+    CONF_OPERATION_SELECT,
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     DEFAULT_FEEDIN_COST_EUR_PER_KWH,
     DEFAULT_MANUAL_CHARGE_POWER,
     DEFAULT_MANUAL_DISCHARGE_POWER,
     FEEDIN_PREMIUM_EUR_PER_KWH,
+    OPTION_MANUAL,
     OPTION_SMART,
     OPTION_SMART_CHARGING,
     PLAN_SPAREN_LEEG_KWH,
@@ -34,12 +37,14 @@ from .const import (
     WAARDEPLAN_EINDPRIJS_UREN,
     WAARDEPLAN_HERREKEN_AFWIJKING_KWH,
     WAARDEPLAN_HORIZON_UUR,
+    WAARDEPLAN_LIVE_AFWIJKING_KWH,
     WAARDEPLAN_MIN_ACTIE_W,
     WAARDEPLAN_MIN_KWARTIEREN,
     WAARDEPLAN_MIN_LAAD_W,
     WAARDEPLAN_MIN_VERMOGEN_W,
     WAARDEPLAN_SLIJTAGE_TERUGVAL_CT,
     WAARDEPLAN_STUURT,
+    WAARDEPLAN_VERMOGEN_TOLERANTIE_W,
     WAARDEPLAN_WEG_AANDACHT_MINUTEN,
 )
 from .tijdtekst import periode_met_dag
@@ -113,6 +118,11 @@ class WaardeplanSturingMixin:
             # rendement in de cellen komt (toonde 2,0 kW bij 2,4 kW laden).
             if r.get("actie") == "laden_net":
                 nieuw["laden_w"] = self._waardeplan_laadvermogen_w(r)
+                # v5.181.1 (punt 2): het lopende kwartier toont wat er echt
+                # naar de accu ging - plan, opdracht en planvolging één getal.
+                opdracht = (self.last_waardeplan or {}).get("opdracht_w")
+                if r is eerste and opdracht:
+                    nieuw["laden_w"] = abs(opdracht)
             nieuw["tekort"] = self._waardeplan_tekort(r, leeg_kwh)
             nieuw["bron"] = "waardeplan"
             if bruikbaar:
@@ -588,8 +598,11 @@ class WaardeplanSturingMixin:
             begin_inhoud = cache[1].get("inhoud_kwh")
             if (
                 inhoud is None or begin_inhoud is None
-                or abs(max(0.0, inhoud) - begin_inhoud) < WAARDEPLAN_HERREKEN_AFWIJKING_KWH
-                + abs(float((cache[1].get("nu") or {}).get("accu_kwh") or 0.0))
+                or (
+                    abs(max(0.0, inhoud) - begin_inhoud) < WAARDEPLAN_HERREKEN_AFWIJKING_KWH
+                    + abs(float((cache[1].get("nu") or {}).get("accu_kwh") or 0.0))
+                    and not self._waardeplan_wijkt_live_af(now, cache[1], max(0.0, inhoud))
+                )
             ):
                 return cache[1]
         try:
@@ -606,8 +619,34 @@ class WaardeplanSturingMixin:
         # accu kump tekort" (20:15-06:00, laagste 10 %) kwam uit de oude
         # planning, terwijl de tabel 20 % vasthield.
         self._kwartierplan_cache = None
-        self._waardeplan_cache = (kwartier, plan)
+        # v5.181.1 (punt 6): een plan uit de opstartfase niet voor het hele
+        # kwartier vasthouden (04-11 10:17: de rij van de opstart bleef tot
+        # 10:30 sturen); de eerste volle ronde daarna rekent opnieuw.
+        if not self._opstart_stuurstil(now):
+            self._waardeplan_cache = (kwartier, plan)
         return plan
+
+    @staticmethod
+    def _waardeplan_wijkt_live_af(now: datetime, plan: dict, inhoud: float) -> bool:
+        """Wijkt de accu NU meer dan een planstap af van het plan? (v5.181.1, punt 8)
+
+        Live 04-11 10:56: de verwachte accustand begon bij "nu" op ~19 %
+        terwijl de accu op ~31 % stond. Het plan rekende één keer per
+        kwartier en hield de inhoud van het begin vast. Verwacht voor nu:
+        de inhoud bij het rekenen plus het deel van de planstap dat er
+        inmiddels had moeten zijn. Wijkt de echte inhoud daar meer dan
+        WAARDEPLAN_LIVE_AFWIJKING_KWH van af, dan opnieuw plannen.
+        """
+        nu = plan.get("nu") or {}
+        berekend = dt_util.parse_datetime(str(plan.get("berekend_om") or ""))
+        begin = plan.get("inhoud_kwh")
+        eind = nu.get("inhoud_kwh")
+        if berekend is None or begin is None or eind is None:
+            return False
+        uren = float(nu.get("uren") or 0.25)
+        deel = 1.0 if uren <= 0 else min(1.0, max(0.0, (now - berekend).total_seconds() / 3600 / uren))
+        verwacht = float(begin) + (float(eind) - float(begin)) * deel
+        return abs(float(inhoud) - verwacht) > WAARDEPLAN_LIVE_AFWIJKING_KWH
 
     def _waardeplan_laadvermogen_w(self, rij: dict) -> float:
         """Het laadvermogen van een planrij, gemeten aan het net (v5.162.0)."""
@@ -623,6 +662,69 @@ class WaardeplanSturingMixin:
         """kWh van een planrij naar W: 1000 / de duur van de rij (v5.177.0)."""
         uren = float(rij.get("uren") or 0.25)
         return 1000 / uren if uren > 0 else 4000
+
+    def _waardeplan_laadvermogen_nu_w(self, rij: dict, plan: dict, now: datetime) -> float:
+        """Het laadvermogen voor de rest van het lopende kwartier (v5.181.1, punt 2).
+
+        Live 04-11: om 10:17:45 (opstart) schreef het EMS -1782 W - de energie
+        van de planrij gedeeld door de rest van het kwartier OP DAT MOMENT -
+        en daarna tot 10:30 niets meer, terwijl er minder tijd overbleef en
+        de accu tussendoor niet had geladen. Het plan rekent één keer per
+        kwartier; het vermogen hoort elke ronde te volgen uit wat er van de
+        rij nog over is: (energie van de rij - al geladen sinds het plan) /
+        resterende tijd, hooguit het ingestelde laadvermogen. Zonder
+        tijdstip of inhoud van het plan: de rij zelf (zoals voorheen).
+        """
+        ingesteld = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0)
+        basis = self._waardeplan_laadvermogen_w(rij)
+        if rij.get("vol_vermogen"):
+            return basis
+        berekend = dt_util.parse_datetime(str(plan.get("berekend_om") or ""))
+        begin_inhoud = plan.get("inhoud_kwh")
+        inhoud = self.beschikbare_energie_kwh()
+        if berekend is None or begin_inhoud is None or inhoud is None or now <= berekend:
+            return basis
+        lokaal = dt_util.as_local(berekend)
+        kwartier = lokaal.replace(minute=lokaal.minute // 15 * 15, second=0, microsecond=0)
+        eind = kwartier + timedelta(minutes=15)
+        if not (kwartier <= dt_util.as_local(now) < eind):
+            return basis
+        rest_uren = max((eind - dt_util.as_local(now)).total_seconds() / 3600, 1 / 60)
+        rendement = float(plan.get("laadrendement_procent") or 100) / 100
+        geladen = max(0.0, float(inhoud) - float(begin_inhoud)) / (rendement if rendement > 0 else 1.0)
+        nog = max(0.0, float(rij.get("accu_kwh") or 0.0) - geladen)
+        return min(ingesteld, nog * 1000 / rest_uren)
+
+    def _als_al_ingesteld(self, vermogen: float) -> float:
+        """Staat de accu al handmatig binnen de marge van dit vermogen, dan
+        dat vermogen (v5.181.1, punt 2): niet elke ronde een paar watt
+        bijschrijven, wel zodra het verschil groter is."""
+        stand = self.hass.states.get(self.config.get(CONF_OPERATION_SELECT) or "")
+        getal = self.hass.states.get(self.config.get(CONF_MANUAL_POWER_NUMBER) or "")
+        if stand is None or getal is None or stand.state != OPTION_MANUAL:
+            return vermogen
+        try:
+            huidig = float(getal.state)
+        except (TypeError, ValueError):
+            return vermogen
+        if abs(huidig - vermogen) < WAARDEPLAN_VERMOGEN_TOLERANTIE_W:
+            return huidig
+        return vermogen
+
+    def _waardeplan_niet_gestuurd(self, now: datetime) -> str | None:
+        """Waarom het besluit niet naar de accu gaat, of None (v5.181.1, punt 1).
+
+        Live 04-11 09:45-10:14: de reden stond op "waardeplan_terugleveren"
+        terwijl de accu op smart_charging bleef. De knop "Handmatig smart
+        charge" (09:34) had de leermodus aangezet: het EMS rekende door, maar
+        schreef terecht niets. Dat stond nergens bij het besluit.
+        """
+        if self.learning_only:
+            stand = getattr(self, "handmatige_stand", None)
+            return f"leermodus (handmatige stand {stand})" if stand else "leermodus"
+        if self._opstart_stuurstil(now):
+            return "opstartfase: de accu blijft zoals hij staat tot de eerste volle ronde"
+        return None
 
     async def _waardeplan_als_nodig(self, now: datetime, entries) -> bool:
         """Past het waardeplan toe (v5.158.0, akkoord Ruud 02-11).
@@ -642,6 +744,14 @@ class WaardeplanSturingMixin:
         if actie in ("houden", "zon") and not self.smart_charging_supported():
             actie = "huis"
         plan["uitgevoerd"] = actie
+        # v5.181.1 (punten 1 en 2): wat er naar de accu gaat (W, + ontladen,
+        # - laden; 0 bij terugleveren), en of het er wel heen gaat.
+        plan["opdracht_w"] = (
+            charge_power if charge_power is not None
+            else discharge_power if discharge_power is not None
+            else 0 if actie == "zon_export" else None
+        )
+        plan["niet_gestuurd"] = self._waardeplan_niet_gestuurd(now)
         if charge_power is not None:
             await self._async_apply_manual(charge_power)
             self.last_reason = "waardeplan_laden"
@@ -682,11 +792,12 @@ class WaardeplanSturingMixin:
         charge_power = None
         discharge_power = None
         if actie == "laden_net":
-            vermogen = self._waardeplan_laadvermogen_w(nu)
+            # v5.181.1 (punt 2): elke ronde de rest van het kwartier.
+            vermogen = self._waardeplan_laadvermogen_nu_w(nu, plan, now)
             if vermogen < WAARDEPLAN_MIN_VERMOGEN_W:
                 actie = "houden"
             else:
-                charge_power = -round(vermogen)
+                charge_power = self._als_al_ingesteld(-round(vermogen))
         elif actie == "zon_export":
             # v5.177.0 (A11): een deel opslaan op een vast vermogen, de rest terug.
             vermogen = float(nu.get("kwh") or 0.0) * self._per_uur_w(nu)

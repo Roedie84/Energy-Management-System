@@ -120,6 +120,8 @@ class FinancienMixin:
 
     #: v5.118.0: (dag, correctie) van de laatste geslaagde berekening.
     _laatste_voorraadcorrectie: tuple | None = None
+    # v5.181.1 (punt 3): de laatste lading gesplitst in zon en net.
+    last_laadsplitsing: dict | None = None
 
     def _voorraad_kwh_waarde(self) -> tuple[float | None, str | None]:
         """Waarde per opgeslagen kWh voor de voorraadcorrectie (v5.116.0).
@@ -637,7 +639,18 @@ class FinancienMixin:
             and charge_power_w
         ):
             energy_kwh = (self._gemeten_accu_w(abs(charge_power_w), -1) / 1000) * elapsed_hours
-            cost_eur = energy_kwh * current_price
+            # v5.181.1 (punt 3): alleen het deel boven het zonoverschot is
+            # netladen. Live 04-11 10:30: plan 'laden_net' terwijl de zon
+            # 1,48 kW leverde en de P1 119 W terugleverde - de accu laadde
+            # dus uit de zon, op een vast vermogen. Dat telde volledig als
+            # netinkoop tegen de inkoopprijs.
+            zon_kwh, net_kwh = self._split_charge_pv_vs_grid(energy_kwh, elapsed_hours)
+            self.last_laadsplitsing = {
+                "zon_kwh": round(zon_kwh, 4),
+                "net_kwh": round(net_kwh, 4),
+                "moment": now.isoformat(),
+            }
+            cost_eur = net_kwh * current_price
             self.total_charge_cost_eur += cost_eur
             self.current_month_charge_cost_eur += cost_eur
 

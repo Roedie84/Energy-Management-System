@@ -12568,10 +12568,15 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # Deze volgorde is de enige die klopt: de accu krijgt de stand
         # terwijl EMS nog mag schrijven, en pas daarna wordt de sturing
         # stilgezet zodat de volgende ronde er niet overheen gaat.
-        if stand == HANDMATIGE_STAND_LADEN:
-            await self._async_apply_manual(-self.handmatig_laadvermogen_w())
-        else:
-            await self._async_apply_operation(OPTION_SMART_CHARGING)
+        # v5.181.1 (punt 6): een knop van de gebruiker gaat ook in de opstartfase door.
+        self._gebruikersopdracht = True
+        try:
+            if stand == HANDMATIGE_STAND_LADEN:
+                await self._async_apply_manual(-self.handmatig_laadvermogen_w())
+            else:
+                await self._async_apply_operation(OPTION_SMART_CHARGING)
+        finally:
+            self._gebruikersopdracht = False
 
         if not self.learning_only:
             self._leermodus_door_handmatige_stand = True
@@ -17384,6 +17389,19 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 "resttijd": self.accu_resttijd(),
             }
         )
+        # v5.181.1 (punten 4 en 7): de opname van deze ronde, voor de tegel
+        # "Accu nu" en de planvolging - dezelfde cijfers op beide plekken.
+        gegevens["stroom"] = dict(self.live_momentopname or {})
+        gegevens["planvolging_nu"] = self.planvolging_nu()
+        # v5.181.1 (punt 9): de reden en de planrij van nu, voor `standWeergave`
+        # in de cockpit (die er het live vermogen naast legt).
+        gegevens["stand"] = {
+            "reden": self.last_reason,
+            "plan_modus": (
+                self._WAARDEPLAN_MODUS.get(((self.last_waardeplan or {}).get("nu") or {}).get("actie"))
+                if str(self.last_reason or "").startswith("waardeplan_") else None
+            ),
+        }
         return gegevens
 
     def _schema_gegevens(self) -> dict:
@@ -23798,7 +23816,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             t = dt_util.parse_datetime(tekst)
             if t is not None and t >= huidig:
                 oud.append(t)
+        grondslag = self._laadplan_grondslag(moment)
         if vorig and sorted(oud) == sorted(nieuw):
+            # v5.181.1 (punt 5): de grondslag bijhouden, zodat bij de volgende
+            # wijziging te zien is wat er sindsdien veranderde.
+            vorig["grondslag"] = grondslag
             return
         self.laadplan_gewijzigd = {
             "om": moment.isoformat(),
@@ -23806,8 +23828,63 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             "kwartieren": [t.isoformat() for t in sorted(nieuw)],
             "blokken": self._laadblokken_tekst(sorted(nieuw), moment),
             "was": vorig.get("blokken"),
+            "reden": self._laadplan_reden(vorig.get("grondslag") if vorig else None, grondslag),
+            "grondslag": grondslag,
         }
         self.schedule_persisted_state_save()
+
+    def _laadplan_grondslag(self, moment: datetime) -> dict:
+        """Waar de laadplanning op rust, om een wijziging te verklaren (v5.181.1, punt 5).
+
+        Live 04-11: om 10:15 laden 10:15-11:00 en 11:15-14:30, om 10:30
+        "geen laden uit het net gepland" - zonder dat ergens stond waarom.
+        Vastgelegd: de prijsreeks (tot wanneer, en een vingerafdruk), de
+        zonverwachting van vandaag, de huis-eerst-regel, de opstartfase en
+        de accu-inhoud.
+        """
+        uit: dict = {}
+        try:
+            entries = self._get_forecast_entries() or []
+        except Exception:  # noqa: BLE001 - zonder prijzen geen prijsvergelijking
+            entries = []
+        if entries:
+            uit["prijzen_tot"] = entries[-1][1].isoformat()
+            uit["prijzen"] = round(sum(float(p) for _s, _e, p in entries), 3)
+        try:
+            verwacht = self._zon_vandaag_totaal(moment)[0]
+        except Exception:  # noqa: BLE001
+            verwacht = None
+        if verwacht is not None:
+            uit["zon_kwh"] = round(float(verwacht), 1)
+        uit["huis_eerst"] = bool(getattr(self, "waardeplan_zon_export_geweigerd", False))
+        uit["opstart"] = bool(self.in_opstartfase(moment))
+        try:
+            inhoud = self.beschikbare_energie_kwh()
+        except Exception:  # noqa: BLE001
+            inhoud = None
+        if inhoud is not None:
+            uit["inhoud_kwh"] = round(float(inhoud), 2)
+        return uit
+
+    @staticmethod
+    def _laadplan_reden(vorig: dict | None, nu: dict) -> str:
+        """De reden van een laadplanwijziging in gewone taal (v5.181.1, punt 5)."""
+        if not vorig:
+            return "opstartfase (eerste planning)" if nu.get("opstart") else "eerste planning"
+        redenen = []
+        if nu.get("opstart"):
+            redenen.append("opstartfase")
+        if vorig.get("prijzen_tot") != nu.get("prijzen_tot") or vorig.get("prijzen") != nu.get("prijzen"):
+            redenen.append("nieuwe prijzen")
+        zon_oud, zon_nu = vorig.get("zon_kwh"), nu.get("zon_kwh")
+        if zon_oud is not None and zon_nu is not None and abs(zon_nu - zon_oud) >= 0.5:
+            redenen.append(f"zonverwachting {zon_oud:.1f} -> {zon_nu:.1f} kWh".replace(".", ","))
+        if bool(vorig.get("huis_eerst")) != bool(nu.get("huis_eerst")):
+            redenen.append("huis-eerst-regel" + (" aan" if nu.get("huis_eerst") else " uit"))
+        inh_oud, inh_nu = vorig.get("inhoud_kwh"), nu.get("inhoud_kwh")
+        if inh_oud is not None and inh_nu is not None and abs(inh_nu - inh_oud) >= 0.3:
+            redenen.append("accu-inhoud anders dan gepland")
+        return ", ".join(redenen) or "verbruik bijgesteld (live correctie)"
 
     @staticmethod
     def _laadblokken_tekst(kwartieren: list[datetime], moment: datetime) -> str:
@@ -23857,16 +23934,59 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             # niet; dan bleef de planvolging het hele kwartier leeg. Elke
             # ronde opnieuw proberen tot het plan er is.
             self._planvolging["gepland"] = self._planvolging_gepland(now, kwartier)
+        meting = self._live_momentopname(now)
+        if meting["accu_w"] is not None:
+            self._planvolging["monsters"].append(meting)
+
+    def _live_momentopname(self, now: datetime) -> dict:
+        """Eén momentopname van zon, net, accu en huis (v5.181.1, punten 4 en 7).
+
+        Live 04-11 10:30: de tegel "Accu nu" toonde 1,16 kW laden (ruwe
+        accusensor), de planvolging 1,77 kW (het gecorrigeerde vermogen van
+        een eerdere ronde), en het huis 57 W terwijl zon 1,48 - terug 0,12 -
+        accu 1,16 = 0,2 kW. Nu leest elke ronde één opname: het accuvermogen
+        dat de coordinator zelf gebruikt, en het huis afgeleid uit dezelfde
+        cijfers (zon + net + accu; accu + is ontladen). De planvolging en de
+        cockpit lezen allebei deze opname.
+        """
+        accu = self._read_corrected_battery_power()
+        zon = self._live_pv_w()
+        net = self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
+        # Het huis zoals de coordinator het rekent (net + zon + accu, met het
+        # gecorrigeerde accuvermogen); kan dat niet, dan uit deze opname.
+        huis = self._read_corrected_consumption_power()
+        if huis is None and None not in (accu, zon, net):
+            huis = max(0.0, float(zon) + float(net) + float(accu))
         meting = {
-            "accu_w": self._read_corrected_battery_power(),
-            "zon_w": self._live_pv_w(),
-            "huis_w": self._read_corrected_consumption_power(),
+            "accu_w": accu,
+            "zon_w": zon,
+            "net_w": net,
+            "huis_w": huis,
             # v5.93.2: de werkelijke stand, om "de sturing koos iets anders"
             # te onderscheiden van "de accu wijkt zelf af"
             "stand": self._planvolging_stand(),
+            # v5.181.1 (punt 2): wat het EMS de accu opdroeg.
+            "opdracht_w": self._opgedragen_vermogen_w(now),
+            "moment": now.isoformat(),
         }
-        if meting["accu_w"] is not None:
-            self._planvolging["monsters"].append(meting)
+        self.live_momentopname = meting
+        return meting
+
+    def _opgedragen_vermogen_w(self, now: datetime) -> float | None:
+        """Het handmatige vermogen dat het waardeplan dit kwartier opdroeg, of
+        None (v5.181.1, punt 2). Alleen als de accu ook echt handmatig staat."""
+        plan = self.last_waardeplan or {}
+        opdracht = plan.get("opdracht_w")
+        if opdracht is None or plan.get("niet_gestuurd"):
+            return None
+        if not str(self._planvolging_stand() or "").startswith("manual"):
+            return None
+        berekend = dt_util.parse_datetime(str((plan.get("nu") or {}).get("begin") or ""))
+        if berekend is not None:
+            begin = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
+            if abs((berekend - begin).total_seconds()) >= 900:
+                return None
+        return float(opdracht)
 
     def _planvolging_stand(self) -> str | None:
         """De stand van de accu nu (operation-select), voor de planvolging."""
@@ -23906,10 +24026,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         """Live: gepland tegen gemeten, plus vandaag en de voorbije dagen (v5.91)."""
         lopend = self._planvolging or {}
         monsters = lopend.get("monsters") or []
-        laatste = monsters[-1] if monsters else {}
         vandaag = dt_util.now().date().isoformat()
         return {
-            "nu": planvolging.beoordeel(lopend.get("gepland"), laatste.get("accu_w"), laatste.get("zon_w"), laatste.get("huis_w"), stand=laatste.get("stand")),
+            "nu": self.planvolging_nu(),
             "kwartier": planvolging.sluit_kwartier(lopend.get("gepland"), monsters),
             "vandaag": planvolging.dagsamenvatting(vandaag, [k for k in self._planvolging_kwartieren if k["dag"] == vandaag]),
             "laatste_kwartieren": [
@@ -23919,6 +24038,24 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             # v5.177.0 (A14): 7 dagen op de sensor (de diagnostiek heeft er 30).
             "dagen": list(self.planvolging_dagen[-7:]),
         }
+
+    def planvolging_nu(self) -> dict:
+        """Gepland tegen gemeten van de laatste momentopname (v5.181.1, punt 7).
+
+        Dezelfde opname als de tegel "Accu nu" (`live_momentopname`), elke
+        ronde; de cockpit leest hem van de cockpitsensor, die niet op de
+        attribuutpoort van de kwartierplanning (120 s) wacht.
+        """
+        lopend = self._planvolging or {}
+        monsters = lopend.get("monsters") or []
+        laatste = monsters[-1] if monsters else {}
+        uit = planvolging.beoordeel(
+            lopend.get("gepland"), laatste.get("accu_w"), laatste.get("zon_w"), laatste.get("huis_w"),
+            stand=laatste.get("stand"), opdracht_w=laatste.get("opdracht_w"),
+        )
+        if uit.get("beschikbaar"):
+            uit["moment"] = laatste.get("moment")
+        return uit
 
     def get_laadplan_gewijzigd(self) -> dict:
         """Voor het dashboard: wanneer de laadplanning veranderde (v5.88)."""
@@ -37935,6 +38072,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # coordinator bereikt, dus hier begint de aanlooptijd.
         if self._started_at is None:
             self._started_at = dt_util.now()
+            # v5.181.1 (punt 6): geen opdrachten tijdens de opstartfase.
+            self._opstart_stil_tot = self._started_at + timedelta(seconds=STARTUP_GRACE_SECONDS)
         if self._state_store_loaded:
             return
         stored = await self._state_store.async_load()
@@ -40021,6 +40160,32 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         resterend = STARTUP_GRACE_SECONDS - verstreken
         return resterend if resterend > 0 else None
 
+    # v5.181.1 (punt 6): tot wanneer het EMS na een herstart niets naar de accu
+    # stuurt (gezet in `async_load_persisted_state`), en of een opdracht van de
+    # gebruiker komt (de knoppen gaan altijd door).
+    _opstart_stil_tot: datetime | None = None
+    _gebruikersopdracht: bool = False
+    # v5.181.1 (punten 4 en 7): de momentopname van de laatste ronde.
+    live_momentopname: dict | None = None
+
+    def _opstart_stuurstil(self, now: datetime | None = None) -> bool:
+        """Stuurt het EMS nog niets omdat het net is opgestart? (v5.181.1, punt 6)
+
+        Live 04-11: binnen 30 s na de herstart schreef het EMS handmatig
+        -1782 W, om 10:19 smart_charging en om 10:21 weer handmatig - drie
+        wissels in vier minuten, met een plan dat nog op halve gegevens
+        rekende. Tijdens de opstartfase (STARTUP_GRACE_SECONDS) blijft de
+        accu zoals hij staat; de eerste volle ronde daarna stuurt.
+        Knoppen van de gebruiker gaan wel door.
+        """
+        tot = self._opstart_stil_tot
+        if tot is None or self._gebruikersopdracht:
+            return False
+        if (now or dt_util.now()) < tot:
+            return True
+        self._opstart_stil_tot = None
+        return False
+
     def in_opstartfase(self, now: datetime | None = None) -> bool:
         """Draait de integratie nog maar net? (v5.14.5)"""
         return self.opstart_resterend_s(now) is not None
@@ -40901,6 +41066,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         hebben allebei die stand. De reden weet wel welke van de twee.
         """
         emoji = MODE_CHANGE_EMOJI.get(self.last_reason, "🔄")
+        # v5.181.1 (punt 9): in een slimme stand wat er werkelijk gebeurt
+        # (dezelfde weergave als de cockpit).
+        if self.last_reason in self._KOP_UIT_WEERGAVE:
+            return f"{emoji} Accu: {self.stand_weergave()['label']}"
         doet = REDEN_KORTE_NAAM.get(self.last_reason or "")
         if not doet:
             doet = MODUS_KORTE_NAAM.get(
@@ -42869,6 +43038,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if self.learning_only:
             self.last_simulated_action = f"would set operation to '{option}'"
             _LOGGER.debug("Learning-only mode: %s", self.last_simulated_action)
+            return
+        if self._opstart_stuurstil():
+            # v5.181.1 (punt 6): na een herstart de accu laten zoals hij staat.
+            self.last_simulated_action = f"opstartfase: zou de stand op '{option}' zetten"
             return
         self.last_simulated_action = None
         onbereikbaar = self._aansturing_bereikbaar()
@@ -45495,6 +45668,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 f"would set operation to '{OPTION_MANUAL}' with power {power}W"
             )
             _LOGGER.debug("Learning-only mode: %s", self.last_simulated_action)
+            return
+        if self._opstart_stuurstil():
+            # v5.181.1 (punt 6): na een herstart de accu laten zoals hij staat.
+            self.last_simulated_action = (
+                f"opstartfase: zou '{OPTION_MANUAL}' met {power:.0f} W zetten"
+            )
             return
         self.last_simulated_action = None
         onbereikbaar = self._aansturing_bereikbaar()

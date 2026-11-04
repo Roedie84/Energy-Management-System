@@ -14,7 +14,12 @@ from .const import (
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_AVAILABLE_ENERGY_SENSOR,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
+    CONF_AIRCO_POWER_SENSOR,
+    CONF_BATTERIJLADER_POWER_SENSOR,
+    CONF_BATTERY_MODULE_POWER_SENSORS,
     CONF_BATTERY_MODULE_SOC_SENSORS,
+    CONF_DISHWASHER_POWER_SENSOR,
+    CONF_FIETSLADERS_POWER_SENSOR,
     CONF_BATTERY_POWER_SENSOR,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
@@ -29,7 +34,9 @@ from .const import (
     CONF_SOLAR_FORECAST_SENSOR,
     CONF_SOLAR_REMAINING_TODAY_SENSOR,
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
+    CONF_STEELSTOFZUIGER_POWER_SENSOR,
     CONF_TERUGLEVER_EUR_VANDAAG_SENSOR,
+    CONF_WASHING_MACHINE_POWER_SENSOR,
     CONF_WATER_ACTIVE_USAGE_SENSOR,
 )
 
@@ -53,6 +60,13 @@ EXTERNE_BRONNEN: dict[str, str] = {
     "airco": CONF_AIRCO_CLIMATE_ENTITY,
     "temp_binnen": CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
     "temp_buiten": CONF_BACKYARD_TEMPERATURE_SENSOR,
+    # v5.181.1 (punt 8): de vermogens van de apparaten, live in de browser.
+    "vaatwasser_w": CONF_DISHWASHER_POWER_SENSOR,
+    "wasmachine_w": CONF_WASHING_MACHINE_POWER_SENSOR,
+    "stofzuiger_w": CONF_STEELSTOFZUIGER_POWER_SENSOR,
+    "fietsen_w": CONF_FIETSLADERS_POWER_SENSOR,
+    "lader_w": CONF_BATTERIJLADER_POWER_SENSOR,
+    "airco_w": CONF_AIRCO_POWER_SENSOR,
 }
 
 
@@ -66,8 +80,14 @@ def externe_bronnen(config: dict) -> dict:
     modules = config.get(CONF_BATTERY_MODULE_SOC_SENSORS)
     if isinstance(modules, list) and modules:
         uit["modules_soc"] = [m for m in modules if isinstance(m, str)]
+    vermogens = config.get(CONF_BATTERY_MODULE_POWER_SENSORS)
+    if isinstance(vermogens, list) and vermogens:
+        uit["modules_vermogen"] = [m for m in vermogens if isinstance(m, str)]
     # De Zendure meldt laden als negatief bij sommige installaties.
     uit["accu_omkeren"] = bool(config.get(CONF_INVERT_BATTERY_POWER_SIGN, False))
+    # v5.181.1 (punt 8): de tekenafspraak na het omkeren, zodat de browser
+    # huis = zon + net + accu precies zo rekent als het EMS.
+    uit["accu_teken"] = "positief_is_ontladen"
     return uit
 
 

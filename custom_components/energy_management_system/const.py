@@ -7596,6 +7596,14 @@ WAARDEPLAN_MIN_VERMOGEN_W = 400.0
 # v5.177.0 (A12): netladen pas vanaf dit vermogen (W, netkant). Onder 500 W
 # haalde laden 72 % tegen 85 % bij 500-1500 W: minder kwartieren, hoger vermogen.
 WAARDEPLAN_MIN_LAAD_W = 500.0
+# v5.181.1 (punt 2, live 04-11): het handmatige vermogen wordt elke ronde
+# opnieuw bepaald (rest van het kwartier); binnen deze marge van wat er al op de
+# accu staat niet opnieuw schrijven.
+WAARDEPLAN_VERMOGEN_TOLERANTIE_W = 50.0
+# v5.181.1 (punt 8, live 04-11 10:56): wijkt de accu-inhoud meer dan een
+# planstap (0,1 kWh) af van wat het plan voor NU verwacht, dan direct opnieuw
+# plannen in plaats van pas bij het volgende kwartier.
+WAARDEPLAN_LIVE_AFWIJKING_KWH = 0.15
 # v5.177.0 (A5): zoveel kwartieren moet het plan minstens hebben; bij een gat in
 # verbruik, zon of prijs knipt het plan de horizon daar af in plaats van weg te vallen.
 WAARDEPLAN_MIN_KWARTIEREN = 4

@@ -117,14 +117,24 @@ def vermogens_per_kwartier(rijen: list[dict], start_kwh: float | None) -> list[d
 def beoordeel(
     gepland: dict, accu_w: float | None, zon_w: float | None, huis_w: float | None,
     stand: str | None = None,
+    opdracht_w: float | None = None,
 ) -> dict:
     """Gemeten tegen gepland, met de oorzaak van het verschil.
 
     `stand` is de werkelijke stand van de accu (de operation-select); is die
     een andere soort dan het plan, dan is de oorzaak de sturing (v5.93.2).
+
+    `opdracht_w` (v5.181.1, punt 2): het handmatige vermogen dat het EMS dit
+    kwartier opdroeg. In een handmatig kwartier is DAT het plan: live 04-11
+    stond er "de accu wijkt zelf 0,6 kW af" terwijl de Zendure precies de
+    -1782 W van het EMS volgde en de tabel 2400 W noemde. Plan, opdracht en
+    planvolging gebruiken nu hetzelfde getal.
     """
     if not gepland or accu_w is None:
         return {"beschikbaar": False}
+    plan_w = gepland["accu_w"]
+    if opdracht_w is not None and _handmatig(gepland.get("modus")):
+        gepland = {**gepland, "accu_w": round(opdracht_w)}
     verschil = accu_w - gepland["accu_w"]
     zon_d = None if zon_w is None else zon_w - gepland["zon_w"]
     huis_d = None if huis_w is None else huis_w - gepland["huis_w"]
@@ -169,6 +179,8 @@ def beoordeel(
         "zon_verschil_w": None if zon_d is None else round(zon_d),
         # v5.99: zon gepland (voorspelling in het plan) tegen gemeten
         "gepland_zon_w": gepland["zon_w"],
+        # v5.181.1 (punt 8): voor de live planvolging in de cockpit.
+        "gepland_huis_w": gepland.get("huis_w"),
         "gemeten_zon_w": None if zon_w is None else round(zon_w),
         "zon_verschil_tekst": zon_verschil_tekst(zon_d),
         "verbruik_verschil_w": None if huis_d is None else round(huis_d),
@@ -177,6 +189,8 @@ def beoordeel(
         "status": status,
         "modus": gepland.get("modus"),
         "stand": stand,
+        "opdracht_w": None if opdracht_w is None else round(opdracht_w),
+        "plan_accu_w": plan_w,
         "tekst": tekst(gepland["accu_w"], accu_w, oorzaak, zon_d, huis_d, rest,
                        stand=stand, plan_modus=gepland.get("modus")),
     }
@@ -262,7 +276,8 @@ def sluit_kwartier(gepland: dict, monsters: list[dict]) -> dict | None:
 
     standen = [m.get("stand") for m in monsters if m.get("stand")]
     stand = max(set(standen), key=standen.count) if standen else None
-    oordeel = beoordeel(gepland, gem("accu_w"), gem("zon_w"), gem("huis_w"), stand=stand)
+    oordeel = beoordeel(gepland, gem("accu_w"), gem("zon_w"), gem("huis_w"), stand=stand,
+                        opdracht_w=gem("opdracht_w"))
     if not oordeel.get("beschikbaar"):
         return None
     return {

@@ -5867,8 +5867,9 @@ class DashboardPaginaSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
 # staat bovenin de cockpit, het kwartierplan en de perioden zijn live tabellen.
 DASHBOARD_PAGINA_INTERVAL_S = {
     "aanwezigheid": 60,
-    "kwartierplanning_tabel": 120,
-    "perioden": 120,
+    # v5.181.1 (punt 8): elke EMS-ronde (de verwachte accustand begint bij nu).
+    "kwartierplanning_tabel": 60,
+    "perioden": 60,
 }
 
 # v5.62: (suffix, naam, icoon, attributen, lijst die de toestand telt).
@@ -6052,6 +6053,13 @@ class CockpitSensor(_CoordinatorDiagnosticSensor):
         return {
             "reden": gegevens.get("status_regel"),
             "bijgewerkt": laatste.isoformat() if laatste else None,
+            # v5.181.1 (punten 4 en 7): één momentopname per ronde voor de
+            # tegel "Accu nu" en de planvolging. Verandert alleen per ronde,
+            # net als "bijgewerkt", dus geen extra databaserijen.
+            "stroom": gegevens.get("stroom") or {},
+            "planvolging_nu": gegevens.get("planvolging_nu") or {},
+            # v5.181.1 (punt 9): reden en planrij voor de standweergave.
+            "stand": gegevens.get("stand") or {},
         }
 
     async def async_added_to_hass(self) -> None:
@@ -6272,3 +6280,25 @@ class DashboardBronnenSensor(_CoordinatorDiagnosticSensor):
             "bronnen": externe_bronnen(self._coordinator.config or {}),
             "eigen": self._eigen(),
         }
+
+
+# v5.181.1 (punt 8): wat de cockpit toont, ververst elke EMS-ronde (60 s) in
+# plaats van na 2-10 minuten. Gevraagd 04-11: "alles live". De fysieke
+# waarden (vermogens, laadstand, modules, apparaten) leest de cockpit zelf
+# rechtstreeks uit de bronentiteiten; deze sensoren dragen het REKENWERK
+# (plan, geld, verwachtingen), en dat verandert hooguit eens per ronde.
+COCKPIT_RONDE_S = 60
+COCKPIT_SENSOREN = (
+    GacsAssessmentSensor,
+    BatteryModuleHealthSensor,
+    BatteryCoolingSensor,
+    CounterfactualSavingsSensor,
+    SelfSufficiencySensor,
+    WaterUsageSensor,
+    ClimateForecastSensor,
+    MonteCarloAdvisorySensor,
+    WeatherEnsembleSensor,
+)
+for _klasse in COCKPIT_SENSOREN:
+    _klasse._zuinig_attr_interval_s = min(_klasse._zuinig_attr_interval_s, COCKPIT_RONDE_S)
+del _klasse

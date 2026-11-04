@@ -19,6 +19,7 @@ from .const import (
     WHY_QUESTIONS,
 )
 from .tijdtekst import tijd_met_dag
+from . import standweergave
 
 
 class UitlegMixin:
@@ -72,9 +73,32 @@ class UitlegMixin:
             return "STANDBY", vermogen
         return ("ONTLADEN" if vermogen > 0 else "LADEN"), vermogen
 
+    # v5.181.1 (punt 9): redenen in een slimme stand, waar de zon de accu mag
+    # vullen of de accu het huis voedt; de kop zegt wat er werkelijk gebeurt.
+    _KOP_UIT_WEERGAVE = frozenset({
+        "waardeplan_houden", "waardeplan_huis", "waardeplan_leeg",
+        "battery_saved_for_peak", "sparen_in_blok", "celbescherming_houden",
+    })
+
+    def stand_weergave(self, reden: str | None = None) -> dict:
+        """Wat de accu nu doet, voor tegel, kopchip, tijdlijn en uitleg (v5.181.1, punt 9).
+
+        Eén functie (`standweergave.weergave`): de planrij van nu (handmatig
+        laden, verkopen, terugleveren) en anders het gemeten vermogen, met
+        de reden als toelichting.
+        """
+        reden = reden if reden is not None else self.last_reason
+        _stand, vermogen = self._accu_doet_nu()
+        nu = (getattr(self, "last_waardeplan", None) or {}).get("nu") or {}
+        modi = getattr(self, "_WAARDEPLAN_MODUS", {}) or {}
+        plan_modus = modi.get(nu.get("actie")) if str(reden or "").startswith("waardeplan_") else None
+        return standweergave.weergave(reden, plan_modus, vermogen)
+
     def _waarom_kop(self, reden: str) -> str:
         """De titel uit het register; in de slimme stand met wat de accu nu doet."""
         titel = (REASON_REGISTRY.get(reden) or {}).get("titel") or DECISION_REASON_LABELS.get(reden, reden)
+        if reden in self._KOP_UIT_WEERGAVE:
+            return self.stand_weergave(reden)["label"]
         if reden != "default_smart":
             return titel
         stand, _w = self._accu_doet_nu()
@@ -777,4 +801,10 @@ class UitlegMixin:
         # v5.165.0: bij het waardeplan de volgende netlading uit het plan.
         if str(reden or "").startswith("waardeplan_") and (zin := self._waardeplan_lading_zin()):
             uitleg += " " + zin[0].upper() + zin[1:] + "."
+        # v5.181.1 (punt 1): rekent het EMS wel maar stuurt het niet, dan staat
+        # dat bij het besluit (04-11: "terugleveren" terwijl de accu op
+        # smart_charging bleef door de handmatige stand).
+        niet = (getattr(self, "last_waardeplan", None) or {}).get("niet_gestuurd")
+        if str(reden or "").startswith("waardeplan_") and niet:
+            uitleg += f" Niet naar de accu gestuurd: {niet}."
         return uitleg
