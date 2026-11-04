@@ -50632,6 +50632,94 @@ class EnergyManagementSystemCoordinator:
 
         return " ".join(parts)
 
+    async def _negatieve_prijs_ronde(self, now: datetime, entries) -> None:
+        """De ronde bij een negatieve prijs (uit `_async_update_locked`, v5.177.0).
+
+        De panelen gaan omlaag zoals altijd. v5.177.0 (A15): de accu volgt het
+        waardeplan - dat rekent met de negatieve inkoopprijs en laadt dan zelf
+        uit het net. Alleen zonder plan (of bij celbescherming) de vaste
+        handmatige lading zoals voorheen.
+        """
+        if not self._is_negative_price_active:
+            self._is_negative_price_active = True
+            self._start_solar_ramp(0.0)
+        if WAARDEPLAN_STUURT and not (self.celbeschermingsbesluit(now) or {}).get("actie"):
+            if await self._waardeplan_als_nodig(now, entries):
+                return
+        charge_power = self.instelling(CONF_NEGATIVE_PRICE_CHARGE_POWER, DEFAULT_NEGATIVE_PRICE_CHARGE_POWER)
+        await self._async_apply_manual(charge_power)
+        self.last_reason = "negative_price"
+        self.last_charge_power_applied = charge_power
+        self._update_financial_tracking(
+            now, entries, self.last_reason, None, charge_power
+        )
+        self._finish_decision_tick(now)
+
+    def _secundaire_laag(self, now: datetime, entries, cheap_block_start) -> bool:
+        """Mag er in de secundaire laag verkocht worden? (uit `_async_update_locked`,
+        v5.177.0). Zie de toelichting daar. v5.177.0 (A15): stuurt het
+        waardeplan deze ronde, dan alleen de drempel (weergave) en verder niets:
+        de reserves en de waardetoets worden dan door niets gebruikt."""
+        secondary_threshold_raw = self._get_secondary_expensive_price_threshold(
+            entries, now
+        )
+        self.last_secondary_price_threshold = (
+            secondary_threshold_raw / PRICE_SCALE_FACTOR
+            if secondary_threshold_raw is not None
+            else None
+        )
+        if self._waardeplan_gaat_sturen(now, entries):
+            return False
+        secondary_available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        # v5.81.1: met de modulesprong (L-EMS-014), net als elke andere
+        # lezer van de beschikbare energie.
+        secondary_available_kwh = self._na_module_leeg(
+            self._read_sensor_float(secondary_available_entity)
+            if secondary_available_entity
+            else None
+        )
+        if secondary_available_kwh is not None and secondary_available_kwh > 0:
+            secondary_reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
+                now, cheap_block_start
+            )
+            # v5.70: verkopen - de verkoopreserve.
+            if secondary_reserve_kwh is not None:
+                _verkoop = self.verkoopreserve(
+                    now, cheap_block_start, entries
+                ).get("reserve_kwh")
+                if _verkoop is not None:
+                    secondary_reserve_kwh = _verkoop
+            if secondary_reserve_kwh is not None:
+                secondary_headroom_kwh = max(
+                    0.0, secondary_available_kwh - secondary_reserve_kwh
+                )
+                secondary_discharge_power = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
+                # v3.99.9: en alleen als de verkooptoets niet dicht
+                # staat. Elke minuut om op 3 september, 23:35-23:38:
+                # de dode zones zitten in `may_sell_now`, maar zegt
+                # die nee, dan viel de code hier door en rekende deze
+                # laag zijn eigen ruimte uit - zonder rem. Twee
+                # poorten voor dezelfde vraag, waarvan er een geremd
+                # was.
+                if self._secundaire_laag_toegestaan() and (
+                    self._is_worth_discharging_at_secondary_tier(
+                        entries, now, secondary_headroom_kwh, secondary_discharge_power
+                    )
+                ):
+                    return True
+
+        return False
+
+    def _waardeplan_gaat_sturen(self, now: datetime, entries) -> bool:
+        """Stuurt het waardeplan deze ronde? (v5.177.0, A15) Het plan van dit
+        kwartier (gecachet; `_waardeplan_als_nodig` gebruikt hetzelfde)."""
+        if not WAARDEPLAN_STUURT:
+            return False
+        try:
+            return bool(self._waardeplan_nu(now, entries).get("beschikbaar"))
+        except Exception:  # noqa: BLE001 - bij twijfel de oude regels
+            return False
+
     async def _async_update_locked(self) -> None:
         now = dt_util.now()
         if self.first_seen_date is None:
@@ -51141,17 +51229,8 @@ class EnergyManagementSystemCoordinator:
         is_negative_price = self._is_negatieve_prijs(current_price_per_kwh, now)
 
         if is_negative_price:
-            if not self._is_negative_price_active:
-                self._is_negative_price_active = True
-                self._start_solar_ramp(0.0)
-            charge_power = self.instelling(CONF_NEGATIVE_PRICE_CHARGE_POWER, DEFAULT_NEGATIVE_PRICE_CHARGE_POWER)
-            await self._async_apply_manual(charge_power)
-            self.last_reason = "negative_price"
-            self.last_charge_power_applied = charge_power
-            self._update_financial_tracking(
-                now, entries, self.last_reason, None, charge_power
-            )
-            self._finish_decision_tick(now)
+            # v5.177.0 (A15): eigen functie; het waardeplan beslist over de accu.
+            await self._negatieve_prijs_ronde(now, entries)
             return
 
         # Price just turned positive again - restore the panels, then fall
@@ -51211,53 +51290,12 @@ class EnergyManagementSystemCoordinator:
         # surrounding quarters at only a slightly lower price went
         # unused). Never applies if the winter guard above already
         # suppressed selling today, or while grid-charged.
-        if not is_expensive:
-            secondary_threshold_raw = self._get_secondary_expensive_price_threshold(
-                entries, now
-            )
-            self.last_secondary_price_threshold = (
-                secondary_threshold_raw / PRICE_SCALE_FACTOR
-                if secondary_threshold_raw is not None
-                else None
-            )
-            secondary_available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
-            # v5.81.1: met de modulesprong (L-EMS-014), net als elke andere
-            # lezer van de beschikbare energie.
-            secondary_available_kwh = self._na_module_leeg(
-                self._read_sensor_float(secondary_available_entity)
-                if secondary_available_entity
-                else None
-            )
-            if secondary_available_kwh is not None and secondary_available_kwh > 0:
-                secondary_reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
-                    now, cheap_block_start
-                )
-                # v5.70: verkopen - de verkoopreserve.
-                if secondary_reserve_kwh is not None:
-                    _verkoop = self.verkoopreserve(
-                        now, cheap_block_start, entries
-                    ).get("reserve_kwh")
-                    if _verkoop is not None:
-                        secondary_reserve_kwh = _verkoop
-                if secondary_reserve_kwh is not None:
-                    secondary_headroom_kwh = max(
-                        0.0, secondary_available_kwh - secondary_reserve_kwh
-                    )
-                    secondary_discharge_power = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
-                    # v3.99.9: en alleen als de verkooptoets niet dicht
-                    # staat. Elke minuut om op 3 september, 23:35-23:38:
-                    # de dode zones zitten in `may_sell_now`, maar zegt
-                    # die nee, dan viel de code hier door en rekende deze
-                    # laag zijn eigen ruimte uit - zonder rem. Twee
-                    # poorten voor dezelfde vraag, waarvan er een geremd
-                    # was.
-                    if self._secundaire_laag_toegestaan() and (
-                        self._is_worth_discharging_at_secondary_tier(
-                            entries, now, secondary_headroom_kwh, secondary_discharge_power
-                        )
-                    ):
-                        is_expensive = True
-                        expensive_tier = "secondary"
+        # v5.177.0 (A15): de secundaire laag (reserve, verkoopreserve,
+        # waardetoets) alleen als de oude regels sturen; de drempel zelf blijft
+        # voor de weergave. Stuurt het waardeplan, dan beslist dat.
+        if not is_expensive and self._secundaire_laag(now, entries, cheap_block_start):
+            is_expensive = True
+            expensive_tier = "secondary"
 
         self.last_expensive_tier = expensive_tier
 
