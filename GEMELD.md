@@ -259,3 +259,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 03-11 19:55 | L-EMS-062 ems geschatte cycli springen bij lagere capaciteit (190->253, rapportage)
 03-11 21:52 | ems uitleg 'accu leeg' klopt niet met 0,17 kwh bruikbaar en zwakste module 11% (leeg-grens 13%, sinds v5.176.0)
 03-11 21:52 | stormchase bronstatus zonder blitzortung, ringen 0/0/0 bij uitval (ringen op onbekend)
+04-11 06:51 | L-GS-040 gold scalper adx-regime vastleggen bij veldproeftrades (483/483 onbekend, akkoord)
