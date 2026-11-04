@@ -90,11 +90,14 @@ const o = Object.create(global.K.prototype);
 o._s = () => undefined;
 const nu = new Date(); nu.setMinutes(Math.floor(nu.getMinutes() / 15) * 15, 0, 0);
 const rijen = [], tijden = [];
-const modi = ["smart", "smart_discharging", "verkopen (expensive_quarter)", "manual (laden)"];
+// v5.181.2 (a): blokken per weergave (soort planrij + gepland vermogen), dus
+// een vermogen dat bij de stand past.
+const modi = ["smart", "smart_discharging", "manual (verkopen)", "manual (laden)"];
+const accuBij = (m, i) => (m === "smart" ? (i % 3 === 0 ? -900 : -1100) : m === "smart_discharging" ? 700 : m === "manual (verkopen)" ? 2000 : -2400);
 for (let i = 0; i < 40; i++) {
   const d = new Date(nu.getTime() + i * 900000); tijden.push(d);
   rijen.push({ van: d.toTimeString().slice(0, 5), prijs_ct: 30 + i, modus: modi[Math.floor(i / 3) % 4],
-               soc_procent: 90 - i, accu_w: i % 3 === 0 ? -900 : -1100, net_w: 52, zon_w: 600, huis_w: 700 });
+               soc_procent: 90 - i, accu_w: accuBij(modi[Math.floor(i / 3) % 4], i), net_w: 52, zon_w: 600, huis_w: 700 });
 }
 o._vbUren = 2;
 const twee = o._vooruitblik(rijen, tijden);
@@ -117,5 +120,5 @@ console.log(JSON.stringify({
     assert r["twee"] == 1 + 3   # kop + 3 blokken (9 kwartieren)
     assert r["zes"] == 1 + 9    # kop + 9 blokken (25 kwartieren)
     assert r["nu"] is True and r["knop"] is True
-    assert r["b0"] == {"label": "Slim", "begin": 92, "eind": 88}
+    assert r["b0"] == {"label": "Zon laden", "begin": 92, "eind": 88}
     assert r["laadt"] is True   # gemiddelde (-900, -1100, -1100) = 1,0 kW laden

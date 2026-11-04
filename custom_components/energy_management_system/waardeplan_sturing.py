@@ -83,7 +83,15 @@ class WaardeplanSturingMixin:
             if hasattr(b, "isoformat"):
                 per_begin[b.astimezone(timezone.utc)] = r
         capaciteit = self.bruikbare_capaciteit_kwh()
-        min_soc = self.effective_min_soc_percent()
+        # v5.181.2 (b): de inhoud van het waardeplan telt boven de EFFECTIEVE
+        # ondergrens (`bereken_waardeplan`, en `beschikbare_energie_kwh` trekt
+        # de ondergrenscorrectie af). Hier stond de min-SoC: live 04-11 11:31
+        # begon de lijn in "Prijs en lading" op ~20 % bij een accu van 35 %
+        # (bodem ~25 %, min-SoC 10 %). Nu dezelfde grens als de inhoud.
+        try:
+            min_soc = float(self.effectieve_ondergrens_procent())
+        except Exception:  # noqa: BLE001 - veilig terugvallen op de min-SoC
+            min_soc = self.effective_min_soc_percent()
         bruikbaar = capaciteit * (100 - min_soc) / 100 if capaciteit else None
         uit = []
         eerste = rijen[0]

@@ -19,6 +19,11 @@ _LOGGER = logging.getLogger(__name__)
 
 COCKPIT_FILE = "ems-cockpit.js"
 COCKPIT_URL = f"/{DOMAIN}/{COCKPIT_FILE}"
+# v5.181.2 (f): het eigen logo in de kop van de cockpit, zonder externe URL.
+LOGO_BESTANDEN = {
+    f"/{DOMAIN}/ems-logo.png": "icon.png",
+    f"/{DOMAIN}/ems-logo@2x.png": "icon@2x.png",
+}
 _GEREGISTREERD = f"{DOMAIN}_cockpit_geregistreerd"
 
 
@@ -66,9 +71,12 @@ async def async_registreer_cockpit(hass, versie: str) -> None:
 
     if not hass.data.get(_GEREGISTREERD):
         try:
-            await hass.http.async_register_static_paths(
-                [StaticPathConfig(COCKPIT_URL, str(bron), cache_headers=True)]
-            )
+            paden = [StaticPathConfig(COCKPIT_URL, str(bron), cache_headers=True)]
+            merk = Path(__file__).parent / "brand"
+            for url, naam in LOGO_BESTANDEN.items():
+                if (merk / naam).is_file():
+                    paden.append(StaticPathConfig(url, str(merk / naam), cache_headers=True))
+            await hass.http.async_register_static_paths(paden)
         except (RuntimeError, ValueError) as err:
             _LOGGER.debug("Pad stond er al: %s", err)
         hass.data[_GEREGISTREERD] = True

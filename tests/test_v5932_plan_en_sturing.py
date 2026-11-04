@@ -113,7 +113,8 @@ def test_verschil_in_woorden():
     assert pv.verschil_tekst(-1000, -1800) == "meer laden"
     assert pv.verschil_tekst(1000, 1600) == "meer ontladen"
     assert pv.verschil_tekst(1600, 1000) == "minder ontladen"
-    assert pv.verschil_tekst(-500, 400) == "meer ontladen"
+    # v5.181.2 (e): een omslag heet ook zo
+    assert pv.verschil_tekst(-500, 400) == "ontlaadt in plaats van laden"
     assert pv.verschil_tekst(-500, -480) == "geen"
 
 
