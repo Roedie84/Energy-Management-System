@@ -1,3 +1,10 @@
+EMS v5.181.0 - coordinator opgesplitst (deel 2), geen gedragswijziging
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Intern opruimwerk: oude sturing, klimaat/airco en NILM staan nu in eigen modules.
+  De sturing en alle getallen zijn gelijk.
+
 EMS v5.180.1 - huis gaat voor bij zon terugleveren; cockpit toont terugleveren
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

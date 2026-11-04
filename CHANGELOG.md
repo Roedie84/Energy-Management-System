@@ -34787,3 +34787,12 @@ Akkoord Ruud 04-11 09:34. Aanleiding 04-11: het plan leverde 09:30–11:15 zon t
 - Cockpit: modus "Zon terugleveren" (kleur #b9c46a) in grafiek en Vooruitblik, met "levert x kW terug".
 
 Tests: `test_v51791_cockpit_terugleveren.py` (7).
+
+## v5.181.0 — coordinator opgesplitst, deel 2 (B4)
+
+Puur verplaatsen, geen gedragswijziging.
+
+- `legacy_sturing.py` (LegacySturingMixin, 2.819 regels): de oude regelsturing die alleen nog als terugval draait.
+- `klimaat.py` (KlimaatMixin, 2.446 regels), incl. `rolluikstand_procent`/`rolluiklabel` (opnieuw geëxporteerd uit `coordinator.py`).
+- `nilm_glue.py` (NilmMixin, 1.106 regels).
+- `coordinator.py`: 52.755 → 46.388 regels.
