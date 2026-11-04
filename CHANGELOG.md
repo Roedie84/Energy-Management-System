@@ -34935,3 +34935,12 @@ Akkoord Ruud 04-11 16:58. Bij de kookfout van 16:45 bleef er voor de accu-inhoud
 - Planrijen die zo gekozen zijn krijgen `vangnet`; attribuut `vangnet_kwartieren` op het waardeplan; een waarschuwing in de log (eens per kwartier) als het lopende kwartier via het vangnet ging.
 
 Tests: `test_v5184_2_vangnet.py`.
+
+## v5.184.3 — opbrengst in het plan volgt het waardeplan
+
+Kaart claude-ems 04-11 18:12: 05-11 00:15-00:45 daalde `cumulatief_eur` € 0,24 per kwartier bij een net van 228 W (~€ 0,02). `_met_waardeplan` verving `net_kwh`, maar `opbrengst_eur` en `cumulatief_eur` bleven van de oude planregel, met de netladingen van die regel.
+
+- `_plan_opbrengst_opnieuw`: opbrengst (-net × prijs) en looptotaal over de plantabel na het waardeplan. Daarmee kloppen ook `verwachte_opbrengst_eur` en `netto_opbrengst_eur`.
+- Sturing ongewijzigd: alleen weergave en dagvergelijking lezen dit.
+
+Tests: `test_v5184_3_plan_opbrengst.py`.

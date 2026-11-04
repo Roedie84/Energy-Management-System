@@ -1,3 +1,11 @@
+EMS v5.184.3 - opbrengst in het plan volgt het waardeplan
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- De kolommen opbrengst en cumulatief in de plantabel, en de verwachte opbrengst,
+  rekenen nu met het net van het waardeplan. Ze volgden nog de oude planregel.
+  Sturing ongewijzigd.
+
 EMS v5.184.2 - vangnet in het plan
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

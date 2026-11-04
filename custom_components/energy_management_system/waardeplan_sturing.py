@@ -151,6 +151,27 @@ class WaardeplanSturingMixin:
         # grafiek; alleen op de eerste rij (attribuutgrootte).
         if uit and bruikbaar:
             uit[0] = {**uit[0], "ondergrens_procent": round(min_soc)}
+        return self._plan_opbrengst_opnieuw(uit)
+
+    @staticmethod
+    def _plan_opbrengst_opnieuw(plan: list[dict]) -> list[dict]:
+        """Opbrengst en looptotaal uit het net van het plan (v5.184.3).
+
+        `_met_waardeplan` verving het net, maar `opbrengst_eur` en
+        `cumulatief_eur` bleven van de oude planregel. Live 04-11 18:12:
+        00:15-00:45 kostte € 0,24 per kwartier bij een net van 228 W (~€ 0,02).
+        Alleen weergave en dagvergelijking; de sturing leest dit niet.
+        """
+        loper = 0.0
+        uit = []
+        for regel in plan:
+            prijs_ct = regel.get("prijs_ct")
+            if prijs_ct is None:
+                uit.append(regel)
+                continue
+            opbrengst = -(regel.get("net_kwh") or 0.0) * prijs_ct / 100
+            loper += opbrengst
+            uit.append({**regel, "opbrengst_eur": round(opbrengst, 4), "cumulatief_eur": round(loper, 3)})
         return uit
 
     @staticmethod
