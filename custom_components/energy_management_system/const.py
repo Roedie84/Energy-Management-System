@@ -1695,6 +1695,12 @@ SUSTAINED_HEAVY_LOAD_SOURCES = {"airco", "slaapkamer"}
 LIVING_ROOM_TEMP_BUCKET_SIZE_C = 0.5
 AIRCO_PREDICTION_LOOKAHEAD_MINUTES = 60
 AIRCO_PREDICTION_MIN_SAMPLES = 5
+# v5.177.0 (A16, L-EMS-063): 's ochtends (04:00-11:00, het ochtendvenster van
+# airco_ritme) alleen 'verwarmen' als jullie hem op dit soort dag minstens zo
+# vaak 's ochtends aanzetten. airco_besluit zei 8 van 8 ochtenden 'verwarmen'
+# omdat het binnen onder de 18,5 °C was, terwijl het dagritme werkdag 0 van 18
+# ochtenden en weekend 1 van 8 liet zien.
+AIRCO_OCHTEND_MIN_KANS = 0.30
 AIRCO_PREDICTION_HISTORY_LENGTH = 20
 # v5.58: per bakje hooguit één nieuwe waarneming per
 # AIRCO_PREDICTION_LOOKAHEAD_MINUTES. Tot v5.57 startte elke coordinator-

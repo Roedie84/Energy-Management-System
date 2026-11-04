@@ -30,6 +30,8 @@ import math
 import statistics
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
+from .const import AIRCO_OCHTEND_MIN_KANS
+
 # "Meer kans dan niet": vanaf deze kans telt een temperatuur als het moment
 # waarop jullie de airco op verwarmen zetten.
 KANS_MEER_DAN_NIET_PROCENT = 50.0
@@ -188,6 +190,7 @@ def besluit(
     setpunten_nodig: int,
     vooruit: dict | None = None,
     nachtrust: bool = False,
+    ochtend: dict | None = None,
 ) -> dict:
     """Wat het EMS met de woonkamer-airco zou doen, en waarom.
 
@@ -208,6 +211,12 @@ def besluit(
 
     Het EMS zet de airco alleen UIT als het hem zelf AANzette; wat een mens
     aanzette, laat het staan.
+
+    v5.177.0 (A16, L-EMS-063): `ochtend` = {"kans", "keer", "ochtenden"} uit
+    het dagritme voor deze dagsoort, alleen in het ochtendvenster. Onder
+    AIRCO_OCHTEND_MIN_KANS worden 6 en 7 "niets": kouder dan de
+    aanzettemperatuur is 's ochtends geen reden als jullie hem dan zelden
+    aanzetten. Overdag en 's avonds verandert er niets.
     """
     redenen: list[str] = []
 
@@ -266,6 +275,13 @@ def besluit(
             "Nachtrust: tussen de vaste uit en 04:00 verwarmt het EMS niet.",
             redenen, doel_c, aanzet_c,
         )
+    if (ochtend or {}).get("kans") is not None and ochtend["kans"] < AIRCO_OCHTEND_MIN_KANS:
+        zin = (
+            f"jullie zetten hem 's ochtends zelden aan ({ochtend.get('keer', 0)} van "
+            f"{ochtend.get('ochtenden', 0)} ochtenden)"
+        )
+        redenen.append(zin)
+        return _uitkomst("niets", zin[0].upper() + zin[1:] + ".", redenen, doel_c, aanzet_c)
     if woonkamer_c < aanzet_c:
         if airco_stand == "heat":
             return _uitkomst("niets", "De airco verwarmt al.", redenen, doel_c, aanzet_c)

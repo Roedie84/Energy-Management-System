@@ -53280,6 +53280,8 @@ class EnergyManagementSystemCoordinator:
                 ),
                 airco_ritme.OCHTEND_VAN,
             ),
+            # v5.177.0 (A16): 's ochtends alleen verwarmen als jullie dat doen
+            ochtend=airco_ritme.ochtend_kans(self._airco_ritme(), now),
         )
         uit = self._airco_ritme_ronde(now, uit, stand)
         uit = self._airco_kort_weg_ronde(now, uit)
