@@ -280,6 +280,9 @@ const klokEind = (start, eind) => {
 /** Een plan- of accumodus: label, kleur en klasse. */
 const MODI = [
   { test: /verkopen/, label: "Verkopen", kleur: "var(--oranje)", k: "verkopen" },
+  // v5.179.1: zon terugleveren in plaats van opslaan (waardeplan_terugleveren,
+  // stand manual) - viel eerder onder "Handmatig" en kleurde als rust.
+  { test: /terugleveren/, label: "Zon terugleveren", kleur: "#b9c46a", k: "terug" },
   { test: /laden\)|^manual \(laden|nu laden|handmatig laden/, label: "Laden van net", kleur: "var(--groen)", k: "laden" },
   { test: /sparen|smart_charging/, label: "Sparen", kleur: "var(--blauw)", k: "sparen" },
   { test: /smart_discharging|ontladen/, label: "Ontladen", kleur: "var(--geel)", k: "ontladen" },
@@ -828,11 +831,13 @@ const DOEN = {
   net: { label: "Net laden", kleur: "var(--groen)" },
   voeden: { label: "Huis voeden", kleur: "var(--cyaan)" },
   verkopen: { label: "Verkopen", kleur: "var(--oranje)" },
+  terug: { label: "Zon terugleveren", kleur: "#b9c46a" },
   leeg: { label: "Accu leeg", kleur: "#3d4555" },
 };
 const doen = (r) => {
   const m = modus(r.modus);
   if (m.k === "verkopen") return "verkopen";
+  if (m.k === "terug") return "terug";
   if (m.k === "laden") return "net";
   if (r.tekort) return "leeg";
   const a = num(r.accu_w);
@@ -1797,12 +1802,13 @@ class EmsCockpitCard extends HTMLElement {
       let b = blokken[blokken.length - 1];
       if (!b || b.k !== m.k) {
         b = { k: m.k, label: m.label, kleur: m.kleur, start: tijden[i], eind: null,
-              socBegin: vorigeSoc, socEind: null, accu: [], prijzen: [], tekort: false };
+              socBegin: vorigeSoc, socEind: null, accu: [], net: [], prijzen: [], tekort: false };
         blokken.push(b);
       }
       b.eind = new Date(t0 + 15 * 60000);
       if (num(r.soc_procent) != null) { b.socEind = num(r.soc_procent); vorigeSoc = num(r.soc_procent); }
       if (num(r.accu_w) != null) b.accu.push(num(r.accu_w));
+      if (num(r.net_w) != null) b.net.push(num(r.net_w));
       if (num(r.prijs_ct) != null) b.prijzen.push(num(r.prijs_ct) / 100);
       if (r.tekort) b.tekort = true;
     });
@@ -1815,7 +1821,12 @@ class EmsCockpitCard extends HTMLElement {
     const blokken = this._vooruitBlokken(rijen, tijden, uren, getal(this._s("soc")));
     const hhmm = (d) => `${dagLabel(d)}${d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`;
     const eur = (v) => `${EURO}\u00a0${fmt(v, 2)}`;
-    const vermogen = (lijst) => {
+    const vermogen = (lijst, b) => {
+      // v5.179.1: bij zon terugleveren staat de accu stil; toon wat er het net op gaat.
+      if (b && b.k === "terug" && b.net.length) {
+        const terug = -b.net.reduce((a, v) => a + v, 0) / b.net.length;
+        if (terug >= 50) return `levert ${fmt(terug / 1000, 1)} kW terug`;
+      }
       if (!lijst.length) return STREEP;
       const gem = lijst.reduce((a, v) => a + v, 0) / lijst.length;
       if (Math.abs(gem) < 50) return "in rust";
@@ -1832,7 +1843,7 @@ class EmsCockpitCard extends HTMLElement {
       return (
         `<tr class="${nu ? "nu" : ""}"><td>${esc(hhmm(b.start))}\u2013${esc(b.eind.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }))}</td>` +
         `<td><span class="modus" style="--kleur:${b.kleur}"><i></i>${esc(b.label)}</span>${nu ? ` <span class="vb-nu">nu</span>` : ""}${b.tekort ? ` <b title="accu leeg, huis aan het net">!</b>` : ""}</td>` +
-        `<td class="vb-socc">${soc}</td><td class="r">${vermogen(b.accu)}</td><td class="r">${prijs}</td></tr>`
+        `<td class="vb-socc">${soc}</td><td class="r">${vermogen(b.accu, b)}</td><td class="r">${prijs}</td></tr>`
       );
     }).join("");
     const knoppen = VB_HORIZONNEN.map((u) =>

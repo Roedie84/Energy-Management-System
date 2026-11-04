@@ -369,13 +369,28 @@ class WaardeplanSturingMixin:
         accu = self._waardeplan_accu(now, beschikbaar, bruikbaar, rendement, kwartieren)
         balans = self._waardeplan_balanceren(now, kwartieren, accu)
         accu.vol_na_kwartier = balans.get("kwartier")
-        res = waardeplan_mod.plan(kwartieren, accu)
+        res = self._waardeplan_huis_eerst(kwartieren, accu, waardeplan_mod.plan(kwartieren, accu))
         if not res.beschikbaar:
             uit["reden"] = res.reden
             return uit
         self._waardeplan_rijen = res.kwartieren
         uit.update(self._waardeplan_uitkomst(res, accu, bruikbaar, kwartieren, balans))
         return uit
+
+    def _waardeplan_huis_eerst(self, kwartieren, accu, res):
+        """Geen zon terugleveren als het huis daarna met een lege accu aan het
+        net hangt (v5.179.1, akkoord Ruud 04-11): dan opnieuw plannen zonder
+        afgedwongen terugleveren, zodat de slimme stand de zon opslaat."""
+        self.waardeplan_zon_export_geweigerd = False
+        if not (res.beschikbaar and accu.zon_export_afdwingbaar
+                and waardeplan_mod.zon_export_laat_huis_tekort(res.kwartieren)):
+            return res
+        accu.zon_export_afdwingbaar = False
+        opnieuw = waardeplan_mod.plan(kwartieren, accu)
+        if not opnieuw.beschikbaar:
+            return res
+        self.waardeplan_zon_export_geweigerd = True
+        return opnieuw
 
     def _waardeplan_accu(self, now, beschikbaar, bruikbaar, rendement, kwartieren):
         """De accu voor het waardeplan (v5.177.0 uit `bereken_waardeplan`)."""
@@ -411,6 +426,8 @@ class WaardeplanSturingMixin:
             "inhoud_kwh": round(accu.inhoud_kwh, 2),
             "bruikbaar_kwh": round(bruikbaar, 2),
             "kwartieren": len(res.kwartieren),
+            # v5.179.1: zon terugleveren geweigerd omdat het huis daarna leeg zou staan.
+            "zon_export_geweigerd": getattr(self, "waardeplan_zon_export_geweigerd", False),
             # v5.177.0 (A5): tot waar het plan reikt als een gat het afknipte.
             "afgeknipt_bij": self._waardeplan_knip.isoformat() if self._waardeplan_knip else None,
             "kosten_plan_eur": res.kosten_plan_eur,

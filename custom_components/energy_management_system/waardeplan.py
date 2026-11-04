@@ -521,6 +521,29 @@ def _vooruit(kwartieren, accu: Accu, keuze, index, b_stap, i: int, niveaus: int,
     return rijen, kosten_plan, kosten_zonder, i
 
 
+def zon_export_laat_huis_tekort(rijen: list[dict], leeg_kwh: float = 0.01) -> bool:
+    """Levert het plan zon terug terwijl het huis daarna, vóór het volgende
+    laden uit het net, met een lege accu aan het net hangt? (v5.179.1)
+
+    Akkoord Ruud 04-11 ("woning gaat voor, dus opslaan in accu is toch
+    beter?"): zon gaat het net niet op zolang het huis later met een lege
+    accu stroom inkoopt. Het geldverschil was een paar cent per dag.
+    """
+    gezien = False
+    for r in rijen:
+        actie = r.get("actie")
+        if actie == "zon_export":
+            gezien = True
+            continue
+        if not gezien:
+            continue
+        if actie == "laden_net":
+            return False
+        if actie != "verkopen" and (r.get("net_kwh") or 0.0) > 0.01 and (r.get("inhoud_kwh") or 0.0) <= leeg_kwh:
+            return True
+    return False
+
+
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     """Het goedkoopste accuplan over de gegeven kwartieren."""
     n = len(kwartieren)
