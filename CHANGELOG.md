@@ -34796,3 +34796,19 @@ Puur verplaatsen, geen gedragswijziging.
 - `klimaat.py` (KlimaatMixin, 2.446 regels), incl. `rolluikstand_procent`/`rolluiklabel` (opnieuw geëxporteerd uit `coordinator.py`).
 - `nilm_glue.py` (NilmMixin, 1.106 regels).
 - `coordinator.py`: 52.755 → 46.388 regels.
+
+## v5.181.1 — live cockpit; plan, opdracht en planvolging één getal
+
+Analyse 04-11 09:45–10:32 en meldingen Ruud 10:48–10:59.
+
+1. Terugleveren 09:45–10:14 niet uitgevoerd: om 09:34 stond "Handmatig smart charge" aan (leermodus), dus het EMS schreef terecht niets. Het besluit meldt nu `niet_gestuurd` in plan, uitleg en cockpit.
+2. Laadvermogen wordt elke ronde opnieuw bepaald over de rest van het kwartier (50 W marge); plan, opdracht en planvolging gebruiken hetzelfde getal.
+3. Netladen met zonoverschot: alleen het deel boven het overschot telt als netstroom.
+4. Cockpit: één momentopname voor accuvermogen in tegel en planvolging; huis = zon + net − accu uit dezelfde opname.
+5. `laadplan_gewijzigd` krijgt een reden, zichtbaar in de cockpit.
+6. Opstartfase: geen opdrachten aan de Zendure tot de eerste volle ronde (knoppen van de gebruiker gaan wel door).
+7. Planvolging 'nu' wordt elke ronde ververst.
+8. Live: vermogens, laadstand, modules en apparaten uit de bronentiteiten in de browser (max 2 tekenbeurten/s); de SoC-lijn begint bij de live laadstand; het plan rekent opnieuw bij > 0,15 kWh afwijking; sensoren die de cockpit leest elke 60 s bijgewerkt.
+9. Standweergave: één vertaling (`standweergave.py`, gespiegeld in de JS) voor tegel, kopchip, tijdlijn en uitleg, bijv. "Zon laden" bij houden met zonlading.
+
+Tests: `test_v51811_live_0411.py` (28); `test_v571_cockpit` aangepast voor het veld `accu_teken`.

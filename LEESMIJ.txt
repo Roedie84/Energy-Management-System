@@ -1,3 +1,15 @@
+EMS v5.181.1 - cockpit live, plan en opdracht hetzelfde getal
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Cockpit live: vermogens, laadstand, modules en apparaten komen rechtstreeks uit de
+  sensoren; de ladingslijn begint bij de echte laadstand; huis = zon + net - accu.
+- De titel zegt wat er echt gebeurt (bijv. "Zon laden" in plaats van "bewaren").
+- Plan, opdracht aan de Zendure en planvolging gebruiken hetzelfde vermogen; het
+  laadvermogen wordt elke ronde bijgesteld.
+- Netladen met zon erbij telt alleen het netdeel als netstroom.
+- Gewijzigde laadplanning krijgt een reden; geen opdrachten tijdens het opstarten.
+
 EMS v5.181.0 - coordinator opgesplitst (deel 2), geen gedragswijziging
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
