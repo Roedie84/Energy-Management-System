@@ -471,3 +471,9 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: schakelaar luistert naar de coordinator, `async_set_learning_only` meldt meteen, herstel op 'aan' neemt de begintijd uit de vorige stand. Sturing ongewijzigd.
 - Let op: de stand van nu is niet te onderscheiden van een bewuste leermodus. Ruud moet hem één keer zelf uitzetten.
 - Meten: leermodus uit na de volgende handmatige stand met herstart; melding `leermodus_lang_aan` komt na een herstart wel.
+
+## L-EMS-065 · huis en zon van het lopende kwartier lopen op in het plan (meetfout, regressie v5.183.3)
+- Status: **gebouwd v5.183.4** (04-11 15:40, tussenronde: foute data nu; suite 7137 groen, 6 nieuw; sturing ongewijzigd). Test `test_v5183_4_lopend_kwartier.py`.
+- Onderbouwing (live 15:41, n=1): plan voor 15:30 huis 2201 W, zon 893 W, gemeten 613 W, 196 W; kwartier erna 772 W en 312 W. `plan_verbruik_kwh`/`plan_zon_kwh` gelden voor de rest van het kwartier bij de berekening (15:34), `uren` voor de rest van nu. `beoordeel` rekende ermee, dus zon/verbruik/rest in de planvolging zaten ernaast.
+- Bouw: `_waardeplan_deel` schaalt beide, zelfde rekening als `_waardeplan_net_kwh`.
+- Meten: na installatie `gepland_huis_w` bij het einde van een kwartier gelijk aan het begin; `onverklaard_w` niet meer hoog bij een plan dat klopt.
