@@ -3973,6 +3973,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "besparing_voorraadcorrectie_totaal_eur": {"type": "plain"},
     # v5.128.0: de maandteller "Besparing deze maand" (beginstand van de maand).
     "besparing_maand": {"type": "plain"},
+    # v5.186.0: de afgesloten maand, bron van de maandmelding op de 1e.
+    "maand_vorige": {"type": "plain"},
     "_pv_geometry_day_peak_w": {"type": "plain"},
     "_pv_geometry_day_peak_azimuth": {"type": "plain"},
     "_pv_geometry_day_expected_peak_w": {"type": "plain"},
@@ -3988,6 +3990,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "weather_source_agreement_dagen": {"type": "plain"},
     "pv_peak_azimuth_history": {"type": "plain"},
     "daily_cost_history": {"type": "plain"},
+    # v5.186.0: de lopende dagstand (met datum), zodat een herstart rond
+    # middernacht de dag niet met de cijfers van vandaag afsluit.
+    "_laatste_dagstand": {"type": "plain"},
     "daily_report_history": {"type": "plain"},
     "balance_missing_by_entity": {"type": "plain"},
     "pv_azimuth_performance": {"type": "plain"},
@@ -4180,7 +4185,6 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "co2_emitted_today_kg": {"type": "plain"},
     "pv_production_today_kwh": {"type": "plain"},
     "pv_export_today_kwh": {"type": "plain"},
-    "pv_daily_history": {"type": "plain"},
     "solar_export_today_kwh": {"type": "plain"},
     "battery_export_today_kwh": {"type": "plain"},
     "gross_consumption_today_kwh": {"type": "plain"},

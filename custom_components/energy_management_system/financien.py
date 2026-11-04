@@ -335,6 +335,13 @@ class FinancienMixin:
             vorig = oud.get("laatste_totaal_eur")
             begin = float(vorig) if isinstance(vorig, (int, float)) else totaal
             bron = f"laatste totaal van {oud.get('maand')}"
+            # v5.186.0: de gecorrigeerde besparing van de afgesloten maand
+            # bewaren voor de maandmelding.
+            if isinstance(oud.get("waarde_eur"), (int, float)):
+                gecorr = oud["waarde_eur"]
+                if isinstance(vorig, (int, float)) and isinstance(oud.get("begin_eur"), (int, float)):
+                    gecorr = float(vorig) - float(oud["begin_eur"])
+                self._bewaar_vorige_maand(oud.get("maand"), besparing_gecorrigeerd_eur=gecorr)
         self.besparing_maand = {
             "maand": maand,
             "begin_eur": round(float(begin), 4),
@@ -343,6 +350,51 @@ class FinancienMixin:
             "bron": bron,
             "bijgewerkt": now.isoformat(),
         }
+
+    #: v5.186.0: de laatst afgesloten maand (bewaard): maand "JJJJ-MM",
+    #: werkelijk_eur, zonder_accu_eur, besparing_rauw_eur en
+    #: besparing_gecorrigeerd_eur. Bron van de maandmelding op de 1e.
+    maand_vorige: dict | None = None
+
+    def _bewaar_vorige_maand(self, maand, **velden) -> None:
+        """Voegt cijfers van een afgesloten maand samen in `maand_vorige` (v5.186.0)."""
+        if isinstance(maand, int):
+            maand = f"{maand // 100:04d}-{maand % 100:02d}"
+        if not isinstance(maand, str) or not maand:
+            return
+        oud = self.maand_vorige if isinstance(self.maand_vorige, dict) else {}
+        info = dict(oud) if oud.get("maand") == maand else {"maand": maand}
+        for sleutel, waarde in velden.items():
+            if isinstance(waarde, (int, float)) and math.isfinite(waarde):
+                info[sleutel] = round(float(waarde), 2)
+        werkelijk, zonder = info.get("werkelijk_eur"), info.get("zonder_accu_eur")
+        if werkelijk is not None and zonder is not None:
+            verschil = zonder - werkelijk
+            info["besparing_rauw_eur"] = round(verschil, 2)
+        self.maand_vorige = info
+
+    def maandoverzicht_tekst(self, now: datetime) -> str | None:
+        """Tekst van de maandmelding over de VORIGE maand (v5.186.0).
+
+        None als die maand niet bewaard is (bijv. net bijgewerkt): liever
+        geen melding dan de eerste uren van de nieuwe maand als maandcijfer.
+        """
+        lokaal = dt_util.as_local(now)
+        jaar, maand = (lokaal.year, lokaal.month - 1) if lokaal.month > 1 else (lokaal.year - 1, 12)
+        info = self.maand_vorige if isinstance(self.maand_vorige, dict) else {}
+        if info.get("maand") != f"{jaar:04d}-{maand:02d}":
+            return None
+        werkelijk, zonder = info.get("werkelijk_eur"), info.get("zonder_accu_eur")
+        if not isinstance(werkelijk, (int, float)) or not isinstance(zonder, (int, float)):
+            return None
+        tekst = (
+            f"De afgelopen maand kostte {werkelijk:.2f} € tegenover {zonder:.2f} € "
+            f"zonder accu - een verschil van {zonder - werkelijk:.2f} €."
+        )
+        gecorr = info.get("besparing_gecorrigeerd_eur")
+        if isinstance(gecorr, (int, float)):
+            tekst += f" Met de accu-inhoud meegerekend: {gecorr:.2f} € bespaard."
+        return tekst + " Zie het Financieel-tabblad voor de opbouw."
 
     def besparing_deze_maand_eur(self) -> float | None:
         """De laatst berekende maandbesparing (v5.128.0); None = nog nooit berekend."""
@@ -488,9 +540,7 @@ class FinancienMixin:
         if self._counterfactual_month_key is None:
             self._counterfactual_month_key = month_key
         elif month_key != self._counterfactual_month_key:
-            self.actual_cost_current_month_eur = 0.0
-            self.counterfactual_cost_current_month_eur = 0.0
-            self._counterfactual_month_key = month_key
+            self._wissel_tegenfeit_maand(month_key)
 
         if self._counterfactual_last_sample is None:
             self._counterfactual_last_sample = now
@@ -533,6 +583,21 @@ class FinancienMixin:
         self.counterfactual_cost_all_time_eur += counterfactual_cost_eur
         # v5.172.0 (punt 3): wat de stilstaande accu zelf van het net neemt.
         self._tel_sluimer(battery_power_w, elapsed_hours, price_per_kwh)
+
+    def _wissel_tegenfeit_maand(self, month_key: int) -> None:
+        """Maandwissel van de tegenfeitelijke tellers.
+
+        v5.186.0: de afgesloten maand eerst bewaren; de maandmelding op de
+        1e las anders de eerste uren van de nieuwe maand.
+        """
+        self._bewaar_vorige_maand(
+            self._counterfactual_month_key,
+            werkelijk_eur=self.actual_cost_current_month_eur,
+            zonder_accu_eur=self.counterfactual_cost_current_month_eur,
+        )
+        self.actual_cost_current_month_eur = 0.0
+        self.counterfactual_cost_current_month_eur = 0.0
+        self._counterfactual_month_key = month_key
 
     def _salderingscorrectie_eur(self, now: datetime, accu_w: float, uren: float) -> float:
         """v5.185.1: tijdens de saldering met een verwacht jaaroverschot krijg
@@ -636,11 +701,12 @@ class FinancienMixin:
                 export_kwh, load_kwh = 0.0, energy_kwh
                 feedin_value = current_price
 
-            feedin_premium_eur = export_kwh * FEEDIN_PREMIUM_EUR_PER_KWH
             value_eur = load_kwh * current_price + export_kwh * feedin_value
             self.total_discharge_value_eur += value_eur
             self.current_month_discharge_value_eur += value_eur
-            self.total_feedin_premium_eur += feedin_premium_eur
+            # v5.186.0: de premie telt alleen in het kostprijsmodel
+            # (`_update_battery_cost_basis_and_savings`); hier werd dezelfde
+            # export een tweede keer opgeteld in total_feedin_premium_eur.
         elif (
             reason
             in (

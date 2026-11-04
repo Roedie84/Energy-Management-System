@@ -811,7 +811,13 @@ class SystemStatusSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
 
 
 class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
-    """Genuine month-over-month trend, on top of the existing rolling
+    """VEROUDERD (v5.186.0): de toestand telt de oude "actieve sturing"
+    (ontladen in dure kwartieren min netlaadkosten). Vervangen door
+    `accukosten.netladen_maand` (sensor geleerd rendement) en de besparing.
+    Entiteit blijft bestaan voor bestaande dashboards; het prijsoverzicht
+    in de attributen is nog actueel.
+
+    Genuine month-over-month trend, on top of the existing rolling
     7-day self-correction (which only ever looks at the recent past,
     not whether things are improving release over release).
 
@@ -824,7 +830,9 @@ class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
     # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:calendar-month-outline"
-    _attr_native_unit_of_measurement = "EUR"
+    # v5.186.0: "€" zoals de andere geldsensoren (geen state_class, dus geen
+    # langetermijnstatistiek die over de eenheidswissel struikelt).
+    _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -870,6 +878,11 @@ class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             "previous_month_excess_days": c.previous_month_excess_days,
             "previous_month_days_tracked": c.previous_month_days_tracked,
             "previous_month_net_eur": previous_net,
+            # v5.186.0: verouderd; de netlaadmarge van nu staat ernaast.
+            **_VEROUDERD_ACTIEVE_STURING,
+            "netladen_maand": _veilig_dict(
+                lambda: (c.get_accukosten() or {}).get("netladen_maand") or {}
+            ),
         }
 
     @_store_wint
@@ -921,6 +934,17 @@ class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
 
 
 HA_STATE_MAX_TEKENS = 255
+
+# v5.186.0: de oude "actieve sturing"-sensoren blijven, met deze uitleg.
+_VEROUDERD_ACTIEVE_STURING = {
+    "verouderd": True,
+    "vervangen_door": (
+        "Verouderd: telt de oude regels (ontladen in dure kwartieren, netladen "
+        "bij weinig zon). Zie 'netladen_maand' in de attributen 'accukosten' "
+        "van de sensor geleerd accurendement, en de besparing t.o.v. zonder "
+        "accu-sturing."
+    ),
+}
 
 
 def kort_op_zinsgrens(tekst: str | None, limiet: int = HA_STATE_MAX_TEKENS) -> str | None:
@@ -1303,7 +1327,10 @@ class BatterijladerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
 
 
 class DischargeValueSensor(SensorEntity, RestoreEntity):
-    """Cumulative euro value of energy discharged during expensive
+    """VEROUDERD (v5.186.0): oude regels "actieve sturing"; zie
+    `accukosten.netladen_maand` en de besparing. Blijft bestaan.
+
+    Cumulative euro value of energy discharged during expensive
     quarters (energy x price at that exact moment). Persisted across
     restarts.
 
@@ -1315,6 +1342,7 @@ class DischargeValueSensor(SensorEntity, RestoreEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Discharge value (expensive quarters)"
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER  # v5.186.0
     _attr_icon = "mdi:cash-plus"
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
@@ -1335,6 +1363,10 @@ class DischargeValueSensor(SensorEntity, RestoreEntity):
     def native_value(self) -> float:
         return round(self._coordinator.total_discharge_value_eur, 4)
 
+    @property
+    def extra_state_attributes(self) -> dict:
+        return dict(_VEROUDERD_ACTIEVE_STURING)  # v5.186.0
+
     @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -1347,13 +1379,17 @@ class DischargeValueSensor(SensorEntity, RestoreEntity):
 
 
 class ChargeCostSensor(SensorEntity, RestoreEntity):
-    """Cumulative euro cost of energy force-charged from the grid during
+    """VEROUDERD (v5.186.0): oude regels "actieve sturing"; zie
+    `accukosten.netladen_maand` en de besparing. Blijft bestaan.
+
+    Cumulative euro cost of energy force-charged from the grid during
     a low-solar cheap block (energy x price at that exact moment).
     Persisted across restarts.
     """
 
     _attr_has_entity_name = True
     _attr_name = "Charge cost (grid charging)"
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER  # v5.186.0
     _attr_icon = "mdi:cash-minus"
     _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
@@ -1373,6 +1409,10 @@ class ChargeCostSensor(SensorEntity, RestoreEntity):
     @property
     def native_value(self) -> float:
         return round(self._coordinator.total_charge_cost_eur, 4)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return dict(_VEROUDERD_ACTIEVE_STURING)  # v5.186.0
 
     @_store_wint
     async def async_added_to_hass(self) -> None:
@@ -2931,6 +2971,8 @@ class CO2IntensitySensor(SensorEntity):
     _attr_name = "CO2-uitstoot vandaag"
     _attr_icon = "mdi:molecule-co2"
     _attr_native_unit_of_measurement = "kg"
+    # v5.186.0: oplopend per dag, om middernacht terug naar 0.
+    _attr_state_class = "total_increasing"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -3190,7 +3232,9 @@ class CounterfactualSavingsTotalSensor(ZuinigSchrijven, SensorEntity):
         # werkelijkheid): de meter "EMS Accubesparing - vandaag" gaf voor
         # 21-10 € 1,56 terwijl de accu van 60 naar 21 % ging; met de daling
         # van de inhoud tegen de gemeten laadprijs was het € 0,35.
-        return round(self._coordinator.besparing_totaal_gecorrigeerd_eur(), 4)
+        # v5.186.0: 2 decimalen; met 4 veranderde de stand elke ronde
+        # (recorderlast) zonder dat er een cent bij kwam.
+        return round(self._coordinator.besparing_totaal_gecorrigeerd_eur(), 2)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -3584,7 +3628,9 @@ class CounterfactualSavingsSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
     _zuinig_attr_interval_s = 120  # cockpit toont kosten vandaag
     _attr_icon = "mdi:cash-check"
-    _attr_native_unit_of_measurement = "EUR"
+    # v5.186.0: "€" zoals de andere geldsensoren (geen state_class, dus geen
+    # langetermijnstatistiek die over de eenheidswissel struikelt).
+    _attr_native_unit_of_measurement = "€"
     _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -3661,6 +3707,11 @@ class CounterfactualSavingsSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
             "besparing_all_time_eur": round(
                 c.counterfactual_cost_all_time_eur - c.actual_cost_all_time_eur, 2
             ),
+            # v5.186.0: het totaal met de accu-inhoud, dezelfde maat als
+            # besparing_deze_maand_eur (de cockpit toont dit als "totaal").
+            "besparing_totaal_gecorrigeerd_eur": round(
+                c.besparing_totaal_gecorrigeerd_eur(), 2
+            ),
             # v5.99.10: het hoofdgetal; de kostprijsmethode is een tweede blik.
             "hoofdgetal": True,
             "rustverbruik_omvormer": c.get_rustverbruik(),
@@ -3680,7 +3731,9 @@ class CounterfactualSavingsSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
                 "het moment zelf als kosten en de opbrengst volgt pas bij het "
                 "ontladen; zonder correctie leek de besparing 's avonds "
                 "negatief. Het rauwe cijfer staat in besparing_ongecorrigeerd. "
-                "Maand- en all-time-totalen zijn rauw."
+                "besparing_deze_maand_eur en besparing_totaal_gecorrigeerd_eur "
+                "zijn gecorrigeerd (v5.186.0); de *_ongecorrigeerd_eur- en "
+                "*_all_time_eur-velden en de kostentellers zijn rauw."
             ),
         }
 

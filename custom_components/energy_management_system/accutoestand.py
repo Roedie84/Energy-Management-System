@@ -1625,13 +1625,33 @@ class AccuToestandMixin:
         """Modules die materieel uit de pas lopen, zonder die waarvoor de
         melding is uitgezet (v5.68.2, op apparaatnaam)."""
         stil = set(self.battery_module_stil or [])
+        # v5.186.0: alleen modules die er NU zijn. Melding 04-11 17:12 "Module
+        # 4" bij drie modules: een oude sleutel in battery_module_health (van
+        # een eerdere modulelijst) bleef meetellen.
+        live = {str(m.get("module")) for m in (self.battery_module_live or [])}
         return [
             nummer
             for nummer, gegevens in (self.battery_module_health or {}).items()
-            if gegevens.get("apparaat") not in stil
+            if (not live or nummer in live)
+            and gegevens.get("apparaat") not in stil
             and gegevens.get("naam") not in stil
             and self._module_drift_velden(nummer, gegevens)
         ]
+
+    def _module_drift_labels(self, nummers: list[str]) -> list[str]:
+        """Naam + apparaat-id per module, zoals de cockpit (v5.186.0)."""
+        live = {str(m.get("module")): m for m in (self.battery_module_live or [])}
+        labels = []
+        for nummer in sorted(nummers, key=lambda n: (len(n), n)):
+            m = live.get(nummer) or {}
+            staat = (self.battery_module_health or {}).get(nummer) or {}
+            naam = m.get("naam") or staat.get("naam")
+            apparaat = m.get("apparaat_id") or staat.get("apparaat")
+            if naam and apparaat and apparaat != naam:
+                labels.append(f"{naam} ({apparaat})")
+            else:
+                labels.append(naam or apparaat or f"Module {nummer}")
+        return labels
 
     def zet_module_melding(self, naam: str, melden: bool) -> None:
         """De melding per accumodule uit of weer aan (v5.68.2) - zie de

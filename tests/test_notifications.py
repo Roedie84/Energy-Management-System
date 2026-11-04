@@ -459,6 +459,8 @@ def test_the_monthly_summary_only_fires_on_the_first(make_coordinator, hass):
     _met_klok(c, uur=10, dag=15)
     assert not any("Maandoverzicht" in t for t in _titels(c))
 
+    # v5.186.0: de melding gaat over de afgesloten maand (bewaard bij de wissel).
+    c.maand_vorige = {"maand": "2026-07", "werkelijk_eur": 10.0, "zonder_accu_eur": 15.0}
     _met_klok(c, uur=10, dag=1)
     assert any("Maandoverzicht" in t for t in _titels(c))
 

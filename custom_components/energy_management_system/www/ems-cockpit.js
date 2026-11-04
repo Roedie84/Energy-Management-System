@@ -96,7 +96,6 @@ const EIGEN = {
   accuGezondheid: "battery_health",
   plan: "kwartierplanning_tabel",
   schema: "upcoming_schedule",
-  maand: "monthly_summary",
   uitleg: "explanation",
   // v5.100: zelfanalyse, prijsverwachting en de generale repetitie 2027
   zelfanalyse: "zelfanalyse",
@@ -1012,7 +1011,7 @@ const AFHANKELIJK = {
     "uitleg", "modus", "schema", "plan", "accuprijs", "cockpit"],
   // v5.181.1 (punt 7): de planvolging komt elke ronde van de cockpitsensor.
   planvandaag: ["plan", "schema", "soc", "besparing", "uitleg", "cockpit", "accu_vermogen", "pv", "net", "modus"],
-  geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief", "rendement", "gacs"],
+  geld: ["besparing", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief", "rendement", "gacs"],
   planning: ["plan", "schema", "uitleg", "blok", "soc", "prijsverwachting"],
   verkoop: ["gacs", "mc", "tekort", "uitleg", "blok", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk",
     "pvNauw", "bewolking", "pv"],
@@ -2461,7 +2460,6 @@ class EmsCockpitCard extends HTMLElement {
 
   _geld() {
     const bes = this._s("besparing");
-    const maandS = this._s("maand");
     const per = (attr(this._s("perioden"), "perioden") || {}).perioden || {};
     const week = per.week || {};
     const maand = per.maand || {};
@@ -2469,7 +2467,8 @@ class EmsCockpitCard extends HTMLElement {
     const kosten = num(attr(bes, "werkelijke_kosten_vandaag_eur"));
     const zonder = num(attr(bes, "tegenfeitelijke_kosten_vandaag_eur"));
     const bmaand = num(attr(bes, "besparing_deze_maand_eur"));
-    const ball = num(attr(bes, "besparing_all_time_eur"));
+    // v5.186.0: het totaal op dezelfde (gecorrigeerde) maat als "deze maand".
+    const ball = num(attr(bes, "besparing_totaal_gecorrigeerd_eur")) ?? num(attr(bes, "besparing_all_time_eur"));
     // v5.185.1: netladen deze maand uit de accuboekhouding (inkoop en wat de
     // netlading opleverde toen hij eruit ging). Het oude blok telde alleen
     // ontladen in dure kwartieren (oude regels) en zette de netlading als
@@ -2478,9 +2477,13 @@ class EmsCockpitCard extends HTMLElement {
     const geladenKwh = num(nl.net_erin_kwh);
     const geladen = num(nl.net_inkoop_eur);
     const netto = num(nl.net_marge_eur);
-    void maandS;
     const zv = getal(this._s("zelfvoorziening"));
     const kleur = (v) => (v != null && v >= 0 ? "var(--groen)" : "var(--oranje)");
+    // v5.186.0: op hoeveel dagen het saldo werkelijk rust.
+    const dagenMet = (p) => {
+      const n = (p.dagen_met_waarde || {}).netto_eur;
+      return n != null && p.dagen ? ` - ${n} van ${p.dagen} dagen met een saldo` : "";
+    };
     // Een regel over de accu zelf: marge per kWh, slijtage en rendement
     const ak = attr(this._s("rendement"), "accukosten") || {};
     const rend = getal(this._s("rendement"));
@@ -2500,15 +2503,15 @@ class EmsCockpitCard extends HTMLElement {
       `<span title="sinds de start">Besparing totaal <b style="color:${kleur(ball)}">${euroTeken(ball)}</b></span>` +
       // v5.185.0: saldo (afname min teruglevering), dezelfde maat als "Vandaag";
       // zonder saldo de afname. Week en maand zijn de afgesloten dagen.
-      `<span title="Saldo van de afgesloten dagen (afname min teruglevering)">Week <b>${euro(num(week.netto_eur) ?? num(week.kosten_eur))}<i class="bij">${fmt(week.opwek_kwh, 0)} kWh zon</i></b></span>` +
-      `<span title="Saldo van de afgesloten dagen deze maand (afname min teruglevering)">Maand <b>${euro(num(maand.netto_eur) ?? num(maand.kosten_eur))}<i class="bij">${fmt(maand.opwek_kwh, 0)} kWh zon</i></b></span>` +
+      `<span title="${esc(`Saldo van de laatste 7 afgesloten dagen (afname min teruglevering)${dagenMet(week)}`)}">Week <b>${euro(num(week.netto_eur) ?? num(week.kosten_eur))}<i class="bij">${fmt(week.opwek_kwh, 0)} kWh zon</i></b></span>` +
+      `<span title="${esc(`Saldo van de afgesloten dagen deze maand (afname min teruglevering)${dagenMet(maand)}`)}">Maand <b>${euro(num(maand.netto_eur) ?? num(maand.kosten_eur))}<i class="bij">${fmt(maand.opwek_kwh, 0)} kWh zon</i></b></span>` +
       `<span>Van het net vandaag <b>${fmt(vandaag.import_kwh, 1)} kWh</b></span>` +
       `<span>Zelfvoorzienend <b>${zv == null ? STREEP : fmt(zv) + "%"}</b></span>` +
       `</div><div>` +
       // v5.105.2: alleen wat het EMS ACTIEF doet; het huis voeden in de
       // stand slim zit hier niet in (wel in de besparing hierboven).
       `<div class="za-s geld-kop" title="Laden uit het net deze maand, uit de accuboekhouding">Netladen deze maand:</div>` +
-      `<div class="rijen geld-r" title="Wat er deze maand uit het net de accu in ging, wat dat kostte, en de marge toen die stroom eruit ging (na rendement en slijtage). Zon opslaan en het huis voeden zitten in de besparing hierboven.">` +
+      `<div class="rijen geld-r" title="Wat er deze maand uit het net de accu in ging, wat dat kostte, en de marge op diezelfde ladingen zodra ze eruit gingen (na rendement en slijtage); wat nog in de accu zit telt pas mee als het ontladen is. Zon opslaan en het huis voeden zitten in de besparing hierboven.">` +
       `<span>Uit het net geladen <b>${geladenKwh == null ? STREEP : fmt(geladenKwh, 1) + " kWh"}</b></span>` +
       `<span>Inkoop <b>${euro(geladen)}</b></span>` +
       `<span>Marge op netladen <b style="color:${kleur(netto)}">${euroTeken(netto)}</b></span>` +
