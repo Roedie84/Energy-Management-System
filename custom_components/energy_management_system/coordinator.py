@@ -1224,7 +1224,7 @@ def _tel_rangorde(paren: list[tuple[float, float]]) -> tuple[int, int]:
     return eens, totaal
 
 
-def accu_is_leeg(soc, inhoud_kwh, vloer: float) -> bool:
+def accu_is_leeg(soc, inhoud_kwh, vloer: float, grens_kwh: float | None = None) -> bool:
     """Staat de accu leeg, voor de tekortmeting? (v5.33, v5.171.0)
 
     Leeg: de laadstand op de vloer (minimum + TEKORT_LEEG_MARGE_PROCENT), of
@@ -1232,7 +1232,14 @@ def accu_is_leeg(soc, inhoud_kwh, vloer: float) -> bool:
     TEKORT_LEEG_INHOUD_KWH, los van de laadstand: een module die eerder op
     zijn celgrens zit, maakt de accu leeg bij 15-16 %. Geen van beide
     bekend: niet leeg.
+
+    v5.177.0 (A7): met `grens_kwh` (zie `EnergyManagementSystemCoordinator.
+    accu_leeg_grens_kwh`) beslist de gecorrigeerde inhoud als die bekend is:
+    leeg tot en met die grens (de marge boven de ondergrens in kWh). Alleen
+    zonder inhoud de laadstand.
     """
+    if grens_kwh is not None and isinstance(inhoud_kwh, (int, float)):
+        return inhoud_kwh <= grens_kwh + 1e-9
     if isinstance(inhoud_kwh, (int, float)) and inhoud_kwh < TEKORT_LEEG_INHOUD_KWH:
         return True
     return isinstance(soc, (int, float)) and soc <= vloer
@@ -26903,6 +26910,7 @@ class EnergyManagementSystemCoordinator:
         bruikbaar = capaciteit * (100 - min_soc) / 100 if capaciteit else None
         uit = []
         eerste = rijen[0]
+        leeg_kwh = self.accu_leeg_grens_plan_kwh()  # v5.177.0 (A7)
         # v5.175.0: "tot bijladen" = tot de eerste netlading van het
         # waardeplan, niet tot het goedkope blok van de oude planning.
         geladen = False
@@ -26933,7 +26941,7 @@ class EnergyManagementSystemCoordinator:
             # rendement in de cellen komt (toonde 2,0 kW bij 2,4 kW laden).
             if r.get("actie") == "laden_net":
                 nieuw["laden_w"] = self._waardeplan_laadvermogen_w(r)
-            nieuw["tekort"] = self._waardeplan_tekort(r)
+            nieuw["tekort"] = self._waardeplan_tekort(r, leeg_kwh)
             nieuw["bron"] = "waardeplan"
             if bruikbaar:
                 nieuw["soc_procent"] = round(min_soc + (100 - min_soc) * r["inhoud_kwh"] / bruikbaar)
@@ -26942,7 +26950,7 @@ class EnergyManagementSystemCoordinator:
         return uit
 
     @staticmethod
-    def _waardeplan_tekort(rij: dict) -> bool:
+    def _waardeplan_tekort(rij: dict, leeg_kwh: float = PLAN_SPAREN_LEEG_KWH) -> bool:
         """Hangt het huis in dit waardeplankwartier aan het net omdat de accu
         niets meer kan leveren? (v5.164.1)
 
@@ -26954,11 +26962,12 @@ class EnergyManagementSystemCoordinator:
         een keuze van het plan (bewaren voor duurder), net als laden en
         verkopen.
         """
-        if rij.get("actie") in ("laden_net", "verkopen"):
+        if rij.get("actie") in ("laden_net", "verkopen", "zon_export"):
             return False
         if (rij.get("net_kwh") or 0.0) <= 0.01:
             return False
-        return (rij.get("inhoud_kwh") or 0.0) <= PLAN_SPAREN_LEEG_KWH
+        # v5.177.0 (A7): de grens van `accu_leeg`, op de stap van het plan.
+        return (rij.get("inhoud_kwh") or 0.0) <= leeg_kwh + 1e-9
 
     @staticmethod
     def _waardeplan_net_kwh(rij: dict, uren: float | None, eerste: bool) -> float | None:
@@ -27354,7 +27363,7 @@ class EnergyManagementSystemCoordinator:
                 soc, net = self._plan_laadkwartier(
                     soc, bruikbaar, geladen, laad_kwh, netregels, min_soc, verbruik, zon
                 )
-            elif soc > PLAN_SPAREN_LEEG_KWH and (
+            elif soc > self.accu_leeg_grens_plan_kwh() and (  # v5.177.0 (A7)
                 # v5.156.0: een lege accu spaart niets - dan "smart", zodat
                 # een netafname als tekort telt (zie PLAN_SPAREN_LEEG_KWH).
                 start in netregels["gespaard"]
@@ -28243,6 +28252,7 @@ class EnergyManagementSystemCoordinator:
         if not self._plan_volgt_waardeplan():
             return None
         rijen = self._waardeplan_rijen or []
+        leeg_kwh = self.accu_leeg_grens_plan_kwh()  # v5.177.0 (A7)
         tot, na = 0.0, 0.0
         geladen = False
         perioden: list[list] = []
@@ -28251,7 +28261,7 @@ class EnergyManagementSystemCoordinator:
         for r in rijen:
             if r.get("actie") == "laden_net":
                 geladen = True
-            if self._waardeplan_tekort(r):
+            if self._waardeplan_tekort(r, leeg_kwh):
                 net = max(0.0, float(r.get("net_kwh") or 0.0))
                 if geladen:
                     na += net
@@ -28267,7 +28277,7 @@ class EnergyManagementSystemCoordinator:
             elif (
                 not eerste_tekort and r.get("actie") == "houden"
                 and float(r.get("net_kwh") or 0.0) > 0.01
-                and float(r.get("inhoud_kwh") or 0.0) > PLAN_SPAREN_LEEG_KWH
+                and float(r.get("inhoud_kwh") or 0.0) > leeg_kwh + 1e-9
             ):
                 inhoud = float(r.get("inhoud_kwh") or 0.0)
                 vastgehouden = inhoud if vastgehouden is None else max(vastgehouden, inhoud)
@@ -30878,33 +30888,24 @@ class EnergyManagementSystemCoordinator:
             self._noodlading_actief = False
             return False
 
-        soc_entity = self.config.get(CONF_SOC_SENSOR)
-        if soc_entity:
-            soc = self._read_sensor_float(soc_entity)
-            if soc is not None:
-                min_soc = float(
-                    self.effective_min_soc_percent()
-                )
-                # v3.99.4: dode zone. Aan op de ondergrens, pas uit als
-                # de laadstand er EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT
-                # boven staat. Anders: laden tot een procent erboven,
-                # stoppen, het huis trekt hem eronder, weer laden - op het
-                # moment in de winter dat het er het meest toe doet.
-                if self._noodlading_actief:
-                    self._noodlading_actief = (
-                        soc < min_soc + EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT
-                    )
-                else:
-                    self._noodlading_actief = soc <= min_soc
-                return self._noodlading_actief
-
-        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
-        if available_entity:
-            available_kwh = self._read_sensor_float(available_entity)
-            if available_kwh is not None:
-                return available_kwh <= EMERGENCY_LOW_BATTERY_KWH_THRESHOLD
-
-        return False
+        # v3.99.4: dode zone. Aan als de accu leeg is, pas uit als hij
+        # EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT boven die grens staat.
+        # Anders: laden tot een procent erboven, stoppen, het huis trekt hem
+        # eronder, weer laden - op het moment in de winter dat het er het
+        # meest toe doet.
+        # v5.177.0 (A7): leeg volgens de ene definitie (`accu_leeg`: de
+        # gecorrigeerde inhoud boven de effectieve ondergrens), niet meer de
+        # laadstand tegen de min-SoC of 0,3 kWh op de ruwe sensor.
+        # De noodregel begint op de ondergrens zelf (geen marge van 3 %):
+        # zelfde maat, zelfde gedrag als voorheen.
+        op_de_grens = -TEKORT_LEEG_MARGE_PROCENT
+        if self._noodlading_actief:
+            self._noodlading_actief = self.accu_leeg(
+                extra_procent=op_de_grens + EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT
+            )
+        else:
+            self._noodlading_actief = self.accu_leeg(extra_procent=op_de_grens)
+        return self._noodlading_actief
 
     # v3.99.0: is er vandaag een kookpiek boven de ontlaadgrens gezien?
     _vermogensgrens_gezien_today: bool = False
@@ -31135,15 +31136,9 @@ class EnergyManagementSystemCoordinator:
         tot = dt_util.parse_datetime(self.piekverkoop_tot or "")
         if tot is not None and now < tot:
             return False
-        try:
-            inhoud = self.beschikbare_energie_kwh()
-        except Exception:  # noqa: BLE001 - zonder inhoud de SoC-regel
-            inhoud = None
         # v5.172.0 (punt 4): de vloer is de effectieve ondergrens.
-        return accu_is_leeg(
-            self.accustand_procent(), inhoud,
-            self.effectieve_ondergrens_procent(now) + TEKORT_LEEG_MARGE_PROCENT,
-        )
+        # v5.177.0 (A7): de ene definitie.
+        return self.accu_leeg(now)
 
     def _update_shortfall_detection(
         self,
@@ -35254,7 +35249,7 @@ class EnergyManagementSystemCoordinator:
             # v5.171.0 (L-EMS-059): ook leeg bij een bruikbare inhoud onder
             # TEKORT_LEEG_INHOUD_KWH; oudere regels zonder inhoud: de SoC.
             if net_w is None or net_w <= 0 or not accu_is_leeg(
-                r.get("soc"), r.get("beschikbaar_kwh"), vloer
+                r.get("soc"), r.get("beschikbaar_kwh"), vloer, self.accu_leeg_grens_kwh()
             ):
                 continue
             if r.get("reden") in REDENEN_BEWUSTE_NETAFNAME:
@@ -38568,13 +38563,48 @@ class EnergyManagementSystemCoordinator:
     def _waardeplan_accu_leeg(self, now: datetime) -> bool:
         """Staat de accu leeg, met dezelfde maat als de tekortmeting? (v5.175.3)"""
         try:
-            inhoud = self.beschikbare_energie_kwh()
-            return accu_is_leeg(
-                self.accustand_procent(), inhoud,
-                self.effectieve_ondergrens_procent(now) + TEKORT_LEEG_MARGE_PROCENT,
-            )
+            return self.accu_leeg(now)
         except Exception:  # noqa: BLE001 - bij twijfel de gewone naam
             return False
+
+    # --- v5.177.0 (A7): één definitie van "leeg" ---------------------------
+    #
+    # Er waren er zes: TEKORT_LEEG_INHOUD_KWH (0,1), PLAN_SPAREN_LEEG_KWH (0,3),
+    # EMERGENCY_LOW_BATTERY_KWH_THRESHOLD (0,3 op de ruwe sensor, zonder
+    # modulecorrectie), ondergrens + 3 % in `accu_is_leeg`, en in de noodregel
+    # de min-SoC in plaats van de effectieve ondergrens. v5.176.1 kwam
+    # daaruit voort (plan "kump neet meer tekort", status "accu leeg"). Nu:
+    # leeg = de gecorrigeerde bruikbare inhoud (boven de effectieve
+    # ondergrens) tot en met TEKORT_LEEG_MARGE_PROCENT van de capaciteit;
+    # zonder inhoud de laadstand tegen de effectieve ondergrens + die marge.
+
+    def accu_leeg_grens_kwh(self, extra_procent: float = 0.0) -> float:
+        """Tot en met deze inhoud (kWh boven de ondergrens) heet de accu leeg."""
+        try:
+            cap = self.bruikbare_capaciteit_kwh()
+        except Exception:  # noqa: BLE001 - zonder capaciteit de vaste grens
+            cap = None
+        if not cap:
+            return PLAN_SPAREN_LEEG_KWH + extra_procent / 100 * 8.64
+        return cap * (TEKORT_LEEG_MARGE_PROCENT + extra_procent) / 100
+
+    def accu_leeg_grens_plan_kwh(self) -> float:
+        """De grens op de stap van het waardeplan (0,1 kWh, naar boven): 0,26
+        kWh bij 8,64 kWh wordt 0,3 - de inhoud in het plan staat op stappen."""
+        return math.ceil(self.accu_leeg_grens_kwh() / 0.1 - 1e-6) * 0.1
+
+    def accu_leeg(self, now: datetime | None = None, extra_procent: float = 0.0) -> bool:
+        """Staat de accu leeg? De ene definitie (v5.177.0, A7)."""
+        now = now or dt_util.now()
+        try:
+            inhoud = self.beschikbare_energie_kwh()
+        except Exception:  # noqa: BLE001 - zonder inhoud de laadstand
+            inhoud = None
+        return accu_is_leeg(
+            self.accustand_procent(), inhoud,
+            self.effectieve_ondergrens_procent(now) + TEKORT_LEEG_MARGE_PROCENT + extra_procent,
+            self.accu_leeg_grens_kwh(extra_procent),
+        )
 
     def _waarom_waardeplan(self) -> list[str]:
         """Waarom-regels bij het waardeplan (v5.158.0)."""
