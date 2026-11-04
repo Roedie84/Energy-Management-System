@@ -23,7 +23,7 @@ def _coordinator(make_coordinator):
     )
 
 
-def _stuur(c, kind="mode_change", titel="test"):
+def _stuur(c, kind="sluipverbruik", titel="test"):
     c._dispatch_notification(
         notify_service="notify.telefoon",
         title=titel,
@@ -38,7 +38,7 @@ def _stuur(c, kind="mode_change", titel="test"):
 
 def test_a_disabled_notification_is_still_recorded(make_coordinator, hass):
     c = _coordinator(make_coordinator)
-    c.set_notification_enabled("mode_change", False)
+    c.set_notification_enabled("sluipverbruik", False)
 
     _stuur(c)
 
@@ -49,7 +49,7 @@ def test_a_disabled_notification_is_still_recorded(make_coordinator, hass):
 def test_it_does_not_reach_the_phone(make_coordinator, hass):
     """Vastleggen mag niet betekenen dat hij alsnog verstuurd wordt."""
     c = _coordinator(make_coordinator)
-    c.set_notification_enabled("mode_change", False)
+    c.set_notification_enabled("sluipverbruik", False)
 
     _stuur(c)
 
@@ -59,7 +59,7 @@ def test_it_does_not_reach_the_phone(make_coordinator, hass):
 def test_the_reason_is_recorded(make_coordinator, hass):
     """Zonder reden lijkt het alsof de melding zomaar niet aankwam."""
     c = _coordinator(make_coordinator)
-    c.set_notification_enabled("mode_change", False)
+    c.set_notification_enabled("sluipverbruik", False)
 
     _stuur(c)
 
@@ -78,7 +78,7 @@ def test_the_master_switch_behaves_the_same(make_coordinator, hass):
 
 def test_a_sent_notification_is_marked_as_sent(make_coordinator, hass):
     c = _coordinator(make_coordinator)
-    c.set_notification_enabled("mode_change", True)
+    c.set_notification_enabled("sluipverbruik", True)
 
     _stuur(c)
 
@@ -95,7 +95,7 @@ def test_a_throttled_repeat_is_not_recorded(make_coordinator, hass):
     herhaling dan alsnog vastleggen zou de geschiedenis volschrijven met
     dubbele regels - precies waar hij onbruikbaar van wordt."""
     c = _coordinator(make_coordinator)
-    c.set_notification_enabled("mode_change", True)
+    c.set_notification_enabled("sluipverbruik", True)
 
     _stuur(c)
     _stuur(c)

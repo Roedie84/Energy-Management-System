@@ -5149,8 +5149,11 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
     (
         "daily_summary",
         "Dagoverzicht",
-        "Een samenvatting van de dag: besparing, opbrengst, verbruik.",
-        False,
+        # v5.177.0 (B2b): standaard aan - meldingen met "Wat te doen: Niets"
+        # gaan niet meer naar de telefoon maar staan in dit overzicht.
+        "Een samenvatting van de dag: besparing, opbrengst, verbruik, en de "
+        "meldingen die niet naar de telefoon gingen.",
+        True,
         720,
     ),
     (
@@ -5597,6 +5600,38 @@ ZONNEPLAN_COST_MISMATCH_MIN_STANDEN = 3
 # Meldingen die een GEBEURTENIS beschrijven (apparaat klaar, goedkoop
 # blok begint, dagoverzicht) horen hier bewust niet bij: daar valt niets
 # aan te herstellen.
+# --- v5.177.0 (B2, akkoord Ruud): minder pushmeldingen -----------------
+# (a) Stille uren: van MELDING_STIL_VAN_UUR tot MELDING_STIL_TOT_UUR (lokaal)
+# gaat er niets naar de telefoon, behalve de kritieke meldingen die nu een
+# handeling vragen. Wat tegengehouden wordt, staat in de meldingengeschiedenis
+# met reden "stille uren" (en in het dagoverzicht).
+MELDING_STIL_VAN_UUR = 23
+MELDING_STIL_TOT_UUR = 7
+MELDING_STIL_REDEN = "stille uren"
+MELDING_STIL_TOEGESTAAN = frozenset(
+    {
+        "integration_error",
+        "interne_fout",
+        "accu_niet_aanstuurbaar",
+        "opdracht_niet_aangekomen",
+        "celspanning_laag",
+        "installatie_onvolledig",
+        "kalibratie_vol",
+        "sensor_unavailable",
+    }
+)
+# (b) Een melding waarvan het advies ("Wat te doen") met "Niets" begint, gaat
+# niet naar de telefoon maar alleen in het dagoverzicht. Eén regel in de
+# verzendfunctie, niet per aanroep. De overzichten zelf gaan wel.
+MELDING_DAGOVERZICHT_REDEN = "alleen in het dagoverzicht"
+MELDING_ALTIJD_PUSHEN = frozenset({"daily_summary", "monthly_summary"})
+#: Zoveel regels "ter kennisgeving" hooguit in het dagoverzicht.
+DAGOVERZICHT_MAX_MELDINGEN = 8
+# (c) Zolang het waardeplan stuurt, bestaan deze meldingen niet (ook niet in
+# het dagoverzicht): het plan laat de besparing al zien, en ze wisselden met
+# hun herstel (03-11: zes keer).
+MELDING_NIET_ONDER_WAARDEPLAN = frozenset({"battery_wont_last_night", "plan_tekort"})
+
 NOTIFICATION_RECOVERY_KINDS = {
     "sensor_unavailable": (
         "✅ Sensor is weer uitleesbaar",

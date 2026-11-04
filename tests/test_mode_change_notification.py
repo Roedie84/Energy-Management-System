@@ -91,15 +91,17 @@ def test_notification_sent_on_genuine_mode_change(make_coordinator, hass):
     asyncio.run(run())
 
     assert coordinator.last_reason == "negative_price"
-    calls = _notify_calls(hass)
-    assert len(calls) == 1
-    domain, service, data = calls[0]
-    assert domain == "notify"
-    assert service == "mobile_app_test"
+    # v5.177.0 (B2b): het advies is "Niets", dus niet naar de telefoon maar
+    # in de geschiedenis, voor het dagoverzicht.
+    assert _notify_calls(hass) == []
+    regels = [r for r in coordinator.notification_history if r.get("soort") == "mode_change"]
+    assert len(regels) == 1
+    regel = regels[0]
+    assert regel["verstuurd"] is False
+    assert regel["reden_niet_verstuurd"] == "alleen in het dagoverzicht"
     # v3.95.0: kort, met de stand erin ("Accu: ontladen").
-    assert data["title"].startswith(("🎁⬆️", "🔄")) or "Accu:" in data["title"]
-    assert "Accu:" in data["title"]
-    assert coordinator.last_explanation in data["message"]
+    assert "Accu:" in regel["titel"]
+    assert coordinator.last_explanation in regel["bericht"]
 
 
 def test_no_duplicate_notification_for_the_same_signature(make_coordinator, hass):
@@ -118,7 +120,9 @@ def test_no_duplicate_notification_for_the_same_signature(make_coordinator, hass
 
     asyncio.run(run())
 
-    assert len(_notify_calls(hass)) == 1
+    # v5.177.0 (B2b): niet gepusht, wel één keer vastgelegd.
+    assert _notify_calls(hass) == []
+    assert len([r for r in coordinator.notification_history if r.get("soort") == "mode_change"]) == 1
 
 
 def test_no_notification_without_configured_notify_service(make_coordinator, hass):

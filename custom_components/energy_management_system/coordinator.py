@@ -696,6 +696,14 @@ from .const import (
     WAARDEPLAN_WEG_AANDACHT_MINUTEN,
     WAARDEPLAN_EINDPRIJS_UREN,
     WEER_OPNIEUW_MINUTEN,
+    MELDING_STIL_VAN_UUR,
+    MELDING_STIL_TOT_UUR,
+    MELDING_STIL_REDEN,
+    MELDING_STIL_TOEGESTAAN,
+    MELDING_DAGOVERZICHT_REDEN,
+    MELDING_ALTIJD_PUSHEN,
+    DAGOVERZICHT_MAX_MELDINGEN,
+    MELDING_NIET_ONDER_WAARDEPLAN,
     VASTE_NACHT_VAN_UUR,
     VASTE_NACHT_TOT_UUR,
     HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH,
@@ -5586,6 +5594,54 @@ class EnergyManagementSystemCoordinator:
             return False
         return (now - moment).total_seconds() / 60 < venster
 
+    def _push_tegenhouden(self, soort: str | None, now: datetime) -> str | None:
+        """Waarom deze melding niet naar de telefoon gaat, of None (v5.177.0, B2).
+
+        Eén regel voor alle meldingen (akkoord Ruud):
+        (b) begint het advies "Wat te doen" met "Niets", dan alleen in het
+            dagoverzicht - een herstelmelding volgt het advies van haar
+            probleemmelding;
+        (a) tussen 23:00 en 07:00 alleen de kritieke meldingen die nu een
+            handeling vragen (MELDING_STIL_TOEGESTAAN).
+        """
+        if not soort:
+            return None
+        basis = soort.removesuffix("_hersteld")
+        if soort not in MELDING_ALTIJD_PUSHEN:
+            advies = MELDING_ADVIES.get(soort) or MELDING_ADVIES.get(basis)
+            if advies and str(advies[1]).strip().lower().startswith("niets"):
+                return MELDING_DAGOVERZICHT_REDEN
+        if basis not in MELDING_STIL_TOEGESTAAN and self._stille_uren(now):
+            return MELDING_STIL_REDEN
+        return None
+
+    def _stille_uren(self, now: datetime) -> bool:
+        """Valt `now` in de stille uren (23:00-07:00 lokaal)? (v5.177.0, B2a)"""
+        uur = dt_util.as_local(now).hour
+        return uur >= MELDING_STIL_VAN_UUR or uur < MELDING_STIL_TOT_UUR
+
+    def _dagoverzicht_meldingen(self, now: datetime | None = None) -> str:
+        """De meldingen die niet gepusht zijn, compact voor het dagoverzicht
+        (v5.177.0, B2): sinds het vorige dagoverzicht, per titel geteld."""
+        now = now or dt_util.now()
+        vorige = dt_util.parse_datetime(self.notification_last_sent.get("daily_summary") or "")
+        vanaf = vorige or dt_util.as_local(now).replace(hour=0, minute=0, second=0, microsecond=0)
+        tellingen: dict[str, int] = {}
+        for regel in self.notification_history or []:
+            if regel.get("reden_niet_verstuurd") not in (MELDING_DAGOVERZICHT_REDEN, MELDING_STIL_REDEN):
+                continue
+            moment = dt_util.parse_datetime(regel.get("moment") or "")
+            if moment is None or moment <= vanaf:
+                continue
+            titel = str(regel.get("titel") or regel.get("soort") or "?").strip()
+            tellingen[titel] = tellingen.get(titel, 0) + 1
+        if not tellingen:
+            return ""
+        delen = [f"{t} ({n}x)" if n > 1 else t for t, n in list(tellingen.items())[:DAGOVERZICHT_MAX_MELDINGEN]]
+        if len(tellingen) > DAGOVERZICHT_MAX_MELDINGEN:
+            delen.append(f"en {len(tellingen) - DAGOVERZICHT_MAX_MELDINGEN} meer")
+        return "\n\nTer kennisgeving (niet gepusht): " + "; ".join(delen) + "."
+
     def is_notification_allowed(self, kind: str, now: datetime) -> tuple[bool, str]:
         """Mag deze melding nu verstuurd worden? (v1.2.0)
 
@@ -5712,39 +5768,12 @@ class EnergyManagementSystemCoordinator:
             return False
         return (now - sinds).total_seconds() >= NACHT_TEKORT_AANHOUDEND_MIN * 60
 
-    def _evaluate_new_notifications(self, now: datetime) -> None:
-        """De meldingen die in v1.2.0 zijn toegevoegd (v1.2.0).
-
-        Allemaal gebaseerd op waarden die de coordinator toch al
-        berekent - er wordt hier niets extra gemeten. Elke melding gaat
-        via `_dispatch_notification` met zijn eigen soort, dus de
-        schakelaar en het dempingsvenster gelden automatisch; deze
-        functie hoeft daar niets voor te doen.
-        """
-        notify = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
-        # De coordinator bewaart deze twee al als `last_*`; ze hier
-        # opnieuw laten doorgeven zou een tweede waarheid opleveren die
-        # uit de pas kan lopen met wat de beslislogica gebruikte.
-        cheap_block_start = self.last_cheap_block_start
-        discharge_start = self.last_discharge_start
-
-        # v1.6.2: welke TOESTAND-meldingen deze ronde afgingen. Wat er
-        # vorige ronde in stond en nu niet meer, is opgelost - en dat
-        # verdient een herstelmelding.
-        actief_nu: list[str] = []
-
-        def stuur(kind: str, titel: str, bericht: str) -> None:
-            if kind in NOTIFICATION_RECOVERY_KINDS:
-                actief_nu.append(kind)
-            self._dispatch_notification(
-                notify_service=notify,
-                title=titel,
-                message=bericht,
-                notification_id=f"ems_{kind}",
-                kind=kind,
-            )
-
-        # --- accu en energie ---
+    def _meld_nacht_tekort(self, now: datetime, stuur) -> None:
+        """"Accu haalt de nacht niet" (v5.13, uit `_evaluate_new_notifications`
+        gehaald in v5.177.0). v5.177.0 (B2c): zolang het waardeplan stuurt,
+        bestaat deze melding niet; alleen onder de oude regels."""
+        if self._plan_volgt_waardeplan():
+            return
         beschikbaar = self.last_available_kwh
         # v5.13: vergelijken met wat er WERKELIJK nodig is, niet met de
         # reserve inclusief veiligheidsmarge. Op 18 september 06:58 was er
@@ -5789,6 +5818,42 @@ class EnergyManagementSystemCoordinator:
                     "spaart de accu voor de duurste uren."
                     + self._tekort_soort_zin(),
                 )
+
+    def _evaluate_new_notifications(self, now: datetime) -> None:
+        """De meldingen die in v1.2.0 zijn toegevoegd (v1.2.0).
+
+        Allemaal gebaseerd op waarden die de coordinator toch al
+        berekent - er wordt hier niets extra gemeten. Elke melding gaat
+        via `_dispatch_notification` met zijn eigen soort, dus de
+        schakelaar en het dempingsvenster gelden automatisch; deze
+        functie hoeft daar niets voor te doen.
+        """
+        notify = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+        # De coordinator bewaart deze twee al als `last_*`; ze hier
+        # opnieuw laten doorgeven zou een tweede waarheid opleveren die
+        # uit de pas kan lopen met wat de beslislogica gebruikte.
+        cheap_block_start = self.last_cheap_block_start
+        discharge_start = self.last_discharge_start
+
+        # v1.6.2: welke TOESTAND-meldingen deze ronde afgingen. Wat er
+        # vorige ronde in stond en nu niet meer, is opgelost - en dat
+        # verdient een herstelmelding.
+        actief_nu: list[str] = []
+
+        def stuur(kind: str, titel: str, bericht: str) -> None:
+            if kind in NOTIFICATION_RECOVERY_KINDS:
+                actief_nu.append(kind)
+            self._dispatch_notification(
+                notify_service=notify,
+                title=titel,
+                message=bericht,
+                notification_id=f"ems_{kind}",
+                kind=kind,
+            )
+
+        # --- accu en energie ---
+        # v5.177.0: eigen functie (ratel); onder het waardeplan niets (B2c).
+        self._meld_nacht_tekort(now, stuur)
 
         # v1.31.1: rechtstreeks, zie `accustand_procent`.
         soc = self.accustand_procent()
@@ -6161,6 +6226,12 @@ class EnergyManagementSystemCoordinator:
         nu = now or dt_util.now()
         if self._voorwaarde_weg_sinds is None:
             self._voorwaarde_weg_sinds = {}
+        # v5.177.0 (B2c): onder het waardeplan verdwijnen deze toestanden
+        # stil - geen herstelmelding voor een melding die niet meer bestaat.
+        if self._plan_volgt_waardeplan():
+            self.notification_active_conditions = [
+                k for k in self.notification_active_conditions if k not in MELDING_NIET_ONDER_WAARDEPLAN
+            ]
         opgelost = []
         nog_niet = []
         for kind in self.notification_active_conditions:
@@ -7498,6 +7569,8 @@ class EnergyManagementSystemCoordinator:
             f"{self.grid_import_today_kwh:.1f} kWh van het net. "
             f"Kosten {self.actual_cost_today_eur:.2f} € tegenover "
             f"{self.counterfactual_cost_today_eur:.2f} € zonder accu - {zin}"
+            # v5.177.0 (B2): wat niet naar de telefoon ging.
+            + self._dagoverzicht_meldingen()
         )
 
     def get_savings_correction(self) -> dict:
@@ -21477,21 +21550,30 @@ class EnergyManagementSystemCoordinator:
         # Nu schrijft deze functie die regel, met de tekst die
         # daadwerkelijk is verstuurd.
         if geschiedenis_soort is not None:
-            self.notification_history.append(
-                {
-                    "moment": now.isoformat(),
-                    "soort": geschiedenis_soort,
-                    "titel": title,
-                    "bericht": message,
-                }
-            )
+            # v5.177.0 (B2): stille uren en "Niets"-advies ook voor herstel.
+            tegen = self._push_tegenhouden(geschiedenis_soort, now) if kind is None else None
+            regel = {
+                "moment": now.isoformat(),
+                "soort": geschiedenis_soort,
+                "titel": title,
+                "bericht": message,
+            }
+            if tegen:
+                regel.update({"verstuurd": False, "reden_niet_verstuurd": tegen})
+            self.notification_history.append(regel)
             self.notification_history = self.notification_history[
                 -NOTIFICATION_HISTORY_LENGTH:
             ]
+            if tegen:
+                self.schedule_persisted_state_save()
+                return
 
         toegestaan = True
         if kind is not None:
             toegestaan, reden = self.is_notification_allowed(kind, now)
+            # v5.177.0 (B2): de centrale regels voor stille uren en "Niets".
+            if toegestaan and (tegen := self._push_tegenhouden(kind, now)):
+                toegestaan, reden = False, tegen
 
             # v1.12.5, gevraagd: "Als ik door een button een melding
             # uitzet moet hij niet meer naar mijn iPhone, maar nog wel
@@ -28129,6 +28211,12 @@ class EnergyManagementSystemCoordinator:
         )
         # v5.118.0: de melding toetst de mediaan van de laatste 15 minuten.
         tekorten = self._plan_tekort_gedempt(now, tekorten)
+        if self._plan_volgt_waardeplan():
+            # v5.177.0 (B2c): geen plan_tekort (en geen herstel) onder het
+            # waardeplan; het wisselde 03-11 zes keer met zijn herstel.
+            self._last_plan_alert.pop("plan_tekort", None)
+            self.last_plan_shortfall["vrij_sinds"] = None
+            tekorten = -1
 
         if tekorten >= PLAN_SHORTFALL_ALERT_MIN_QUARTERS:
             self.last_plan_shortfall["vrij_sinds"] = None
@@ -28143,7 +28231,7 @@ class EnergyManagementSystemCoordinator:
                     f"{samenvatting.get('laagste_soc_procent')}%."
                 ),
             )
-        elif tekorten > 0:
+        elif tekorten > 0 or tekorten < 0:
             # Eén of twee kwartieren: ruis rond de rekengrens. Geen
             # melding, maar de teller voor "hersteld" ook niet starten -
             # er is immers nog een tekort.

@@ -26,7 +26,7 @@ def _coordinator(make_coordinator):
     return make_coordinator({CONF_APPLIANCE_NOTIFY_SERVICE: "notify.telefoon"})
 
 
-def _stuur(c, kind="mode_change"):
+def _stuur(c, kind="sluipverbruik"):  # v5.177.0: mode_change gaat alleen nog in het dagoverzicht
     c._dispatch_notification(
         notify_service="notify.telefoon",
         title="test",
@@ -52,7 +52,7 @@ def test_a_disabled_notification_is_not_sent(make_coordinator, hass):
     blijft wél in de geschiedenis staan - gevraagd omdat uitzetten
     anders hetzelfde is als weggooien."""
     c = _coordinator(make_coordinator)
-    c.set_notification_enabled("mode_change", False)
+    c.set_notification_enabled("sluipverbruik", False)
 
     _stuur(c)
 
@@ -109,7 +109,7 @@ def test_it_is_allowed_again_after_the_window(make_coordinator, hass):
     from custom_components.energy_management_system import coordinator as mod
 
     c = _coordinator(make_coordinator)
-    definitie = c.notification_definition("mode_change")
+    definitie = c.notification_definition("sluipverbruik")
     venster = definitie[4]
 
     origineel = mod.dt_util.now
@@ -133,13 +133,13 @@ def test_suppressed_notifications_are_counted(make_coordinator, hass):
     _stuur(c)
     _stuur(c)
 
-    assert c.notification_suppressed_count["mode_change"] == 2
+    assert c.notification_suppressed_count["sluipverbruik"] == 2
 
 
 def test_different_kinds_do_not_throttle_each_other(make_coordinator, hass):
     c = _coordinator(make_coordinator)
 
-    _stuur(c, "mode_change")
+    _stuur(c, "device_drift")
     _stuur(c, "sluipverbruik")
 
     assert len(c.notification_history) == 2
@@ -207,6 +207,8 @@ def test_only_the_pre_existing_kinds_default_to_on():
         "sluipverbruik",
         "device_drift",
         "mode_change",
+        # v5.177.0 (B2b): het dagoverzicht draagt de "Niets"-meldingen.
+        "daily_summary",
         # v1.29.0: "Onderdeel van de integratie faalt" staat aan om
         # dezelfde reden. Gemeld: "Dat er een txt wordt gemaakt is een
         # error, ik had daar graag een melding van verwacht zoals eerder
