@@ -390,12 +390,24 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
             if not geldig.any():
                 continue
             # v5.160.0: het plan verkoopt niet wat de sturing tegenhoudt.
-            if k.verkoop_vloer_kwh > 0 and b < 0 and -b > tekort + EPS_KWH:
+            # v5.183.2: in een dekkwartier is een overschot van minder dan een
+            # stap afronding (de slimme stand dekt alleen het huis), geen verkoop.
+            if (k.verkoop_vloer_kwh > 0 and b < 0 and -b > tekort + EPS_KWH
+                    and not (k.dekken and -b - tekort < STAP_KWH)):
                 geldig = geldig & (doel * STAP_KWH >= k.verkoop_vloer_kwh - 1e-9)
                 if not geldig.any():
                     continue
+            # v5.183.2: de slimme stand dekt het HELE huistekort (tot het
+            # ontlaadvermogen); een halve dekking kan de accu niet uitvoeren,
+            # behalve als hij daarmee leeg raakt. De stap van 0,1 kWh liet het
+            # plan om en om 0,1 kWh ontladen bij een huis van 0,17 kWh: de
+            # accu ging in werkelijkheid sneller leeg dan het plan dacht.
+            if b < -EPS_KWH and tekort > EPS_KWH and -b < min(tekort, grenzen[2]) - 0.5 * STAP_KWH:
+                geldig = geldig & (doel == 0)
+                if not geldig.any():
+                    continue
             # v5.183.0: dekken - het huis uit de accu zolang er inhoud is.
-            if k.dekken and tekort > EPS_KWH and b > -(tekort - 1.5 * STAP_KWH):
+            if k.dekken and tekort > EPS_KWH and b >= -EPS_KWH:
                 geldig = geldig & (doel == 0)
                 if not geldig.any():
                     continue
@@ -468,8 +480,14 @@ def _accu_ac_slim(rij: dict, k, accu: Accu, actie: str, i_voor: int, uren: float
         ac = 0.0
     else:
         return
-    # accu_kwh en net_kwh blijven de stap van het plan (rendement per band).
     rij["accu_ac_w"] = round(ac / uren * 1000)
+    if actie == "huis":
+        # v5.183.2 (kaart claude-ems 04-11): accu + net = huis. De tabel gaf
+        # 18:00 accu 693 W (deze dekking) en net 292 W (de afgeronde stap van
+        # 0,1 kWh): ~300 W meer dan het huis vroeg.
+        rij["accu_stap_kwh"] = rij["accu_kwh"]   # de stap van het plan (rendement per band)
+        rij["accu_kwh"] = round(-ac, 3)
+        rij["net_kwh"] = round(max(0.0, tekort - ac), 3)
 
 
 def _rij_zon(rij: dict, k, accu: Accu, i_voor: int, uren: float, eta_l: float) -> None:
@@ -520,6 +538,9 @@ def _vooruit(kwartieren, accu: Accu, keuze, index, b_stap, i: int, niveaus: int,
         i = min(max(i + s, 0), niveaus - 1)
         if _zon_export(k, accu, actie, s, i_voor, niveaus, eta_l, max_op):
             actie, kwh = "zon_export", max(b, 0.0)
+        if k.dekken and actie == "verkopen" and kwh < STAP_KWH:
+            # v5.183.2: afronding van de stap in een dekkwartier (zie boven).
+            actie, kwh = "huis", min(-b, max(k.verbruik_kwh - k.zon_kwh, 0.0))
         rij = {
             "begin": k.begin,
             "actie": actie,

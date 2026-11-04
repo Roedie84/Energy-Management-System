@@ -63,7 +63,7 @@ def _verkocht(rijen):
 def test_oude_vloer_schuift_de_verkoop_naar_later():
     """Het probleem van 04-11: het duurste kwartier dekt alleen het huis."""
     u = W.plan(_kw(), _accu())
-    assert u.kwartieren[0]["actie"] == "huis"
+    assert u.kwartieren[0]["actie"] in ("huis", "houden")   # v5.183.2: volle dekking of bewaren
     assert sum(_verkocht(u.kwartieren[1:BLOK])) > 0
 
 

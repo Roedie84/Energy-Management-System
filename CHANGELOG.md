@@ -34881,3 +34881,14 @@ Melding Ruud 04-11 14:33: "Accu leeg maar accu lijn in grafiek nog niet op 10%".
 - Grafiek: de ondergrens als stippellijn met legenda "leeg (10 %)"; `ondergrens_procent` op de eerste planrij.
 
 Tests: `test_v5183_1_leeg.py`.
+
+## v5.183.2 — bewaarmarge ook bij een klein huisverbruik; volle dekking; leermodus niet GOED
+
+Kaart claude-ems 04-11 (twee punten) en Ruud 15:06 ("waarom hier sparen ipv slim?", 05-11 06:00-08:15).
+
+- **Volle dekking in de slimme stand.** Het plan mocht om en om 0,1 kWh ontladen bij een huis van 0,17 kWh per kwartier; de slimme stand dekt in werkelijkheid het hele tekort. Een ontlaadstap kleiner dan het tekort (min een halve stap, tot het ontlaadvermogen) mag nu alleen als de accu daarmee leeg raakt. Planrij 'huis': `accu_kwh`/`net_kwh` volgen de dekking (`accu_stap_kwh` = de stap van het plan), dus accu + net = huis. Was 18:00: accu 693 W + net 292 W bij een huis van 684 W.
+- **Bewaarmarge greep niet bij een klein huisverbruik.** `dekken` telde een stap tot 1,5 x 0,1 kWh onder het tekort als dekking, en bij een tekort kleiner dan de stap gaf dekken een mini-verkoop die de huis-eerst-regel verbood (zodat alleen een lege accu overbleef). Nu: in een dekkwartier is niets doen verboden (behalve leeg), en een overschot van minder dan een stap is afronding (actie 'huis', geen verkoopvloer). Met de prijzen van 05-11 voedt de accu nu 06:15-08:15 het huis en is hij 's middags toch vol voor de avond.
+- **Leermodus is geen GOED/OK.** `_ems_status` geeft "LET OP · stuurt niet: leermodus / handmatig slim laden / handmatig laden" (na STORING en INGRIJPEN); `system_status` "Stuurt niet (...)" met een eigen icoon.
+
+Tests: `test_v5183_2_dekking_en_status.py`; drie oudere waardeplantests rekenen met de stap (`accu_stap_kwh`) of de volle dekking.
+- `cockpit_accu`: zonder tekortschatting tot het blok (None) geen TypeError meer (zag in de testlog).

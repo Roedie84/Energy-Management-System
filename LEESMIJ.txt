@@ -1,3 +1,14 @@
+EMS v5.183.2 - bewaarmarge werkt ook bij een klein huisverbruik; plantabel klopt
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- De bewaarmarge (v5.183.0) greep niet bij een huisverbruik onder ~600 W; daardoor bleef
+  de accu morgenochtend bewaren bij 42-51 ct. Nu voedt hij dan het huis.
+- Het plan rekent met wat de slimme stand echt doet: hij dekt het hele huis, geen half
+  kwartier. Plantabel: accu + net = huis (was ~300 W te veel in de avond).
+- Cockpit en systeemstatus tonen "LET OP - stuurt niet" / "Stuurt niet" als de leermodus
+  of een handmatige stand aan staat, in plaats van GOED/OK.
+
 EMS v5.183.1 - "Accu leeg" pas als de accu niets meer levert
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

@@ -63,7 +63,7 @@ def test_reproductie_zonder_de_reparatie():
     oud = W._plan(kwartieren(), accu())
     assert oud.kwartieren[0]["actie"] == "verkopen"
     assert "zon" in _acties(oud)[1:]
-    assert W.zinloze_verkopen(oud.kwartieren, kwartieren(), accu()) == [0]
+    assert 0 in W.zinloze_verkopen(oud.kwartieren, kwartieren(), accu())  # v5.183.2: volle dekking
 
 
 def test_de_toets_verbiedt_de_middagverkoop():

@@ -747,6 +747,8 @@ class SystemStatusSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
             return "mdi:alert-circle-outline"
         if status == "Aandacht gewenst":
             return "mdi:alert-outline"
+        if status.startswith("Stuurt niet"):  # v5.183.2: leermodus
+            return "mdi:hand-back-right-outline"
         return "mdi:help-circle-outline"
 
     @property

@@ -42,10 +42,10 @@ def test_huis_dekken_met_het_rendement_van_de_lage_band():
     huis = [r for r in met.kwartieren if r["actie"] == "huis"]
     assert huis
     for r in huis:
-        assert -r["accu_kwh"] / -r["inhoud_delta_kwh"] == pytest.approx(0.69, abs=0.01)
+        assert -r.get("accu_stap_kwh", r["accu_kwh"]) / -r["inhoud_delta_kwh"] == pytest.approx(0.69, abs=0.01)  # v5.183.2
     zonder = W.plan(_kw(prijzen), W.Accu(**accu))
     r = next(r for r in zonder.kwartieren if r["actie"] == "huis")
-    assert -r["accu_kwh"] / -r["inhoud_delta_kwh"] == pytest.approx(0.83 ** 0.5, abs=0.01)
+    assert -r.get("accu_stap_kwh", r["accu_kwh"]) / -r["inhoud_delta_kwh"] == pytest.approx(0.83 ** 0.5, abs=0.01)
 
 
 def test_verkopen_met_het_rendement_van_de_hoge_band():

@@ -17061,7 +17061,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             nu = dt_util.now()
             if blok is not None and blok > nu:
                 tot_blok = self._estimate_worst_case_deficit_kwh(nu, blok)
-                uit["tekort_kwh"] = max(0.0, tot_blok - beschikbaar)
+                # v5.183.2: zonder schatting (None) geen TypeError in de cockpit.
+                if tot_blok is not None:
+                    uit["tekort_kwh"] = max(0.0, tot_blok - beschikbaar)
             else:
                 uit["tekort_kwh"] = 0.0
         elif beschikbaar is not None and reserve is None:
@@ -17294,6 +17296,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             return "INGRIJPEN", met_reden(
                 f"fout: {onderwerp}" if onderwerp else f"{len(fouten)} fout(en)"
             )
+        # v5.183.2 (kaart claude-ems 04-11): stuurt het EMS niet (leermodus,
+        # ook via Handmatig laden / Handmatig smart charge), dan geen GOED.
+        if getattr(self, "learning_only", False) is True:
+            return "LET OP", met_reden(self._stuurt_niet_tekst())
         if kapot:
             namen = ", ".join(self._koppelingnaam(r) for r in kapot[:2])
             return "LET OP", met_reden(f"koppeling weg: {namen}")
@@ -40229,6 +40235,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             "alleen controles en meldingen wachten."
         )
 
+    def _stuurt_niet_tekst(self) -> str:
+        """v5.183.2: waarom het EMS de accu nu niet stuurt, kort."""
+        stand = str(getattr(self, "handmatige_stand", None) or "")
+        soort = {"smart_charge": "handmatig slim laden", "laden": "handmatig laden"}.get(stand, "leermodus")
+        return f"stuurt niet: {soort}"
+
     @property
     def system_status(self) -> str:
         """A single, simple health status: 'OK' if the integration is
@@ -40274,6 +40286,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # historisch "laatste fout"-veld blijft staan, hier onterecht
         # "Aandacht gewenst" tonen terwijl de integratie zelf allang
         # weer prima draait.
+        # v5.183.2: de leermodus is geen "OK": de accu wordt niet gestuurd.
+        if getattr(self, "learning_only", False) is True:
+            return "Stuurt niet (" + self._stuurt_niet_tekst().removeprefix("stuurt niet: ") + ")"
+
         overige_aandachtspunten = [
             p
             for p in self.get_diagnostic_summary()["aandachtspunten"]
