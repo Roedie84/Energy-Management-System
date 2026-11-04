@@ -44,3 +44,54 @@ def test_vooruitblik_toont_terugleververmogen():
     vb = JS.split("  _vooruitblik(rijen, tijden) {")[1].split("  /* v5.146.0")[0]
     assert 'b.k === "terug"' in vb and "levert ${" in vb
     assert "b.net.push" in JS
+
+
+# --- huis gaat voor: geen zon terugleveren als het huis daarna leeg staat --
+
+from custom_components.energy_management_system import waardeplan as wp
+
+
+def _r(actie, net, inhoud):
+    return {"actie": actie, "net_kwh": net, "inhoud_kwh": inhoud}
+
+
+def test_export_met_later_lege_accu_is_tekort():
+    rijen = [_r("zon_export", -0.2, 0.7), _r("zon", -0.1, 1.0), _r("huis", 0.0, 0.0), _r("houden", 0.3, 0.0)]
+    assert wp.zon_export_laat_huis_tekort(rijen) is True
+
+
+def test_export_met_genoeg_tot_laden_mag():
+    rijen = [_r("zon_export", -0.2, 2.0), _r("huis", 0.0, 0.5), _r("laden_net", 0.6, 1.0), _r("houden", 0.3, 0.0)]
+    assert wp.zon_export_laat_huis_tekort(rijen) is False
+
+
+def test_lege_accu_voor_de_export_telt_niet():
+    rijen = [_r("houden", 0.3, 0.0), _r("zon_export", -0.2, 0.0), _r("huis", 0.0, 0.4)]
+    assert wp.zon_export_laat_huis_tekort(rijen) is False
+
+
+def test_coordinator_plant_opnieuw_zonder_export(make_coordinator):
+    c = make_coordinator({})
+
+    class Res:
+        def __init__(self, rijen):
+            self.beschikbaar, self.kwartieren = True, rijen
+
+    class Accu:
+        zon_export_afdwingbaar = True
+
+    met = Res([_r("zon_export", -0.2, 0.7), _r("houden", 0.3, 0.0)])
+    zonder = Res([_r("zon", -0.0, 0.9), _r("huis", 0.0, 0.2)])
+    gevraagd = []
+    orig = wp.plan
+    wp.plan = lambda k, a: (gevraagd.append(a.zon_export_afdwingbaar), zonder)[1]
+    try:
+        accu = Accu()
+        assert c._waardeplan_huis_eerst([], accu, met) is zonder
+        assert gevraagd == [False] and c.waardeplan_zon_export_geweigerd is True
+        accu2 = Accu()
+        goed = Res([_r("zon_export", -0.2, 2.0), _r("huis", 0.0, 1.0)])
+        assert c._waardeplan_huis_eerst([], accu2, goed) is goed
+        assert c.waardeplan_zon_export_geweigerd is False
+    finally:
+        wp.plan = orig
