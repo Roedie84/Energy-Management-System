@@ -36,6 +36,9 @@ from .const import (
     TEKORT_LEEG_MARGE_PROCENT,
     WAARDEPLAN_EINDPRIJS_UREN,
     WAARDEPLAN_HERREKEN_AFWIJKING_KWH,
+    WAARDEPLAN_INHAAL_FACTOR,
+    WAARDEPLAN_MIDKWARTIER_WISSEL_EUR,
+    WAARDEPLAN_ZON_AFWIJKING_FRACTIE,
     WAARDEPLAN_HORIZON_UUR,
     WAARDEPLAN_LIVE_AFWIJKING_KWH,
     WAARDEPLAN_MIN_ACTIE_W,
@@ -681,9 +684,7 @@ class WaardeplanSturingMixin:
     def _waardeplan_nu(self, now: datetime, entries) -> dict:
         """Het plan voor dit kwartier: één keer per kwartier rekenen, of
         opnieuw als de accu-inhoud ver van het plan afwijkt."""
-        kwartier = dt_util.as_local(now).replace(
-            minute=(dt_util.as_local(now).minute // 15) * 15, second=0, microsecond=0
-        )
+        kwartier = self._kwartier_sleutel(now)
         cache = self._waardeplan_cache
         inhoud = self.beschikbare_energie_kwh()
         if cache is not None and cache[0] == kwartier and cache[1].get("beschikbaar"):
@@ -697,6 +698,8 @@ class WaardeplanSturingMixin:
                 )
             ):
                 return cache[1]
+            # v5.186.0 (B11): een herplanning midden in het kwartier, geteld.
+            self._tel_herplanning(now, "midkwartier")
         try:
             plan = self.bereken_waardeplan(now, entries)
         except Exception:  # noqa: BLE001 - het plan mag de sturing nooit breken
@@ -785,7 +788,10 @@ class WaardeplanSturingMixin:
         rendement = float(plan.get("laadrendement_procent") or 100) / 100
         geladen = max(0.0, float(inhoud) - float(begin_inhoud)) / (rendement if rendement > 0 else 1.0)
         nog = max(0.0, float(rij.get("accu_kwh") or 0.0) - geladen)
-        return min(ingesteld, nog * 1000 / rest_uren)
+        # v5.186.0 (B23): inhalen begrensd. Aan het eind van het kwartier
+        # (rest minimaal 1 minuut) werd de rest bijna op vol vermogen gezet -
+        # en dat liep het volgende kwartier in tot de eerste ronde daar.
+        return min(ingesteld, nog * 1000 / rest_uren, basis * WAARDEPLAN_INHAAL_FACTOR)
 
     def _als_al_ingesteld(self, vermogen: float) -> float:
         """Staat de accu al handmatig binnen de marge van dit vermogen, dan
@@ -831,10 +837,7 @@ class WaardeplanSturingMixin:
         self._noteer_waardeplan_beschikbaar(now, plan)
         if not plan.get("beschikbaar"):
             return False
-        nu = plan.get("nu") or {}
-        actie, charge_power, discharge_power = self._waardeplan_opdracht(now, plan, nu)
-        if actie in ("houden", "zon") and not self.smart_charging_supported():
-            actie = "huis"
+        actie, charge_power, discharge_power, uitvoerplan = self._waardeplan_kies(now, plan)
         plan["uitgevoerd"] = actie
         # v5.181.1 (punten 1 en 2): wat er naar de accu gaat (W, + ontladen,
         # - laden; 0 bij terugleveren), en of het er wel heen gaat.
@@ -844,28 +847,16 @@ class WaardeplanSturingMixin:
             else 0 if actie == "zon_export" else None
         )
         plan["niet_gestuurd"] = self._waardeplan_niet_gestuurd(now)
-        if charge_power is not None:
-            await self._async_apply_manual(charge_power)
-            self.last_reason = "waardeplan_laden"
-            self.last_charge_power_applied = charge_power
-        elif discharge_power is not None:
-            await self._async_apply_manual(discharge_power)
-            self.last_reason = "waardeplan_verkopen"
-        elif actie == "zon_export":
-            # v5.177.0 (A11): het overschot het net op - handmatig op 0 W, de
-            # slimme standen zouden het zelf opladen.
-            await self._async_apply_manual(0)
-            self.last_reason = "waardeplan_terugleveren"
-        elif actie == "huis":
-            await self._async_apply_operation(OPTION_SMART)
-            self.last_reason = "waardeplan_huis"
-        else:
-            await self._async_apply_operation(OPTION_SMART_CHARGING)
-            # v5.175.3: een lege accu bewaart niets - alleen de naam wijkt af.
-            if self._waardeplan_accu_leeg(now):
-                self.last_reason = "waardeplan_leeg"
-            else:
-                self.last_reason = "waardeplan_houden"
+        geschreven = await self._waardeplan_schrijf(now, actie, charge_power, discharge_power)
+        if not geschreven:
+            # v5.186.0 (B22): plan en uitvoering apart vastleggen - geen
+            # opdracht_w claimen die niet is geschreven, en zeggen waarom.
+            plan["opdracht_w"] = None
+            if not plan["niet_gestuurd"]:
+                plan["niet_gestuurd"] = getattr(self, "laatste_schrijfuitkomst", None) or "schrijven mislukt"
+        self._kwartier_uitvoering = {"kwartier": self._kwartier_sleutel(now), "plan": uitvoerplan, "actie": actie}
+        plan["herplanningen"] = {k: v for k, v in (self.waardeplan_herplanningen or {}).items()
+                                 if not k.startswith("_")}
         self.last_waardeplan = plan
         self._update_financial_tracking(now, entries, self.last_reason, discharge_power, charge_power)
         self._update_shortfall_detection(
@@ -873,6 +864,165 @@ class WaardeplanSturingMixin:
         )
         self._finish_decision_tick(now)
         return True
+
+    async def _waardeplan_schrijf(self, now: datetime, actie: str, charge_power, discharge_power) -> bool:
+        """De gekozen actie naar de accu; True als die er nu staat (v5.186.0,
+        uit `_waardeplan_als_nodig`)."""
+        if charge_power is not None:
+            gelukt = await self._async_apply_manual(charge_power)
+            self.last_reason = "waardeplan_laden"
+            self.last_charge_power_applied = charge_power
+        elif discharge_power is not None:
+            gelukt = await self._async_apply_manual(discharge_power)
+            self.last_reason = "waardeplan_verkopen"
+        elif actie == "zon_export":
+            # v5.177.0 (A11): het overschot het net op - handmatig op 0 W, de
+            # slimme standen zouden het zelf opladen.
+            gelukt = await self._async_apply_manual(0)
+            self.last_reason = "waardeplan_terugleveren"
+        elif actie == "huis":
+            gelukt = await self._async_apply_operation(OPTION_SMART)
+            self.last_reason = "waardeplan_huis"
+        else:
+            gelukt = await self._async_apply_operation(OPTION_SMART_CHARGING)
+            # v5.175.3: een lege accu bewaart niets - alleen de naam wijkt af.
+            if self._waardeplan_accu_leeg(now):
+                self.last_reason = "waardeplan_leeg"
+            else:
+                self.last_reason = "waardeplan_houden"
+        return gelukt is not False
+
+    # --- v5.186.0 (B11/B12): niet wisselen midden in het kwartier ------------
+
+    _kwartier_uitvoering: dict | None = None
+    waardeplan_herplanningen: dict | None = None
+    _zon_herplan_kwartier = None
+
+    _STAND_VAN_ACTIE = {
+        "laden_net": OPTION_MANUAL, "verkopen": OPTION_MANUAL, "zon_export": OPTION_MANUAL,
+        "huis": OPTION_SMART, "zon": OPTION_SMART, "houden": OPTION_SMART_CHARGING,
+    }
+
+    @staticmethod
+    def _kwartier_sleutel(now: datetime) -> datetime:
+        lokaal = dt_util.as_local(now)
+        return lokaal.replace(minute=(lokaal.minute // 15) * 15, second=0, microsecond=0)
+
+    def _waardeplan_kies(self, now: datetime, plan: dict) -> tuple:
+        """(actie, laadvermogen, ontlaadvermogen, uitvoerplan) (v5.186.0, B11).
+
+        Live 04-11 17:02: smart -> smart_charging -> smart binnen 23 s. Een
+        afwijking van 0,15 kWh liet het plan midden in het kwartier opnieuw
+        rekenen, en de nieuwe eerste rij koos een andere stand. Na zo'n
+        herplanning geldt voor de rest van het kwartier de stand van het
+        plan dat dit kwartier al uitvoerde; alleen het vermogen volgt.
+        Een andere stand alleen als die duidelijk beter is of de veiligheid
+        erom vraagt (`_midkwartier_wissel_reden`).
+        """
+        actie, charge_power, discharge_power = self._waardeplan_opdracht(now, plan, plan.get("nu") or {})
+        actie = self._zonder_smart_charging(actie)
+        oud = self._midkwartier_vasthouden(now, plan, actie)
+        if oud is None:
+            return actie, charge_power, discharge_power, plan
+        actie, charge_power, discharge_power = self._waardeplan_opdracht(now, oud, oud.get("nu") or {})
+        return self._zonder_smart_charging(actie), charge_power, discharge_power, oud
+
+    def _zonder_smart_charging(self, actie: str) -> str:
+        if actie in ("houden", "zon") and not self.smart_charging_supported():
+            return "huis"
+        return actie
+
+    def _midkwartier_vasthouden(self, now: datetime, plan: dict, actie: str) -> dict | None:
+        """Het plan om dit kwartier mee door te gaan, of None (v5.186.0, B11)."""
+        vorige = self._kwartier_uitvoering
+        if not vorige or vorige.get("kwartier") != self._kwartier_sleutel(now):
+            return None
+        oud = vorige.get("plan") or {}
+        if not oud.get("beschikbaar") or oud.get("berekend_om") == plan.get("berekend_om"):
+            return None
+        oud_actie = vorige.get("actie")
+        if self._STAND_VAN_ACTIE.get(actie, actie) == self._STAND_VAN_ACTIE.get(oud_actie, oud_actie):
+            return None
+        reden = self._midkwartier_wissel_reden(now, plan, oud, oud_actie)
+        plan["midkwartier"] = {
+            "actie_plan": actie,
+            "actie_dit_kwartier": oud_actie,
+            "gewisseld": bool(reden),
+            "reden": reden or "vastgehouden: alleen het vermogen bijstellen tot het kwartier om is",
+        }
+        self._tel_herplanning(now, "wissel_toegestaan" if reden else "wissel_tegengehouden",
+                              plan.get("berekend_om"))
+        return None if reden else oud
+
+    def _midkwartier_wissel_reden(self, now: datetime, plan: dict, oud: dict, oud_actie) -> str | None:
+        """Waarom midden in het kwartier tóch van stand wisselen, of None."""
+        toestand = self._overschot_toestand()
+        if oud_actie in ("verkopen", "huis") and self._waardeplan_accu_leeg(now):
+            return "veiligheid: de accu is leeg"
+        if oud_actie in ("laden_net", "zon", "zon_export", "houden") and toestand.get("accu_vol"):
+            return "veiligheid: de accu is vol"
+        overschot = toestand.get("overschot_w")
+        if oud_actie == "zon_export" and overschot is not None and overschot <= 0:
+            return "veiligheid: geen zonoverschot meer; terugleveren zou het huis uit het net voeden"
+        voordeel = self._midkwartier_voordeel_eur(plan, oud)
+        if voordeel is not None and voordeel >= WAARDEPLAN_MIDKWARTIER_WISSEL_EUR:
+            return f"duidelijk beter: naar schatting € {voordeel:.2f} in de rest van het kwartier"
+        return None
+
+    @staticmethod
+    def _midkwartier_voordeel_eur(plan: dict, oud: dict) -> float | None:
+        """Grove schatting van wat de nieuwe stand in de rest van het kwartier
+        scheelt: het verschil in accu-energie (nieuwe rij tegen het restant van
+        de oude) maal het verschil tussen de prijs nu en de waarde van een kWh
+        aan het eind van het plan. Zonder die twee: None (dan vasthouden)."""
+        nieuw, vorig = plan.get("nu") or {}, oud.get("nu") or {}
+        uren_n, uren_o = float(nieuw.get("uren") or 0.0), float(vorig.get("uren") or 0.0)
+        prijs, waarde = nieuw.get("rekenprijs_eur"), plan.get("eindwaarde_eur_per_kwh")
+        if uren_n <= 0 or uren_o <= 0 or prijs is None or waarde is None:
+            return None
+        rest_oud = float(vorig.get("accu_kwh") or 0.0) * min(1.0, uren_n / uren_o)
+        verschil = abs(float(nieuw.get("accu_kwh") or 0.0) - rest_oud)
+        return verschil * abs(float(prijs) - float(waarde))
+
+    def _tel_herplanning(self, now: datetime, soort: str, sleutel=None) -> None:
+        """Telt herplanningen per dag (v5.186.0, B11). Met `sleutel` hooguit
+        één keer per plan (een vastgehouden wissel komt elke ronde langs)."""
+        dag = dt_util.as_local(now).date().isoformat()
+        teller = self.waardeplan_herplanningen
+        if not isinstance(teller, dict) or teller.get("dag") != dag:
+            teller = {"dag": dag, "midkwartier": 0, "wissel_tegengehouden": 0,
+                      "wissel_toegestaan": 0, "zon_afwijking": 0, "_laatst": {}}
+        if sleutel is not None:
+            if teller["_laatst"].get(soort) == sleutel:
+                self.waardeplan_herplanningen = teller
+                return
+            teller["_laatst"][soort] = sleutel
+        teller[soort] = int(teller.get(soort) or 0) + 1
+        self.waardeplan_herplanningen = teller
+
+    def _zon_export_laadvermogen(self, now: datetime, gepland_w: float) -> float | None:
+        """Het laadvermogen bij zon_export, elke ronde begrensd tot het echte
+        zonoverschot (pv - huis) (v5.186.0, B12).
+
+        Het plan sloeg een deel van de zon op met een vast vermogen. Kwam er
+        een wolk, dan bleef de accu op dat vermogen laden - uit het net.
+        Wijkt het overschot sterk af van het plan, dan eens per kwartier
+        opnieuw plannen. Onder het minimale laadvermogen: None (alles terug,
+        handmatig 0 W). Zonder meting: het geplande vermogen, zoals voorheen.
+        """
+        overschot = self._overschot_toestand().get("overschot_w")
+        if overschot is None:
+            return -round(gepland_w)
+        if overschot < gepland_w * (1 - WAARDEPLAN_ZON_AFWIJKING_FRACTIE):
+            kwartier = self._kwartier_sleutel(now)
+            if self._zon_herplan_kwartier != kwartier:
+                self._zon_herplan_kwartier = kwartier
+                self._waardeplan_cache = None
+                self._tel_herplanning(now, "zon_afwijking")
+        toegestaan = min(gepland_w, max(0.0, float(overschot)))
+        if toegestaan < WAARDEPLAN_MIN_LAAD_W - 1:
+            return None
+        return -round(toegestaan)
 
     def _waardeplan_opdracht(self, now: datetime, plan: dict, nu: dict) -> tuple:
         """(actie, laadvermogen, ontlaadvermogen) voor de planrij van nu (v5.177.0).
@@ -895,7 +1045,8 @@ class WaardeplanSturingMixin:
             vermogen = float(nu.get("kwh") or 0.0) * self._per_uur_w(nu)
             if vermogen >= WAARDEPLAN_MIN_LAAD_W - 1:
                 ingesteld = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0)
-                charge_power = -round(min(ingesteld, vermogen))
+                # v5.186.0 (B12): niet meer dan het zonoverschot van nu.
+                charge_power = self._zon_export_laadvermogen(now, min(ingesteld, vermogen))
         elif actie == "verkopen":
             actie, discharge_power = self._waardeplan_verkoop(now, plan, nu)
         return actie, charge_power, discharge_power

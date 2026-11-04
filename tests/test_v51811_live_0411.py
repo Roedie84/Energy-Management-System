@@ -264,8 +264,11 @@ def test_plan_uit_de_opstartfase_wordt_niet_vastgehouden(make_coordinator, hass)
 
 
 def test_opstart_stil_gezet_bij_het_laden_van_de_opslag():
+    """v5.186.0 (B21): het laden van de opslag zet de stille fase klaar; hij
+    begint pas bij de eerste ronde (zie tests/test_v5186_B_ronde.py)."""
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text(encoding="utf-8")
-    assert "self._opstart_stil_tot = self._started_at + timedelta(seconds=STARTUP_GRACE_SECONDS)" in bron
+    assert "self._opstart_stil_wacht_op_ronde = True" in bron
+    assert "self._opstart_stil_tot = now + timedelta(seconds=STARTUP_GRACE_SECONDS)" in bron
 
 
 # --- 8. alles live -----------------------------------------------------------

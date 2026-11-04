@@ -965,6 +965,17 @@ from .const import (
     MODUSWISSEL_HISTORIE,
     MODUSWISSEL_DREMPEL_PER_UUR,
     OPDRACHT_BEVESTIGING_SECONDEN,
+    # v5.186.0 (track B)
+    ACCU_SCHRIJF_TIMEOUT_S,
+    KWARTIERRONDE_NA_SECONDEN,
+    LANGE_STAND_HERINNERING_UREN,
+    LANGE_STAND_WAARSCHUWING_UREN,
+    OPDRACHT_ESCALATIE_RONDES,
+    OPDRACHT_TOLERANTIE_FRACTIE,
+    OPDRACHT_TOLERANTIE_W,
+    PANEELGRENS_MAX_HERHALINGEN,
+    PANEELGRENS_TOLERANTIE_PROCENT,
+    VANGNET_RONDES_ZONDER_BESLUIT,
     OPTION_SMART_CHARGING,
     OPTION_SMART_DISCHARGING,
     PRICE_ATTRIBUTE_CHECK_MARGIN_EUR,
@@ -2378,6 +2389,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             self.internal_failures["energiegeschiedenis"] = (
                 f"{type(fout).__name__}: {fout}"
             )
+        else:
+            self.internal_failures.pop("energiegeschiedenis", None)  # v5.186.0 (B28)
 
         self._unsub_interval = async_track_time_interval(
             self.hass,
@@ -2389,9 +2402,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # begeeft.
         # v5.28: een eigen klok op de kwartiergrenzen voor de kwartierenergie,
         # los van de ronde van vijf minuten.
-        self._unsub_meetlaag_kwartier = async_track_time_change(
-            self.hass, self._meetlaag_kwartier, minute=[0, 15, 30, 45], second=0
-        )
+        # v5.186.0 (B23): en een ronde vlak na elke kwartiergrens.
+        self._registreer_kwartierklokken()
         self._unsub_watchdog = async_track_time_interval(
             self.hass,
             self._watchdog,
@@ -2756,6 +2768,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # v1.0.4: een geplande, nog niet uitgevoerde opslag zou bij een
         # herstart alsnog verloren gaan - dus hier hard wegschrijven.
         await self.async_save_persisted_state_now()
+        await self._paneelgrens_vrij_bij_afsluiten()  # v5.186.0 (B19)
+        # v5.186.0 (B21/B23): de kwartierronde en de ronde na de opstartfase.
+        for opzeggen in (self._unsub_kwartierronde, self._unsub_opstart_einde):
+            if opzeggen:
+                opzeggen()
+        self._unsub_kwartierronde = self._unsub_opstart_einde = None
         # v5.48: de afsluitluisteraar opzeggen (hoort bij deze coordinator).
         opzeggen = getattr(self, "_unsub_afsluiten", None)
         if opzeggen:
@@ -2793,6 +2811,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         minuten = (dt_util.now() - moment).total_seconds() / 60
         if minuten < UPDATE_INTERVAL_MINUTES * HEALTH_MAX_MISSED_TICKS:
             return
+        # v5.186.0 (B17): hangt er een ronde, dan niet nog een in de rij.
+        if self._ronde_overslaan("watchdog"):
+            return
 
         self.watchdog_herstelpogingen += 1
         _LOGGER.warning(
@@ -2821,12 +2842,58 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
 
         `add_job` is wél draadveilig en kiest zelf de juiste weg.
         """
+        if self._ronde_overslaan("klok"):
+            return
         self.hass.add_job(self.async_update)
 
     @callback
     def _handle_state_change(self, _event: Event) -> None:
         # Deze draait wél op de event loop (@callback), maar `add_job`
         # werkt daar net zo goed - één manier is beter dan twee.
+        if self._ronde_overslaan("prijssensor"):
+            return
+        self.hass.add_job(self.async_update)
+
+    # v5.186.0 (B17): overgeslagen aanvragen per bron (diagnose).
+    rondes_overgeslagen: dict | None = None
+
+    def _ronde_overslaan(self, bron: str) -> bool:
+        """Loopt er al een ronde (het slot is bezet), dan geen nieuwe in de
+        rij zetten (v5.186.0, B17).
+
+        Een hangende schrijfactie naar de Zendure hield het slot vast; de klok,
+        de watchdog en de prijssensor zetten intussen ronde na ronde in de
+        wachtrij, die daarna allemaal achter elkaar liepen. De lopende ronde
+        rekent toch al met de stand van nu.
+        """
+        slot = getattr(self, "_lock", None)
+        if slot is None or not slot.locked():
+            return False
+        teller = self.rondes_overgeslagen = dict(self.rondes_overgeslagen or {})
+        teller[bron] = int(teller.get(bron) or 0) + 1
+        _LOGGER.debug("Ronde (%s) overgeslagen: er loopt er al een", bron)
+        return True
+
+    def _registreer_kwartierklokken(self) -> None:
+        """De klokken op de kwartiergrenzen (uit `async_setup`, v5.186.0)."""
+        self._unsub_meetlaag_kwartier = async_track_time_change(
+            self.hass, self._meetlaag_kwartier, minute=[0, 15, 30, 45], second=0
+        )
+        self._unsub_kwartierronde = async_track_time_change(
+            self.hass, self._kwartierronde, minute=[0, 15, 30, 45], second=KWARTIERRONDE_NA_SECONDEN
+        )
+
+    @callback
+    def _kwartierronde(self, _now) -> None:
+        """Een ronde vlak na elke kwartiergrens (v5.186.0, B23).
+
+        De rondes liepen op de klok (vijf minuten, of het ingestelde interval)
+        en op een wijziging van de prijssensor. Blijft de prijs over de grens
+        gelijk, dan kwam de planrij van het nieuwe kwartier pas bij de
+        volgende klokronde - en liep een inhaalvermogen van het vorige
+        kwartier door. Deze wacht wel op een lopende ronde: die rekende nog
+        met het oude kwartier.
+        """
         self.hass.add_job(self.async_update)
 
     async def async_set_nu_laden(self, value: bool) -> None:
@@ -3054,6 +3121,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         await self._handmatig_gezet()
 
     async def async_set_force_manual(self, value: bool) -> None:
+        # v5.186.0 (B27): sinds wanneer, voor de herinnering.
+        if value and not self.force_manual:
+            self.force_manual_sinds = dt_util.now()
+        elif not value:
+            self.force_manual_sinds = None
         self.force_manual = value
         await self._handmatig_gezet()
 
@@ -5390,7 +5462,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         setattr(self, idle_history_attr, history[-IDLE_POWER_HISTORY_LENGTH:])
 
     async def _stuur_naar_de_accu(
-        self, domein: str, dienst: str, data: dict, wat: str
+        self, domein: str, dienst: str, data: dict, wat: str,
+        sleutel: str = "accu_aansturing",
     ) -> bool:
         """Eén afgeschermde schrijfactie naar de accu (v4.11).
 
@@ -5408,17 +5481,26 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         Nu: de fout wordt vastgelegd en de ronde loopt door. De accu
         staat dan in de oude stand - de veiligste terugval.
         """
+        # v5.186.0 (B17): met een tijdslimiet. De ronde houdt het slot vast;
+        # een hangende Zendure-aanroep (blocking=True) hield alle rondes op.
+        # v5.186.0 (B18): de foutsleutel per soort, zodat een gelukte
+        # schakelaar de fout van de accu niet wist.
         try:
-            await self.hass.services.async_call(
-                domein, dienst, data, blocking=True
+            await asyncio.wait_for(
+                self.hass.services.async_call(domein, dienst, data, blocking=True),
+                ACCU_SCHRIJF_TIMEOUT_S,
             )
+        except asyncio.TimeoutError:
+            _LOGGER.warning("%s naar de accu duurde langer dan %.0f s; afgebroken", wat, ACCU_SCHRIJF_TIMEOUT_S)
+            self.internal_failures[sleutel] = f"{wat}: geen antwoord binnen {ACCU_SCHRIJF_TIMEOUT_S:.0f} s"
+            return False
         except Exception as fout:  # noqa: BLE001 - de ronde moet doorlopen
             _LOGGER.exception("Kon %s niet naar de accu sturen", wat)
-            self.internal_failures["accu_aansturing"] = (
+            self.internal_failures[sleutel] = (
                 f"{wat}: {type(fout).__name__}: {fout}"
             )
             return False
-        self.internal_failures.pop("accu_aansturing", None)
+        self.internal_failures.pop(sleutel, None)
         return True
 
     async def _async_set_switch(self, entity_id: str, turn_on: bool) -> None:
@@ -5441,6 +5523,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             "turn_on" if turn_on else "turn_off",
             {"entity_id": entity_id},
             f"schakelaar {entity_id}",
+            sleutel=f"schakelaar:{entity_id}",
         )
 
     @staticmethod
@@ -11103,10 +11186,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         van vóór v5.74 tellen in de nieuwe totalen alleen mee als ze uit het
         dagverloop te herberekenen waren.
         """
-        try:
-            self._herbereken_oude_cyclusbeurten()
-        except Exception as fout:  # noqa: BLE001 - een overzicht mag niet omvallen
-            self.internal_failures["cycluskosten_herberekenen"] = f"{type(fout).__name__}: {fout}"
+        # v5.186.0 (B28): een overzicht mag niet omvallen; de vlag eraf als het lukt.
+        self._bewaak_stap("cycluskosten_herberekenen", self._herbereken_oude_cyclusbeurten)
         uit = {}
         for apparaat, beurten in (self.cycluskosten_geschiedenis or {}).items():
             if not beurten:
@@ -12603,6 +12684,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             vorige = self.handmatige_stand
             self.handmatige_stand = None
             self.handmatige_stand_sinds = None
+            self.handmatige_stand_bij_afsluiten = None  # v5.186.0 (B29)
             self._handmatige_stand_laatste_herinnering = None
             # Alleen terugdraaien wat deze schakelaar zelf heeft gezet.
             if self._leermodus_door_handmatige_stand:
@@ -12620,6 +12702,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         self.handmatige_stand = stand
         self.handmatige_stand_sinds = nu
         self._handmatige_stand_laatste_herinnering = nu
+        # v5.186.0 (B29): onthouden, om na een herstart te melden dat hij verviel.
+        self.handmatige_stand_bij_afsluiten = {"stand": stand, "sinds": nu.isoformat()}
+        self._vervallen_stand_gemeld = True
 
         # v3.80.0: EERST schrijven, DAN de leermodus.
         #
@@ -12636,14 +12721,18 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # terwijl EMS nog mag schrijven, en pas daarna wordt de sturing
         # stilgezet zodat de volgende ronde er niet overheen gaat.
         # v5.181.1 (punt 6): een knop van de gebruiker gaat ook in de opstartfase door.
-        self._gebruikersopdracht = True
-        try:
-            if stand == HANDMATIGE_STAND_LADEN:
-                await self._async_apply_manual(-self.handmatig_laadvermogen_w())
-            else:
-                await self._async_apply_operation(OPTION_SMART_CHARGING)
-        finally:
-            self._gebruikersopdracht = False
+        # v5.186.0 (B26): het schrijven binnen het slot, zodat een lopende
+        # ronde er niet tussendoor schrijft. Alleen het schrijven: de
+        # leermodus hieronder start zelf een ronde (die ook het slot wil).
+        async with self._lock:
+            self._gebruikersopdracht = True
+            try:
+                if stand == HANDMATIGE_STAND_LADEN:
+                    await self._async_apply_manual(-self.handmatig_laadvermogen_w())
+                else:
+                    await self._async_apply_operation(OPTION_SMART_CHARGING)
+            finally:
+                self._gebruikersopdracht = False
 
         if not self.learning_only:
             self._leermodus_door_handmatige_stand = True
@@ -16833,6 +16922,22 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             self._noteer_staartfout(naam)
         else:
             self._wis_staartfout(naam)
+
+    def _bewaak_stap(self, sleutel: str, stap) -> bool:
+        """Voert `stap` uit; een fout komt in internal_failures[sleutel], een
+        gelukte uitvoering haalt die sleutel weer weg (v5.186.0, B28).
+
+        Een aantal sleutels werd alleen gezet en nooit gewist: één fout om
+        23:00 gaf de hele nacht elk uur een kritieke melding.
+        """
+        try:
+            stap()
+        except Exception as fout:  # noqa: BLE001 - veilig falen, zichtbaar
+            _LOGGER.debug("Onderdeel %s viel om", sleutel, exc_info=True)
+            self.internal_failures[sleutel] = f"{type(fout).__name__}: {fout}"
+            return False
+        self.internal_failures.pop(sleutel, None)
+        return True
 
     async def _voer_staartstap_async_uit(self, naam: str, stap) -> None:
         """Als `_voer_staartstap_uit`, voor een coroutine (v5.161.3)."""
@@ -26081,6 +26186,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 )
         except Exception as fout:  # noqa: BLE001
             self.internal_failures["meet_stuurt_niet"] = f"{type(fout).__name__}: {fout}"
+        else:
+            self.internal_failures.pop("meet_stuurt_niet", None)  # v5.186.0 (B28)
         ijk = self.get_helderheid_ijking() or {}
         items.append({"naam": "Heldere-hemel-ijklijn", "bron": "ijklijn", "status": ijk.get("status"),
                       "rijp": bool(ijk.get("mag_regelen")), "waarde": ijk.get("wat_ontbreekt") or "klaar",
@@ -28501,14 +28608,102 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 err,
             )
 
-    def _start_solar_ramp(self, target_percent: float) -> None:
+    def _start_solar_ramp(self, target_percent: float, herhaling: bool = False) -> None:
         """Fire-and-forget the ramp as a background task, so it doesn't
         block the main coordinator update loop for
         SOLAR_RAMP_DURATION_SECONDS.
+
+        v5.186.0 (B19): omlaag regelen niet in de leermodus of de
+        opstartfase (terug naar 100 % altijd); een lopende ramp eerst
+        stoppen (twee ramps schreven door elkaar); en het doel onthouden,
+        zodat de volgende ronde kan nakijken of het is bereikt
+        (`_controleer_paneelgrens`).
         """
+        if target_percent < 100 and (self.learning_only or self._opstart_stuurstil()):
+            self.last_simulated_action = f"zou de panelen naar {target_percent:.0f} % regelen"
+            return
+        taak = getattr(self, "_solar_ramp_task", None)
+        if taak is not None and not taak.done():
+            taak.cancel()
+        if not herhaling:
+            self._paneelgrens_herhalingen = 0
+        self._paneelgrens_doel = float(target_percent)
         self._solar_ramp_task = self.hass.async_create_task(
             self._ramp_solar_power_limit(target_percent)
         )
+
+    # v5.186.0 (B19): het doel van de laatste ramp en hoe vaak hij is herhaald.
+    _paneelgrens_doel: float | None = None
+    _paneelgrens_herhalingen: int = 0
+    _paneelgrens_na_start_bekeken: bool = False
+
+    def _controleer_paneelgrens(self) -> None:
+        """Staat de paneelgrens na de ramp ook echt op het doel? (v5.186.0, B19)
+
+        Een ramp die halverwege mislukte (omvormer even weg, ramp
+        afgebroken door een herlaad) liet de panelen op een tussenstand
+        staan. Hooguit PANEELGRENS_MAX_HERHALINGEN keer opnieuw, daarna een
+        zichtbare fout.
+        """
+        doel = self._paneelgrens_doel
+        entity = self.config.get(CONF_SOLAR_POWER_LIMIT_ENTITY)
+        taak = getattr(self, "_solar_ramp_task", None)
+        if doel is None or not entity or (taak is not None and not taak.done()):
+            return
+        huidig = self._read_sensor_float(entity)
+        if huidig is None:
+            return
+        if abs(huidig - doel) <= PANEELGRENS_TOLERANTIE_PROCENT:
+            self._paneelgrens_herhalingen = 0
+            self.internal_failures.pop("paneelgrens", None)
+            return
+        if self._paneelgrens_herhalingen >= PANEELGRENS_MAX_HERHALINGEN:
+            self.internal_failures["paneelgrens"] = (
+                f"{entity} staat op {huidig:.0f} % in plaats van {doel:.0f} %"
+            )
+            return
+        self._paneelgrens_herhalingen += 1
+        _LOGGER.warning("Paneelgrens %s staat op %.0f %% in plaats van %.0f %% - opnieuw", entity, huidig, doel)
+        self._start_solar_ramp(doel, herhaling=True)
+
+    def _herstel_paneelgrens_na_start(self) -> None:
+        """Eerste ronde met een positieve prijs na een (her)start: staat de
+        paneelgrens onder 100 % zonder dat het EMS begrenst, dan terug naar
+        100 % (v5.186.0, B19). `_is_negative_price_active` en
+        `_teruglevering_begrensd` worden niet bewaard; een herstart tijdens een
+        negatieve prijs liet de panelen daardoor begrensd achter."""
+        entity = self.config.get(CONF_SOLAR_POWER_LIMIT_ENTITY)
+        if not entity:
+            self._paneelgrens_na_start_bekeken = True
+            return
+        huidig = self._read_sensor_float(entity)
+        if huidig is None:
+            return  # nog niet geladen: de volgende ronde opnieuw
+        self._paneelgrens_na_start_bekeken = True
+        if (huidig < 100 - PANEELGRENS_TOLERANTIE_PROCENT and not self._is_negative_price_active
+                and not self._teruglevering_begrensd):
+            _LOGGER.warning("Paneelgrens stond na de start op %.0f %% zonder begrenzing - terug naar 100 %%", huidig)
+            self._start_solar_ramp(100.0)
+
+    async def _paneelgrens_vrij_bij_afsluiten(self) -> None:
+        """Bij het herladen de panelen vrij (v5.186.0, B19): de nieuwe
+        coordinator weet niet dat deze begrensde."""
+        entity = self.config.get(CONF_SOLAR_POWER_LIMIT_ENTITY)
+        if not entity or self.hass is None:
+            return
+        huidig = self._read_sensor_float(entity)
+        if not (self._is_negative_price_active or self._teruglevering_begrensd
+                or (huidig is not None and huidig < 100 - PANEELGRENS_TOLERANTIE_PROCENT)):
+            return
+        try:
+            await asyncio.wait_for(
+                self.hass.services.async_call(
+                    "number", "set_value", {"entity_id": entity, "value": 100.0}, blocking=True
+                ),
+                ACCU_SCHRIJF_TIMEOUT_S,
+            )
+        except Exception:  # noqa: BLE001 - herladen mag hier niet op stuklopen
+            _LOGGER.warning("Kon de paneelgrens bij het herladen niet op 100 %% zetten", exc_info=True)
 
     def _get_current_price_per_kwh(
         self, entries: list[PriceEntry], now: datetime
@@ -38204,7 +38399,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if self._started_at is None:
             self._started_at = dt_util.now()
             # v5.181.1 (punt 6): geen opdrachten tijdens de opstartfase.
-            self._opstart_stil_tot = self._started_at + timedelta(seconds=STARTUP_GRACE_SECONDS)
+            # v5.186.0 (B21): die begint pas bij de eerste ronde.
+            self._opstart_stil_wacht_op_ronde = True
         if self._state_store_loaded:
             return
         stored = await self._state_store.async_load()
@@ -38799,6 +38995,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                     uit.append(f"{naam}: {uitkomst.get('uitleg', '')}")
         except Exception as fout:  # noqa: BLE001
             self.internal_failures["zelfcontroles"] = f"{type(fout).__name__}: {fout}"
+        else:
+            self.internal_failures.pop("zelfcontroles", None)  # v5.186.0 (B28)
         return uit
 
     def _meld_module_temperatuur(
@@ -40199,7 +40397,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         try:
             async with self._lock:
                 self._begin_ronde_cache(dt_util.now())
-                await self._async_update_locked()
+                # v5.186.0: met wat ervoor en erna hoort (B16/B18/B21/B27/B29).
+                await self._async_ronde()
                 # v5.28: de meetlaag, NA het besluit en het sturen van de
                 # Zendure. Leest alleen; een fout blijft daarbinnen.
                 self._meetlaag_na_besluit()
@@ -40316,6 +40515,178 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             return True
         self._opstart_stil_tot = None
         return False
+
+    # --- v5.186.0 (track B): wat vóór en na elke ronde hoort ----------------
+    #
+    # Klasse-standaarden in plaats van velden in `__init__` (ratel).
+    _opstart_stil_wacht_op_ronde: bool = False
+    _unsub_kwartierronde = None
+    _unsub_opstart_einde = None
+    _besluit_deze_ronde: bool = False
+    rondes_zonder_besluit: int = 0
+    vangnet_laatst: dict | None = None
+    force_manual_sinds: datetime | None = None
+    _lange_stand_herinnerd: dict | None = None
+    _vervallen_stand_gemeld: bool = False
+    handmatige_stand_bij_afsluiten: dict | None = None
+
+    async def _async_ronde(self) -> None:
+        """De ronde binnen het slot, met wat ervoor en erna hoort (v5.186.0).
+
+        Ervoor: de opstartfase starten (B21), de opdrachten van de vorige
+        ronde nakijken (B18), herinneringen (B27, B29). Erna: het vangnet
+        (B16) - een ronde die omvalt of geen besluit neemt, laat de accu in
+        zijn laatste stand staan, ook een handmatige lading.
+        """
+        self._voor_de_ronde(dt_util.now())
+        self._besluit_deze_ronde = False
+        try:
+            await self._async_update_locked()
+        except Exception:
+            await self._vangnet_na_ronde(dt_util.now(), gelukt=False)
+            raise
+        await self._vangnet_na_ronde(dt_util.now(), gelukt=True)
+
+    def _voor_de_ronde(self, now: datetime) -> None:
+        """Wat aan het begin van elke ronde hoort (v5.186.0); valt nooit om."""
+        if self._opstart_stil_wacht_op_ronde:
+            self._start_opstartfase(now)
+        # B18: de vorige opdracht nakijken VOOR er een nieuwe wordt geschreven.
+        # Stond aan het eind van de ronde, na de nieuwe schrijfactie, en zag
+        # dan vooral een opdracht van een paar seconden oud.
+        self._bewaak_stap("opdrachtcontrole", lambda: self.controleer_opdrachten(now))
+        self._bewaak_stap("lange_stand", lambda: self._waarschuw_bij_lange_stand(now))
+        self._bewaak_stap("vervallen_stand", lambda: self._meld_vervallen_handmatige_stand(now))
+
+    def _start_opstartfase(self, now: datetime) -> None:
+        """De stille opstartfase begint bij de EERSTE ronde (v5.186.0, B21).
+
+        Begon bij het laden van de opslag. Bij een koude start ligt daar
+        soms minuten tussen (EVENT_HOMEASSISTANT_STARTED); dan was de stille
+        tijd al voorbij voordat er één ronde had gedraaid. En aan het eind
+        kwam er geen ronde: de eerste opdracht wachtte op de klok.
+        """
+        self._opstart_stil_wacht_op_ronde = False
+        self._opstart_stil_tot = now + timedelta(seconds=STARTUP_GRACE_SECONDS)
+        try:
+            from homeassistant.helpers.event import async_call_later
+        except ImportError:  # toetsomgeving zonder deze hulp
+            return
+        try:
+            self._unsub_opstart_einde = async_call_later(
+                self.hass, STARTUP_GRACE_SECONDS + 1, self._na_opstartfase
+            )
+        except Exception:  # noqa: BLE001 - dan stuurt de klokronde
+            _LOGGER.debug("Ronde na de opstartfase niet gepland", exc_info=True)
+
+    @callback
+    def _na_opstartfase(self, _now=None) -> None:
+        """Einde van de opstartfase: meteen een volle ronde (v5.186.0, B21)."""
+        self._unsub_opstart_einde = None
+        self.hass.add_job(self.async_update)
+
+    def _vangnet_niet_van_toepassing(self) -> bool:
+        """Standen waarin het EMS de accu bewust niet stuurt (B16)."""
+        return bool(
+            self.force_manual or self.kalibratie or self.learning_only
+            or getattr(self, "handmatige_stand", None) or self._opstart_stuurstil()
+        )
+
+    async def _vangnet_na_ronde(self, now: datetime, gelukt: bool) -> None:
+        """Na N rondes zonder besluit met de accu handmatig: terug naar smart
+        (v5.186.0, B16). Zo'n ronde liet de accu in zijn laatste stand - op
+        live 04-11 kon dat een handmatige netlading zijn die bleef lopen."""
+        try:
+            if (gelukt and self._besluit_deze_ronde) or self._vangnet_niet_van_toepassing():
+                self.rondes_zonder_besluit = 0
+                self.internal_failures.pop("vangnet_geen_besluit", None)
+                return
+            self.rondes_zonder_besluit += 1
+            if self.rondes_zonder_besluit < VANGNET_RONDES_ZONDER_BESLUIT:
+                return
+            staat = self.hass.states.get(self.config.get(CONF_OPERATION_SELECT) or "")
+            if staat is None or staat.state != OPTION_MANUAL:
+                return
+            _LOGGER.warning(
+                "%d rondes zonder besluit terwijl de accu handmatig staat - terug naar smart",
+                self.rondes_zonder_besluit,
+            )
+            gezet = await self._async_apply_operation(OPTION_SMART)
+            self.vangnet_laatst = {"moment": now.isoformat(), "rondes": self.rondes_zonder_besluit,
+                                   "teruggezet": bool(gezet)}
+            self.internal_failures["vangnet_geen_besluit"] = (
+                f"{self.rondes_zonder_besluit} rondes zonder besluit; accu van handmatig "
+                f"{'terug naar smart' if gezet else 'NIET terug te zetten'}"
+            )
+        except Exception:  # noqa: BLE001 - het vangnet mag zelf niets breken
+            _LOGGER.exception("Vangnet na de ronde viel om")
+
+    def _waarschuw_bij_lange_stand(self, now: datetime) -> None:
+        """Elk uur een herinnering bij een lange kalibratie of force_manual
+        (v5.186.0, B27), zoals bij de leermodus. Bewust geen automatisch
+        uitzetten: alleen herinneren."""
+        if self.force_manual and self.force_manual_sinds is None:
+            # Na een herstart hersteld door de schakelaar: tellen vanaf nu.
+            self.force_manual_sinds = now
+        if not self.force_manual:
+            self.force_manual_sinds = None
+        herinnerd = self._lange_stand_herinnerd = dict(self._lange_stand_herinnerd or {})
+        for naam, aan, sinds, wat in (
+            ("kalibratie", self.kalibratie, self._als_moment(self.kalibratie_sinds),
+             "De kalibratie"),
+            ("force_manual", self.force_manual, self.force_manual_sinds, "Force manual"),
+        ):
+            if not aan or sinds is None:
+                herinnerd.pop(naam, None)
+                continue
+            uren = (now - sinds).total_seconds() / 3600
+            laatste = herinnerd.get(naam)
+            if uren < LANGE_STAND_WAARSCHUWING_UREN or (
+                laatste is not None and (now - laatste).total_seconds() / 3600 < LANGE_STAND_HERINNERING_UREN
+            ):
+                continue
+            herinnerd[naam] = now
+            self._dispatch_notification(
+                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                title=f"✋ {wat} staat nog aan",
+                message=(
+                    f"Al {uren:.0f} uur, sinds {dt_util.as_local(sinds).strftime('%H:%M')}. "
+                    "Zolang dit aan staat stuurt de integratie de accu niet."
+                ),
+                notification_id=f"ems_lange_stand_{naam}",
+                kind="handmatige_stand",
+            )
+
+    @staticmethod
+    def _als_moment(waarde) -> datetime | None:
+        if isinstance(waarde, datetime):
+            return waarde
+        return dt_util.parse_datetime(str(waarde)) if waarde else None
+
+    def _meld_vervallen_handmatige_stand(self, now: datetime) -> None:
+        """Meldt een handmatige stand die de herstart niet overleefde
+        (v5.186.0, B29). De stand komt met opzet niet terug (zie
+        `handmatige_stand` in de vluchtige velden); dat gebeurde wel stil."""
+        bewaard = self.handmatige_stand_bij_afsluiten
+        if self._vervallen_stand_gemeld or not bewaard:
+            return
+        self._vervallen_stand_gemeld = True
+        if self.handmatige_stand:
+            return
+        self.handmatige_stand_bij_afsluiten = None
+        sinds = self._als_moment((bewaard or {}).get("sinds"))
+        tijd = f" (aan sinds {dt_util.as_local(sinds).strftime('%d-%m %H:%M')})" if sinds else ""
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="ℹ️ Handmatige stand vervallen na herstart",
+            message=(
+                f"De handmatige stand '{(bewaard or {}).get('stand')}'{tijd} stond aan bij het "
+                "afsluiten en is na de herstart bewust niet teruggezet. De integratie stuurt de "
+                "accu weer; zet de knop opnieuw aan als dat nog nodig is."
+            ),
+            notification_id="ems_handmatige_stand_vervallen",
+            kind="handmatige_stand",
+        )
 
     def in_opstartfase(self, now: datetime | None = None) -> bool:
         """Draait de integratie nog maar net? (v5.14.5)"""
@@ -40993,6 +41364,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         just build the explanation directly, since there's nothing the
         integration did to notify about.
         """
+        # v5.186.0 (B16): deze ronde nam een besluit (voor het vangnet).
+        self._besluit_deze_ronde = True
         # v4.1: padbereik en nachtrondes.
         self._tel_pad("reden", self.last_reason or "onbekend", now)
         self._tel_nachtronde(
@@ -41055,10 +41428,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             self.hass.async_create_task(
                 self._waarschuw_bij_lange_leermodus(now)
             )
-            # v3.87.0: en nakijken of de vorige opdracht is aangekomen.
-            self._klok(
-                "opdrachtcontrole", lambda: self.controleer_opdrachten(now)
-            )
+            # v3.87.0: nakijken of de vorige opdracht is aangekomen - sinds
+            # v5.186.0 (B18) aan het BEGIN van de ronde (`_voor_de_ronde`).
             self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
             # v3.12.0: en melden zodra een kandidaat rijp wordt.
             self._klok(
@@ -41229,6 +41600,84 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         )
         return f"{power:.0f} W" if power is not None else None
 
+    def _adviesstappen_voor_besluit(self, now: datetime, entries, cheap_block_start) -> tuple:
+        """De adviesstappen vóór het besluit als (naam, stap) (v5.186.0, B16).
+        Uit `_async_update_locked` gehaald; zelfde volgorde als voorheen."""
+        return (
+            ("energiebalans", lambda: self._update_energy_balance_validation(now)),
+            ("anomalie", lambda: self._update_anomaly_detection(now)),
+            ("weerensemble", lambda: self._update_weather_ensemble_check(now)),
+            ("vaatwasser", lambda: self._update_appliance_state_machine(
+                now,
+                power_entity=self.config.get(CONF_DISHWASHER_POWER_SENSOR),
+                state_attr="_dishwasher_state",
+                cycle_started_attr="_dishwasher_cycle_started_at",
+                below_threshold_since_attr="_dishwasher_below_threshold_since",
+                duration_history_attr="dishwasher_cycle_duration_history",
+                notify_title="🍽️ Vaatwasser klaar",
+            )),
+            ("wasmachine", lambda: self._update_appliance_state_machine(
+                now,
+                power_entity=self.config.get(CONF_WASHING_MACHINE_POWER_SENSOR),
+                state_attr="_washing_machine_state",
+                cycle_started_attr="_washing_machine_cycle_started_at",
+                below_threshold_since_attr="_washing_machine_below_threshold_since",
+                duration_history_attr="washing_machine_cycle_duration_history",
+                notify_title="🧺 Wasmachine klaar",
+            )),
+            ("mpc", lambda: self._compute_mpc_plan(now, entries)),
+            ("monte carlo", lambda: self._run_monte_carlo_simulation(now, cheap_block_start)),
+            ("kalman", self._update_kalman_filters),
+        )
+
+    def _leerstappen_voor_besluit(self, now: datetime, should_postpone_charging: bool) -> list:
+        """De leerstappen vóór het besluit als (naam, stap) (v5.186.0, B16).
+
+        Verbruiksleren ligt stil in de vakantiestand en tijdens een
+        kalibratie (v3.27.0): dan zijn de metingen geen gewoon huisverbruik.
+        """
+        stappen = []
+        if not self.vacation_mode and not self.kalibratie:
+            stappen += [
+                ("nachtverbruik", lambda: self._update_night_consumption_tracking(now, should_postpone_charging)),
+                ("uurprofiel", lambda: self._update_hourly_consumption_profile(now)),
+            ]
+        return stappen + [
+            ("pv-uurbias", lambda: self._update_pv_hourly_bias_tracking(now)),
+            ("rendementsleren", lambda: self._update_battery_efficiency_learning(now)),
+            ("maandwissel", lambda: self._check_monthly_rollover(now)),
+            ("apparaatgebruik", lambda: self._update_appliance_usage_tracking(now)),
+            ("quooker", lambda: self._update_quooker_tracking(now)),
+            ("water", lambda: self._update_water_tracking(now)),
+            # v1.18.2: aanwezigheid uit de gekozen bewegingssensoren.
+            ("aanwezigheid", lambda: self._update_presence(now)),
+            ("piekvermogen", lambda: self._update_peak_power_tracking(now)),
+            ("accumodules", lambda: self._update_battery_module_health(now)),
+        ]
+
+    def _ververs_tijdlijn(self, entries, now: datetime, cheap_block_start, kwargs: dict) -> None:
+        """De verwachte tijdlijn en de overgangen (uit `_async_update_locked`)."""
+        self.last_timeline = self._build_forecast_timeline(
+            entries, now, cheap_block_start, self.last_discharge_start, **kwargs
+        )
+        self.last_transitions = self._collapse_timeline(self.last_timeline)
+
+    def _adviesstappen_na_tijdlijn(self, now: datetime, entries, cheap_block_start, kwargs: dict) -> list:
+        """Tijdlijn, tweeling, NILM en gereedheid als (naam, stap) (v5.186.0, B16)."""
+        stappen = [
+            ("tijdlijn", lambda: self._ververs_tijdlijn(entries, now, cheap_block_start, kwargs)),
+            ("digitale tweeling", lambda: self._run_digital_twin_simulation(now)),
+        ]
+        # v3.27.0: geen apparaatherkenning tijdens een kalibratie. Een
+        # blok van 2000 W dat uren aanstaat en dan ineens stopt is
+        # precies het patroon waar de herkenning op zoekt.
+        if not self.kalibratie:
+            stappen.append(("nilm-ontdekking", lambda: self._update_nilm_discovery(now)))
+        return stappen + [
+            ("nilm-apparaten", lambda: self._update_nilm_confirmed_devices(now)),
+            ("adviesgereedheid", lambda: self._update_advisory_readiness(now)),
+        ]
+
     async def _async_update_locked(self) -> None:
         now = dt_util.now()
         if self.first_seen_date is None:
@@ -41357,30 +41806,13 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             self._net_is_goedkoper_dan_de_accu(now, entries)
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon accu-tegen-net niet berekenen")
-        self._update_energy_balance_validation(now)
-        self._update_anomaly_detection(now)
-        self._update_weather_ensemble_check(now)
-        self._update_appliance_state_machine(
-            now,
-            power_entity=self.config.get(CONF_DISHWASHER_POWER_SENSOR),
-            state_attr="_dishwasher_state",
-            cycle_started_attr="_dishwasher_cycle_started_at",
-            below_threshold_since_attr="_dishwasher_below_threshold_since",
-            duration_history_attr="dishwasher_cycle_duration_history",
-            notify_title="🍽️ Vaatwasser klaar",
-        )
-        self._update_appliance_state_machine(
-            now,
-            power_entity=self.config.get(CONF_WASHING_MACHINE_POWER_SENSOR),
-            state_attr="_washing_machine_state",
-            cycle_started_attr="_washing_machine_cycle_started_at",
-            below_threshold_since_attr="_washing_machine_below_threshold_since",
-            duration_history_attr="washing_machine_cycle_duration_history",
-            notify_title="🧺 Wasmachine klaar",
-        )
-        self._compute_mpc_plan(now, entries)
-        self._run_monte_carlo_simulation(now, cheap_block_start)
-        self._update_kalman_filters()
+        # v5.186.0 (B16): de advies- en leerstappen vóór het besluit elk
+        # afgeschermd. Eén fout (MPC, Monte Carlo, Kalman, ...) sloeg de hele
+        # ronde over en liet de accu in zijn laatste stand - ook een
+        # handmatige lading. Nu: gemeld als `ronde:<naam>`, gewist zodra het
+        # weer lukt, en de ronde loopt door naar het besluit.
+        for naam, stap in self._adviesstappen_voor_besluit(now, entries, cheap_block_start):
+            self._voer_staartstap_uit(naam, stap)
 
         # Pause consumption-related learning during vacation mode, so the
         # unusually low readings don't pollute the learned "normal"
@@ -41391,19 +41823,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # v3.27.0: en tijdens een kalibratie, om dezelfde reden. Een blok
         # van 2000 W dat uren aanstaat is geen huisverbruik en geen
         # apparaat.
-        if not self.vacation_mode and not self.kalibratie:
-            self._update_night_consumption_tracking(now, should_postpone_charging)
-            self._update_hourly_consumption_profile(now)
-        self._update_pv_hourly_bias_tracking(now)
-        self._update_battery_efficiency_learning(now)
-        self._check_monthly_rollover(now)
-        self._update_appliance_usage_tracking(now)
-        self._update_quooker_tracking(now)
-        self._update_water_tracking(now)
-        # v1.18.2: aanwezigheid uit de gekozen bewegingssensoren.
-        self._update_presence(now)
-        self._update_peak_power_tracking(now)
-        self._update_battery_module_health(now)
+        # v5.186.0 (B16): ook deze leerstappen afgeschermd (zie hierboven).
+        for naam, stap in self._leerstappen_voor_besluit(now, should_postpone_charging):
+            self._voer_staartstap_uit(naam, stap)
         # v5.175.0: de beschikbare energie opnieuw met de moduletoestand van
         # DEZE ronde; `_ververs_toestandsvelden` las hem met die van de vorige.
         if self.config.get(CONF_AVAILABLE_ENERGY_SENSOR):
@@ -41411,10 +41833,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 self.config[CONF_AVAILABLE_ENERGY_SENSOR]
             )
         # v5.117.0: wanneer de accu het laatst vol was (balanceerlading).
-        try:
-            self._volg_balanceren(now)
-        except Exception as fout:  # noqa: BLE001 - veilig falen: geen balanceerlading
-            self.internal_failures["balanceren"] = f"{type(fout).__name__}: {fout}"
+        # v5.186.0 (B28): ook weer wissen als het lukt.
+        self._bewaak_stap("balanceren", lambda: self._volg_balanceren(now))
         _kalibratie_soc = self._read_sensor_float(
             self.config.get(CONF_SOC_SENSOR)
         )
@@ -41565,7 +41985,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         else:
             self._wis_staartfout("gepland apparaat")
         # v5.121.0 (punt 1): in 2027 ook op zonoverschot; tot dan alleen gemeten.
-        await self._async_update_scheduled_charge_appliance(
+        # v5.186.0 (B16): afgeschermd, zoals de andere twee laders.
+        await self._voer_staartstap_async_uit("fietsladers", self._async_update_scheduled_charge_appliance(
             now,
             is_currently_cheapest_block or self._fiets_overschot_veilig(now),
             switch_entity=self.config.get(CONF_FIETSLADERS_SWITCH),
@@ -41588,7 +42009,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             ),
             override_attr="fietsladers_override",
             kwartiercontrole=True,
-        )
+        ))
         # v5.129.0: de batterijlader in de keuken, zoals de fietsladers: uit
         # zodra alles vol is, daarna elk kwartier kijken of er weer iets aan
         # hangt (meerdere poorten). v5.129.1: niet alleen in het goedkope
@@ -41648,26 +42069,17 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         projection_available_kwh = self._na_module_leeg(projection_available_kwh)
         self.last_projection_available_kwh = projection_available_kwh
         self.last_projection_reserve_kwh = projection_reserve_kwh
-        self.last_timeline = self._build_forecast_timeline(
-            entries,
-            now,
-            cheap_block_start,
-            self.last_discharge_start,
+        # v5.186.0 (B16): tijdlijn, digitale tweeling, NILM en gereedheid elk
+        # afgeschermd; een fout houdt de vorige tijdlijn en gaat door.
+        tijdlijn_kwargs = dict(
             live_is_expensive=is_expensive,
             live_should_postpone_charging=should_postpone_charging,
             live_should_capture_solar=live_should_capture_solar,
             available_kwh=projection_available_kwh,
             reserve_kwh=projection_reserve_kwh,
         )
-        self.last_transitions = self._collapse_timeline(self.last_timeline)
-        self._run_digital_twin_simulation(now)
-        # v3.27.0: geen apparaatherkenning tijdens een kalibratie. Een
-        # blok van 2000 W dat uren aanstaat en dan ineens stopt is
-        # precies het patroon waar de herkenning op zoekt.
-        if not self.kalibratie:
-            self._update_nilm_discovery(now)
-        self._update_nilm_confirmed_devices(now)
-        self._update_advisory_readiness(now)
+        for naam, stap in self._adviesstappen_na_tijdlijn(now, entries, cheap_block_start, tijdlijn_kwargs):
+            self._voer_staartstap_uit(naam, stap)
 
         # What the pure price/solar logic wants, independent of
         # force_manual or learning_only - lets you graph this against the
@@ -43156,8 +43568,19 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             return False
         return OPTION_SMART_CHARGING in (staat.attributes.get("options") or [])
 
-    async def _async_apply_operation(self, option: str) -> None:
-        """Set the Zendure operation mode, unless in learning_only mode."""
+    # v5.186.0 (B22): waarom de laatste schrijfactie niet gebeurde (None = wel
+    # geschreven of stond er al): leermodus, opstartfase, accu onbereikbaar,
+    # schrijven mislukt. Het waardeplan zet dit bij 'niet_gestuurd'.
+    laatste_schrijfuitkomst: str | None = None
+
+    async def _async_apply_operation(self, option: str) -> bool:
+        """Set the Zendure operation mode, unless in learning_only mode.
+
+        v5.186.0 (B22): True als de accu nu op deze stand staat (geschreven
+        of stond er al), anders False met de reden in
+        `laatste_schrijfuitkomst`. Een opdracht wordt alleen nagekeken als
+        hij ook werkelijk is verstuurd (B18).
+        """
         # v1.55.0: een onbekende modus wordt door de select-entiteit
         # stilzwijgend genegeerd, en dan staat de accu ergens anders dan
         # de integratie denkt. Liever terugvallen op smart met een
@@ -43179,39 +43602,41 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if self.learning_only:
             self.last_simulated_action = f"would set operation to '{option}'"
             _LOGGER.debug("Learning-only mode: %s", self.last_simulated_action)
-            return
+            self.laatste_schrijfuitkomst = "leermodus"
+            return False
         if self._opstart_stuurstil():
             # v5.181.1 (punt 6): na een herstart de accu laten zoals hij staat.
             self.last_simulated_action = f"opstartfase: zou de stand op '{option}' zetten"
-            return
+            self.laatste_schrijfuitkomst = "opstartfase"
+            return False
         self.last_simulated_action = None
-        onbereikbaar = self._aansturing_bereikbaar()
+        # v5.186.0 (B25): alleen de entiteit die geschreven wordt; een
+        # 'unknown' vermogensgetal hield ook het zetten van de stand tegen.
+        onbereikbaar = self._aansturing_bereikbaar((CONF_OPERATION_SELECT,))
         if onbereikbaar:
             self._meld_aansturing_onbereikbaar(onbereikbaar)
-            return
-        # v3.75.0: onthouden WAT er is geschreven, zodat een ingreep van
-        # buitenaf herkenbaar is.
-        self.last_applied_operation = option
+            self.laatste_schrijfuitkomst = "accu onbereikbaar"
+            return False
         # v5.29: staat hij er al, dan niet opnieuw schrijven. Elke schrijf-
         # actie start in de Zendure-integratie de operatie opnieuw - en
         # leverde op 5 oktober elke minuut een melding op.
-        if self._staat_al_op(self.config[CONF_OPERATION_SELECT], option):
-            return
-        # v4.11: afgeschermd - zie `_stuur_naar_de_accu`.
-        if await self._stuur_naar_de_accu(
-            "select",
-            "select_option",
-            {
-                "entity_id": self.config[CONF_OPERATION_SELECT],
-                "option": option,
-            },
-            f"stand {option}",
-        ):
-            self._onthoud_geschreven(self.config[CONF_OPERATION_SELECT], option)
-        # v3.87.0: en controleren of het ook is aangekomen.
-        self._noteer_opdracht(
-            self.config[CONF_OPERATION_SELECT], option, "modus"
-        )
+        select = self.config[CONF_OPERATION_SELECT]
+        if not self._staat_al_op(select, option):
+            # v4.11: afgeschermd - zie `_stuur_naar_de_accu`.
+            if not await self._stuur_naar_de_accu(
+                "select", "select_option", {"entity_id": select, "option": option},
+                f"stand {option}",
+            ):
+                self.laatste_schrijfuitkomst = "schrijven mislukt"
+                return False
+            self._onthoud_geschreven(select, option)
+            # v3.87.0: en controleren of het ook is aangekomen.
+            self._noteer_opdracht(select, option, "modus")
+        # v3.75.0: onthouden WAT er is geschreven, zodat een ingreep van
+        # buitenaf herkenbaar is (v5.186.0: alleen als het er ook staat).
+        self.last_applied_operation = option
+        self.laatste_schrijfuitkomst = None
+        return True
 
     def _noteer_opdracht(
         self,
@@ -43245,11 +43670,32 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # de hele controle om.
         #
         # Een monotone teller kent dat probleem niet.
+        #
+        # v5.186.0 (B18): blijft de verwachte waarde (binnen de marge) gelijk,
+        # dan de wachttijd NIET opnieuw laten beginnen. Elke ronde schreef een
+        # paar watt anders en zette 'sinds' op nu: de controle kwam zo nooit
+        # aan de negentig seconden toe.
+        vorige = self._openstaande_opdrachten.get(entity_id)
+        if vorige is not None and self._opdracht_gelijk(vorige.get("verwacht"), verwacht):
+            vorige["verwacht"] = verwacht
+            return
         self._openstaande_opdrachten[entity_id] = {
             "verwacht": verwacht,
             "wat": wat,
             "sinds": nu_seconden if nu_seconden is not None else time.monotonic(),
         }
+
+    @staticmethod
+    def _opdracht_gelijk(werkelijk, verwacht) -> bool:
+        """Is de opdracht aangekomen? Een vermogen binnen max(25 W, 3 %),
+        een stand precies (v5.186.0, B18). Was < 1 W: de Zendure rondt af."""
+        if isinstance(verwacht, (int, float)) and not isinstance(verwacht, bool):
+            try:
+                marge = max(OPDRACHT_TOLERANTIE_W, abs(float(verwacht)) * OPDRACHT_TOLERANTIE_FRACTIE)
+                return abs(float(werkelijk) - float(verwacht)) <= marge
+            except (TypeError, ValueError):
+                return False
+        return str(werkelijk) == str(verwacht)
 
     def controleer_opdrachten(
         self, now: datetime, nu_seconden: float | None = None
@@ -43277,19 +43723,14 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
 
             verwacht = opdracht["verwacht"]
             werkelijk = staat.state
-            if isinstance(verwacht, (int, float)):
-                try:
-                    aangekomen = abs(float(werkelijk) - float(verwacht)) < 1.0
-                except (TypeError, ValueError):
-                    aangekomen = False
-            else:
-                aangekomen = str(werkelijk) == str(verwacht)
-
-            if aangekomen:
+            # v5.186.0 (B18): met een marge, en een reeks per entiteit.
+            if self._opdracht_gelijk(werkelijk, verwacht):
                 self.opdracht_bevestigingen["gelukt"] += 1
+                self._opdracht_reeks(entity_id, gelukt=True)
                 continue
 
             self.opdracht_bevestigingen["mislukt"] += 1
+            self._opdracht_reeks(entity_id, gelukt=False)
             self.opdracht_bevestigingen["laatste_mislukking"] = {
                 "moment": now.isoformat(),
                 "entiteit": entity_id,
@@ -43316,6 +43757,25 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 notification_id="ems_opdracht_niet_aangekomen",
                 kind="opdracht_niet_aangekomen",
             )
+
+    _opdracht_mislukt_reeks: dict | None = None
+
+    def _opdracht_reeks(self, entity_id: str, gelukt: bool) -> None:
+        """Mislukte controles op rij per entiteit; na OPDRACHT_ESCALATIE_RONDES
+        in internal_failures (de kritieke melding), weg zodra er weer een
+        opdracht aankomt (v5.186.0, B18)."""
+        reeks = self._opdracht_mislukt_reeks = dict(self._opdracht_mislukt_reeks or {})
+        if gelukt:
+            reeks.pop(entity_id, None)
+        else:
+            reeks[entity_id] = int(reeks.get(entity_id) or 0) + 1
+        slecht = {e: n for e, n in reeks.items() if n >= OPDRACHT_ESCALATIE_RONDES}
+        if slecht:
+            self.internal_failures["opdracht_niet_aangekomen"] = ", ".join(
+                f"{e}: {n} keer op rij niet aangekomen" for e, n in sorted(slecht.items())
+            )
+        else:
+            self.internal_failures.pop("opdracht_niet_aangekomen", None)
 
     def get_entiteittypecontrole(self) -> dict:
         """Staat er wel het juiste SOORT entiteit ingevuld? (v3.90.0)
@@ -44062,6 +44522,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 self._meld_keuzes_achteraf(oordeel)
             self.schedule_persisted_state_save()
             self._notify_listeners()
+            self.internal_failures.pop("zelfanalyse", None)  # v5.186.0 (B28)
         except Exception as fout:  # noqa: BLE001 - meten mag de sturing nooit raken
             self.internal_failures["zelfanalyse"] = f"{type(fout).__name__}: {fout}"
             _LOGGER.debug("Zelfanalyse van %s mislukt", datum, exc_info=True)
@@ -45690,7 +46151,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         waarde = self.config.get(sleutel)
         return standaard if waarde is None else waarde
 
-    def _aansturing_bereikbaar(self) -> str | None:
+    def _aansturing_bereikbaar(
+        self, sleutels: tuple = (CONF_OPERATION_SELECT, CONF_MANUAL_POWER_NUMBER),
+        getal_onbekend_mag: bool = False,
+    ) -> str | None:
         """Kan er überhaupt naar de accu geschreven worden? (v3.46.0)
 
         Gemeld: "Ik krijg telkens deze melding van de integratie: Zendure
@@ -45709,7 +46173,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         schrijven valt, dat één keer zeggen, en verder normaal
         doorrekenen.
         """
-        for sleutel in (CONF_OPERATION_SELECT, CONF_MANUAL_POWER_NUMBER):
+        # v5.186.0 (B25): alleen de entiteiten die geschreven worden, en een
+        # 'unknown' vermogensgetal mag (`getal_onbekend_mag`).
+        for sleutel in sleutels:
             entity_id = self.config.get(sleutel)
             if not entity_id:
                 continue
@@ -45722,6 +46188,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 # Daar niet op afgaan: alleen een uitdrukkelijk
                 # `unavailable` of `unknown` betekent dat de andere
                 # integratie zelf zegt dat het niet kan.
+                continue
+            if staat.state == "unknown" and getal_onbekend_mag and sleutel == CONF_MANUAL_POWER_NUMBER:
                 continue
             if staat.state in ("unavailable", "unknown"):
                 return (
@@ -45799,69 +46267,71 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             f"{oordeel['oplossing']}"
         )
 
-    async def _async_apply_manual(self, power: float) -> None:
+    async def _async_apply_manual(self, power: float) -> bool:
         """Set manual mode with the given power, unless in learning_only
         mode. Positive power discharges, negative charges (matching the
         Zendure manual power number's own sign convention).
+
+        v5.186.0 (B22): True als stand en vermogen nu zo staan, anders False
+        met de reden in `laatste_schrijfuitkomst`.
         """
         if self.learning_only:
             self.last_simulated_action = (
                 f"would set operation to '{OPTION_MANUAL}' with power {power}W"
             )
             _LOGGER.debug("Learning-only mode: %s", self.last_simulated_action)
-            return
+            self.laatste_schrijfuitkomst = "leermodus"
+            return False
         if self._opstart_stuurstil():
             # v5.181.1 (punt 6): na een herstart de accu laten zoals hij staat.
             self.last_simulated_action = (
                 f"opstartfase: zou '{OPTION_MANUAL}' met {power:.0f} W zetten"
             )
-            return
+            self.laatste_schrijfuitkomst = "opstartfase"
+            return False
         self.last_simulated_action = None
-        onbereikbaar = self._aansturing_bereikbaar()
+        # v5.186.0 (B25): een 'unknown' vermogensgetal is geen reden om niet
+        # te schrijven (een nieuwe waarde lost dat juist op); 'unavailable' wel.
+        onbereikbaar = self._aansturing_bereikbaar(getal_onbekend_mag=True)
         if onbereikbaar:
             self._meld_aansturing_onbereikbaar(onbereikbaar)
-            return
+            self.laatste_schrijfuitkomst = "accu onbereikbaar"
+            return False
+        select = self.config[CONF_OPERATION_SELECT]
+        getal = self.config[CONF_MANUAL_POWER_NUMBER]
         # v4.11: afgeschermd, en de tweede opdracht alleen als de
         # eerste is aangekomen - een vermogen zetten terwijl de stand
         # nog slim is, laat de accu op dat vermogen staan zodra hij
         # later handmatig wordt.
         # v5.29: alleen schrijven wat nog niet zo staat.
-        modus_al = self._staat_al_op(self.config[CONF_OPERATION_SELECT], OPTION_MANUAL)
-        if modus_al or await self._stuur_naar_de_accu(
-            "select",
-            "select_option",
-            {
-                "entity_id": self.config[CONF_OPERATION_SELECT],
-                "option": OPTION_MANUAL,
-            },
-            "handmatige stand",
-        ):
-            if not modus_al:
-                self._onthoud_geschreven(self.config[CONF_OPERATION_SELECT], OPTION_MANUAL)
-            # v5.31.2: na een nieuwe stand altijd ook het vermogen - de
-            # Zendure-manager start de handmatige stand pas met een vermogen.
-            if not modus_al or not self._staat_al_op(
-                self.config[CONF_MANUAL_POWER_NUMBER], power
-            ):
-                if await self._stuur_naar_de_accu(
-                    "number",
-                    "set_value",
-                    {
-                        "entity_id": self.config[CONF_MANUAL_POWER_NUMBER],
-                        "value": power,
-                    },
-                    f"vermogen {power:.0f} W",
-                ):
-                    self._onthoud_geschreven(self.config[CONF_MANUAL_POWER_NUMBER], power)
-                self._noteer_opdracht(
-                    self.config[CONF_MANUAL_POWER_NUMBER], power, "handmatig vermogen"
-                )
-        # v3.87.0: allebei nakijken - de modus én het vermogen. Op 30
-        # augustus stond de modus goed maar deed het vermogen niets.
+        modus_al = self._staat_al_op(select, OPTION_MANUAL)
         if not modus_al:
-            self._noteer_opdracht(
-                self.config[CONF_OPERATION_SELECT], OPTION_MANUAL, "modus"
-            )
+            if not await self._stuur_naar_de_accu(
+                "select", "select_option", {"entity_id": select, "option": OPTION_MANUAL},
+                "handmatige stand",
+            ):
+                self.laatste_schrijfuitkomst = "schrijven mislukt"
+                return False
+            self._onthoud_geschreven(select, OPTION_MANUAL)
+            # v3.87.0: allebei nakijken - de modus én het vermogen. Op 30
+            # augustus stond de modus goed maar deed het vermogen niets.
+            self._noteer_opdracht(select, OPTION_MANUAL, "modus")
+        # v5.31.2: na een nieuwe stand altijd ook het vermogen - de
+        # Zendure-manager start de handmatige stand pas met een vermogen.
+        if modus_al and self._staat_al_op(getal, power):
+            self.laatste_schrijfuitkomst = None
+            return True
+        if not await self._stuur_naar_de_accu(
+            "number", "set_value", {"entity_id": getal, "value": power},
+            f"vermogen {power:.0f} W",
+        ):
+            # v5.186.0 (B18): een mislukte schrijfactie niet nakijken.
+            self.laatste_schrijfuitkomst = "schrijven mislukt"
+            return False
+        self._onthoud_geschreven(getal, power)
+        self._noteer_opdracht(getal, power, "handmatig vermogen")
+        self.laatste_schrijfuitkomst = None
+        return True
 
     @staticmethod
     def _zelfde(a, b) -> bool:
@@ -46204,6 +46674,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # lastsprong minutenlang tegen (16:04-16:14: regeldoel -190 W bij
         # +988 W import).
         pendel = self._p1_pendel(regel_w, now)
+        # v5.186.0 (B24): is de regelsensor weg (onbeschikbaar, of nog niet
+        # geladen na een herlaad), dan de ruwe P1-meter plus de geleerde
+        # verschuiving in plaats van None - de Zendure regelde anders op niets.
+        terugval = regel_w is None and echt_w is not None
+        if terugval:
+            regel_w = echt_w + verschuiving
         if regel_w is None:
             waarde = None
         elif salderen:
@@ -46217,6 +46693,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             "template_verschuiving_w": round(verschuiving, 1),
             "doel_w": -round(verschuiving, 1) if salderen else P1_DOEL_2027_W,
             "monsters": len(monsters),
+            "terugval": "ruwe P1-meter + verschuiving (regelsensor onbeschikbaar)" if terugval else None,
         }
 
     _p1_pendel_staat: dict | None = None
@@ -46461,6 +46938,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         if self._is_negative_price_active:
             self._is_negative_price_active = False
             self._start_solar_ramp(100.0)
+        # v5.186.0 (B19): na een (her)start de panelen vrij, en het doel nakijken.
+        if not self._paneelgrens_na_start_bekeken:
+            self._bewaak_stap("paneelgrens_na_start", self._herstel_paneelgrens_na_start)
+        self._bewaak_stap("paneelgrens_controle", self._controleer_paneelgrens)
         try:
             await self._async_negatieve_teruglevering(now)
         except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken

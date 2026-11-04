@@ -2821,9 +2821,14 @@ class LegacySturingMixin:
         uit het net. Alleen zonder plan (of bij celbescherming) de vaste
         handmatige lading zoals voorheen.
         """
-        if not self._is_negative_price_active:
+        # v5.186.0 (B19): ook opnieuw als de ramp naar 0 % (nog) niet liep -
+        # in de leermodus of opstartfase wordt hij overgeslagen - en de
+        # vorige ronde nakijken.
+        if not self._is_negative_price_active or self._paneelgrens_doel != 0.0:
             self._is_negative_price_active = True
             self._start_solar_ramp(0.0)
+        else:
+            self._bewaak_stap("paneelgrens_controle", self._controleer_paneelgrens)
         if WAARDEPLAN_STUURT and not (self.celbeschermingsbesluit(now) or {}).get("actie"):
             if await self._waardeplan_als_nodig(now, entries):
                 return

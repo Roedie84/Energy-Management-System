@@ -102,6 +102,9 @@ def test_correctie_gaat_los_als_de_module_herstelt(make_coordinator, hass):
 
 def test_de_ronde_zet_de_meting_opnieuw_na_de_moduletoestand():
     bron = coordinator_bron()
-    blok = bron[bron.index("        self._update_battery_module_health(now)\n"):][:600]
+    # v5.186.0 (B16): de moduletoestand staat nu als laatste in de afgeschermde
+    # leerstappen (`_leerstappen_voor_besluit`); de meting volgt op die lus.
+    assert '("accumodules", lambda: self._update_battery_module_health(now))' in bron
+    blok = bron[bron.index("        for naam, stap in self._leerstappen_voor_besluit("):][:800]
     assert "self.last_available_kwh = self._beschikbaar_voor_spiegel(" in blok
     assert "_gemeten_beschikbaar = self._spiegel_beschikbaar(" in bron

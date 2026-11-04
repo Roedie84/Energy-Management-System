@@ -1113,10 +1113,8 @@ class AccuToestandMixin:
         # opnieuw berekenen - anders blijft een oude valse drift staan.
         self._herijk_module_cusums()
         # v5.172.0 (punt 4): de effectieve ondergrens, ook zonder moduledata.
-        try:
-            self._volg_ondergrens(now)
-        except Exception as fout:  # noqa: BLE001 - veilig falen: de min-SoC
-            self.internal_failures["ondergrens"] = f"{type(fout).__name__}: {fout}"
+        # v5.186.0 (B28): veilig falen (de min-SoC), en de vlag eraf als het lukt.
+        self._bewaak_stap("ondergrens", lambda: self._volg_ondergrens(now))
         modules = self._read_battery_modules()
         if not modules:
             self.battery_module_live = []
@@ -1136,11 +1134,9 @@ class AccuToestandMixin:
             module["vermogen_afwijking_w"] = self._deviation_from_peers(powers, index)
         self.battery_module_live = modules
         # v5.72 (L-EMS-014): een module die bijna leeg is.
-        try:
-            self._volg_module_leeg(now)
-        except Exception as fout:  # noqa: BLE001 - veilig falen: geen correctie
+        # v5.186.0 (B28): veilig falen (geen correctie), vlag eraf als het lukt.
+        if not self._bewaak_stap("module_leeg", lambda: self._volg_module_leeg(now)):
             self._module_leeg = None
-            self.internal_failures["module_leeg"] = f"{type(fout).__name__}: {fout}"
         self._onthoud_hoogste_capaciteit()
 
         day_key = now.date()

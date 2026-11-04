@@ -3519,18 +3519,57 @@ class P1RegeldoelSensor(_V5100Sensor):
 
     def _bereken(self) -> None:
         regel, echt = getattr(self, "_gevolgd", None) or self._bronnen()
-        self._uitkomst = {**self._coordinator.p1_regeldoel(self._lees(regel), self._lees(echt)),
-                          "spiegelt": regel}
+        try:
+            uit = self._coordinator.p1_regeldoel(self._lees(regel), self._lees(echt))
+        except Exception:  # noqa: BLE001 - v5.186.0 (B24): liever de ruwe meter dan niets
+            uit = {"waarde_w": self._lees(echt), "terugval": "ruwe P1-meter (rekenfout)"}
+        self._uitkomst = {**uit, "spiegelt": regel}
+
+    _unsub_bronnen = None
+
+    def _volg_bronnen(self) -> bool:
+        """Luister naar de huidige bronnen; True als die veranderden (v5.186.0, B24).
+
+        De bron werd één keer bepaald, bij het toevoegen. Zette je de Zendure
+        daarna op een andere P1-sensor, of was de bron bij het herladen nog
+        niet bekend, dan bleef deze sensor de oude volgen.
+        """
+        bronnen = self._bronnen()
+        if bronnen == getattr(self, "_gevolgd", None) and self._unsub_bronnen is not None:
+            return False
+        if self._unsub_bronnen is not None:
+            self._unsub_bronnen()
+            self._unsub_bronnen = None
+        self._gevolgd = bronnen
+        lijst = [b for b in bronnen if b and b != self.entity_id]
+        if lijst:
+            self._unsub_bronnen = async_track_state_change_event(self.hass, lijst, self._bij_wijziging)
+        return True
 
     async def async_added_to_hass(self) -> None:
         # v5.124.1: eerst het eigen entity_id doorgeven, zodat de bron nooit
         # deze sensor zelf wordt (na een herstart heeft hij nog geen kenmerk).
         self._coordinator.registreer_p1_regeldoel(self.entity_id)
-        self._gevolgd = self._bronnen()
-        bronnen = [b for b in self._gevolgd if b and b != self.entity_id]
-        if bronnen:
-            self.async_on_remove(async_track_state_change_event(self.hass, bronnen, self._bij_wijziging))
+        self._volg_bronnen()
+        self.async_on_remove(self._stop_bronnen)
+        # v5.186.0 (B24): elke ronde nakijken of de bron nog dezelfde is.
+        self._coordinator.register_listener(self._na_ronde)
+        self.async_on_remove(lambda: self._coordinator.unregister_listener(self._na_ronde))
         self._bereken()
+
+    def _stop_bronnen(self) -> None:
+        if self._unsub_bronnen is not None:
+            self._unsub_bronnen()
+            self._unsub_bronnen = None
+
+    @callback
+    def _na_ronde(self) -> None:
+        try:
+            if self._volg_bronnen() or self._uitkomst.get("waarde_w") is None:
+                self._bereken()
+                self.async_write_ha_state()
+        except Exception:  # noqa: BLE001 - een luisteraar mag de ronde niet breken
+            _LOGGER.debug("P1 regeldoel niet bijgewerkt", exc_info=True)
 
     @callback
     def _bij_wijziging(self, _event) -> None:

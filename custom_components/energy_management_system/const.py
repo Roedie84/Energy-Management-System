@@ -4085,6 +4085,12 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # de vlag bewaard weet de integratie na een herstart dat die
     # leermodus bij een verdwenen stand hoorde, en kan hij weg.
     "_leermodus_door_handmatige_stand": {"type": "plain"},
+    # v5.186.0 (B29): welke handmatige stand er bij het afsluiten aan stond -
+    # niet om hem terug te zetten (zie hierboven), wel om na de herstart te
+    # melden dat hij is vervallen. En de celbescherming, die anders midden in
+    # een bijlaadactie vergeten werd.
+    "handmatige_stand_bij_afsluiten": {"type": "plain"},
+    "_celbescherming": {"type": "plain"},
     # v5.14: metingen op bronnen die eerder niet werden gebruikt.
     "instraling_verhouding": {"type": "plain"},
     "ventilator_kwh_per_dag": {"type": "plain"},
@@ -7927,6 +7933,42 @@ HANDMATIGE_RICHTING_DREMPEL_W = 50.0
 # uit, dus drie ronden. Korter geeft valse meldingen bij een trage
 # uitlezing.
 OPDRACHT_BEVESTIGING_SECONDEN = 90
+
+# --- v5.186.0 (track B): uitvoering robuuster -------------------------------
+# B18: een vermogen telt als aangekomen binnen max(25 W, 3 %) - de Zendure rondt
+# af en regelt bij; 1 W gaf valse "niet aangekomen" of juist een nieuwe
+# wachttijd per ronde. Na zoveel mislukte controles op rij: escalatie
+# (internal_failures, dus de kritieke melding).
+OPDRACHT_TOLERANTIE_W = 25.0
+OPDRACHT_TOLERANTIE_FRACTIE = 0.03
+OPDRACHT_ESCALATIE_RONDES = 3
+# B17: zo lang mag één schrijfactie naar de accu duren (de ronde houdt het slot
+# vast; een hangende Zendure-cloud hield alles op).
+ACCU_SCHRIJF_TIMEOUT_S = 12.0
+# B16: na zoveel rondes op rij zonder besluit (fout of overgeslagen) terwijl de
+# accu handmatig staat: terug naar smart. Een handmatige lading uit een oude
+# ronde mag niet blijven lopen omdat een adviesstap omvalt.
+VANGNET_RONDES_ZONDER_BESLUIT = 3
+# B11: na een herplanning midden in het kwartier alleen nog het vermogen
+# bijstellen; een andere stand alleen als die naar schatting zoveel euro
+# (rest van het kwartier) beter is, of de veiligheid erom vraagt.
+WAARDEPLAN_MIDKWARTIER_WISSEL_EUR = 0.05
+# B12: wijkt het zonoverschot zoveel af van het geplande laadvermogen bij
+# zon_export (fractie), dan eens per kwartier opnieuw plannen.
+WAARDEPLAN_ZON_AFWIJKING_FRACTIE = 0.5
+# B23: inhalen aan het eind van het kwartier hooguit zoveel keer het geplande
+# vermogen (en nooit boven het laadvermogen).
+WAARDEPLAN_INHAAL_FACTOR = 1.5
+# B23: zoveel seconden na elke kwartiergrens een ronde (nieuwe prijs, nieuwe
+# planrij), ook als de prijssensor niet verandert.
+KWARTIERRONDE_NA_SECONDEN = 3
+# B19: een paneelgrens die na een ramp zoveel procentpunt van het doel afwijkt,
+# wordt opnieuw gezet; hooguit zoveel keer per doel.
+PANEELGRENS_TOLERANTIE_PROCENT = 2.0
+PANEELGRENS_MAX_HERHALINGEN = 3
+# B27: herinnering bij kalibratie en force_manual, zoals bij de leermodus.
+LANGE_STAND_WAARSCHUWING_UREN = 2.0
+LANGE_STAND_HERINNERING_UREN = 1.0
 
 # Het bijhouden van moduswisselingen (v3.87.0).
 #
