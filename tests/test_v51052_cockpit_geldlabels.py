@@ -19,7 +19,7 @@ def test_de_besparing_zegt_zonder_accu():
 
 def test_de_regels_heten_actieve_sturing():
     geld = JS.split("  _geld() {")[1].split("\n  }\n")[0]
-    for tekst in ("Ontladen in dure kwartieren", "Laden uit het net", "Actieve sturing netto",
-                  "alleen wat het EMS zelf ingrijpt"):
+    # v5.185.1: het blok heet nu "Netladen deze maand" (uit de accuboekhouding)
+    for tekst in ("Netladen deze maand", "Uit het net geladen", "Marge op netladen"):
         assert tekst in geld
     assert "Accu netto" not in geld

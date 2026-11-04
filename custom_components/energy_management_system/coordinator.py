@@ -7467,6 +7467,16 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         overzicht: dict = {
             "vandaag_tot_nu_toe": nu,
             "voltooide_dagen": len(historie),
+            # v5.185.1: wat week/maand/jaar hier betekenen. "jaar" stond op
+            # -33,44 EUR terwijl Zonneplan dit jaar -90,51 zei: het zijn de
+            # laatste 365 VOLTOOIDE dagen, en zolang de meting korter loopt
+            # alleen die dagen.
+            "periodes": (
+                f"week/maand/jaar = laatste 7/30/365 voltooide dagen; jaar = sinds start meting "
+                f"({len(historie)} dagen)" if len(historie) < 365
+                else "week/maand/jaar = laatste 7/30/365 voltooide dagen"
+            ),
+            "jaar_dagen": min(len(historie), 365),
             "note": (
                 "Trends vergelijken alleen VOLTOOIDE dagen. 'Vandaag tot nu "
                 "toe' heeft bewust geen trend: halverwege de dag vergelijken "

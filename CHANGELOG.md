@@ -34966,3 +34966,13 @@ Onderzoek 04-11 19:44 (Ruud: "Kloppen alle kosten/besparings waardes? Graag diep
 - `netto_eur` (Saldo) telt mee per periode; de cockpit toont Week en Maand als saldo (afgesloten dagen), net als Vandaag. Was: week en maand het saldo uit de dagstand, vandaag de werkelijke kosten - door de fout toevallig dezelfde maat, na de fix zou het de afname zijn.
 
 Tests: `test_v5185_dagsaldo.py`.
+
+## v5.185.1 — geldcijfers eerlijker: netladen, belasting tijdens de saldering, betekenis "jaar"
+
+Onderzoek kosten/besparing 04-11 19:44 (punten 1-3); Ruud 20:00: "Jij weet wat het beste is dus dat hanteren we".
+
+- **Netladen in plaats van "actieve sturing".** Het cockpitblok gebruikte de maandsamenvatting van de oude regels (ontladen in dure kwartieren tegen laden uit het net): deze maand "ontladen 0,00 / laden 0,92 / netto -0,92", oktober -19,01, terwijl het waardeplan de accu in de slimme stand laat ontladen. Nu uit de accuboekhouding (`accukosten.netladen_maand`): kWh uit het net, inkoop en de marge op die netlading bij het ontladen (na rendement en slijtage). De sensor Monthly summary blijft zoals hij was.
+- **Belasting tijdens de saldering.** `_update_counterfactual_savings`: met een verwacht jaaroverschot (`_salderingskorting_eur` > 0) telt de netstroom die de accu extra laat lopen zonder belastingdeel; het verschil gaat in het scenario zonder accu (de werkelijke kosten blijven de rekening). Laadverlies en sluimer (~0,4 kWh/dag) telden ~11 ct/kWh te zwaar.
+- **"jaar" in het kostenoverzicht.** `get_energy_cost_overview` zegt nu wat week/maand/jaar zijn (laatste 7/30/365 voltooide dagen; jaar = sinds start meting zolang korter), met `jaar_dagen`.
+
+Tests: `test_v5185_1_geld.py`.

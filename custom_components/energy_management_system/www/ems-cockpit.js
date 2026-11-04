@@ -2470,9 +2470,15 @@ class EmsCockpitCard extends HTMLElement {
     const zonder = num(attr(bes, "tegenfeitelijke_kosten_vandaag_eur"));
     const bmaand = num(attr(bes, "besparing_deze_maand_eur"));
     const ball = num(attr(bes, "besparing_all_time_eur"));
-    const verkocht = num(attr(maandS, "current_month_discharge_value_eur"));
-    const geladen = num(attr(maandS, "current_month_charge_cost_eur"));
-    const netto = getal(maandS);
+    // v5.185.1: netladen deze maand uit de accuboekhouding (inkoop en wat de
+    // netlading opleverde toen hij eruit ging). Het oude blok telde alleen
+    // ontladen in dure kwartieren (oude regels) en zette de netlading als
+    // kosten zonder de opbrengst: deze maand "-0,92" terwijl de marge positief is.
+    const nl = (attr(this._s("rendement"), "accukosten") || {}).netladen_maand || {};
+    const geladenKwh = num(nl.net_erin_kwh);
+    const geladen = num(nl.net_inkoop_eur);
+    const netto = num(nl.net_marge_eur);
+    void maandS;
     const zv = getal(this._s("zelfvoorziening"));
     const kleur = (v) => (v != null && v >= 0 ? "var(--groen)" : "var(--oranje)");
     // Een regel over de accu zelf: marge per kWh, slijtage en rendement
@@ -2501,11 +2507,11 @@ class EmsCockpitCard extends HTMLElement {
       `</div><div>` +
       // v5.105.2: alleen wat het EMS ACTIEF doet; het huis voeden in de
       // stand slim zit hier niet in (wel in de besparing hierboven).
-      `<div class="za-s geld-kop" title="Alleen wat het EMS zelf ingrijpt">Actieve sturing deze maand - alleen wat het EMS zelf ingrijpt:</div>` +
-      `<div class="rijen geld-r" title="Alleen ontladen in dure kwartieren en laden uit het net. Dat de accu het huis voedt in de stand slim, of zon opslaat, staat hier niet in maar wel in de besparing.">` +
-      `<span>Ontladen in dure kwartieren <b>${euro(verkocht)}</b></span>` +
-      `<span>Laden uit het net <b>${euro(geladen)}</b></span>` +
-      `<span>Actieve sturing netto <b style="color:${kleur(netto)}">${euroTeken(netto)}</b></span>` +
+      `<div class="za-s geld-kop" title="Laden uit het net deze maand, uit de accuboekhouding">Netladen deze maand:</div>` +
+      `<div class="rijen geld-r" title="Wat er deze maand uit het net de accu in ging, wat dat kostte, en de marge toen die stroom eruit ging (na rendement en slijtage). Zon opslaan en het huis voeden zitten in de besparing hierboven.">` +
+      `<span>Uit het net geladen <b>${geladenKwh == null ? STREEP : fmt(geladenKwh, 1) + " kWh"}</b></span>` +
+      `<span>Inkoop <b>${euro(geladen)}</b></span>` +
+      `<span>Marge op netladen <b style="color:${kleur(netto)}">${euroTeken(netto)}</b></span>` +
       `</div>` +
       this._zelfanalyseRijen() +
       `</div></div>` +

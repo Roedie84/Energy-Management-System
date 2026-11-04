@@ -522,6 +522,8 @@ class FinancienMixin:
         counterfactual_cost_eur = self._grid_flow_cost_eur(
             counterfactual_power_w, elapsed_hours, price_per_kwh, feedin_value
         )
+        counterfactual_cost_eur -= self._salderingscorrectie_eur(
+            now, counterfactual_power_w - p1_power_w, elapsed_hours)
 
         self.actual_cost_today_eur += actual_cost_eur
         self.counterfactual_cost_today_eur += counterfactual_cost_eur
@@ -531,6 +533,20 @@ class FinancienMixin:
         self.counterfactual_cost_all_time_eur += counterfactual_cost_eur
         # v5.172.0 (punt 3): wat de stilstaande accu zelf van het net neemt.
         self._tel_sluimer(battery_power_w, elapsed_hours, price_per_kwh)
+
+    def _salderingscorrectie_eur(self, now: datetime, accu_w: float, uren: float) -> float:
+        """v5.185.1: tijdens de saldering met een verwacht jaaroverschot krijg
+        je de energiebelasting op extra afname terug; elke kWh die de accu het
+        net extra laat leveren of afnemen telt dan zonder belastingdeel (zoals
+        het plan rekent, `_salderingskorting_eur`). Zonder dit telden
+        laadverlies en sluimer ~11 ct/kWh te zwaar: ~3 EUR per maand. De
+        werkelijke kosten blijven de rekening; dit gaat van het scenario
+        zonder accu af. `accu_w`: + ontladen, - laden."""
+        try:
+            korting = float(self._salderingskorting_eur(now) or 0.0)
+        except Exception:  # noqa: BLE001
+            korting = 0.0
+        return korting * accu_w * uren / 1000 if korting else 0.0
 
     def _check_monthly_rollover(self, now: datetime) -> None:
         """Detect a new calendar month starting, snapshotting the current

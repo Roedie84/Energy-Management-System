@@ -465,8 +465,27 @@ def _samenvatting(tel: _Teller, partijen: list, eta: float, slijtage_eur: float,
             "opbrengst_ct": _per_kwh(d["opbrengst_eur"], d["geleverd_kwh"]),
             "net_marge_eur": round(d["net_marge_eur"], 2),
         })
+    # v5.185.1: netladen per kalendermaand (de marge op de dag van ontladen),
+    # voor het cockpitblok dat het oude "actieve sturing" vervangt.
+    maand = {}
+    if nu is not None:
+        try:
+            mk = nu.strftime("%Y-%m")
+        except AttributeError:
+            mk = None
+        if mk:
+            sel = [d for dag, d in tel.per_dag.items() if str(dag).startswith(mk)]
+            erin = sum(d["net_in_kwh"] for d in sel)
+            maand = {
+                "maand": mk,
+                "dagen": len(sel),
+                "net_erin_kwh": round(erin, 2),
+                "net_inkoop_eur": round(sum(d["net_inkoop_eur"] for d in sel), 2),
+                "net_marge_eur": round(sum(d["net_marge_eur"] for d in sel), 2),
+            }
     return {
         "beschikbaar": True,
+        "netladen_maand": maand,
         "rendement_procent": round(eta * 100, 1),
         "slijtage_ct": round(slijtage_eur * 100, 2),
         "net": {

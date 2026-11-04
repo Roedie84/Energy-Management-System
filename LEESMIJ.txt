@@ -1,3 +1,16 @@
+EMS v5.185.1 - geldcijfers eerlijker: netladen, belasting tijdens de saldering
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Cockpit Geld: het blok "Actieve sturing" (telde netladen als kosten zonder de
+  opbrengst) is vervangen door "Netladen deze maand": geladen kWh, inkoop en de marge
+  toen die stroom eruit ging.
+- Besparing: tijdens de saldering met een verwacht jaaroverschot tellen laadverlies en
+  sluimer zonder energiebelasting (die krijg je via de saldering terug), zoals het plan
+  rekent. De besparing viel daardoor ~3 EUR per maand te laag uit.
+- Kostenoverzicht: "jaar" = de laatste 365 voltooide dagen, en zolang de meting korter
+  loopt alleen die dagen (staat er nu bij).
+
 EMS v5.185.0 - saldo per dag hersteld; week en maand op dezelfde maat als vandaag
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

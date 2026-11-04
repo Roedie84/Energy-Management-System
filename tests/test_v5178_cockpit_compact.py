@@ -94,8 +94,8 @@ def test_geld_getallen_zichtbaar_toelichting_ingeklapt():
     g = _methode("_geld")
     zichtbaar = g.split('this._uitklap("geld_detail"')[0]
     for tekst in ("zonder accu", "Besparing deze maand", "Besparing totaal", "Week", "Maand",
-                  "Van het net vandaag", "Zelfvoorzienend", "Ontladen in dure kwartieren",
-                  "Actieve sturing netto", "this._zelfanalyseRijen()"):
+                  "Van het net vandaag", "Zelfvoorzienend", "Netladen deze maand",
+                  "Marge op netladen", "this._zelfanalyseRijen()"):
         assert tekst in zichtbaar, tekst
     assert '"kaart_primair"' in _methode("_zelfanalyseRijen")
     z = _methode("_zelfanalyse")
