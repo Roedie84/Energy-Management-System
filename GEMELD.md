@@ -273,3 +273,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 04-11 14:52 | ems plantabel avond accu_w plus net_w dubbel (~0,3 kw te veel, soc-regel/leeg-moment kloppen niet)
 04-11 14:52 | ems cockpit/systeemstatus toont GOED/OK terwijl leermodus niet stuurt
 04-11 15:52 | H-EMS-18 ems netlaadplan springt binnen 10 min na herstart (live_correctie/lange horizon)
+04-11 18:51 | ems geplande vaatwasser hele cyclus in eerste kwartier (geplande_witgoed_kwh_in_periode, verdelen over start-eind, akkoord)
+04-11 18:51 | updates installeren ems 5.184.3 (hacs) + ha herstarten
