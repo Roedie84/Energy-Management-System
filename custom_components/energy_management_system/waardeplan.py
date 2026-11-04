@@ -44,7 +44,7 @@ dan een kWh zonoverschot (de zonnebonus van 2027 geldt alleen voor zon):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from statistics import median
 
 import numpy as np
@@ -542,6 +542,48 @@ def zon_export_laat_huis_tekort(rijen: list[dict], leeg_kwh: float = 0.01) -> bo
         if actie != "verkopen" and (r.get("net_kwh") or 0.0) > 0.01 and (r.get("inhoud_kwh") or 0.0) <= leeg_kwh:
             return True
     return False
+
+
+def vloeren_gelijktrekken(kwartieren: list[Kwartier], bodem_kwh: float = 0.0) -> list[Kwartier]:
+    """Eén verkoopvloer langs het hele plan (v5.181.2).
+
+    Gemeten 04-11 11:27: met een volle accu dekte het plan om 16:45
+    (50,6 ct) en 17:45 (50,9 ct) alleen het huis en verkocht het pas van
+    18:00 tot 19:15 (49,5-50,0 ct). Oorzaak: de vloer per kwartier is de
+    huisreserve tot het goedkope blok, MET een marge evenredig aan wat er
+    vanaf dat kwartier nog nodig is. Een vroeger kwartier heeft een langere
+    rest -> een grotere marge -> een hogere vloer, en de verkoop schoof naar
+    latere, goedkopere kwartieren. Terwijl X kWh om 16:45 of om 18:00
+    verkopen op hetzelfde uitkomt als het huis er tussendoor uit de accu
+    draait: de eindstand bij het blok is gelijk.
+
+    Nu: de marge geldt één keer, als eindvoorwaarde. Het anker is het
+    laatste kwartier vóór het blok (het laatste met een vloer boven de
+    bodem): zijn vloer blijft zoals hij was - met de marge op wat daarna
+    nog nodig is en de bodem. Elk eerder kwartier krijgt die vloer plus
+    het verwachte huistekort (verbruik - zon) ertussen, en nooit meer dan
+    zijn eigen oude vloer. De vloer zakt dus precies met het huisverbruik:
+    verkopen kost in elk kwartier evenveel ruimte en het plan kiest de
+    duurste. Het huis tot het blok blijft beschermd (het hele tekort ertussen
+    plus de marge van het anker), alleen de dubbel getelde marge vooraan
+    vervalt. Een kwartier waarvan de volgende vloer op de bodem staat (in
+    het blok, of niets nodig) is zelf een anker. Het tekort telt aan de
+    netkant (zonder ontlaadverlies): bij twijfel liever eerder dan later.
+    """
+    n = len(kwartieren)
+    uit = list(kwartieren)
+    bodem = max(0.0, float(bodem_kwh or 0.0)) + 1e-9
+    volgende = None
+    for t in range(n - 1, -1, -1):
+        k = kwartieren[t]
+        oud = max(0.0, float(k.verkoop_vloer_kwh or 0.0))
+        vloer = oud
+        if volgende is not None and volgende > bodem:
+            vloer = min(oud, volgende + max(0.0, k.verbruik_kwh - k.zon_kwh))
+        if vloer < oud - 1e-12:
+            uit[t] = replace(k, verkoop_vloer_kwh=vloer)
+        volgende = vloer
+    return uit
 
 
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:

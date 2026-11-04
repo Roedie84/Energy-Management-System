@@ -283,6 +283,10 @@ class WaardeplanSturingMixin:
             uit.append(k)
         if self._waardeplan_knip is not None and len(uit) < WAARDEPLAN_MIN_KWARTIEREN:
             return None
+        # v5.181.2: één vloer langs het plan - de marge van nu, daarna zakt
+        # hij met het huisverbruik (zie `waardeplan.vloeren_gelijktrekken`).
+        if uit:
+            uit = waardeplan_mod.vloeren_gelijktrekken(uit, self._reserve_bodem_kwh())
         return uit or None
 
     def _waardeplan_kwartier(self, now, begin, eind, prijs, kaal, feedin_cost, reserve_cache, entries):
