@@ -1003,3 +1003,18 @@ laatste ronde: 03-11 19:40, gemeten t/m 03-11 19:46
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
 
 laatste ronde: 03-11 23:40, gemeten t/m 03-11 23:46
+
+## 04-11 03:40 · dagafsluiting 03-11
+- **Gebouwd v5.176.3** (L-EMS-060): bewolking per kwartier overleeft een herstart, en een daglabel vraagt 50 % dekking van de verwachte zon. Suite 6937 groen, workflow groen, HACS ververst. Geen purge/repack gezien. Log: Solcast/Zonneplan rond herstart, 0 fouten.
+- Dag 03-11 (di): PV **4,96 kWh** (day-ahead 7,69 → **−35,5 %**), import 7,15, export 0,39, accu 3,41 in / 2,90 uit, huis **11,20** (verwacht 10,05 → **+1,15**). **Harde regel: 0× onder de reserve**, verkocht 0; `geschonden` om 0,228 kWh regeloverschot (rond de zon, vóór v5.175.1).
+- **H-EMS-2 (PV te hoog):** 7 d MAE/bias **31,5/−23,1 %** (6/7), 14 d 22,9/−16,9, 30 d 19,3/−15,8 (26/30). Plan-zon 7 d 22,9/−17,3; plantoetsing zelf: 28 van 30 dagen minder zon dan voorspeld (mediaan −13 %).
+- **Backtest correctievenster (n=26):** zonder correctie MAE 21,1 / bias −17,9; huidig (14 d) 17,5 / −8,9; mediaan 14 d 17,8; 7 d 17,9. **Een ander venster levert niets op**, de rest is dagruis. Geen voorstel; de bias van −9 blijft staan.
+- **L-EMS-059 werkt:** `tekortnacht_tot_nu_kwh` **1,232** om 03:45, boven de 0,5 van een tekortdag; vorige nacht telde maar 0,165 van ~2,5 kWh net.
+- **Brier 0,018 → 0,25 is geen verslechtering:** nacht 03-11 staat op kans 100 %, tekort false, omdat die vóór L-EMS-059 te laag telde. Valt vanzelf uit het venster.
+- **MC 0 % sinds 03:14 terwijl det. 0,49:** klopt, kans telt pas boven beschikbaar + 0,5 kWh (0,67). Geen fout. Label 03-11 is leeg door de herstarts (L-EMS-060).
+- Nabeschouwing 7 d **65,4 %** (6,45 / 9,86). Planvolging 7 d **69,7 %** (03-11 64,9). Verbruik 7 d **+0,81** (MAE 1,62). Twin 0,396.
+- Stilstand: **geen echte** (12 wachten, 0 doen). Airco 'niets', knop uit → rekent.
+- Niet gemeten: PV per uur; L-EMS-057, H-EMS-15, regeloverschot overdag: uitslag vanochtend.
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
+
+laatste ronde: 04-11 03:40, gemeten t/m 04-11 03:46

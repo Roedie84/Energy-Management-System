@@ -1246,3 +1246,22 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-03 23:40,TUSSEN,ems_planvolging_vandaag_pct,64.1,92,"tot 23:30; afwijking accu 23, energieverschil -2.93 kWh; 19:40 59.7"
 2026-11-03 23:40,TUSSEN,ems_besparing_eur,0.07,1,"vandaag; maand -0.72"
 2026-11-03 23:40,TUSSEN,ems_stilstand_functies,0,12,"12 wachten, 0 doen (was 11); airco niets, knop uit -> rekent; witgoedadvies morgen 04:15"
+2026-11-04 03:40,DAG,ems_pv_mae_7d_pct,31.5,7,bias -23.1; mediaan -31.8; 6/7 negatief; 03-11 -35.5 (4.96 tegen 7.69)
+2026-11-04 03:40,DAG,ems_pv_mae_14d_pct,22.9,14,bias -16.9; mediaan -14.8; 11/14 negatief
+2026-11-04 03:40,DAG,ems_pv_mae_30d_pct,19.3,30,bias -15.8; mediaan -9.5; 26/30 negatief
+2026-11-04 03:40,DAG,ems_pv_plan_mae_7d_pct,22.9,7,"plantoetsing voorspeld tegen werkelijk 28-10..03-11, bias -17.3; 03-11 5.09/4.96"
+2026-11-04 03:40,DAG,ems_pv_backtest_correctie_mae_pct,17.5,26,venster 14 groepmediaan 17.5 (bias -8.9); mediaan 14 d 17.8; 7 d 17.9; zonder correctie 21.1 (-17.9): venster maakt niets uit
+2026-11-04 03:40,DAG,ems_harde_regel_verkoop_onder_reserve,0,96,"03-11 0 kwartieren onder de reserve; verkoopkwartieren leeg; huis_gaat_voor geschonden door regeloverschot 0.228, geen verkoop"
+2026-11-04 03:40,DAG,ems_pv_dag_kwh,4.96,1,03-11; day-ahead 7.69
+2026-11-04 03:40,DAG,ems_net_import_kwh,7.15,1,03-11 dagarchief; export 0.39
+2026-11-04 03:40,DAG,ems_accu_laden_kwh,3.41,1,03-11; ontladen 2.90
+2026-11-04 03:40,DAG,ems_huisverbruik_kwh,11.2,1,03-11; verwacht 10.05 = +1.15
+2026-11-04 03:40,DAG,ems_verbruik_dag_bias_kwh,0.81,7,28-10..03-11: +1.27/-0.73/-2.10/+3.92/+0.55/+1.64/+1.15; MAE 1.62
+2026-11-04 03:40,DAG,ems_besparing_eur,-0.15,1,"03-11 dagarchief accu_opbrengst; kosten 2.69 tegen zonder accu 2.76, voorraad -0.22"
+2026-11-04 03:40,DAG,ems_nabeschouwing_realisatie_7d_pct,65.4,7,28-10..03-11 leverde 6.45 / had 9.86; 03-11 0.08 / 0.09
+2026-11-04 03:40,DAG,ems_planvolging_7d_pct,69.7,7,"28-10..03-11: 66.3/53.7/54.2/70.5/93.7/84.5/64.9; 03-11 23 kwartieren accu, 6 verbruik, 4 zon"
+2026-11-04 03:40,DAG,ems_mc_brier_22u,0.25,4,per_nacht 28/30/31-10 + 03-11 kans 100 tekortnacht false: die nacht telde vóór L-EMS-059 maar 0.165 kWh van ~2.5 net; geen echte verslechtering
+2026-11-04 03:40,DAG,ems_digital_twin_kwartierplan_mae_kwh,0.396,60,23:40 0.405
+2026-11-04 03:40,DAG,ems_tekortnacht_tot_nu_kwh,1.232,1,"live 03:45, boven 0.5 = tekortdag; L-EMS-059 werkt; uitslag 09:00"
+2026-11-04 03:40,DAG,ems_mc_tekortkans_tot_blok_pct,0,1000,"sinds 03:14: det. 0.492 < beschikbaar 0.17 + drempel 0.5; uitleg, geen fout"
+2026-11-04 03:40,DAG,ems_stilstand_functies,0,12,"12 wachten, 0 doen; airco 'niets', knop uit -> rekent"

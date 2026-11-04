@@ -125,3 +125,7 @@
 | Planvolging volgens plan | 69,7 % (7 d, 53,7-93,7) | 27-10..02-11 | 03-11 03:40 |
 
 - 03-11 19:31: accu van 4 naar 3 modules (00996 eruit): totaal 8,64 kWh, bruikbaar 7,78 kWh (was 11,52 / 10,37). Referenties in kWh van vóór deze datum niet zonder meer vergelijken.
+
+| PV-voorspelling MAE/bias 7 d | 31,5 % / −23,1 % (30 d 19,3 / −15,8) | 28-10..03-11 | 04-11 03:40 |
+| PV-correctie backtest MAE/bias | 17,5 / −8,9 (zonder 21,1 / −17,9) | n=26 dagen | 04-11 03:40 |
+| Verbruik dagtotaal bias 7 d | +0,81 kWh/dag (MAE 1,62) | 28-10..03-11 | 04-11 03:40 |

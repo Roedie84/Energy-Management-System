@@ -437,7 +437,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: test met SoC 15 %, inhoud 0,02 kWh en `waardeplan_houden` = tekort; eerstvolgende lege nacht telt > 0 en de soort is gevuld.
 
 ## L-EMS-060 · bewolking van vandaag overleeft een herstart niet (meetfout)
-- Status: **open, zelf te bouwen** (03-11 11:40; meetfout zonder invloed op de sturing vandaag → dagafsluiting).
+- Status: **gebouwd v5.176.3** (04-11 03:40, dagafsluiting; suite groen, workflow groen, HACS ververst; wacht op installatie). Test `test_v51763_bewolking_herstart.py` (6). Meten na installatie: geen gat in `bewolking_vandaag` rond een herstart; een dag met < 50 % dekking krijgt geen label. Was: open, zelf te bouwen.
 - Onderbouwing (live 03-11, n=1): `bewolking_vandaag.kwartieren` mist 08:30-09:30 terwijl de bewolking er was (100 → 99,2 %). Herstart 09:45. `noteer_bewolking` wijzigt de tracker zonder `_notify_listeners`, dus `PvForecastAccuracySensor` schrijft geen staat; alleen de staat die er bij de herstart stond komt terug. Op dagen met meerdere herstarts wordt het label dunner of leeg (< 4 kwartieren).
 - Voorstel: in `noteer_bewolking` `_notify_listeners()` aanroepen zodra er een nieuw kwartier bijkomt (niet elke ronde).
 - Verwacht effect: alle zonkwartieren staan na een herstart nog in `bewolking_vandaag`.
