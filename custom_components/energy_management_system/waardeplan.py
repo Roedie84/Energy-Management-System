@@ -82,6 +82,9 @@ class Kwartier:
     #: er inhoud is; bewaren voor later is hier niet genoeg waard (zie
     #: `te_duur_bewaard`).
     dekken: bool = False
+    #: v5.184.0 (akkoord Ruud 04-11 15:56): hier geen zon terugleveren zolang er
+    #: ruimte is (ook niet via een verkoop); zie `zon_export_zonder_overschot`.
+    geen_zon_export: bool = False
 
 
 @dataclass
@@ -296,8 +299,10 @@ def _zon_regel(k, accu: Accu, s: int, b: float, s_min, min_kwh: float, min_laad_
         return None, 0.0
     tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
     if b < 0 and -b - tekort >= min_kwh - 1e-9:
+        if k.geen_zon_export:       # v5.184.0: de zon zou mee het net op gaan
+            return np.zeros(len(s_min), dtype=bool), 0.0
         return None, 0.0            # echt verkopen: handmatig, de zon gaat mee het net op
-    if accu.zon_export_afdwingbaar and s >= 0:
+    if accu.zon_export_afdwingbaar and not k.geen_zon_export and s >= 0:
         # Terugleveren wat de slimme stand zou opslaan mag, met de marge.
         gemist = np.maximum(s_min - s, 0) * STAP_KWH
         # v5.177.0 (A11/A12): minder opslaan dan het overschot gaat met een
@@ -508,7 +513,7 @@ def _zon_export(k, accu: Accu, actie: str, s: int, i_voor: int, niveaus: int, et
     """v5.177.0 (A11): slaat het plan minder op dan de slimme stand zou doen?
     Dan moet de sturing het overschot laten terugleveren (handmatig, 0 W of
     een vast laadvermogen) - de slimme standen laden het anders zelf op."""
-    if actie != "zon" or not (accu.zon_opslaan and accu.zon_export_afdwingbaar):
+    if actie != "zon" or not (accu.zon_opslaan and accu.zon_export_afdwingbaar) or k.geen_zon_export:
         return False
     overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
     if overschot <= EPS_KWH:
@@ -780,6 +785,40 @@ def te_duur_bewaard(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu,
     return uit
 
 
+def zon_export_zonder_overschot(rijen: list[dict], accu: Accu) -> list[int]:
+    """Zon terugleveren terwijl de accu niet vol raakt (v5.184.0).
+
+    Akkoord Ruud 04-11 15:56: zon alleen terugleveren als het echt overschot
+    is - als de accu anders vol zou raken. Live 15:54: 05-11 09:30-10:45 zon
+    terug voor 39-43 ct (+2 ct) en om 11:45 bijladen uit het net voor 37 ct;
+    de accu kwam niet verder dan ~70 % en was om 21:30 leeg.
+
+    Een kwartier met zon terugleveren (ook een verkoop met zonoverschot) mag
+    alleen als de accu daarna vol raakt voordat hij weer levert, uit het net
+    laadt of het huis het net op gaat.
+    """
+    vol = accu.bruikbaar_kwh - STAP_KWH - 1e-9
+    n = len(rijen)
+    uit = []
+    for t, r in enumerate(rijen):
+        actie = r.get("actie")
+        zon_mee = actie == "verkopen" and -(r.get("net_kwh") or 0.0) > -(r.get("accu_kwh") or 0.0) + 0.01
+        if actie != "zon_export" and not zon_mee:
+            continue
+        overschot = False
+        for u in range(t, n):
+            ru = rijen[u]
+            if (ru.get("inhoud_kwh") or 0.0) >= vol:
+                overschot = True
+                break
+            if u > t and (ru.get("actie") in ("huis", "verkopen", "laden_net")
+                          or (ru.get("net_kwh") or 0.0) > 0.01):
+                break
+        if not overschot:
+            uit.append(t)
+    return uit
+
+
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     """Het goedkoopste accuplan over de gegeven kwartieren.
 
@@ -792,6 +831,7 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     # v5.182.0: met de huis-eerst-regel meer rondes (elke ronde kan een
     # verkoop naar een ander kwartier schuiven).
     dekken: set[int] = set()
+    geen_zon: set[int] = set()
     for _ in range(16 if (accu.huis_eerst or accu.bewaarmarge_eur) else 4):
         if not res.beschikbaar:
             break
@@ -801,13 +841,18 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
         nieuw -= verboden
         # v5.183.0: bewaarmarge - te goedkoop bewaard, dan hier het huis dekken.
         nieuw_dekken = set(te_duur_bewaard(res.kwartieren, kwartieren, accu)) - dekken
-        if not nieuw and not nieuw_dekken:
+        # v5.184.0: zon alleen terug als het echt overschot is (huis eerst).
+        nieuw_zon = (set(zon_export_zonder_overschot(res.kwartieren, accu)) - geen_zon
+                     if accu.huis_eerst else set())
+        if not nieuw and not nieuw_dekken and not nieuw_zon:
             break
         verboden |= nieuw
         dekken |= nieuw_dekken
+        geen_zon |= nieuw_zon
         dicht = accu.bruikbaar_kwh + STAP_KWH
         kwartieren = [replace(k, verkoop_vloer_kwh=dicht if t in verboden else k.verkoop_vloer_kwh,
-                              dekken=k.dekken or t in dekken)
+                              dekken=k.dekken or t in dekken,
+                              geen_zon_export=k.geen_zon_export or t in geen_zon)
                       for t, k in enumerate(kwartieren)]
         res = _plan(kwartieren, accu)
     return res

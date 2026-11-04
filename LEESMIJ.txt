@@ -1,3 +1,11 @@
+EMS v5.184.0 - zon alleen terugleveren als het echt overschot is
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Zolang de accu niet vol raakt voordat hij weer levert, uit het net laadt of het huis
+  op het net gaat, gaat zon altijd eerst de accu in - ook als netladen later goedkoper is.
+  Geen handel meer in zon tegen netstroom.
+
 EMS v5.183.3 - plantabel rekent met hetzelfde huisverbruik als het plan
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

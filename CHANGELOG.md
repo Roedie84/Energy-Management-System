@@ -34901,3 +34901,11 @@ Controle na de herstart 04-11 15:21 (v5.183.2): 15:30 net 2428 W bij een huis va
 - `ondergrens_procent` (v5.183.1) stond niet in de veldenlijst van het attribuut `kwartierplanning` en kwam dus nooit in de cockpit; nu wel (alleen de eerste rij).
 
 Tests: `test_v5183_3_tabel.py`.
+
+## v5.184.0 — zon alleen terugleveren als het echt overschot is
+
+Akkoord Ruud 04-11 15:56. Live 15:54: 05-11 09:30-10:45 zon terug voor 39-43 ct (+2 ct premie) en om 11:45 bijladen uit het net voor 37 ct; de accu kwam niet verder dan ~70 % en was om 21:30 leeg. De huis-eerst-regel van v5.179.1 liet dat toe omdat er vóór de lege accu nog een netlading kwam.
+
+- Controle `zon_export_zonder_overschot` (met `huis_eerst`): zon terugleveren (ook een verkoop met zonoverschot) mag alleen als de accu daarna vol raakt voordat hij weer levert, uit het net laadt of het huis het net op gaat. Anders krijgt het kwartier `geen_zon_export` (geen afgedwongen teruglevering, geen verkoop met zon) en wordt opnieuw gepland.
+
+Tests: `test_v5184_zon_overschot.py`.
