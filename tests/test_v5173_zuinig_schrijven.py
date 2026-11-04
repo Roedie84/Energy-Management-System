@@ -125,6 +125,8 @@ def test_kleine_toestandswijziging_wordt_niet_afgerond(klok):
 def test_betekenisvol_attribuut_wacht_op_interval(klok):
     s = _Sensor()
     s.async_write_ha_state()
+    klok["t"] += zs.ZUINIG_OPWARM_S  # v5.178.1: na de opwarmtijd
+    s.async_write_ha_state()
     klok["t"] += 30
     s.attrs["samenvatting"] = "let op"
     s.async_write_ha_state()
@@ -163,6 +165,8 @@ def test_tik_en_stop_aangemeld_en_afgemeld(monkeypatch, klok):
 def test_bij_stop_altijd_de_actuele_stand(klok):
     """Herstelgegevens (RestoreEntity) komen uit de toestandsmachine."""
     s = _Sensor()
+    s.async_write_ha_state()
+    klok["t"] += zs.ZUINIG_OPWARM_S  # v5.178.1: na de opwarmtijd
     s.async_write_ha_state()
     klok["t"] += 30
     s.attrs["samenvatting"] = "nieuw"
@@ -252,3 +256,93 @@ def test_cockpit_draagt_het_tijdstip_voor_bijgewerkt():
         __import__("pathlib").Path(sensor.__file__).parent / "www" / "ems-cockpit.js"
     ).read_text(encoding="utf-8")
     assert 'attr(this._s("cockpit"), "bijgewerkt")' in js
+
+
+# v5.178.1: na de herstart van 08:40 stond de modulegezondheid 5 minuten op
+# `modules: []` / `aantal_modules: 0` ("Geen modulegegevens" in de cockpit).
+# De eerste schrijfbeurt kwam vóór de eerste EMS-ronde; de toestand bleef "0",
+# dus de gevulde lijst wachtte op het attribuutinterval (300 s).
+
+
+class _Modules(zs.ZuinigSchrijven, _Basis):
+    _zuinig_attr_interval_s = 300
+
+    def __init__(self):
+        super().__init__()
+        self.hass = _Hass()
+        self.modules = []
+
+    @property
+    def native_value(self):
+        return 0
+
+    @property
+    def extra_state_attributes(self):
+        return {"modules": list(self.modules), "aantal_modules": len(self.modules)}
+
+
+def test_lege_modulelijst_bij_opstarten_volgt_binnen_een_tik(klok):
+    s = _Modules()
+    s.async_write_ha_state()  # toevoegen aan HA, vóór de eerste ronde
+    assert s.geschreven == 1
+    klok["t"] += zs.ZUINIG_TIK_S
+    s.modules = [{"module": 1, "soc_percent": 16.0}, {"module": 2}, {"module": 3}]
+    s.async_write_ha_state()
+    assert s.geschreven == 2
+
+
+def test_leeg_naar_gevuld_ook_na_de_opwarmtijd(klok):
+    s = _Modules()
+    s.async_write_ha_state()
+    klok["t"] += zs.ZUINIG_OPWARM_S + 30
+    s.async_write_ha_state()
+    klok["t"] += 30
+    s.modules = [{"module": 1}]
+    s.async_write_ha_state()
+    assert s.geschreven == 2
+
+
+def test_na_opwarmen_blijft_gewone_ruis_geremd(klok):
+    s = _Modules()
+    s.modules = [{"module": 1, "soc_percent": 16.0}]
+    s.async_write_ha_state()
+    klok["t"] += zs.ZUINIG_OPWARM_S
+    for i in range(8):  # 4 minuten elke 30 s een andere SoC
+        klok["t"] += 30
+        s.modules = [{"module": 1, "soc_percent": 17.0 + i}]
+        s.async_write_ha_state()
+    assert s.geschreven == 2  # één keer na het interval van 300 s
+
+
+def test_gevuld_naar_leeg_wacht_op_het_interval(klok):
+    s = _Modules()
+    s.modules = [{"module": 1}]
+    s.async_write_ha_state()
+    klok["t"] += zs.ZUINIG_OPWARM_S
+    s.modules = [{"module": 1, "soc_percent": 20.0}]
+    s.async_write_ha_state()  # interval verstreken: tweede rij
+    klok["t"] += 30
+    s.modules = []
+    s.async_write_ha_state()
+    assert s.geschreven == 2  # gevuld -> leeg wacht op het interval
+    klok["t"] += 30
+    s.modules = [{"module": 1}]
+    s.async_write_ha_state()
+    # de laatst geschreven stand was al gevuld: geen extra rij (geen flapperen)
+    assert s.geschreven == 2
+
+
+def test_leeg_naar_gevuld_los():
+    assert zs.leeg_naar_gevuld((("m", ()),), (("m", (1,)),))
+    assert zs.leeg_naar_gevuld((("m", None),), (("m", 2),))
+    assert zs.leeg_naar_gevuld((), (("nieuw", 1),))
+    assert not zs.leeg_naar_gevuld((("m", (1,)),), (("m", (2,)),))
+    assert not zs.leeg_naar_gevuld((("m", (1,)),), (("m", ()),))
+
+
+def test_herstart_van_de_entiteit_begint_opnieuw_met_opwarmen(klok):
+    s = _Modules()
+    s.async_write_ha_state()
+    klok["t"] += zs.ZUINIG_OPWARM_S * 3
+    s._zuinig_stop()
+    assert s._zuinig_eerste is None

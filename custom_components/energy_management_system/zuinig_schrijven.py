@@ -34,6 +34,15 @@ schrijfbeurt aan die niet langs deze poort liep); een eigen tik van 30 s
 vraagt de poort. Een sensor die op een andere plek `async_write_ha_state`
 aanroept, gaat ook langs de poort.
 
+Opstarten (v5.178.1): de eerste schrijfbeurt komt bij het toevoegen van de
+entiteit, vóór de eerste EMS-ronde. De attributen zijn dan nog leeg
+(modulegezondheid: `modules: []`). Bleef de toestand daarna gelijk (de
+modulegezondheid staat op "0"), dan volgde de gevulde lijst pas na het
+attribuutinterval: tot 5-10 minuten "Geen modulegegevens" in de cockpit.
+Daarom gaan attribuutwijzigingen in de opwarmtijd (`ZUINIG_OPWARM_S` na de
+eerste schrijfbeurt) en een attribuut dat van leeg naar gevuld gaat (of
+nieuw verschijnt) meteen door - hoogstens eens per tik.
+
 Bij het stoppen van Home Assistant schrijft elke sensor nog één keer zijn
 actuele stand, buiten de poort om. Een aantal sensoren haalt bij de
 herstart zijn geleerde gegevens uit de attributen van de laatste toestand
@@ -68,6 +77,12 @@ STANDAARD_VLUCHTIG = frozenset(
 ZUINIG_TIK_S = 30
 ZUINIG_ATTR_INTERVAL_S = 600
 ZUINIG_HARTSLAG_S = 900
+# v5.178.1: na de eerste schrijfbeurt zo lang attribuutwijzigingen meteen.
+ZUINIG_OPWARM_S = 300
+# Ondergrens tussen twee schrijfbeurten voor de snelle routes hierboven.
+ZUINIG_MIN_S = 25
+
+_LEEG = (None, (), "", "unknown", "unavailable")
 
 
 def _afgerond(waarde, diepte: int = 0):
@@ -101,12 +116,26 @@ def vingerafdruk(attributen: dict | None, vluchtig: frozenset) -> tuple:
     )
 
 
+def leeg_naar_gevuld(vorige: tuple, nu: tuple) -> bool:
+    """Is een attribuut van leeg (None, lege lijst/dict, "") naar gevuld
+    gegaan, of nieuw verschenen? Dat is geen ruis maar de eerste echte
+    inhoud, en mag niet op het attribuutinterval wachten (v5.178.1)."""
+    oud = dict(vorige or ())
+    for sleutel, waarde in nu or ():
+        if waarde in _LEEG:
+            continue
+        if sleutel not in oud or oud[sleutel] in _LEEG:
+            return True
+    return False
+
+
 def beslis(
     vorige: dict | None,
     nu: dict,
     sinds_s: float,
     attr_interval_s: float,
     hartslag_s: float,
+    opwarmen: bool = False,
 ) -> bool:
     """Moet er geschreven worden? Los van Home Assistant, zodat het toetsbaar is.
 
@@ -116,7 +145,12 @@ def beslis(
     if vorige is None or vorige["kern"] != nu["kern"]:
         return True
     if vorige["betekenis"] != nu["betekenis"]:
-        return sinds_s >= attr_interval_s
+        if sinds_s >= attr_interval_s:
+            return True
+        # v5.178.1: opstarten of eerste echte inhoud - niet 5-10 min wachten.
+        if opwarmen or leeg_naar_gevuld(vorige["betekenis"], nu["betekenis"]):
+            return sinds_s >= min(ZUINIG_MIN_S, attr_interval_s)
+        return False
     if vorige["alles"] != nu["alles"]:
         return sinds_s >= hartslag_s
     return False
@@ -135,6 +169,7 @@ class ZuinigSchrijven:
     _zuinig_tik_af = None
     _zuinig_stop_af = None
     _zuinig_overgeslagen: int = 0
+    _zuinig_eerste: float | None = None
 
     def _zuinig_staat(self) -> dict:
         toestand = getattr(self, "state", None)
@@ -164,12 +199,15 @@ class ZuinigSchrijven:
             self._zuinig_schrijf()
             return
         nu = time.monotonic()
+        if self._zuinig_eerste is None:
+            self._zuinig_eerste = nu
         if not beslis(
             self._zuinig_vorige,
             staat,
             nu - self._zuinig_geschreven,
             self._zuinig_attr_interval_s,
             self._zuinig_hartslag_s,
+            opwarmen=nu - self._zuinig_eerste < ZUINIG_OPWARM_S,
         ):
             self._zuinig_overgeslagen += 1
             return
@@ -215,6 +253,7 @@ class ZuinigSchrijven:
         af, self._zuinig_tik_af = self._zuinig_tik_af, None
         stop_af, self._zuinig_stop_af = self._zuinig_stop_af, None
         self._zuinig_vorige = None
+        self._zuinig_eerste = None
         for afmelden in (af, stop_af):
             if afmelden is not None:
                 afmelden()
