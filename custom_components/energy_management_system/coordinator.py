@@ -23936,6 +23936,15 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             # niet; dan bleef de planvolging het hele kwartier leeg. Elke
             # ronde opnieuw proberen tot het plan er is.
             self._planvolging["gepland"] = self._planvolging_gepland(now, kwartier)
+        else:
+            # v5.181.2 (c): het plan van NU voor dit kwartier. Live 04-11 11:32
+            # stond er "Gepland 2,40 kW laden" uit het plan van 11:30:00, terwijl
+            # het om 11:30 opnieuw was berekend (huis-eerst: geen netladen). Het
+            # eerste plan blijft bewaard (`gepland`, eerst voorspeld) voor het
+            # kwartieroordeel; de weergave van nu gebruikt het laatste plan.
+            actueel = self._planvolging_gepland(now, kwartier)
+            if actueel is not None:
+                self._planvolging["gepland_nu"] = actueel
         meting = self._live_momentopname(now)
         if meting["accu_w"] is not None:
             self._planvolging["monsters"].append(meting)
@@ -24051,12 +24060,24 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         lopend = self._planvolging or {}
         monsters = lopend.get("monsters") or []
         laatste = monsters[-1] if monsters else {}
-        uit = planvolging.beoordeel(
-            lopend.get("gepland"), laatste.get("accu_w"), laatste.get("zon_w"), laatste.get("huis_w"),
-            stand=laatste.get("stand"), opdracht_w=laatste.get("opdracht_w"),
-        )
+        # v5.181.2 (c): gepland = het laatste plan voor dit kwartier; het
+        # eerste plan (`eerst_voorspeld`) staat er apart bij.
+        gepland = lopend.get("gepland_nu") or lopend.get("gepland")
+        if self.learning_only and laatste:
+            # v5.181.2 (c): het EMS stuurt niet - geen afwijking berekenen.
+            stand = getattr(self, "handmatige_stand", None)
+            uit = planvolging.niet_gestuurd(
+                laatste, gepland, f"handmatige stand {stand}" if stand else "leermodus"
+            )
+        else:
+            uit = planvolging.beoordeel(
+                gepland, laatste.get("accu_w"), laatste.get("zon_w"), laatste.get("huis_w"),
+                stand=laatste.get("stand"), opdracht_w=laatste.get("opdracht_w"),
+            )
         if uit.get("beschikbaar"):
             uit["moment"] = laatste.get("moment")
+            eerst = lopend.get("gepland") or {}
+            uit["eerst_voorspeld_accu_w"] = eerst.get("accu_w")
         return uit
 
     def get_laadplan_gewijzigd(self) -> dict:

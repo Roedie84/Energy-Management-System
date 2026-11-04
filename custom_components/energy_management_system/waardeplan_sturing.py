@@ -83,7 +83,15 @@ class WaardeplanSturingMixin:
             if hasattr(b, "isoformat"):
                 per_begin[b.astimezone(timezone.utc)] = r
         capaciteit = self.bruikbare_capaciteit_kwh()
-        min_soc = self.effective_min_soc_percent()
+        # v5.181.2 (b): de inhoud van het waardeplan telt boven de EFFECTIEVE
+        # ondergrens (`bereken_waardeplan`, en `beschikbare_energie_kwh` trekt
+        # de ondergrenscorrectie af). Hier stond de min-SoC: live 04-11 11:31
+        # begon de lijn in "Prijs en lading" op ~20 % bij een accu van 35 %
+        # (bodem ~25 %, min-SoC 10 %). Nu dezelfde grens als de inhoud.
+        try:
+            min_soc = float(self.effectieve_ondergrens_procent())
+        except Exception:  # noqa: BLE001 - veilig terugvallen op de min-SoC
+            min_soc = self.effective_min_soc_percent()
         bruikbaar = capaciteit * (100 - min_soc) / 100 if capaciteit else None
         uit = []
         eerste = rijen[0]
@@ -283,6 +291,10 @@ class WaardeplanSturingMixin:
             uit.append(k)
         if self._waardeplan_knip is not None and len(uit) < WAARDEPLAN_MIN_KWARTIEREN:
             return None
+        # v5.181.2: één vloer langs het plan - de marge van nu, daarna zakt
+        # hij met het huisverbruik (zie `waardeplan.vloeren_gelijktrekken`).
+        if uit:
+            uit = waardeplan_mod.vloeren_gelijktrekken(uit, self._reserve_bodem_kwh())
         return uit or None
 
     def _waardeplan_kwartier(self, now, begin, eind, prijs, kaal, feedin_cost, reserve_cache, entries):
@@ -396,6 +408,8 @@ class WaardeplanSturingMixin:
                 and waardeplan_mod.zon_export_laat_huis_tekort(res.kwartieren)):
             return res
         accu.zon_export_afdwingbaar = False
+        # v5.181.2 (g): en ook niet via een verkoop (de zon gaat dan mee).
+        accu.verkopen_bij_zon = False
         opnieuw = waardeplan_mod.plan(kwartieren, accu)
         if not opnieuw.beschikbaar:
             return res

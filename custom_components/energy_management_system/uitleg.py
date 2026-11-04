@@ -88,6 +88,9 @@ class UitlegMixin:
         de reden als toelichting.
         """
         reden = reden if reden is not None else self.last_reason
+        # v5.181.2 (a): stuurt het EMS niet, dan zegt de stand dat.
+        if getattr(self, "learning_only", False) is True:
+            return standweergave.handmatig_weergave(getattr(self, "handmatige_stand", None))
         _stand, vermogen = self._accu_doet_nu()
         nu = (getattr(self, "last_waardeplan", None) or {}).get("nu") or {}
         modi = getattr(self, "_WAARDEPLAN_MODUS", {}) or {}

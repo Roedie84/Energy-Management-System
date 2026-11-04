@@ -209,16 +209,64 @@ def _richting(w: float) -> str:
 
 
 def verschil_tekst(gepland_w: float, gemeten_w: float) -> str:
-    """Het verschil in woorden (v5.93.2): "minder laden" in plaats van
-    "meer ontladen" als de accu wel laadt, maar minder dan gepland."""
+    """Het verschil in woorden, vanuit wat er GEPLAND was (v5.93.2, v5.181.2).
+
+    v5.181.2 (e): live 04-11 11:34 stond er bij 2,40 kW laden gepland en
+    1,36 kW gemeten "1,04 kW meer ontladen" (de cockpit rekende het teken
+    om); het is "minder laden". Alle gevallen, + is ontladen en - laden:
+
+    - beide laden: "minder laden" / "meer laden"
+    - beide ontladen: "minder ontladen" / "meer ontladen"
+    - laden gepland, ontlaadt: "ontlaadt in plaats van laden" (en omgekeerd)
+    - laden of ontladen gepland, in rust: "laadt niet" / "ontlaadt niet"
+    - rust gepland: "laadt" / "ontlaadt" (in plaats van rust)
+    """
     verschil = gemeten_w - gepland_w
     if abs(verschil) < 50:
         return "geen"
-    if gepland_w <= -50 and gemeten_w <= -50:
+    plan = "laden" if gepland_w <= -50 else "ontladen" if gepland_w >= 50 else "rust"
+    echt = "laden" if gemeten_w <= -50 else "ontladen" if gemeten_w >= 50 else "rust"
+    if plan == "laden" and echt == "laden":
         return "minder laden" if verschil > 0 else "meer laden"
-    if gepland_w >= 50 and gemeten_w >= 50:
+    if plan == "ontladen" and echt == "ontladen":
         return "meer ontladen" if verschil > 0 else "minder ontladen"
-    return "meer ontladen" if verschil > 0 else "meer laden"
+    if plan == "laden" and echt == "ontladen":
+        return "ontlaadt in plaats van laden"
+    if plan == "ontladen" and echt == "laden":
+        return "laadt in plaats van ontladen"
+    if echt == "rust":
+        return "laadt niet" if plan == "laden" else "ontlaadt niet"
+    return "laadt in plaats van rust" if echt == "laden" else "ontlaadt in plaats van rust"
+
+
+def niet_gestuurd(meting: dict | None, gepland: dict | None, reden: str | None = None) -> dict:
+    """De planvolging als het EMS niet stuurt (v5.181.2, c).
+
+    In de leermodus (ook via de knoppen "Handmatig laden" / "Smart charge")
+    schrijft het EMS niets naar de accu. Een verschil met het plan is dan
+    geen afwijking die het EMS veroorzaakte; we tonen de meting, zonder
+    oordeel.
+    """
+    meting = meting or {}
+    gepland = gepland or {}
+    accu = meting.get("accu_w")
+    zon = meting.get("zon_w")
+    return {
+        "beschikbaar": True,
+        "niet_gestuurd": True,
+        "niet_gestuurd_reden": reden,
+        "gepland_accu_w": gepland.get("accu_w"),
+        "gemeten_accu_w": None if accu is None else round(accu),
+        "gepland_zon_w": gepland.get("zon_w"),
+        "gemeten_zon_w": None if zon is None else round(zon),
+        "verschil_w": None,
+        "verschil_tekst": None,
+        "oorzaak": "handmatig",
+        "status": "niet gestuurd",
+        "modus": gepland.get("modus"),
+        "stand": meting.get("stand"),
+        "tekst": "EMS stuurt niet (handmatig)",
+    }
 
 
 def zon_verschil_tekst(zon_d: float | None) -> str:

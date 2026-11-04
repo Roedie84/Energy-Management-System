@@ -34823,3 +34823,20 @@ Acute bug uit de leerronde van 04-11 11:40. Om 11:25:38 zette Ruud Handmatig sma
 Niet veranderd: sturing en reserve. Een stand van vóór deze versie is niet te onderscheiden van een leermodus die de gebruiker zelf aanzette en wordt dus niet opgeruimd: die zet je zelf uit.
 
 Tests: `test_v51812_leermodus_direct.py` (5).
+
+## v5.181.3 — geen zinloze middagverkoop; verkopen in de duurste kwartieren; cockpit eenduidig
+
+Meldingen Ruud 04-11 11:29–12:01.
+
+**Plan**
+- Middagverkoop (12:00, 37,6 ct, met de zon er direct achteraan om bij te vullen): de huis-eerst-regel had zonteruglevering uitgezet, maar een kleine accuverkoop zette de accu op handmatig zodat de zon tóch het net op ging; bij een bijna-gelijkspel koos het plan dat. Nieuw `Accu.verkopen_bij_zon`: de herberekening van de huis-eerst-regel verbiedt ook ontladen bij zonoverschot; een verkoop met zon erin telt als teruglevering in `zon_export_laat_huis_tekort`.
+- Controle `zinloze_verkopen`: een verkoop die minder oplevert dan het goedkoopste latere bijvullen (zon: gemiste teruglevering; net: prijs + netlaadmarge; gedeeld door het laadrendement) wordt in dat kwartier verboden en het plan opnieuw gerekend.
+- Verkoopvloer: `vloeren_gelijktrekken` telt de veiligheidsmarge één keer, aan het eind; eerdere kwartieren krijgen die vloer plus het verwachte huisverbruik ertussen (nooit boven de oude vloer). Verkopen schuift niet meer naar latere, goedkopere kwartieren.
+
+**Cockpit**
+- Tegeltitel, kopchip, grafiek, tijdlijn, Vooruitblik en "Daarna" volgen dezelfde planregel; in leermodus/handmatig "Handmatig: slim laden – EMS stuurt niet".
+- De plan-SoC werd vanaf de min-SoC (10 %) berekend terwijl de inhoud vanaf de geleerde ondergrens telt (hier ~25 %); dat gaf 20 % tegen live 35 %. Opgelost; de lijn begint bovendien bij de live laadstand en sluit in 3 uur aan op het plan.
+- "Gepland" in de planvolging volgt het nieuwste plan (de eerste voorspelling blijft apart); in leermodus "EMS stuurt niet (handmatig)". Alle richtingen van "verschil" kloppen (ook ontladen in plaats van laden).
+- Eenheden bij de assen: "ct/kWh" en "accu %"; eigen logo van de integratie in de kop.
+
+Tests: `test_v5181_2_middagverkoop.py`, `test_v5181_2_verkoopvloer.py`, `test_v5181_2_cockpit.py`.

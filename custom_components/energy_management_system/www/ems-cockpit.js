@@ -501,8 +501,8 @@ button { font: inherit; }
 /* ---- kop ---- */
 .kop { display: flex; align-items: center; gap: 12px 16px; padding: 0 0 16px; }
 .merk { display: flex; align-items: center; gap: 12px; min-width: 0; flex: none; }
-.logo { width: 32px; height: 32px; border-radius: var(--r2); display: grid; place-items: center; color: var(--amber); background: var(--kaart); border: 1px solid var(--rand); }
-.logo .ic { width: 16px; height: 16px; fill: currentColor; stroke: none; }
+.logo { width: 34px; height: 34px; flex: none; display: grid; place-items: center; }
+.logo img { width: 34px; height: 34px; display: block; border-radius: 50%; }
 .merknaam { font-size: 15px; font-weight: 600; line-height: 1.2; }
 .merksub { font-size: 11px; color: var(--tekst3); }
 .kop-mid { display: flex; gap: 8px; flex-wrap: wrap; flex: 1 1 0; min-width: 0; justify-content: flex-start; padding-left: 16px; }
@@ -660,6 +660,8 @@ button { font: inherit; }
 .pl-legenda.klein { gap: 4px 12px; }
 .gwrap { position: relative; display: grid; grid-template-columns: 32px 1fr 36px; grid-template-rows: 180px 24px; }
 .g-y, .g-y2 { position: relative; }
+/* v5.181.2 (d): eenheid boven de prijs- en de accu-as */
+.g-eenheid { display: flex; justify-content: space-between; font-size: 11px; color: var(--tekst3); line-height: 1; margin: 6px 0 6px; }
 .g-y span, .g-y2 span, .g-x span { position: absolute; font-size: 11px; color: var(--tekst3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .g-y span { right: 8px; transform: translateY(-50%); }
 .g-y2 span { left: 8px; transform: translateY(-50%); }
@@ -827,6 +829,10 @@ button { font: inherit; }
 const VB_HORIZONNEN = [2, 6, 12, 24];
 const VB_STANDAARD_UREN = 6;
 
+/* v5.181.2 (f): het logo, geserveerd door de integratie zelf (cockpit_frontend.py). */
+const LOGO_URL = "/energy_management_system/ems-logo.png";
+const LOGO_URL_2X = "/energy_management_system/ems-logo@2x.png";
+
 /* v5.178.0: de tabbladen van Prijs en lading, onthouden per browser. */
 const TABS = [["vandaag", "Vandaag"], ["morgen", "Morgen"], ["week", "7 dagen"]];
 
@@ -866,17 +872,9 @@ const STAND_RUST = {
   sparen_in_blok: "Bewaren voor na het blok",
   celbescherming_houden: "Lading vasthouden",
 };
-const KOP_UIT_WEERGAVE = ["waardeplan_houden", "waardeplan_huis", "waardeplan_leeg",
-  "battery_saved_for_peak", "sparen_in_blok", "celbescherming_houden"];
-const standSoort = (planModus, accuW, tekort) => {
-  const m = String(planModus || "");
-  if (m.startsWith("manual (verkopen)")) return "verkopen";
-  if (m.startsWith("manual (terugleveren)")) return "terug";
-  if (m.startsWith("manual (laden)")) return "net";
-  if (tekort) return "leeg";
-  if (accuW != null) return accuW <= -50 ? "zon" : accuW >= 50 ? "voeden" : "rust";
-  return m.startsWith("smart_discharging") ? "voeden" : "rust";
-};
+/* v5.181.2 (a): een mapping - `doen` - voor staaf, tijdlijn, Vooruitblik,
+   tegel en kopchip. */
+const standSoort = (planModus, accuW, tekort) => doen({ modus: planModus, accu_w: accuW, tekort });
 const standWeergave = (reden, planModus, accuW, tekort = false) => {
   let k = standSoort(planModus, accuW, tekort);
   if (reden === "waardeplan_leeg" && k === "rust") k = "leeg";
@@ -887,6 +885,41 @@ const standWeergave = (reden, planModus, accuW, tekort = false) => {
   else label = DOEN[k].label;
   return { k, label, kleur: DOEN[k].kleur };
 };
+/* v5.181.2 (a): de weergave van een planrij (= standweergave.weergave_rij). */
+const kwartierWeergave = (r, reden) => standWeergave(reden, r && r.modus, r ? num(r.accu_w) : null, !!(r && r.tekort));
+/* v5.181.2 (a): stuurt het EMS niet, dan zegt de tegel dat (= standweergave.HANDMATIG). */
+const STAND_HANDMATIG = {
+  smart_charge: "Handmatig: slim laden \u2013 EMS stuurt niet",
+  laden: "Handmatig: laden \u2013 EMS stuurt niet",
+  "": "Leermodus \u2013 EMS stuurt niet",
+};
+const handmatigWeergave = (stand) => {
+  const s = String(stand || "");
+  const k = s === "laden" ? "net" : s === "smart_charge" ? "zon" : "rust";
+  return { k, label: STAND_HANDMATIG[s] || STAND_HANDMATIG[""], kleur: DOEN[k].kleur, handmatig: true };
+};
+/* v5.181.2 (b): de accustand-lijn begint bij "nu" op de live laadstand. Het
+   verschil met het plan op dat moment loopt over `blendMs` lineair weg; de
+   kwartieren voor "nu" vallen weg. punten: [{t (ms, eind kwartier), soc}]. */
+const SOC_BLEND_MS = 3 * 3600000;
+const socLijn = (punten, nuT, socLive, blendMs = SOC_BLEND_MS) => {
+  const p = punten.filter((q) => q && q.soc != null && Number.isFinite(q.t));
+  if (socLive == null || !Number.isFinite(nuT)) return p;
+  const voor = p.filter((q) => q.t <= nuT);
+  const na = p.filter((q) => q.t > nuT);
+  // het plan op "nu": tussen het laatste punt ervoor en het eerste erna
+  let planNu = null;
+  const a = voor[voor.length - 1];
+  const b = na[0];
+  if (a && b) planNu = a.soc + (b.soc - a.soc) * ((nuT - a.t) / Math.max(1, b.t - a.t));
+  else if (b) planNu = b.soc;
+  else if (a) planNu = a.soc;
+  const verschil = planNu == null ? 0 : socLive - planNu;
+  return [{ t: nuT, soc: socLive }].concat(na.map((q) => {
+    const w = Math.max(0, 1 - (q.t - nuT) / blendMs);
+    return { t: q.t, soc: Math.max(0, Math.min(100, q.soc + verschil * w)) };
+  }));
+};
 
 /* v5.181.1 (punt 8): gepland (EMS, elke ronde) tegen gemeten (live in de
    browser). Dezelfde regels als planvolging.beoordeel. */
@@ -894,7 +927,29 @@ const PV_DREMPEL_W = 150;
 const handmatig = (m) => String(m || "").startsWith("manual");
 const kwTekst = (w) => `${fmt(Math.abs(w) / 1000, 1)} kW`;
 const richting = (w) => (Math.abs(w) < PV_DREMPEL_W ? "in rust" : w < 0 ? `laadt ${kwTekst(w)}` : `ontlaadt ${kwTekst(w)}`);
+/* v5.181.2 (e): het verschil vanuit wat er gepland was (= planvolging.verschil_tekst).
+   Live 04-11 11:34: 2,40 kW laden gepland, 1,36 kW gemeten -> "meer ontladen";
+   het is "minder laden". + is ontladen, - laden. */
+const verschilTekst = (gepland, gemeten) => {
+  const v = gemeten - gepland;
+  if (Math.abs(v) < 50) return "geen";
+  const soort = (w) => (w <= -50 ? "laden" : w >= 50 ? "ontladen" : "rust");
+  const plan = soort(gepland);
+  const echt = soort(gemeten);
+  if (plan === "laden" && echt === "laden") return v > 0 ? "minder laden" : "meer laden";
+  if (plan === "ontladen" && echt === "ontladen") return v > 0 ? "meer ontladen" : "minder ontladen";
+  if (plan === "laden" && echt === "ontladen") return "ontlaadt in plaats van laden";
+  if (plan === "ontladen" && echt === "laden") return "laadt in plaats van ontladen";
+  if (echt === "rust") return plan === "laden" ? "laadt niet" : "ontlaadt niet";
+  return echt === "laden" ? "laadt in plaats van rust" : "ontlaadt in plaats van rust";
+};
 const planvolgingLive = (ems, live) => {
+  // v5.181.2 (c): stuurt het EMS niet, dan geen afwijking - alleen de meting.
+  if (ems && ems.niet_gestuurd) {
+    return { ...ems, gemeten_accu_w: live.accu == null ? ems.gemeten_accu_w : Math.round(live.accu),
+      gemeten_zon_w: live.zon == null ? ems.gemeten_zon_w : Math.round(live.zon), verschil_w: null,
+      tekst: "EMS stuurt niet (handmatig)", live: true };
+  }
   if (!ems || !ems.beschikbaar || live.accu == null || num(ems.gepland_accu_w) == null) return ems;
   const gepland = num(ems.gepland_accu_w);
   const verschil = live.accu - gepland;
@@ -924,7 +979,7 @@ const planvolgingLive = (ems, live) => {
     gemeten_accu_w: Math.round(live.accu),
     gemeten_zon_w: live.zon == null ? null : Math.round(live.zon),
     verschil_w: Math.round(verschil),
-    verschil_tekst: null,
+    verschil_tekst: verschilTekst(gepland, live.accu),
     zon_verschil_w: zonD == null ? null : Math.round(zonD),
     zon_verschil_tekst: null,
     oorzaak,
@@ -1346,10 +1401,30 @@ class EmsCockpitCard extends HTMLElement {
   }
 
   /* v5.181.1 (punt 9): de stand zoals de hele cockpit hem noemt. */
+  /* v5.181.2 (a): tegel, kopchip, staaf, tijdlijn en Vooruitblik uit
+     dezelfde weergave per kwartier: de planrij van nu (`kwartierWeergave`).
+     Stuurt het EMS niet (leermodus, ook via Handmatig laden / Smart charge),
+     dan zegt de stand dat. Zonder planrij het gemeten vermogen. */
   _stand(live) {
     const st = attr(this._s("cockpit"), "stand") || {};
     const reden = st.reden || (bruikbaar(this._s("reden")) ? this._s("reden").state : null);
+    const aan = (k) => bruikbaar(this._s(k)) && this._s(k).state === "on";
+    if (aan("leermodus") || aan("handSmart") || aan("handLaden")) {
+      const hand = aan("handLaden") ? "laden" : aan("handSmart") ? "smart_charge" : "";
+      return { reden, ...handmatigWeergave(hand) };
+    }
+    const rij = this._huidigeRij();
+    if (rij) return { reden, ...kwartierWeergave(rij, reden) };
     return { reden, ...standWeergave(reden, st.plan_modus, (live || this._live()).accu) };
+  }
+
+  /* v5.181.2 (a): de planrij van het lopende kwartier, of null. */
+  _huidigeRij() {
+    const rijen = this._planRijen();
+    const tijden = planTijden(rijen);
+    const nu = Date.now();
+    const i = tijden.findIndex((d) => d.getTime() <= nu && d.getTime() + 15 * 60000 > nu);
+    return i >= 0 ? rijen[i] : null;
   }
 
   _planRijen() {
@@ -1432,7 +1507,8 @@ class EmsCockpitCard extends HTMLElement {
     const m = modus(attr(this._s("uitleg"), "expected_mode") || (bruikbaar(accuModus) ? accuModus.state : ""));
     // v5.181.1 (punt 9): dezelfde weergave als de tegel "Accu nu"
     const stand = this._stand();
-    const kopStand = KOP_UIT_WEERGAVE.includes(stand.reden) ? stand : { label: m.label, kleur: m.kleur };
+    // v5.181.2 (a): altijd de weergave van het lopende kwartier
+    const kopStand = stand.label ? stand : { label: m.label, kleur: m.kleur };
     const modusChip = chip(`<span class="stip" style="--kleur:${kopStand.kleur}"></span>Accu: ${esc(kopStand.label)}`, "groot");
 
     // v5.178.0: de prijs staat in de kop (de tegel Stroomprijs is weg)
@@ -1456,7 +1532,8 @@ class EmsCockpitCard extends HTMLElement {
       : "";
 
     return (
-      `<div class="merk"><div class="logo">${icoon("bout")}</div>` +
+      // v5.181.2 (f): het eigen logo van de integratie (brand/icon.png, zelf geserveerd)
+      `<div class="merk"><div class="logo"><img src="${LOGO_URL}" srcset="${LOGO_URL_2X} 2x" width="34" height="34" alt="Energy Management System"></div>` +
       `<div><div class="merknaam">Energiecockpit</div>` +
       `<div class="merksub">Energy Management System${this._hass.config && this._hass.config.location_name ? PUNT + esc(this._hass.config.location_name) : ""}</div></div></div>` +
       `<div class="kop-mid">${status}${this._aanwezigChip()}${modusChip}${prijsChip}${laag}${hoog}${blokChip}</div>` +
@@ -1548,10 +1625,14 @@ class EmsCockpitCard extends HTMLElement {
     const verwacht = attr(this._s("uitleg"), "expected_mode") || (bruikbaar(this._s("verwacht")) ? this._s("verwacht").state : "");
     const m = modus(verwacht);
     // v5.181.1 (punt 9): in een slimme stand wat er werkelijk gebeurt
-    const kort = KOP_UIT_WEERGAVE.includes(stand.reden) ? stand.label
+    // v5.181.2 (a): de titel is de weergave van het lopende kwartier
+    const kort = stand.label ? stand.label
       : waarom.kop ? hoofd(waarom.kop) : waarom.kort ? hoofd(waarom.kort) : m.label;
     const redenen = Array.isArray(waarom.redenen) ? waarom.redenen.slice(0, 3) : [];
-    const blok = this._blokken()[1];
+    // v5.181.2 (a): "Daarna" = het volgende blok van de Vooruitblik (zelfde weergave)
+    const rijenNu = this._planRijen();
+    const vb = rijenNu.length ? this._vooruitBlokken(rijenNu, planTijden(rijenNu), 24, soc) : [];
+    const blok = stand.handmatig ? null : vb.find((b, j) => j > 0 && b.k !== stand.k) || null;
     const haalt = attr(this._s("gacs"), "haalt_de_accu_het");
     const resttijd = this._accuResttijd(w, soc);
     const regel = [
@@ -1561,7 +1642,7 @@ class EmsCockpitCard extends HTMLElement {
     // v5.181.1 (punt 1): rekent het EMS wel maar stuurt het niet, dan zeggen we dat.
     const niet = (attr(this._s("uitleg"), "waardeplan") || {}).niet_gestuurd;
     const daarna = blok
-      ? `<div class="sub">Daarna: <b>${esc(modus(blok.mode).label)}</b> vanaf ${esc(blok.van_tekst || klokDag(blok.start) || "")}</div>`
+      ? `<div class="sub">Daarna: <b>${esc(blok.label)}</b> vanaf ${esc(klokDag(blok.start) || "")}</div>`
       : "";
 
     // v5.178.0: de energiestroom als vier vakjes (alle waarden van het schema)
@@ -1720,9 +1801,11 @@ class EmsCockpitCard extends HTMLElement {
     // v5.181.1 (punt 8): gemeten = live uit de bronnen, gepland = EMS-ronde
     const nu = planvolgingLive(ems && ems.beschikbaar ? ems : pv.nu, this._live());
     if (!nu || !nu.beschikbaar) return "";
-    const kl = nu.status === "volgens plan" ? "ok" : nu.status === "verklaard" ? "" : "let";
+    // v5.181.2 (c): stuurt het EMS niet, dan geen oordeel
+    const hand = !!nu.niet_gestuurd;
+    const kl = hand ? "" : nu.status === "volgens plan" ? "ok" : nu.status === "verklaard" ? "" : "let";
     // v5.93.2: "andere keuze" als de sturing iets anders koos dan het plan
-    const label = nu.status === "volgens plan" ? "volgens plan" : nu.status === "verklaard" ? "verklaard"
+    const label = hand ? "handmatig" : nu.status === "volgens plan" ? "volgens plan" : nu.status === "verklaard" ? "verklaard"
       : nu.status === "afwijking sturing" ? "andere keuze" : "afwijking";
     // Teken zoals het EMS: positief ontladen, negatief laden
     const rw = (w) => {
@@ -1748,7 +1831,9 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="${accuK(nu.gepland_accu_w)}"><div class="l">Gepland</div><div class="w">${rw(nu.gepland_accu_w)}</div></div>` +
       `<div class="${accuK(nu.gemeten_accu_w)}"><div class="l">Gemeten nu</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
       `<div class="${accuK(verschil)}"><div class="l">Verschil</div><div class="w">${verschil == null ? STREEP : watt(Math.abs(verschil))}</div>` +
-      `<div class="s">${nu.verschil_tekst ? esc(nu.verschil_tekst) : verschil == null || Math.abs(verschil) < 50 ? "geen" : verschil < 0 ? "meer laden" : "meer ontladen"}</div></div>` +
+      `<div class="s">${hand ? "EMS stuurt niet" : nu.verschil_tekst ? esc(nu.verschil_tekst)
+        : verschil == null || num(nu.gepland_accu_w) == null || num(nu.gemeten_accu_w) == null ? "geen"
+        : esc(verschilTekst(num(nu.gepland_accu_w), num(nu.gemeten_accu_w)))}</div></div>` +
       `</div>` +
       this._planvolgingZon(nu) +
       (dag ? `<div class="dag">Vandaag ${fmt(dag.volgens_plan_procent)}% van ${dag.kwartieren} kwartieren volgens plan` +
@@ -1881,12 +1966,14 @@ class EmsCockpitCard extends HTMLElement {
     const tEind = tijden[n - 1].getTime() + 15 * 60000;
     const nuX = ((Date.now() - t0) / (tEind - t0)) * 100;
     const socLive = getal(this._s("soc"));
-    const socPunt = (i, r) => `${x(i).toFixed(2)},${(100 - num(r.soc_procent)).toFixed(2)}`;
-    const punten = rijen.map((r, i) => (num(r.soc_procent) == null ? null : { x: x(i), p: socPunt(i, r) })).filter(Boolean);
-    const socPunten = (socLive != null && nuX >= 0 && nuX <= 100
-      ? [...punten.filter((q) => q.x < nuX).map((q) => q.p), `${nuX.toFixed(2)},${(100 - socLive).toFixed(2)}`,
-        ...punten.filter((q) => q.x > nuX).map((q) => q.p)]
-      : punten.map((q) => q.p)).join(" ");
+    // v5.181.2 (b): soc_procent is de stand aan het EIND van het kwartier.
+    // De lijn begint bij "nu" op de live laadstand; het verschil met het plan
+    // loopt in drie uur weg (`socLijn`). Daarvoor kwam het eerste punt uit
+    // het plan (04-11 11:31: ~20 % bij een accu van 35 %).
+    const tX = (t) => ((t - t0) / (tEind - t0)) * 100;
+    const ruw = rijen.map((r, i) => ({ t: tijden[i].getTime() + 15 * 60000, soc: num(r.soc_procent) }));
+    const lijn = socLive != null && nuX >= 0 && nuX <= 100 ? socLijn(ruw, Date.now(), socLive) : ruw.filter((q) => q.soc != null);
+    const socPunten = lijn.map((q) => `${Math.max(0, Math.min(100, tX(q.t))).toFixed(2)},${(100 - q.soc).toFixed(2)}`).join(" ");
     const zonMax = Math.max(0.05, ...rijen.map((r) => num(r.zon_kwh) || 0));
     const zonPunten =
       `0,100 ` +
@@ -1927,7 +2014,9 @@ class EmsCockpitCard extends HTMLElement {
         .map((k) => `<span><i style="background:${DOEN[k].kleur}"></i>${DOEN[k].label.toLowerCase()}</span>`).join("") +
       `<span><i class="lijn-i" style="background:var(--tekst)"></i>accu %</span>` +
       `<span><i style="background:rgba(214,166,79,.45)"></i>zon</span></div>`;
+    // v5.181.2 (d): de eenheden boven de assen
     return (
+      `<div class="g-eenheid" aria-hidden="true"><span>ct/kWh</span><span>accu %</span></div>` +
       `<div class="gwrap">` +
       `<div class="g-y">${yLab}</div>` +
       `<div class="g-plot">${yRaster}<div class="staven">${staven}</div>${svg}${nuLijn}</div>` +
@@ -1965,10 +2054,11 @@ class EmsCockpitCard extends HTMLElement {
         vorigeSoc = num(r.soc_procent) != null ? num(r.soc_procent) : vorigeSoc;
         return;
       }
-      const m = modus(r.modus);
+      // v5.181.2 (a): gegroepeerd op de weergave per kwartier (staaf en tijdlijn)
+      const m = kwartierWeergave(r);
       let b = blokken[blokken.length - 1];
       if (!b || b.k !== m.k) {
-        b = { k: m.k, label: m.label, kleur: m.kleur, start: tijden[i], eind: null,
+        b = { k: m.k, label: DOEN[m.k].label, kleur: m.kleur, start: tijden[i], eind: null,
               socBegin: vorigeSoc, socEind: null, accu: [], net: [], prijzen: [], tekort: false };
         blokken.push(b);
       }
@@ -2530,6 +2620,7 @@ class EmsCockpitCard extends HTMLElement {
       `<span><i style="background:var(--blauw)"></i>sparen</span>` +
       `<span><i style="background:var(--violet)"></i>slim</span>` +
       `<span><i style="background:var(--violet);opacity:.45"></i>verwachting</span></div>` +
+      `<div class="g-eenheid" aria-hidden="true"><span>ct/kWh</span></div>` +
       `<div class="pv-wrap">` +
       `<div class="g-y">${yLab}</div>` +
       `<div class="g-plot">${yRaster}` +

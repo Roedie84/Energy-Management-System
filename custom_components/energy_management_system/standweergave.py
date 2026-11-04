@@ -86,3 +86,29 @@ def weergave(
     else:
         label = STANDEN[k]
     return {"k": k, "label": label}
+
+
+# v5.181.2 (a): stuurt het EMS niet (leermodus, ook via de knoppen), dan zegt
+# de tegel dat in plaats van de stand uit het plan.
+HANDMATIG: dict[str, str] = {
+    "smart_charge": "Handmatig: slim laden – EMS stuurt niet",
+    "laden": "Handmatig: laden – EMS stuurt niet",
+    "": "Leermodus – EMS stuurt niet",
+}
+
+
+def handmatig_weergave(stand: str | None) -> dict:
+    """{"k", "label"} als het EMS niet stuurt; `stand` = de handmatige stand."""
+    s = str(stand or "")
+    k = "net" if s == "laden" else "zon" if s == "smart_charge" else "rust"
+    return {"k": k, "label": HANDMATIG.get(s, HANDMATIG[""]), "handmatig": True}
+
+
+def weergave_rij(rij: dict | None, reden: str | None = None) -> dict:
+    """De weergave van een planrij (v5.181.2, a): dezelfde sleutel voor de
+    staaf in de grafiek, de tijdlijn, de Vooruitblik, de tegel en de kopchip.
+    Uit de soort planrij en het geplande accuvermogen (`accu_w`, drempel
+    DREMPEL_W); de reden geeft hooguit de toelichting."""
+    rij = rij or {}
+    accu = rij.get("accu_w")
+    return weergave(reden, rij.get("modus"), None if accu is None else float(accu), bool(rij.get("tekort")))
