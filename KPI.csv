@@ -1265,3 +1265,13 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-04 03:40,DAG,ems_tekortnacht_tot_nu_kwh,1.232,1,"live 03:45, boven 0.5 = tekortdag; L-EMS-059 werkt; uitslag 09:00"
 2026-11-04 03:40,DAG,ems_mc_tekortkans_tot_blok_pct,0,1000,"sinds 03:14: det. 0.492 < beschikbaar 0.17 + drempel 0.5; uitleg, geen fout"
 2026-11-04 03:40,DAG,ems_stilstand_functies,0,12,"12 wachten, 0 doen; airco 'niets', knop uit -> rekent"
+2026-11-04 07:40,TUSSEN,ems_verkoop_onder_reserve,0,1,verkoopkwartieren leeg; P1 export 22:00-07:00 0.000 kWh
+2026-11-04 07:40,TUSSEN,ems_tekortnacht_tot_nu_kwh,1.646,1,live 07:45; 03:45 1.232; boven 0.5 = tekortdag; P1 22-06 1.764 kWh; uitslag 09:00
+2026-11-04 07:40,TUSSEN,ems_net_kwh_per_uur_nacht,0.22,8,"P1 22:00-06:00 1.764 kWh; SoC 12 % vlak, accu 0 W"
+2026-11-04 07:40,TUSSEN,ems_laadblok_0600_kwh,0.52,1,SoC 12->18 % op 8.64 kWh; plan 0.6 kWh; P1 06-07 0.804 kWh; schatting uit SoC-stappen
+2026-11-04 07:40,TUSSEN,ems_planvolging_vandaag_pct,93.3,30,"tot 07:30; afwijking accu 2 (06:00, 06:30 herstart); energieverschil -0.03 kWh"
+2026-11-04 07:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,0,1000,"horizon 11:15 goedkoopste blok, geen laadblok gepland; det. 0.22 kWh; incl. lange horizon 100"
+2026-11-04 07:40,TUSSEN,ems_airco_verwarmen_22_04_min,0,1,nacht 03->04: niets 22:01-05:16; L-EMS-057 geverifieerd; 7 van de 8 nachten ervoor wel
+2026-11-04 07:40,TUSSEN,ems_airco_verwarmen_ochtend_min,176,8,27-10..03-11 04-11 uur: 176/213/144/134/229/239/121/155 min; 8/8 ochtenden; eigen gebruik 1/26 ochtenden; L-EMS-063
+2026-11-04 07:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.384,60,03:40 0.396
+2026-11-04 07:40,TUSSEN,ems_stilstand_functies,0,12,"12 wachten, 0 doen; airco 'verwarmen', knop uit -> rekent"

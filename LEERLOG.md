@@ -1018,3 +1018,17 @@ laatste ronde: 03-11 23:40, gemeten t/m 03-11 23:46
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
 
 laatste ronde: 04-11 03:40, gemeten t/m 04-11 03:46
+
+## 04-11 07:40 · tussenronde
+- Draait v5.176.3, HACS gelijk. Geen release: niets acuts, er is vandaag om 03:40 al één uit. Herstarts 04:43 en 06:39; bij 06:39 alleen sensoren rond de herstart (Solcast, Zonneplan, weather), verder 0 EMS-fouten. Logvenster: Google News/Solar Magazine, iPhone-melding: niet EMS.
+- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, P1-export 22-07 uur 0,000 kWh.
+- **L-EMS-059 houdt stand:** `tekortnacht_tot_nu_kwh` **1,646** (03:45 1,232) bij P1 22-06 uur 1,764 kWh; accu leeg op 12 %. Telt als tekortdag. Blok 06:00 telt terecht niet mee. Uitslag 09:00 (volgende ronde).
+- **Laadblok 06:00:** SoC 12 → 18 % ≈ 0,52 kWh tegen 0,6 gepland; afwijking 06:30 komt door de herstart (267 W gepland, 0 gemeten). Plan 06:45 schrapte 11:30-11:45: geen laden uit het net in 16 u. Accu houdt 0,69 kWh voor 19:15-00:00, reserve 7,78 op het plafond.
+- **L-EMS-057 geverifieerd (n=1 volle nacht):** airco-besluit 22:01-05:16 'niets'. 7 van de 8 nachten ervoor kwam 'verwarmen' wel. Ochtendbesluit blijft komen (05:16).
+- **Nieuw L-EMS-063 (open):** het gewone besluit staat 8/8 ochtenden op 'verwarmen', gemiddeld 176 min tussen 04 en 11 uur, terwijl jullie hem op 1 van 26 ochtenden aanzetten en de eigen verwachting 'niet verwacht' zegt. Knop uit, dus nu geen effect.
+- L-EMS-061: niet te toetsen, accu 0 W op 12 %. Regeloverschot: geen zon gehad. H-EMS-15: live nog 'planning', uitslag 09:00. H-EMS-2: dag begint net.
+- MC tot blok 0 % (det. 0,22 kWh, horizon 11:15). Twin 0,384 (0,396). Planvolging vandaag 93,3 % (n=30). Stilstand: **geen echte** (12 wachten, 0 doen). Airco 'verwarmen', knop uit → rekent.
+- Niet gemeten: PV en verbruik vandaag (te vroeg), SoC-voorspelling (dagafsluiting).
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
+
+laatste ronde: 04-11 07:40, gemeten t/m 04-11 07:45
