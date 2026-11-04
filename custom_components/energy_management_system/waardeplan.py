@@ -78,6 +78,10 @@ class Kwartier:
     #: Vanaf 2027 zonder de zonnebonus (die geldt alleen voor zonnestroom).
     #: None = gelijk aan `teruglever_eur`.
     teruglever_accu_eur: float | None = None
+    #: v5.183.0 (bewaarmarge): in dit kwartier dekt de accu het huistekort zolang
+    #: er inhoud is; bewaren voor later is hier niet genoeg waard (zie
+    #: `te_duur_bewaard`).
+    dekken: bool = False
 
 
 @dataclass
@@ -142,6 +146,13 @@ class Accu:
     #: verkoopt alleen wat het huis tot het volgende bijvullen niet nodig
     #: heeft, en nooit lading die uit het net kwam (zie `verkopen_voor_huis`).
     huis_eerst: bool = False
+    #: v5.183.0 (akkoord Ruud 04-11 14:04, punt 1): lading bewaren terwijl het
+    #: huis op het net draait mag alleen als die later minstens zoveel per kWh
+    #: meer oplevert (of duurder terug te laden is). 0 = uit.
+    bewaarmarge_eur: float = 0.0
+    #: v5.183.0 (punt 2): onzekerheid verder vooruit - een kleine kost per kWh
+    #: inhoud per uur, zodat het plan bij een gelijkspel nu gebruikt. 0 = uit.
+    bewaarkost_eur_per_kwh_uur: float = 0.0
 
 
 @dataclass
@@ -383,6 +394,11 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
                 geldig = geldig & (doel * STAP_KWH >= k.verkoop_vloer_kwh - 1e-9)
                 if not geldig.any():
                     continue
+            # v5.183.0: dekken - het huis uit de accu zolang er inhoud is.
+            if k.dekken and tekort > EPS_KWH and b > -(tekort - 1.5 * STAP_KWH):
+                geldig = geldig & (doel == 0)
+                if not geldig.any():
+                    continue
             zon_geldig, extra = _zon_regel(k, accu, int(s), float(b), s_min, min_kwh, min_laad)
             if zon_geldig is not None:
                 geldig = geldig & zon_geldig
@@ -395,6 +411,9 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
                 + waarde[doel[geldig]]
                 + (extra[geldig] if isinstance(extra, np.ndarray) else extra)
             )
+            if accu.bewaarkost_eur_per_kwh_uur:
+                # v5.183.0 (punt 2): wat erin blijft, kost een beetje per uur.
+                kosten[geldig] += doel[geldig] * STAP_KWH * accu.bewaarkost_eur_per_kwh_uur * grenzen[0]
             beter = kosten < beste
             beste[beter] = kosten[beter]
             beste_s[beter] = s
@@ -686,6 +705,56 @@ def verkopen_voor_huis(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu
     return uit
 
 
+def te_duur_bewaard(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu,
+                    leeg_kwh: float = 0.05) -> list[int]:
+    """Kwartieren waarin het plan lading bewaart terwijl het huis op het net
+    draait, voor te weinig voordeel (v5.183.0, bewaarmarge).
+
+    Akkoord Ruud 04-11 14:04. Live 14:01: 1,9 kWh bleef van 18:00 tot 05:30
+    staan (huis op het net, 37-50 ct) voor morgenavond (55 ct); vannacht
+    bijladen kostte met verlies, slijtage en datacorrectie net iets meer.
+    Het verschil was een paar cent; Ruud wil de lading dan in de woning.
+
+    Per bewaarkwartier: wat de bewaarde lading later oplevert - de prijs van
+    het eerste latere kwartier waarin de accu levert (huis of verkoop), of de
+    eindprijs - maar nooit meer dan wat het bijladen ertussen kost (net:
+    (prijs + netlaadmarge) / laadrendement + slijtage). Is dat minder dan
+    `bewaarmarge_eur` boven de prijs nu, dan moet de accu hier dekken.
+    """
+    if not accu.bewaarmarge_eur:
+        return []
+    eta_l, _eta_o = rendementen(accu)
+    eind = accu.eindprijs_eur
+    if eind is None:
+        eind = float(np.percentile([k.inkoop_eur for k in kwartieren], 75))
+    n = len(rijen)
+    uit = []
+    for t, r in enumerate(rijen):
+        k = kwartieren[t]
+        if r.get("actie") != "houden" or (r.get("net_kwh") or 0.0) <= 0.01:
+            continue
+        if (r.get("inhoud_kwh") or 0.0) <= leeg_kwh or k.verbruik_kwh - k.zon_kwh <= EPS_KWH:
+            continue
+        later = None
+        bijladen = None
+        for u in range(t + 1, n):
+            ru, ku = rijen[u], kwartieren[u]
+            if ru.get("actie") == "laden_net":
+                kost = (ku.inkoop_eur + accu.netlaadmarge_eur) / eta_l + accu.slijtage_eur
+                bijladen = kost if bijladen is None else min(bijladen, kost)
+            elif ru.get("actie") in ("huis", "verkopen") and (ru.get("accu_kwh") or 0.0) < -EPS_KWH:
+                later = ku.inkoop_eur if ru.get("actie") == "huis" else (
+                    ku.teruglever_eur if ku.teruglever_accu_eur is None else ku.teruglever_accu_eur)
+                break
+        if later is None:
+            later = eind
+        if bijladen is not None:
+            later = min(later, bijladen)
+        if later - k.inkoop_eur < accu.bewaarmarge_eur - 1e-9:
+            uit.append(t)
+    return uit
+
+
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     """Het goedkoopste accuplan over de gegeven kwartieren.
 
@@ -697,18 +766,23 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     verboden: set[int] = set()
     # v5.182.0: met de huis-eerst-regel meer rondes (elke ronde kan een
     # verkoop naar een ander kwartier schuiven).
-    for _ in range(12 if accu.huis_eerst else 4):
+    dekken: set[int] = set()
+    for _ in range(16 if (accu.huis_eerst or accu.bewaarmarge_eur) else 4):
         if not res.beschikbaar:
             break
         nieuw = set(zinloze_verkopen(res.kwartieren, kwartieren, accu))
         if accu.huis_eerst:
             nieuw |= set(verkopen_voor_huis(res.kwartieren, kwartieren, accu))
         nieuw -= verboden
-        if not nieuw:
+        # v5.183.0: bewaarmarge - te goedkoop bewaard, dan hier het huis dekken.
+        nieuw_dekken = set(te_duur_bewaard(res.kwartieren, kwartieren, accu)) - dekken
+        if not nieuw and not nieuw_dekken:
             break
         verboden |= nieuw
+        dekken |= nieuw_dekken
         dicht = accu.bruikbaar_kwh + STAP_KWH
-        kwartieren = [replace(k, verkoop_vloer_kwh=dicht) if t in verboden else k
+        kwartieren = [replace(k, verkoop_vloer_kwh=dicht if t in verboden else k.verkoop_vloer_kwh,
+                              dekken=k.dekken or t in dekken)
                       for t, k in enumerate(kwartieren)]
         res = _plan(kwartieren, accu)
     return res

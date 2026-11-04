@@ -40,6 +40,8 @@ from .const import (
     WAARDEPLAN_LIVE_AFWIJKING_KWH,
     WAARDEPLAN_MIN_ACTIE_W,
     WAARDEPLAN_MIN_KWARTIEREN,
+    WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR,
+    WAARDEPLAN_BEWAARMARGE_EUR,
     WAARDEPLAN_HUIS_EERST,
     WAARDEPLAN_MIN_LAAD_W,
     WAARDEPLAN_MIN_VERMOGEN_W,
@@ -433,6 +435,9 @@ class WaardeplanSturingMixin:
             verkopen=True,
             # v5.182.0 (akkoord Ruud 04-11): woning eerst, alleen overschot verkopen.
             huis_eerst=WAARDEPLAN_HUIS_EERST,
+            # v5.183.0 (akkoord Ruud 04-11 14:04): bewaarmarge en onzekerheid vooruit.
+            bewaarmarge_eur=WAARDEPLAN_BEWAARMARGE_EUR,
+            bewaarkost_eur_per_kwh_uur=WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR,
             # v5.172.0 (punt 2): geen mini-opdrachten (zie waardeplan.actie_van).
             min_actie_w=WAARDEPLAN_MIN_ACTIE_W,
             # v5.177.0 (A12): netladen vanaf 500 W.

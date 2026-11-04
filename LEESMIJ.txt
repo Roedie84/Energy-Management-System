@@ -1,3 +1,14 @@
+EMS v5.183.0 - de accu bewaart alleen bij duidelijk voordeel
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Lading bewaren terwijl het huis op het net draait mag alleen als die later minstens
+  5 ct/kWh meer oplevert (of duurder terug te laden is). Anders voedt de accu het huis.
+- Onzekerheid verder vooruit telt mee (0,2 ct per kWh per uur): bij een gelijkspel gaat
+  de lading nu naar het huis.
+- De datacorrectie op netladen telt alleen nog netladingen van het waardeplan zelf. De
+  5 ct kwam uit ladingen van de oude regels; tot er genoeg nieuwe metingen zijn: 0 ct.
+
 EMS v5.182.0 - woning eerst: de accu verkoopt alleen echt overschot
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

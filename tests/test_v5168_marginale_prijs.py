@@ -235,7 +235,7 @@ def test_dipbesluit_rekent_marginaal(make_coordinator, hass):
 def _rij(tijd, inhoud, prijs_ct, accu_w, korting=None, verwacht=None, reden="grid_charging_profitable"):
     r = {"tijd": tijd, "beschikbaar_kwh": inhoud, "prijs_ct": prijs_ct, "accu_w": accu_w,
          "net_w": max(0.0, -accu_w), "huis_w": 300.0, "pv_w": 0.0, "reden": reden,
-         "laad_waarde_ct": verwacht}
+         "laad_waarde_ct": verwacht, "laad_waarde_bron": "waardeplan"}  # v5.183.0
     if korting is not None:
         r["korting_ct"] = korting
     return r

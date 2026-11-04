@@ -41,7 +41,7 @@ def _netdag(dag="2026-10-20", inkoop=23.0, verkoop=45.0, verwacht=None):
     inhoud = 0.0
     for t in _kwartieren(3, 4):
         inhoud += 0.5
-        regels.append(_r(t, inhoud, inkoop, accu_w=-2400, net_w=2700, laad_waarde_ct=verwacht))
+        regels.append(_r(t, inhoud, inkoop, accu_w=-2400, net_w=2700, laad_waarde_ct=verwacht, laad_waarde_bron="waardeplan"))  # v5.183.0
     for t in _kwartieren(4, 59):            # 04:00 - 18:30 stil
         regels.append(_r(t, inhoud, 30.0))
     regels.append(_r("18:45", inhoud, verkoop))

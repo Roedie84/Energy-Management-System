@@ -324,7 +324,11 @@ def _laadverwachting(r: dict) -> float | None:
     v5.177.0 uit het bevroren laadbesluit van de oude regels; zulke regels
     (zonder `laad_waarde_bron`) tellen niet mee in de datacorrectie.
     """
-    if str(r.get("reden") or "").startswith("waardeplan_") and r.get("laad_waarde_bron") != "waardeplan":
+    # v5.183.0 (akkoord Ruud 04-11 14:04, punt 3): alleen netladingen van het
+    # waardeplan zelf. De 5 ct van 04-11 (mediaan 5,1 ct over 5 dagen) kwam
+    # uit ladingen van de oude regels (vóór het waardeplan van 02-11), die
+    # anders voorspelden; het waardeplan corrigeert zo zijn eigen fouten.
+    if r.get("laad_waarde_bron") != "waardeplan":
         return None
     return _getal(r, "laad_waarde_ct")
 

@@ -138,7 +138,8 @@ def test_a3_oude_bevroren_verwachting_telt_niet():
     r = {"reden": "waardeplan_laden", "laad_waarde_ct": 30.0}
     assert A._laadverwachting(r) is None
     assert A._laadverwachting({**r, "laad_waarde_bron": "waardeplan"}) == 30.0
-    assert A._laadverwachting({"reden": "grid_charging_profitable", "laad_waarde_ct": 30.0}) == 30.0
+    # v5.183.0 (punt 3): ladingen van de oude regels tellen ook niet meer mee
+    assert A._laadverwachting({"reden": "grid_charging_profitable", "laad_waarde_ct": 30.0}) is None
 
 
 # --- A4: het lopende kwartier telt zijn eigen duur --------------------------

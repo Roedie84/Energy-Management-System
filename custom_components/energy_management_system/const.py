@@ -7613,6 +7613,12 @@ WAARDEPLAN_SLIJTAGE_TERUGVAL_CT = 4.22
 #: v5.182.0 (akkoord Ruud 04-11 13:45): de accu verkoopt alleen wat het huis
 #: tot het volgende bijvullen niet nodig heeft, en geen lading uit het net.
 WAARDEPLAN_HUIS_EERST = True
+#: v5.183.0 (akkoord Ruud 04-11 14:04, punt 1): bewaren terwijl het huis op het
+#: net draait alleen bij minstens 5 ct/kWh voordeel later.
+WAARDEPLAN_BEWAARMARGE_EUR = 0.05
+#: v5.183.0 (punt 2): onzekerheid vooruit, 0,2 ct per kWh inhoud per uur
+#: (~5 ct per dag): bij een gelijkspel gaat de lading nu naar het huis.
+WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR = 0.002
 # v5.177.0 (A5): zo lang (minuten) zonder waardeplan wordt een aandachtspunt.
 WAARDEPLAN_WEG_AANDACHT_MINUTEN = 30
 # v5.177.0 (A10): zoveel uur na de horizon telt de prijsverwachting voor de

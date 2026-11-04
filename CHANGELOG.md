@@ -34862,3 +34862,13 @@ Live 13:38: netladen vanaf 13:30 voor 37 ct, verkopen 18:45-20:15 voor ~50 ct, d
 - `get_accukosten`: zonder slijtage (bij het opstarten) de vaste 4,22 ct en niet een kwartier bewaren; de cockpit toonde na de herstart "slijtage 0,0 ct". Het plan rekende al met de terugval.
 
 Tests: `test_v5182_huis_eerst.py`.
+
+## v5.183.0 — de accu bewaart alleen bij duidelijk voordeel
+
+Akkoord Ruud 04-11 14:04 (punten 1-3). Live 14:01: 1,9 kWh (32 %) bleef van 18:00 tot 05:30 in de accu terwijl het huis op het net draaide (37-50 ct), voor morgenavond (55 ct). Vannacht bijladen kostte met verlies (83 %), slijtage (4,2 ct) en datacorrectie (5 ct) ~51 ct tegen 50 ct besparing; het verschil was een paar cent.
+
+- Punt 1, bewaarmarge (`Accu.bewaarmarge_eur`, `WAARDEPLAN_BEWAARMARGE_EUR` = 5 ct): controle `te_duur_bewaard`. Een kwartier waarin het plan bewaart terwijl het huis op het net draait, moet minstens 5 ct/kWh opleveren: de prijs van het eerste latere kwartier waarin de accu levert (of de eindprijs), maar nooit meer dan het bijladen ertussen kost. Anders krijgt het kwartier `dekken` (de accu dekt het huis zolang er inhoud is) en wordt opnieuw gepland (tot 16 rondes, samen met de verkoopcontroles).
+- Punt 2, onzekerheid vooruit (`bewaarkost_eur_per_kwh_uur` = 0,2 ct): een kleine kost per kWh inhoud per uur in de planberekening (niet in de kosten van het plan).
+- Punt 3, datacorrectie: `_laadverwachting` telt alleen netladingen met `laad_waarde_bron = waardeplan`. De 5 ct (mediaan 5,1 ct over 5 dagen, 38 kWh) kwam vooral uit ladingen van de oude regels (vóór het waardeplan van 02-11). Tot er 5 dagen en 10 kWh aan waardeplanladingen zijn: geen correctie.
+
+Tests: `test_v5183_bewaarmarge.py`.

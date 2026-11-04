@@ -61,6 +61,7 @@ def test_dagen_met_gat_tellen_niet_mee_in_de_datacorrectie():
     for rs in regels.values():
         for r in rs:
             if r.get("accu_w", 0) < 0:
+                r["laad_waarde_bron"] = "waardeplan"   # v5.183.0
                 r["laad_waarde_ct"] = 40.0       # verwachtte veel meer dan 40 x ... - slijtage
     nu = datetime(2026, 10, 31)
     vol = A.doorreken(regels, ETA_L, ETA_O, SLIJT, nu, gemeten=gemeten)
