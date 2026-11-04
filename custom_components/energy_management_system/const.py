@@ -1779,6 +1779,8 @@ CLIMATE_RATE_NEUTRAL_C_PER_HOUR = 0.1
 CLIMATE_RATE_MAX_EXTRAPOLATIE_C = 2.0
 CLIMATE_FORECAST_HORIZON_HOURS = 24
 CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES = 30
+# v5.176.4: is de weerentiteit nog niet geladen (opstarten), dan sneller opnieuw.
+CLIMATE_FORECAST_RETRY_NIET_GELADEN_MINUTES = 2
 
 # Geleerde bias-correctie op de weersvoorspelling (v0.63.95, gevraagd:
 # "zijn er zaken waardoor ik de voorspelling kan verbeteren" - de

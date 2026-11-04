@@ -34693,3 +34693,13 @@ L-EMS-060, meetfout uit de leerronde van 03-11. Op 03-11 stonden na de herstarts
 Niet veranderd: sturing, reserve en de weging. Een dag zonder label telt niet mee in de vakken van `zonbias_percent`, zoals nu al bij te weinig kwartieren.
 
 Tests: `test_v51763_bewolking_herstart.py` (6).
+
+## v5.176.4 — weerentiteit nog niet geladen is geen fout
+
+Gemeld kaart claude-ems, 04-11. Bij de herstart van 06:39 gaf `weather.get_forecasts` een ERROR met traceback: `weather.forecast_thuis` was nog niet geladen ("did not match any entities"). De volgende poging kwam pas na de vaste 30 minuten; tot ~07:10 stond de melding in de uitleg.
+
+**Gebouwd.** Is de entiteit bij een mislukte oproep afwezig of `unavailable`, dan logt het EMS dat op debug-niveau en probeert het na `CLIMATE_FORECAST_RETRY_NIET_GELADEN_MINUTES` (2 min) opnieuw. Mislukt de oproep terwijl de entiteit er wel is, dan blijft het een ERROR met de vaste 30 minuten.
+
+Niet veranderd: de sturing en de klimaatprojectie bij een geslaagde oproep.
+
+Tests: `test_v51764_weer_niet_geladen.py` (4).

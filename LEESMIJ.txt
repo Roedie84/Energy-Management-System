@@ -1,3 +1,11 @@
+EMS v5.176.4 - geen foutmelding meer als het weer bij het opstarten nog niet klaar is
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Was de weerentiteit bij een herstart nog niet geladen, dan kwam er een ERROR
+  met traceback en bleef de buitentemperatuur-verwachting 30 minuten weg. Nu
+  probeert het EMS het na 2 minuten opnieuw, zonder foutmelding. Sturing gelijk.
+
 EMS v5.176.3 - bewolking van de dag overleeft een herstart
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -238,6 +238,7 @@ from .const import (
     CLIMATE_RATE_MAX_EXTRAPOLATIE_C,
     CLIMATE_FORECAST_HORIZON_HOURS,
     CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES,
+    CLIMATE_FORECAST_RETRY_NIET_GELADEN_MINUTES,
     CLIMATE_FORECAST_BIAS_HISTORY_LENGTH,
     CLIMATE_FORECAST_BIAS_MIN_SAMPLES,
     BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR,
@@ -1963,6 +1964,7 @@ class EnergyManagementSystemCoordinator:
         # achtertuinsensor of weerentiteit. Zie `_get_live_outdoor_temp_c`.
         self.climate_live_outdoor_source: str | None = None
         self._climate_forecast_last_fetch: datetime | None = None
+        self._climate_forecast_weer_niet_geladen = False
         self._climate_cached_forecast: list[tuple] | None = None
         # v0.63.120: de reden waarom de buitentemperatuur-voorspelling
         # ontbreekt, apart bewaard. De fetch is gethrottled (1x per 30
@@ -47854,9 +47856,16 @@ class EnergyManagementSystemCoordinator:
                 return_response=True,
             )
         except Exception:  # noqa: BLE001 - a forecast fetch must never crash the tick
-            _LOGGER.exception(
-                "Kon geen uurlijkse weersvoorspelling ophalen bij %s", entity_id
-            )
+            # v5.176.4: bij het opstarten is de weerentiteit vaak nog niet
+            # geladen; dat is geen fout en geen traceback waard.
+            weer = self.hass.states.get(entity_id)
+            if weer is None or weer.state == "unavailable":
+                self._climate_forecast_weer_niet_geladen = True
+                _LOGGER.debug("Weerentiteit %s is nog niet geladen", entity_id)
+            else:
+                _LOGGER.exception(
+                    "Kon geen uurlijkse weersvoorspelling ophalen bij %s", entity_id
+                )
             return None
 
         if not response or entity_id not in response:
@@ -47966,7 +47975,14 @@ class EnergyManagementSystemCoordinator:
             self.climate_forecast_note = self._climate_forecast_fetch_note
             return
 
+        self._climate_forecast_weer_niet_geladen = False
         forecast = await self._async_fetch_hourly_outdoor_forecast(weather_entity)
+        if self._climate_forecast_weer_niet_geladen:
+            # v5.176.4: niet de vaste 30 minuten wachten op een entiteit die zo komt.
+            self._climate_forecast_last_fetch = now - timedelta(
+                minutes=CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES
+                - CLIMATE_FORECAST_RETRY_NIET_GELADEN_MINUTES
+            )
         if not forecast:
             # v5.114.0: de vorige verwachting blijft gelden voor de uren die nog komen
             nog = [r for r in (self._climate_cached_forecast or []) if r and r[0] > now]
