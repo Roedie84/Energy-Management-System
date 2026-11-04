@@ -156,6 +156,10 @@ class Accu:
     #: v5.183.0 (punt 2): onzekerheid verder vooruit - een kleine kost per kWh
     #: inhoud per uur, zodat het plan bij een gelijkspel nu gebruikt. 0 = uit.
     bewaarkost_eur_per_kwh_uur: float = 0.0
+    #: v5.183.5: het vermogen waarmee een verkoop (handmatig ontladen) loopt;
+    #: `ontladen_kw` is dan de grens van de slimme stand (huis dekken). None =
+    #: allebei `ontladen_kw`.
+    verkoop_kw: float | None = None
 
 
 @dataclass
@@ -347,6 +351,10 @@ def _stap_toegestaan(accu: Accu, b: float, overschot: float, tekort: float, gren
         return False
     if b < 0 and not accu.verkopen and -b > tekort + 1e-9:
         return False
+    if (b < 0 and accu.verkoop_kw is not None
+            and -b - tekort >= accu.min_actie_w / 1000 * uren - 1e-9 and -b - tekort > EPS_KWH
+            and -b > accu.verkoop_kw * uren + 1e-9):
+        return False   # v5.183.5: een echte verkoop loopt op het handmatige vermogen
     if b < 0 and not accu.verkopen_bij_zon and overschot > EPS_KWH:
         return False   # v5.181.2 (g): zie Accu.verkopen_bij_zon
     min_laad = _min_laad_kwh(accu, uren)
@@ -386,6 +394,11 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
             s_min = zon_opslag_stappen(overschot, eta_l, grenzen[3], niveaus, not accu.netladen)
         min_kwh = accu.min_actie_w / 1000 * grenzen[0]
         min_laad = _min_laad_kwh(accu, grenzen[0])
+        # v5.183.5: de grootste ontlaadstap die binnen de ontlaadgrens past. Bij
+        # 1,2 kW (0,3 kWh) en een rendement boven 1 viel 0,3 kWh net buiten de
+        # grens en 0,2 kWh onder de volle dekking: geen enkele ontlaadstap bleef
+        # over en het plan moest bewaren (04-11 16:45, koken op 2,2-4,6 kW).
+        af_max = max((-float(x) for x in b_stap if x < 0 and -x <= grenzen[2] + 1e-9), default=0.0)
         tl_accu = getattr(k, "teruglever_accu_eur", None)
         for s, b in zip(stappen, b_stap):
             if not _stap_toegestaan(accu, float(b), overschot, tekort, grenzen, eta_l):
@@ -407,7 +420,7 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
             # behalve als hij daarmee leeg raakt. De stap van 0,1 kWh liet het
             # plan om en om 0,1 kWh ontladen bij een huis van 0,17 kWh: de
             # accu ging in werkelijkheid sneller leeg dan het plan dacht.
-            if b < -EPS_KWH and tekort > EPS_KWH and -b < min(tekort, grenzen[2]) - 0.5 * STAP_KWH:
+            if b < -EPS_KWH and tekort > EPS_KWH and -b < min(tekort, af_max) - 0.5 * STAP_KWH:
                 geldig = geldig & (doel == 0)
                 if not geldig.any():
                     continue

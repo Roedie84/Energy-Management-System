@@ -451,11 +451,20 @@ class WaardeplanSturingMixin:
         """De accu voor het waardeplan (v5.177.0 uit `bereken_waardeplan`)."""
         laden_kw = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0) / 1000
         ontladen_kw = abs(self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER) or 0) / 1000
+        # v5.183.5: de slimme stand dekt het huis tot de ontlaadgrens van de
+        # omvormer (2,4 kW); alleen een verkoop loopt op het handmatige
+        # vermogen (1,2 kW). Het plan rekende ook het huis dekken met 1,2 kW
+        # (04-11 16:45: koken op 2,2-4,6 kW, accu op sparen).
+        try:
+            slim_kw = float(self.slimme_ontlaadgrens_w()) / 1000
+        except Exception:  # noqa: BLE001
+            slim_kw = None
         return waardeplan_mod.Accu(
             inhoud_kwh=max(0.0, beschikbaar),
             bruikbaar_kwh=bruikbaar,
             laden_kw=laden_kw or 2.4,
-            ontladen_kw=ontladen_kw or 2.4,
+            ontladen_kw=max(slim_kw or 0.0, ontladen_kw or 2.4),
+            verkoop_kw=ontladen_kw or 2.4,
             rendement=rendement / 100,
             slijtage_eur=self._waardeplan_slijtage_ct() / 100,
             verkoopmarge_eur=self._verkoop_min_winst_eur(),

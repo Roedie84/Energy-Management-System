@@ -34917,3 +34917,12 @@ Akkoord Ruud 04-11 15:56. Live 15:54: 05-11 09:30-10:45 zon terug voor 39-43 ct 
 - Controle `zon_export_zonder_overschot` (met `huis_eerst`): zon terugleveren (ook een verkoop met zonoverschot) mag alleen als de accu daarna vol raakt voordat hij weer levert, uit het net laadt of het huis het net op gaat. Anders krijgt het kwartier `geen_zon_export` (geen afgedwongen teruglevering, geen verkoop met zon) en wordt opnieuw gepland.
 
 Tests: `test_v5184_zon_overschot.py`.
+
+## v5.184.1 — de accu dekt het huis ook bij koken
+
+Ruud 04-11 16:47: "waarom nu sparen? Nu ben ik juist aan het koken". Huis 2,2-4,6 kW, accu 2,6 kWh, plan: sparen tot 17:45.
+
+- De volle-dekkingsregel (v5.183.2) eiste een stap tot de ontlaadgrens. Met 1,2 kW (0,3 kWh per kwartier) en een ontlaadrendement boven 1 viel de stap van 0,3 kWh net buiten de grens en die van 0,2 kWh onder de eis: geen ontlaadstap over, en dan kiest het plan stil bewaren. Nu telt de grootste stap die binnen de grens past (`af_max`).
+- Het plan rekende het huis dekken met het handmatige ontlaadvermogen (1,2 kW, bedoeld voor verkopen). De slimme stand levert tot de grens van de omvormer (`slimme_ontlaadgrens_w`, 2,4 kW). Nu: `ontladen_kw` = die grens, nieuw `Accu.verkoop_kw` = het handmatige vermogen voor een echte verkoop (overschot vanaf de opdrachtgrens).
+
+Tests: `test_v5183_5_koken.py`.

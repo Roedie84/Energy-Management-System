@@ -1,3 +1,11 @@
+EMS v5.184.1 - de accu dekt het huis ook bij koken
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Bij een groot verbruik (koken, 2-4,6 kW) bleef de accu op sparen: geen enkele
+  ontlaadstap paste meer in de regels. Nu dekt hij het huis tot de grens van de slimme
+  stand (2,4 kW); alleen een verkoop loopt op het handmatige vermogen (1,2 kW).
+
 EMS v5.184.0 - zon alleen terugleveren als het echt overschot is
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
