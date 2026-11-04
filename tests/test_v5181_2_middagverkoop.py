@@ -59,11 +59,25 @@ def _acties(res, n=6):
 
 
 def test_reproductie_zonder_de_reparatie():
-    """Het oude plan (geen toets, verkopen met zon toegestaan) verkoopt om 12:00."""
+    """Het oude plan (geen toets, verkopen met zon toegestaan) verkocht om 12:00.
+
+    v5.186.0: die verkoop kwam uit de afronding (een stap van 0,1 kWh boven het
+    huis telde als verkoop met de zon mee). Met de exacte slimme stand verkoopt
+    ook het rekenmodel zonder toetsen hier niet meer; de toets zelf staat in
+    `test_zinloze_verkoop_toets_zelf`."""
     oud = W._plan(kwartieren(), accu())
-    assert oud.kwartieren[0]["actie"] == "verkopen"
-    assert "zon" in _acties(oud)[1:]
-    assert 0 in W.zinloze_verkopen(oud.kwartieren, kwartieren(), accu())  # v5.183.2: volle dekking
+    assert oud.kwartieren[0]["actie"] != "verkopen"
+    assert W.zinloze_verkopen(oud.kwartieren, kwartieren(), accu()) == []
+
+
+def test_zinloze_verkoop_toets_zelf():
+    """De rijen van 04-11 12:01: verkopen om 12:00, daarna zon laden."""
+    kw = kwartieren()
+    rijen = [{"actie": "verkopen", "accu_kwh": -0.209, "net_kwh": -0.529, "inhoud_delta_kwh": -0.2,
+              "inhoud_kwh": 2.05}]
+    rijen += [{"actie": "zon", "accu_kwh": 0.321, "net_kwh": 0.0, "inhoud_delta_kwh": 0.27,
+               "inhoud_kwh": 2.3}] * 3
+    assert W.zinloze_verkopen(rijen, kw, accu()) == [0]
 
 
 def test_de_toets_verbiedt_de_middagverkoop():
@@ -102,28 +116,15 @@ def test_avondverkoop_blijft():
     assert "verkopen" in _acties(res, 4)
 
 
-def test_coordinator_zet_verkopen_bij_zon_uit_bij_huis_eerst(make_coordinator):
-    c = make_coordinator({})
-
-    class Res:
-        def __init__(self, rijen):
-            self.beschikbaar, self.kwartieren = True, rijen
-
+def test_coordinator_zet_verkopen_bij_zon_uit_bij_huis_eerst():
+    """v5.186.0 (punt 14): geen globale schakelaar meer (verkopen_bij_zon over de
+    hele horizon uit); het plan verbiedt per kwartier een verkoop met zon via
+    `geen_zon_export` als die zon het huis later tekort doet."""
+    kw = kwartieren()
     a = accu()
     a.zon_export_afdwingbaar = True
-    eerst = Res([{"actie": "zon_export", "net_kwh": -0.2, "accu_kwh": 0.0, "inhoud_kwh": 0.5},
-                 {"actie": "huis", "net_kwh": 0.3, "accu_kwh": -0.2, "inhoud_kwh": 0.0}])
-    gezien = {}
-
-    def plan(kw, acc):
-        gezien["bij_zon"] = acc.verkopen_bij_zon
-        return Res([])
-
-    import custom_components.energy_management_system.waardeplan as wp
-    oud = wp.plan
-    wp.plan = plan
-    try:
-        c._waardeplan_huis_eerst([], a, eerst)
-    finally:
-        wp.plan = oud
-    assert gezien["bij_zon"] is False and a.zon_export_afdwingbaar is False
+    res = W.plan(kw, a)
+    for r, k in zip(res.kwartieren, kw):
+        if r["actie"] == "verkopen" and k.zon_kwh > k.verbruik_kwh + W.EPS_KWH:
+            assert not W._zon_export_voor_tekort(res.kwartieren)
+    assert a.verkopen_bij_zon is True and a.zon_export_afdwingbaar is True   # niets globaal omgezet

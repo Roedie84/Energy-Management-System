@@ -38,8 +38,17 @@ def test_ook_met_1_2_kw_dekt_de_accu_nu():
 
 
 def test_slimme_stand_dekt_tot_2_4_kw_verkopen_op_1_2_kw():
-    rijen = W.plan(_kw(), _accu(ontladen_kw=2.4, verkoop_kw=1.2)).kwartieren
-    assert rijen[1]["actie"] == "huis" and -rijen[1]["accu_kwh"] > 0.45   # 2,2 kW huis grotendeels uit de accu
+    kw, acc = _kw(), _accu(ontladen_kw=2.4, verkoop_kw=1.2)
+    rijen = W.plan(kw, acc).kwartieren
+    # v5.186.0: het koken (16:45-17:30) grotendeels uit de accu; 2,2 kW huis gaat
+    # tot 2,4 kW helemaal uit de accu. Was: precies kwartier 17:00. Nu kiest het
+    # plan zelf het goedkoopste kookkwartier (46,8 ct) om te bewaren als de
+    # lading later minstens de bewaarmarge meer waard is (marginale waarde uit
+    # het plan, `te_duur_bewaard` blijft leeg).
+    koken = [r for r in rijen[:4] if r["actie"] == "huis"]
+    assert len(koken) >= 3
+    assert all(-r["accu_kwh"] > 0.4 for r in koken if r["verbruik_kwh"] > 0.5)
+    assert W.te_duur_bewaard(rijen, kw, acc) == []
     for r in rijen:
         if r["actie"] == "verkopen":
             assert -r.get("accu_stap_kwh", r["accu_kwh"]) <= 0.3 + 1e-6

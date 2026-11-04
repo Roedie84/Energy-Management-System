@@ -16,6 +16,7 @@ from . import (
 )
 from .const import (
     BALANCEER_KLAAR_UUR,
+    CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
     BALANCEER_MAX_PRIJS_EUR,
     CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
     CONF_FEEDIN_COST_EUR_PER_KWH,
@@ -346,8 +347,22 @@ class WaardeplanSturingMixin:
         # v5.181.2: één vloer langs het plan - de marge van nu, daarna zakt
         # hij met het huisverbruik (zie `waardeplan.vloeren_gelijktrekken`).
         if uit:
-            uit = waardeplan_mod.vloeren_gelijktrekken(uit, self._reserve_bodem_kwh())
+            # v5.186.0 (punt 10): met het ontlaadrendement (inhoud per kWh huis).
+            uit = waardeplan_mod.vloeren_gelijktrekken(uit, self._reserve_bodem_kwh(), self._waardeplan_eta_o(now))
         return uit or None
+
+    def _waardeplan_eta_o(self, now: datetime) -> float:
+        """Het ontlaadrendement van het plan (v5.186.0), voor de verkoopvloer;
+        1,0 als het (nog) niet te bepalen is."""
+        try:
+            rendement = self.learned_battery_efficiency_percent or float(
+                self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
+            )
+            accu = waardeplan_mod.Accu(inhoud_kwh=0.0, bruikbaar_kwh=1.0, rendement=float(rendement) / 100,
+                                       **self._waardeplan_rendementen(now))
+            return waardeplan_mod.rendementen(accu)[1]
+        except Exception:  # noqa: BLE001 - de vloer rekent dan aan de netkant
+            return 1.0
 
     def _waardeplan_kwartier(self, now, begin, eind, prijs, kaal, feedin_cost, reserve_cache, entries):
         """Eén kwartier voor het waardeplan, of None bij een gat (v5.177.0)."""
@@ -419,7 +434,42 @@ class WaardeplanSturingMixin:
         return p75
 
     def bereken_waardeplan(self, now: datetime, entries) -> dict:
-        """Het waardeplan van nu (v5.158.0) - zie waardeplan.py."""
+        """Het waardeplan van nu (v5.158.0) - zie waardeplan.py.
+
+        v5.186.0 (punt 20): synchroon (tests, terugval). De sturing gebruikt
+        `_async_bereken_waardeplan`: zelfde invoer en afronding, maar het
+        rekenwerk (`waardeplan.plan`, puur Python/numpy) in een executor.
+        """
+        voor = self._waardeplan_invoer(now, entries)
+        if "uitkomst" in voor:
+            return voor["uitkomst"]
+        return self._waardeplan_afronden(now, voor, waardeplan_mod.plan(voor["kwartieren"], voor["accu"]))
+
+    async def _async_bereken_waardeplan(self, now: datetime, entries) -> dict:
+        """`bereken_waardeplan` met het rekenwerk buiten de event loop (v5.186.0, punt 20).
+
+        De invoer (HA-toestanden, instellingen) en de afronding (attributen,
+        log) blijven op de loop; alleen `waardeplan.plan` gaat naar de
+        executor: het raakt alleen zijn eigen invoer (dataclasses) aan.
+        """
+        if "bereken_waardeplan" in vars(self):
+            # testhaak: een test die `bereken_waardeplan` vervangt, blijft werken
+            return self.bereken_waardeplan(now, entries)
+        voor = self._waardeplan_invoer(now, entries)
+        if "uitkomst" in voor:
+            return voor["uitkomst"]
+        hass = getattr(self, "hass", None)
+        uitvoeren = getattr(hass, "async_add_executor_job", None)
+        if uitvoeren is None:
+            res = waardeplan_mod.plan(voor["kwartieren"], voor["accu"])
+        else:
+            res = await uitvoeren(waardeplan_mod.plan, voor["kwartieren"], voor["accu"])
+        return self._waardeplan_afronden(now, voor, res)
+
+    def _waardeplan_invoer(self, now: datetime, entries) -> dict:
+        """De invoer van het waardeplan (v5.186.0 uit `bereken_waardeplan`):
+        {"kwartieren", "accu", "bruikbaar", "balans"}, of {"uitkomst": ...}
+        als er niets te rekenen valt."""
         uit: dict = {"beschikbaar": False, "berekend_om": now.isoformat()}
         beschikbaar = self.beschikbare_energie_kwh()
         capaciteit = self.bruikbare_capaciteit_kwh()
@@ -430,7 +480,7 @@ class WaardeplanSturingMixin:
         # op netladen komt er sinds v5.165.0 apart bij (`_waardeplan_rendementen`)
         if beschikbaar is None or not capaciteit or not rendement:
             uit["reden"] = "accu-inhoud, capaciteit of rendement onbekend"
-            return uit
+            return {"uitkomst": uit}
         # v5.172.0 (punt 4): boven de effectieve ondergrens (gelijk aan de
         # min-SoC zolang de accu niet eerder stopt), net als de inhoud.
         bruikbaar = capaciteit * (100 - self.effectieve_ondergrens_procent(now)) / 100
@@ -439,11 +489,27 @@ class WaardeplanSturingMixin:
             kwartieren = self._waardeplan_kwartieren(now, entries)
         if not kwartieren:
             uit["reden"] = "geen verbruiksverwachting of prijzen vooruit"
-            return uit
+            return {"uitkomst": uit}
         accu = self._waardeplan_accu(now, beschikbaar, bruikbaar, rendement, kwartieren)
         balans = self._waardeplan_balanceren(now, kwartieren, accu)
         accu.vol_na_kwartier = balans.get("kwartier")
-        res = self._waardeplan_huis_eerst(kwartieren, accu, waardeplan_mod.plan(kwartieren, accu))
+        return {"kwartieren": kwartieren, "accu": accu, "bruikbaar": bruikbaar, "balans": balans}
+
+    def _waardeplan_afronden(self, now: datetime, voor: dict, res) -> dict:
+        """Van de uitkomst van `waardeplan.plan` naar de attributen (v5.186.0
+        uit `bereken_waardeplan`)."""
+        uit: dict = {"beschikbaar": False, "berekend_om": now.isoformat()}
+        kwartieren, accu, bruikbaar, balans = voor["kwartieren"], voor["accu"], voor["bruikbaar"], voor["balans"]
+        # v5.186.0 (punt 14): de huis-eerst-toets van v5.179.1 zit in het plan zelf.
+        self.waardeplan_zon_export_geweigerd = bool(getattr(res, "zon_export_geweigerd", 0))
+        if getattr(res, "rondelimiet", False):
+            # v5.186.0 (punt 15): de toetsen raakten niet uitgerekend; eens per uur in de log.
+            sleutel = now.strftime("%Y-%m-%d %H")
+            if getattr(self, "_rondelimiet_gemeld", None) != sleutel:
+                self._rondelimiet_gemeld = sleutel
+                _LOGGER.warning(
+                    "Waardeplan: na %s rondes staan er nog overtredingen in het plan: %s",
+                    getattr(res, "rondes", "?"), getattr(res, "resterend", {}) or "-")
         # v5.184.2 (vangnet): het lopende kwartier kon alleen zonder de
         # dekregels; eens per kwartier in de log, zodat het opvalt.
         if res.beschikbaar and res.kwartieren and res.kwartieren[0].get("vangnet"):
@@ -460,23 +526,6 @@ class WaardeplanSturingMixin:
         uit.update(self._waardeplan_uitkomst(res, accu, bruikbaar, kwartieren, balans))
         return uit
 
-    def _waardeplan_huis_eerst(self, kwartieren, accu, res):
-        """Geen zon terugleveren als het huis daarna met een lege accu aan het
-        net hangt (v5.179.1, akkoord Ruud 04-11): dan opnieuw plannen zonder
-        afgedwongen terugleveren, zodat de slimme stand de zon opslaat."""
-        self.waardeplan_zon_export_geweigerd = False
-        if not (res.beschikbaar and accu.zon_export_afdwingbaar
-                and waardeplan_mod.zon_export_laat_huis_tekort(res.kwartieren)):
-            return res
-        accu.zon_export_afdwingbaar = False
-        # v5.181.2 (g): en ook niet via een verkoop (de zon gaat dan mee).
-        accu.verkopen_bij_zon = False
-        opnieuw = waardeplan_mod.plan(kwartieren, accu)
-        if not opnieuw.beschikbaar:
-            return res
-        self.waardeplan_zon_export_geweigerd = True
-        return opnieuw
-
     def _waardeplan_accu(self, now, beschikbaar, bruikbaar, rendement, kwartieren):
         """De accu voor het waardeplan (v5.177.0 uit `bereken_waardeplan`)."""
         laden_kw = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0) / 1000
@@ -489,10 +538,21 @@ class WaardeplanSturingMixin:
             slim_kw = float(self.slimme_ontlaadgrens_w()) / 1000
         except Exception:  # noqa: BLE001
             slim_kw = None
+        # v5.186.0 (punt 13): de slimme stand slaat zon op tot de laadgrens van
+        # de omvormer (max. laadvermogen-entiteit), niet tot het handmatige
+        # laadvermogen; zonder entiteit het handmatige.
+        laden_slim_kw = None
+        try:
+            gemeten = self._read_sensor_float(self.config.get(CONF_BATTERY_MAX_CHARGE_POWER_ENTITY))
+            if gemeten is not None and 100 <= abs(gemeten) <= 12000:
+                laden_slim_kw = abs(gemeten) / 1000
+        except Exception:  # noqa: BLE001
+            laden_slim_kw = None
         return waardeplan_mod.Accu(
             inhoud_kwh=max(0.0, beschikbaar),
             bruikbaar_kwh=bruikbaar,
             laden_kw=laden_kw or 2.4,
+            laden_slim_kw=laden_slim_kw,
             ontladen_kw=max(slim_kw or 0.0, ontladen_kw or 2.4),
             verkoop_kw=ontladen_kw or 2.4,
             rendement=rendement / 100,
@@ -526,7 +586,9 @@ class WaardeplanSturingMixin:
             "bruikbaar_kwh": round(bruikbaar, 2),
             "kwartieren": len(res.kwartieren),
             # v5.179.1: zon terugleveren geweigerd omdat het huis daarna leeg zou staan.
-            "zon_export_geweigerd": getattr(self, "waardeplan_zon_export_geweigerd", False),
+            # v5.186.0 (punt 14): uit het plan zelf (kwartieren met geweigerd terugleveren).
+            "zon_export_geweigerd": bool(getattr(res, "zon_export_geweigerd", 0)),
+            "zon_export_geweigerd_kwartieren": int(getattr(res, "zon_export_geweigerd", 0) or 0),
             # v5.177.0 (A5): tot waar het plan reikt als een gat het afknipte.
             "afgeknipt_bij": self._waardeplan_knip.isoformat() if self._waardeplan_knip else None,
             "kosten_plan_eur": res.kosten_plan_eur,
@@ -535,6 +597,15 @@ class WaardeplanSturingMixin:
                 (res.kosten_zonder_accu_eur or 0) - (res.kosten_plan_eur or 0), 2
             ),
             "eindwaarde_eur_per_kwh": res.eindwaarde_eur_per_kwh,
+            # v5.186.0 (punt 4): tot de knik telt de eindwaarde hierboven (het
+            # huistekort na de horizon), daarboven de lage waarde.
+            "eindwaarde_knik_kwh": getattr(res, "eindwaarde_knik_kwh", None),
+            "eindwaarde_laag_eur_per_kwh": getattr(res, "eindwaarde_laag_eur_per_kwh", None),
+            # v5.186.0 (punt 15): de toetsen achteraf - rondes, wat er nog
+            # overtreden wordt (hoort leeg te zijn) en of de rondegrens geraakt is.
+            "toets_rondes": getattr(res, "rondes", None),
+            "toets_resterend": getattr(res, "resterend", None) or {},
+            "toets_rondelimiet": bool(getattr(res, "rondelimiet", False)),
             # v5.184.2: kwartieren die het plan alleen zonder de dekregels kon
             # vullen (vangnet); hoort 0 te zijn.
             "vangnet_kwartieren": sum(1 for r in res.kwartieren if r.get("vangnet")),
@@ -640,7 +711,8 @@ class WaardeplanSturingMixin:
         if self._balanceer_zon_vult_vandaag(now, accu.inhoud_kwh, ruimte):
             return {"reden": f"{bal['reden']}; de zon maakt de accu vandaag vol"}
         einde = kwartieren[-1].begin + timedelta(minutes=15)
-        per_kwartier = accu.laden_kw * accu.duur_h * max(0.5, min(1.0, accu.rendement)) ** 0.5
+        # v5.186.0 (punt 6): het laadrendement van het plan (was de wortel van de rondrit).
+        per_kwartier = accu.laden_kw * accu.duur_h * waardeplan_mod.rendementen(accu)[0]
         doel = self._balanceer_doel
         if doel is None or doel <= now:
             # Een nieuw moment; niet meer haalbaar vóór 08:00 = de dag erna,
@@ -678,9 +750,8 @@ class WaardeplanSturingMixin:
             "reden": f"{bal['reden']}: vol vóór {dt_util.as_local(doel):%d-%m %H:%M}",
         }
 
-    def _waardeplan_nu(self, now: datetime, entries) -> dict:
-        """Het plan voor dit kwartier: één keer per kwartier rekenen, of
-        opnieuw als de accu-inhoud ver van het plan afwijkt."""
+    def _waardeplan_uit_cache(self, now: datetime) -> tuple:
+        """(kwartier, het plan uit de cache of None) - v5.186.0 uit `_waardeplan_nu`."""
         kwartier = dt_util.as_local(now).replace(
             minute=(dt_util.as_local(now).minute // 15) * 15, second=0, microsecond=0
         )
@@ -696,12 +767,42 @@ class WaardeplanSturingMixin:
                     and not self._waardeplan_wijkt_live_af(now, cache[1], max(0.0, inhoud))
                 )
             ):
-                return cache[1]
+                return kwartier, cache[1]
+        return kwartier, None
+
+    def _waardeplan_nu(self, now: datetime, entries) -> dict:
+        """Het plan voor dit kwartier: één keer per kwartier rekenen, of
+        opnieuw als de accu-inhoud ver van het plan afwijkt."""
+        kwartier, plan = self._waardeplan_uit_cache(now)
+        if plan is not None:
+            return plan
+        laatst = getattr(self, "_waardeplan_laatst", None)
+        if laatst is not None and laatst[0] == now:
+            return laatst[1]   # v5.186.0: deze ronde al (async) berekend
         try:
             plan = self.bereken_waardeplan(now, entries)
         except Exception:  # noqa: BLE001 - het plan mag de sturing nooit breken
             _LOGGER.exception("Waardeplan niet te berekenen; de oude regels gelden")
             plan = {"beschikbaar": False, "reden": "rekenfout"}
+        return self._waardeplan_bewaar(now, kwartier, plan)
+
+    async def _async_waardeplan_nu(self, now: datetime, entries) -> dict:
+        """`_waardeplan_nu` met het rekenwerk in de executor (v5.186.0, punt 20)."""
+        kwartier, plan = self._waardeplan_uit_cache(now)
+        if plan is not None:
+            return plan
+        try:
+            plan = await self._async_bereken_waardeplan(now, entries)
+        except Exception:  # noqa: BLE001 - het plan mag de sturing nooit breken
+            _LOGGER.exception("Waardeplan niet te berekenen; de oude regels gelden")
+            plan = {"beschikbaar": False, "reden": "rekenfout"}
+        # v5.186.0: ook een plan zonder uitkomst geldt voor de rest van deze
+        # ronde (`_waardeplan_gaat_sturen` rekent dan niet nog eens synchroon).
+        self._waardeplan_laatst = (now, plan)
+        return self._waardeplan_bewaar(now, kwartier, plan)
+
+    def _waardeplan_bewaar(self, now: datetime, kwartier, plan: dict) -> dict:
+        """Een vers plan vastleggen (v5.186.0 uit `_waardeplan_nu`)."""
         if not plan.get("beschikbaar"):
             # v5.175.0: dan sturen de oude regels; de tabel toont die.
             self._waardeplan_rijen = None
@@ -827,7 +928,8 @@ class WaardeplanSturingMixin:
         if self._is_emergency_low_battery():
             # Bijna leeg: de noodregel van de oude sturing gaat voor.
             return False
-        plan = self.last_waardeplan = dict(self._waardeplan_nu(now, entries))
+        # v5.186.0 (punt 20): het rekenwerk buiten de event loop.
+        plan = self.last_waardeplan = dict(await self._async_waardeplan_nu(now, entries))
         self._noteer_waardeplan_beschikbaar(now, plan)
         if not plan.get("beschikbaar"):
             return False

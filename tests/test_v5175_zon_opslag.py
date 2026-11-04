@@ -47,7 +47,8 @@ def test_nieuw_model_slaat_het_overschot_op():
     rijen = W.plan(_dag(), _accu()).kwartieren
     for r in rijen[:12]:
         assert r["actie"] == "zon"
-        assert r["inhoud_delta_kwh"] == pytest.approx(0.2, abs=0.01)   # 0,2 kWh x 0,836 -> 2 stappen
+        # v5.186.0: exact 0,2 kWh x 0,836 (was afgerond op 2 stappen van 0,1)
+        assert r["inhoud_delta_kwh"] == pytest.approx(0.2 * 0.836, abs=0.002)
         assert r["accu_ac_w"] == -800
         assert r["net_kwh"] <= 0.06                                    # niets of een afrondrestje terug
 
@@ -77,9 +78,16 @@ def test_terugleveren_afdwingbaar_alleen_met_de_marge():
     u = W.plan(_dag(), _accu(zon_export_afdwingbaar=True))
     assert all(r["inhoud_delta_kwh"] > 0.1 for r in u.kwartieren[:12])
     # met een avond van 30 ct is terugleveren ruim 5 ct beter -> terugleveren
+    # (in het rekenmodel zelf, `_plan`)
     ks = [_k(i, 0.40, 200, 1000) for i in range(12)] + [_k(12 + i, 0.30, 600, 0) for i in range(24)]
-    u = W.plan(ks, _accu(zon_export_afdwingbaar=True))
+    u = W._plan(ks, _accu(zon_export_afdwingbaar=True))
     assert sum(r["inhoud_delta_kwh"] for r in u.kwartieren[:12]) < 0.5
+    # v5.186.0 (punt 14): de huis-eerst-toets van v5.179.1 zit nu in `plan` zelf
+    # (was `_waardeplan_huis_eerst` in de sturing): het huis staat 's avonds met een
+    # lege accu op het net, dus wordt het terugleveren geweigerd en de zon opgeslagen.
+    u = W.plan(ks, _accu(zon_export_afdwingbaar=True))
+    assert u.zon_export_geweigerd > 0
+    assert all(r["inhoud_delta_kwh"] > 0.1 for r in u.kwartieren[:12])
 
 
 def test_zon_opslag_stappen():
