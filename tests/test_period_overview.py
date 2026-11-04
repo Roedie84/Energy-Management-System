@@ -496,7 +496,10 @@ def test_the_closed_day_uses_the_last_standing_values(
     r = c.energy_daily_history[-1]
     assert r["opwek_kwh"] == 21.0
     assert r["accu_ontladen_kwh"] == 5.5
-    assert r["kosten_eur"] == -3.3
+    # v5.185.0: het saldo staat onder netto_eur (kosten_eur is de kostenmeter;
+    # hier niet ingesteld). Voorheen ging het saldo verloren (netto ~0).
+    assert r["netto_eur"] == -3.3
+    assert r["zonder_sturing_eur"] == -1.1
     assert r["co2_kg"] == 0.4
 
 

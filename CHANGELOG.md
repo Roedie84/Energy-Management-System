@@ -34955,3 +34955,14 @@ Kaart claude-controle 04-11 19:18: vaatwasser gepland 05-11 05:00, in het plan h
 - Een lopende cyclus (`lopend_witgoed_kwh_in_periode`) verdeelt de rest volgens het profiel vanaf de verstreken tijd (`rest_fracties`).
 
 Tests: `test_v5184_4_witgoed_verdelen.py`.
+
+## v5.185.0 — saldo per dag hersteld; week en maand op dezelfde maat als vandaag
+
+Onderzoek 04-11 19:44 (Ruud: "Kloppen alle kosten/besparings waardes? Graag diepgaand onderzoeken"). De besparing per periode in het overzicht (`perioden`) gaf week 19,29 EUR en maand 11,07 EUR; de besparingssensor zegt deze maand -0,26 EUR ongecorrigeerd (-0,74 met de voorraadcorrectie).
+
+- Oorzaak: de dagstand (`_energiedagstand`) bewaarde het saldo onder `kosten_eur` en had geen `netto_eur`. Bij het afsluiten van de dag viel `netto_eur` terug op de live teller, die om middernacht al gewist was (~0), en `kosten_eur` kreeg het saldo in plaats van de kostenmeter. Besparing per dag = zonder sturing - saldo werd zo de hele rekening zonder accu.
+- De dagstand draagt nu `kosten_eur` = kostenmeter en `netto_eur` = saldo. Nieuwe dagregels krijgen `dagregel_v5185`.
+- `_migreer_dagreeks_kosten` herstelt oude live dagregels: saldo (stond onder `kosten_eur`) terug naar `netto_eur`, `kosten_eur` = het afnamebedrag van de leverancier (`inkoop_eur`) of leeg.
+- `netto_eur` (Saldo) telt mee per periode; de cockpit toont Week en Maand als saldo (afgesloten dagen), net als Vandaag. Was: week en maand het saldo uit de dagstand, vandaag de werkelijke kosten - door de fout toevallig dezelfde maat, na de fix zou het de afname zijn.
+
+Tests: `test_v5185_dagsaldo.py`.

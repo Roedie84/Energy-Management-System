@@ -2492,8 +2492,10 @@ class EmsCockpitCard extends HTMLElement {
       // v5.105.2: de besparing vergelijkt met een huis ZONDER accu
       `<span title="${esc("t.o.v. zonder accu")}">Besparing deze maand <b style="color:${kleur(bmaand)}">${euroTeken(bmaand)}</b></span>` +
       `<span title="sinds de start">Besparing totaal <b style="color:${kleur(ball)}">${euroTeken(ball)}</b></span>` +
-      `<span>Week <b>${euro(week.kosten_eur)}<i class="bij">${fmt(week.opwek_kwh, 0)} kWh zon</i></b></span>` +
-      `<span>Maand <b>${euro(maand.kosten_eur)}<i class="bij">${fmt(maand.opwek_kwh, 0)} kWh zon</i></b></span>` +
+      // v5.185.0: saldo (afname min teruglevering), dezelfde maat als "Vandaag";
+      // zonder saldo de afname. Week en maand zijn de afgesloten dagen.
+      `<span title="Saldo van de afgesloten dagen (afname min teruglevering)">Week <b>${euro(num(week.netto_eur) ?? num(week.kosten_eur))}<i class="bij">${fmt(week.opwek_kwh, 0)} kWh zon</i></b></span>` +
+      `<span title="Saldo van de afgesloten dagen deze maand (afname min teruglevering)">Maand <b>${euro(num(maand.netto_eur) ?? num(maand.kosten_eur))}<i class="bij">${fmt(maand.opwek_kwh, 0)} kWh zon</i></b></span>` +
       `<span>Van het net vandaag <b>${fmt(vandaag.import_kwh, 1)} kWh</b></span>` +
       `<span>Zelfvoorzienend <b>${zv == null ? STREEP : fmt(zv) + "%"}</b></span>` +
       `</div><div>` +

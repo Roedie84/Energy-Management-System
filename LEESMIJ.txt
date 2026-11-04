@@ -1,3 +1,13 @@
+EMS v5.185.0 - saldo per dag hersteld; week en maand op dezelfde maat als vandaag
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Een afgesloten dag bewaarde zijn saldo niet goed (netto ~0). De besparing per week,
+  maand en jaar in het overzicht werd daardoor de hele rekening zonder accu (maand
+  11,07 EUR in plaats van ongeveer -0,26). De oude dagregels worden bij het opstarten
+  hersteld.
+- Cockpit: Week en Maand tonen het saldo (afname min teruglevering), net als Vandaag.
+
 EMS v5.184.4 - vaatwasser en wasmachine volgens hun eigen verbruiksprofiel
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

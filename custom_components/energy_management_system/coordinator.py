@@ -29387,7 +29387,15 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             "verbruik_kwh": self.gross_consumption_today_kwh,
             "import_kwh": self.grid_import_today_kwh,
             "accu_ontladen_kwh": self.battery_discharge_today_kwh,
-            "kosten_eur": self.actual_cost_today_eur,
+            # v5.185.0: het SALDO onder `netto_eur` en de kostenmeter onder
+            # `kosten_eur`, net als de dagregel. Hier stond het saldo onder
+            # `kosten_eur` en ontbrak `netto_eur`; het afsluiten viel dan
+            # terug op de live teller, die om middernacht al op nul stond.
+            # Gevolg: elke afgesloten dag netto ~0, en de besparing per
+            # periode (zonder sturing - saldo) werd de hele rekening zonder
+            # accu (maand 11,07 EUR tegen -0,26 in de besparingssensor).
+            "kosten_eur": self._kosten_vandaag_uit_meter(),
+            "netto_eur": self.actual_cost_today_eur,
             "zonder_sturing_eur": self.counterfactual_cost_today_eur,
             "co2_kg": self.co2_emitted_today_kg,
         }
@@ -29409,8 +29417,23 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         dat iets anders meet dan de kolom eromheen.
         """
         verplaatst = 0
+        hersteld = 0
         for regel in self.energy_daily_history or []:
             if regel.get("zonder_sturing_eur") is None:
+                continue
+            if "netto_eur" in regel and not regel.get("dagregel_v5185"):
+                # v5.185.0: tot deze versie kreeg een afgesloten dag het saldo
+                # onder `kosten_eur` (uit de dagstand) en een `netto_eur` van
+                # ~0 (de gewiste live teller). Saldo terug naar `netto_eur`;
+                # de kostenmeter van die dag is het afnamebedrag van de
+                # leverancier (`inkoop_eur`) als dat er is, anders leeg.
+                netto = regel.get("netto_eur")
+                saldo = regel.get("kosten_eur")
+                if saldo is not None and (netto is None or abs(netto) < 0.01) and abs(saldo) >= 0.01:
+                    regel["netto_eur"] = saldo
+                    regel["kosten_eur"] = regel.get("inkoop_eur")
+                    hersteld += 1
+                regel["dagregel_v5185"] = True
                 continue
             if "netto_eur" in regel:
                 continue
@@ -29423,6 +29446,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 "netto_eur (v3.29.0)",
                 verplaatst,
             )
+        if hersteld:
+            _LOGGER.info("%d dagregel(s): saldo hersteld naar netto_eur (v5.185.0)", hersteld)
+            self.schedule_persisted_state_save()
             self.schedule_persisted_state_save()
 
     def _weer_onmogelijke_dagen(self) -> None:
@@ -29603,6 +29629,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
                 "netto_eur": round(
                     _w("netto_eur", self.actual_cost_today_eur), 4
                 ),
+                "dagregel_v5185": True,   # v5.185.0: saldo uit de dagstand (zie _migreer_dagreeks_kosten)
                 "zonder_sturing_eur": round(
                     _w("zonder_sturing_eur", self.counterfactual_cost_today_eur),
                     4,
@@ -29653,6 +29680,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         ("export_kwh", "Naar het net", "kWh"),
         ("accu_ontladen_kwh", "Uit de accu", "kWh"),
         ("kosten_eur", "Kosten", "EUR"),
+        # v5.185.0: het saldo (afname min teruglevering) per periode, zodat de
+        # cockpit week en maand op dezelfde maat toont als vandaag.
+        ("netto_eur", "Saldo", "EUR"),
         ("co2_kg", "CO2", "kg"),
         # v5.15: de bedragen van de leverancier, incl en excl btw. Zo tellen
         # week en contractjaar vanzelf mee - die kent de leverancier niet.
