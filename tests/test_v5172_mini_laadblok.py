@@ -66,8 +66,9 @@ def test_plan_zonder_grens_heeft_het_restje():
 def test_plan_met_grens_laadt_alleen_de_zon():
     rij = _plan(WAARDEPLAN_MIN_ACTIE_W)
     assert rij["actie"] == "zon"
-    # de inhoud van het plan blijft de stap (de zon gaat er in de slimme stand in)
-    assert rij["inhoud_kwh"] == pytest.approx(0.1)
+    # v5.186.0: de slimme stand slaat het overschot exact op (was de stap van 0,1 kWh)
+    eta_l = W.rendementen(W.Accu(inhoud_kwh=0.0, bruikbaar_kwh=9.8, rendement=0.83))[0]
+    assert rij["inhoud_kwh"] == pytest.approx((0.17 - 0.10) * eta_l, abs=0.002)
 
 
 def test_een_kort_kwartier_heeft_een_evenredig_kleinere_grens():

@@ -6,6 +6,8 @@ niet stuurt.
 """
 from datetime import datetime, timedelta
 
+import pytest
+
 from custom_components.energy_management_system import waardeplan as W
 
 T0 = datetime(2026, 11, 4, 18, 0)
@@ -19,10 +21,12 @@ def test_huis_rij_accu_plus_net_is_huis():
         if r["actie"] == "huis":
             assert abs(-r["accu_kwh"] + r["net_kwh"] - 0.171) < 0.002
             assert r["accu_ac_w"] == round(-r["accu_kwh"] * 4000)
-    # geen halve dekking: de inhoud zakt per kwartier minstens met het tekort (op de stap)
+    # geen halve dekking: de inhoud zakt per kwartier met het tekort / ontlaadrendement
+    # (v5.186.0: exact; was minstens de afgeronde stap van 0,2 kWh)
+    eta_o = W.rendementen(W.Accu(inhoud_kwh=1.5, bruikbaar_kwh=7.7, rendement=0.834))[1]
     for r in res.kwartieren:
         if r["actie"] == "huis" and r["inhoud_kwh"] > 0:
-            assert -r["inhoud_delta_kwh"] >= 0.2 - 1e-9
+            assert -r["inhoud_delta_kwh"] == pytest.approx(0.171 / eta_o, abs=0.002)
 
 
 def test_leermodus_geen_goed(make_coordinator, hass):

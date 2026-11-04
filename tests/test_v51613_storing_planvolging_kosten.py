@@ -66,7 +66,8 @@ def test_waardeplan_geeft_delta_mee():
     inhoud = 1.0
     for r in res.kwartieren:
         inhoud += r["inhoud_delta_kwh"]
-        assert inhoud == pytest.approx(r["inhoud_kwh"])
+        # v5.186.0: doorlopende inhoud, per rij op 0,001 kWh afgerond
+        assert inhoud == pytest.approx(r["inhoud_kwh"], abs=0.002)
 
 
 def test_net_eerste_rij_alleen_accustap_schalen():

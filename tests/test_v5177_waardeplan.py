@@ -316,10 +316,14 @@ def test_a12_geen_netlading_onder_500_w():
 
 
 def test_a12_lege_accu_geen_geplande_ontlading():
-    """06:30: 0,06 kWh telde als 0,1 en het plan ontlaadde een lege accu."""
+    """06:30: 0,06 kWh telde als 0,1 en het plan ontlaadde een lege accu.
+
+    v5.186.0: de inhoud loopt door en de slimme dekking is exact: het plan
+    ontlaadt nooit meer dan er in zit (hier de 0,06 kWh), en daarna niets."""
     u = W.plan(_kw([0.40] * 4), _accu(0.06, netladen=False, verkopen=False))
-    assert u.kwartieren[0]["inhoud_delta_kwh"] == 0.0
-    assert u.kwartieren[0]["accu_ac_w"] == 0
+    assert -u.kwartieren[0]["inhoud_delta_kwh"] <= 0.06 + 1e-9
+    assert u.kwartieren[0]["inhoud_kwh"] >= 0.0
+    assert all(r["inhoud_delta_kwh"] == 0.0 and r["accu_ac_w"] == 0 for r in u.kwartieren[1:])
 
 
 def test_a12_huis_gepland_als_het_tekort():

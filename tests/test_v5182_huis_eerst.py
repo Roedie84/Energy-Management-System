@@ -73,7 +73,15 @@ def test_regel_zelf():
         {"actie": "huis", "accu_kwh": -0.2, "inhoud_kwh": 3.0},
         {"actie": "houden", "accu_kwh": 0.0, "inhoud_kwh": 3.0},
     ]
-    assert W.verkopen_voor_huis(rijen, k, acc) == [1]          # lading uit het net
+    # v5.186.0 (punt 8): de netlading (0,6 kWh x laadrendement) blijft voor het
+    # huis; de verkoop neemt alleen van de 3,0 kWh die er al in zat: mag.
+    # Was: elke netlading verbood elke latere verkoop tot de accu leeg stond.
+    assert W.verkopen_voor_huis(rijen, k, acc) == []
+    acc0 = _accu(True)
+    acc0.inhoud_kwh = 0.0
+    rijen[0] = {"actie": "laden_net", "accu_kwh": 0.6, "inhoud_kwh": 0.5}
+    rijen[1] = {"actie": "verkopen", "accu_kwh": -0.3, "inhoud_kwh": 0.2}
+    assert W.verkopen_voor_huis(rijen, k, acc0) == [1]         # lading uit het net
     rijen[0] = {"actie": "huis", "accu_kwh": -0.2, "inhoud_kwh": 0.3}
     rijen[1] = {"actie": "verkopen", "accu_kwh": -0.3, "inhoud_kwh": 0.05}
     assert W.verkopen_voor_huis(rijen, k, acc) == [1]          # huis daarna niet gedekt

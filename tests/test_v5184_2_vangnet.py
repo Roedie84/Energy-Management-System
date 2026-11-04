@@ -14,10 +14,26 @@ from custom_components.energy_management_system import waardeplan as W
 T0 = datetime(2026, 11, 4, 17, 0)
 
 
-def test_vangnet_vult_een_onmogelijk_kwartier_en_meldt_het():
-    # dekken geëist, maar de accu kan in dit kwartier niets leveren (0,3 kW grens)
+def test_vangnet_vult_een_onmogelijk_kwartier_en_meldt_het(monkeypatch):
+    # v5.186.0: het oude geval (dekken bij een grens van 0,3 kW) is nu gewoon te
+    # plannen: de slimme stand dekt exact wat het vermogen toelaat (0,075 kWh).
     kw = [W.Kwartier(T0 + timedelta(minutes=15 * i), 0.3, 0.0, 0.40, 0.42, dekken=(i == 0)) for i in range(8)]
-    res = W.plan(kw, W.Accu(inhoud_kwh=1.0, bruikbaar_kwh=4.0, ontladen_kw=0.3, netladen=False, verkopen=False))
+    acc = W.Accu(inhoud_kwh=1.0, bruikbaar_kwh=4.0, ontladen_kw=0.3, netladen=False, verkopen=False)
+    res = W.plan(kw, acc)
+    assert res.beschikbaar and not res.kwartieren[0].get("vangnet")
+    assert res.kwartieren[0]["actie"] == "huis" and abs(res.kwartieren[0]["accu_kwh"] + 0.075) < 1e-6
+    # het vangnet zelf: past er streng geen enkele actie (hier de slimme stand
+    # kunstmatig uitgezet), dan zonder de dekregel en gemeld
+    echt = W._Kw.evalueer
+
+    def zonder_slim(self, j, accu, e, waarde, raster, cap, eta_l, streng=True):
+        kosten, b, e2 = echt(self, j, accu, e, waarde, raster, cap, eta_l, streng)
+        if streng and self.k.dekken and j == self.i_slim:
+            kosten = np.full(np.shape(e), np.inf)
+        return kosten, b, e2
+
+    monkeypatch.setattr(W._Kw, "evalueer", zonder_slim)
+    res = W.plan(kw, acc)
     assert res.beschikbaar
     assert res.kwartieren[0].get("vangnet") is True
     assert np.isfinite(res.kosten_plan_eur)

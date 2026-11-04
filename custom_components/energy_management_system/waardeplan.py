@@ -19,6 +19,13 @@ zon van gisteren als verwachting.
 Dit is die planner: dynamisch programmeren over de accu-inhoud (stap
 0,1 kWh), per kwartier. Losse functies zonder Home Assistant.
 
+v5.186.0 (review): de slimme stand (huis dekken, zon opslaan) is een eigen,
+exacte actie: de inhoud zakt met tekort / rendement (of stijgt met het
+overschot x rendement), niet met een afgeronde stap van 0,1 kWh. De waarde
+van een inhoud tussen twee rasterpunten is lineair geinterpoleerd en de
+vooruitrekening volgt een doorlopende inhoud. Laden uit het net, verkopen en
+zon terugleveren blijven stappen op het raster (handmatig, vast vermogen).
+
 Per kwartier t, bij inhoud e (kWh boven de ondergrens):
     accu laden    b > 0 (AC, kWh)   inhoud + b * rendement_laden
     accu ontladen b < 0             inhoud + b / rendement_ontladen
@@ -50,7 +57,16 @@ from statistics import median
 import numpy as np
 
 STAP_KWH = 0.1
+#: v5.186.0: één drempel voor plan en toetsen (was 0,02 in het plan en 0,01
+#: in een deel van de toetsen: een overtreding die het plan niet kon zien).
 EPS_KWH = 0.02
+#: v5.186.0: de balanceereis is zacht - per kWh te kort na het eiskwartier.
+BOETE_EIS_EUR_PER_KWH = 5.0
+#: v5.186.0: kosten-to-go van een inhoud zonder geldige stap (eindig, zodat de
+#: interpolatie werkt); daarboven telt een plan als onhaalbaar.
+GROOT_EUR = 1.0e4
+#: v5.186.0: hooguit zoveel rondes met de toetsen achteraf.
+MAX_RONDES = 16
 #: v5.169.0: ontladen in inhoud-eenheden (inhoud -> AC) mag boven 1,0: het is
 #: een schaalfactor tussen de laadstand en de AC-kant (zie rondrit.py). De
 #: afkapping op 1,0 drukte laden x ontladen onder de gemeten rondrit.
@@ -80,11 +96,18 @@ class Kwartier:
     teruglever_accu_eur: float | None = None
     #: v5.183.0 (bewaarmarge): in dit kwartier dekt de accu het huistekort zolang
     #: er inhoud is; bewaren voor later is hier niet genoeg waard (zie
-    #: `te_duur_bewaard`).
+    #: `te_duur_bewaard`). v5.186.0: verbiedt bewaren en netladen zolang er
+    #: inhoud is; leeg mag alles. De bewaarmarge zit sindsdien ook in het plan zelf.
     dekken: bool = False
     #: v5.184.0 (akkoord Ruud 04-11 15:56): hier geen zon terugleveren zolang er
     #: ruimte is (ook niet via een verkoop); zie `zon_export_zonder_overschot`.
     geen_zon_export: bool = False
+    #: v5.186.0: hier geen verkoop (toets achteraf). Apart van de vloer, zodat
+    #: de rij de echte verkoopvloer blijft tonen (was: vloer boven vol).
+    verkoop_verboden: bool = False
+    #: v5.186.0 (punt 9): hier niet uit het net laden - de zon vult de accu
+    #: daarna toch tot vol en levert dan terug.
+    geen_netladen: bool = False
 
 
 @dataclass
@@ -160,6 +183,9 @@ class Accu:
     #: `ontladen_kw` is dan de grens van de slimme stand (huis dekken). None =
     #: allebei `ontladen_kw`.
     verkoop_kw: float | None = None
+    #: v5.186.0 (punt 13): het laadvermogen van de slimme stand (zon opslaan),
+    #: los van het handmatige laadvermogen. None = `laden_kw`.
+    laden_slim_kw: float | None = None
 
 
 @dataclass
@@ -170,6 +196,19 @@ class Uitkomst:
     kosten_plan_eur: float | None = None
     kosten_zonder_accu_eur: float | None = None
     eindwaarde_eur_per_kwh: float | None = None
+    #: v5.186.0 (punt 4): tot deze inhoud geldt de eindwaarde hierboven (het
+    #: verwachte huistekort na de horizon); daarboven `eindwaarde_laag`.
+    eindwaarde_knik_kwh: float | None = None
+    eindwaarde_laag_eur_per_kwh: float | None = None
+    #: v5.186.0 (punt 15): hoeveel rondes de toetsen achteraf nodig hadden,
+    #: welke overtredingen er in het eindplan nog staan, en of de grens van
+    #: MAX_RONDES bereikt is.
+    rondes: int = 0
+    resterend: dict = field(default_factory=dict)
+    rondelimiet: bool = False
+    #: v5.186.0 (punt 14): in zoveel kwartieren is zon terugleveren geweigerd
+    #: (huis eerst); was een losse herberekening in de sturing.
+    zon_export_geweigerd: int = 0
 
 
 def _kosten_stap(verbruik, zon, inkoop, teruglever, b, accu: Accu, teruglever_accu=None):
@@ -193,6 +232,26 @@ def _kosten_stap(verbruik, zon, inkoop, teruglever, b, accu: Accu, teruglever_ac
         # v5.165.0: alleen wat boven het zonoverschot uit het net komt.
         netlading = np.maximum(b - max(zon - verbruik, 0.0), 0.0)
         kosten = kosten + netlading * accu.netlaadmarge_eur
+    return kosten
+
+
+def _kosten_een(k, b: float, accu: Accu, teruglever_accu=None) -> float:
+    """`_kosten_stap` voor één stroom b, zonder numpy (v5.186.0: sneller)."""
+    verbruik, zon = k.verbruik_kwh, k.zon_kwh
+    g = verbruik - zon + b
+    uit = max(-b, 0.0)
+    naar_net = min(max(-g, 0.0), uit)
+    if g >= 0:
+        kosten = g * k.inkoop_eur
+    elif teruglever_accu is None or teruglever_accu == k.teruglever_eur:
+        kosten = g * k.teruglever_eur
+    else:
+        kosten = (g + naar_net) * k.teruglever_eur - naar_net * teruglever_accu
+    kosten += uit * accu.slijtage_eur
+    if accu.verkoopmarge_eur:
+        kosten += naar_net * accu.verkoopmarge_eur
+    if accu.netlaadmarge_eur:
+        kosten += max(b - max(zon - verbruik, 0.0), 0.0) * accu.netlaadmarge_eur
     return kosten
 
 
@@ -223,14 +282,15 @@ def ontlaadrendement(vermogen_w: float, accu: Accu, terugval: float) -> float:
     return terugval
 
 
-def _ontlaadstappen(accu: Accu, eta_o: float) -> tuple[np.ndarray, np.ndarray]:
+def _ontlaadstappen(accu: Accu, eta_o: float, grens_kw: float | None = None) -> tuple[np.ndarray, np.ndarray]:
     """De ontlaadstappen (negatief, in STAP_KWH) en hun AC-stroom (v5.165.0).
 
     Per stap het rendement van de band waarin het vermogen valt. De band
     volgt uit het vermogen aan de netkant, dat zelf van het rendement
     afhangt: twee keer bijstellen is genoeg (drie banden).
+    v5.186.0: `grens_kw` = het vermogen van een verkoop (None = ontladen_kw).
     """
-    grens_kwh = accu.ontladen_kw * accu.duur_h
+    grens_kwh = (accu.ontladen_kw if grens_kw is None else grens_kw) * accu.duur_h
     ruim = int(grens_kwh / 0.5 / STAP_KWH) + 1
     s = np.arange(-ruim, 0)
     dc = -s * STAP_KWH
@@ -296,195 +356,9 @@ def zon_opslag_stappen(
     return np.minimum(opslag, ruimte)
 
 
-def _zon_regel(k, accu: Accu, s: int, b: float, s_min, min_kwh: float, min_laad_kwh: float = 0.0):
-    """Welke inhouden deze stap mogen bij de zonregel, en wat hij extra kost
-    (v5.175.0). (geldig-masker of None = alle, extra kosten per inhoud of 0)."""
-    if s_min is None or s >= 0 and (s_min <= s).all():
-        return None, 0.0
-    tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
-    if b < 0 and -b - tekort >= min_kwh - 1e-9:
-        if k.geen_zon_export:       # v5.184.0: de zon zou mee het net op gaan
-            return np.zeros(len(s_min), dtype=bool), 0.0
-        return None, 0.0            # echt verkopen: handmatig, de zon gaat mee het net op
-    if accu.zon_export_afdwingbaar and not k.geen_zon_export and s >= 0:
-        # Terugleveren wat de slimme stand zou opslaan mag, met de marge.
-        gemist = np.maximum(s_min - s, 0) * STAP_KWH
-        # v5.177.0 (A11/A12): minder opslaan dan het overschot gaat met een
-        # vast laadvermogen (handmatig); onder de laadgrens alleen 0 W.
-        geldig = None
-        if 0 < s and b < min_laad_kwh - 1e-9:
-            geldig = s_min <= s
-        return geldig, gemist * accu.verkoopmarge_eur
-    if s < 0:
-        # Een ontlaadrestje onder de opdrachtgrens wordt 'huis' (smart): die
-        # ontlaadt niet bij een overschot, maar slaat het op.
-        return np.zeros(len(s_min), dtype=bool), 0.0
-    return s_min <= s, 0.0
-
-
-def _kwartier_grenzen(k, accu: Accu, eta_l: float) -> tuple[float, float, float, int]:
-    """(uren, laadgrens, ontlaadgrens (kWh AC), grootste laadstap) van een
-    kwartier. v5.177.0 (A4): het lopende kwartier telt maar zijn resterende
-    uren; met een vast kwartier plande het meer dan er in de tijd past."""
-    uren = getattr(k, "uren", 0.25) or 0.25
-    max_op = int(accu.laden_kw * uren * eta_l / STAP_KWH + 1e-9)
-    return uren, accu.laden_kw * uren + 1e-9, accu.ontladen_kw * uren + 1e-9, max_op
-
-
 def _min_laad_kwh(accu: Accu, uren: float) -> float:
     """De kleinste netlading (kWh AC) in een kwartier van `uren` (v5.177.0)."""
     return (accu.min_laad_w or accu.min_actie_w) / 1000 * uren
-
-
-def _stap_toegestaan(accu: Accu, b: float, overschot: float, tekort: float, grenzen, eta_l: float) -> bool:
-    """Mag deze stap in dit kwartier? (v5.177.0, A4 en A12)
-
-    A12: een netlading tussen een afrondingsrestje (een halve stap boven het
-    zonoverschot) en de laadgrens voert de sturing niet uit ('zon'/'houden');
-    het plan rekende er wel mee: 13-23 kwartieren per dag 'afwijking accu'.
-    Zo'n stap bestaat nu niet meer in het plan.
-    """
-    uren, op, af, _max = grenzen
-    if b > op or -b > af:
-        return False
-    if b > 0 and not accu.netladen and b > overschot + 1e-9:
-        return False
-    if b < 0 and not accu.verkopen and -b > tekort + 1e-9:
-        return False
-    if (b < 0 and accu.verkoop_kw is not None
-            and -b - tekort >= accu.min_actie_w / 1000 * uren - 1e-9 and -b - tekort > EPS_KWH
-            and -b > accu.verkoop_kw * uren + 1e-9):
-        return False   # v5.183.5: een echte verkoop loopt op het handmatige vermogen
-    if b < 0 and not accu.verkopen_bij_zon and overschot > EPS_KWH:
-        return False   # v5.181.2 (g): zie Accu.verkopen_bij_zon
-    min_laad = _min_laad_kwh(accu, uren)
-    if b > 0 and min_laad > 0:
-        net = b - overschot
-        if STAP_KWH / eta_l / 2 + EPS_KWH < net < min_laad - 1e-9:
-            return False
-    return True
-
-
-def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=None,
-                  eta_l: float = 1.0, max_op: int = 0, waardes: list | None = None,
-                  vangnet: list | None = None):
-    """Achterwaarts: per kwartier en inhoud de goedkoopste stap.
-
-    `eis` = (kwartier, niveau): na dat kwartier minstens dat niveau.
-    v5.175.0: met `accu.zon_opslaan` slaat elke stap die niet echt verkoopt
-    minstens het zonoverschot op (zie `zon_opslag_stappen`).
-    v5.177.0: `waardes[t]` = de kosten-to-go na kwartier t (voor de waarde
-    van een netlading, A3); de grenzen per kwartier (A4, A12).
-    """
-    n = len(kwartieren)
-    keuze = np.zeros((n, niveaus), dtype=np.int16)
-    for t in range(n - 1, -1, -1):
-        k = kwartieren[t]
-        if waardes is not None:
-            waardes[t] = waarde
-        if eis is not None and t == eis[0]:
-            waarde = waarde.copy()
-            waarde[: eis[1]] = np.inf
-        overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
-        tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
-        grenzen = _kwartier_grenzen(k, accu, eta_l)
-        beste = np.full(niveaus, np.inf)
-        beste_s = np.zeros(niveaus, dtype=np.int16)
-        s_min = None
-        if accu.zon_opslaan and overschot > EPS_KWH:
-            s_min = zon_opslag_stappen(overschot, eta_l, grenzen[3], niveaus, not accu.netladen)
-        min_kwh = accu.min_actie_w / 1000 * grenzen[0]
-        min_laad = _min_laad_kwh(accu, grenzen[0])
-        # v5.183.5: de grootste ontlaadstap die binnen de ontlaadgrens past. Bij
-        # 1,2 kW (0,3 kWh) en een rendement boven 1 viel 0,3 kWh net buiten de
-        # grens en 0,2 kWh onder de volle dekking: geen enkele ontlaadstap bleef
-        # over en het plan moest bewaren (04-11 16:45, koken op 2,2-4,6 kW).
-        af_max = max((-float(x) for x in b_stap if x < 0 and -x <= grenzen[2] + 1e-9), default=0.0)
-        tl_accu = getattr(k, "teruglever_accu_eur", None)
-        # v5.184.2 (vangnet, akkoord Ruud 04-11 16:58): eerst met alle regels;
-        # blijft er voor een inhoud geen enkele stap over, dan nog eens zonder
-        # de dekregels (volle dekking, dekken). Anders koos het plan daar stil
-        # 'houden' (keuze 0) - zo zag de kookfout van 16:45 eruit.
-        for streng in (True, False):
-            if not streng:
-                open_ = np.isinf(beste) & np.isfinite(waarde).any()
-                if not open_.any():
-                    break
-                beste_los = np.full(niveaus, np.inf)
-                beste_s_los = np.zeros(niveaus, dtype=np.int16)
-            for s, b in zip(stappen, b_stap):
-                kosten = _stapkosten(k, accu, s, b, overschot, tekort, grenzen, eta_l, niveaus, af_max,
-                                     s_min, min_kwh, min_laad, tl_accu, waarde, streng)
-                if kosten is None:
-                    continue
-                if streng:
-                    beter = kosten < beste
-                    beste[beter] = kosten[beter]
-                    beste_s[beter] = s
-                else:
-                    beter = kosten < beste_los
-                    beste_los[beter] = kosten[beter]
-                    beste_s_los[beter] = s
-            if not streng:
-                gebruikt = open_ & np.isfinite(beste_los)
-                beste[gebruikt] = beste_los[gebruikt]
-                beste_s[gebruikt] = beste_s_los[gebruikt]
-                if vangnet is not None:
-                    vangnet[t] = gebruikt
-        keuze[t] = beste_s
-        waarde = beste
-    return keuze
-
-
-def _stapkosten(k, accu, s, b, overschot, tekort, grenzen, eta_l, niveaus, af_max,
-                s_min, min_kwh, min_laad, tl_accu, waarde, streng: bool = True):
-    """Kosten per inhoud van stap (s, b) in kwartier k, of None (v5.184.2: uit
-    `_terugrekenen`; `streng` = met de dekregels van v5.183)."""
-    if not _stap_toegestaan(accu, float(b), overschot, tekort, grenzen, eta_l):
-        return None
-    doel = np.arange(niveaus) + s
-    geldig = (doel >= 0) & (doel < niveaus)
-    if not geldig.any():
-        return None
-    # v5.160.0: het plan verkoopt niet wat de sturing tegenhoudt.
-    # v5.183.2: in een dekkwartier is een overschot van minder dan een
-    # stap afronding (de slimme stand dekt alleen het huis), geen verkoop.
-    if (k.verkoop_vloer_kwh > 0 and b < 0 and -b > tekort + EPS_KWH
-            and not (k.dekken and -b - tekort < STAP_KWH)):
-        geldig = geldig & (doel * STAP_KWH >= k.verkoop_vloer_kwh - 1e-9)
-        if not geldig.any():
-            return None
-    # v5.183.2: de slimme stand dekt het HELE huistekort (tot het
-    # ontlaadvermogen); een halve dekking kan de accu niet uitvoeren,
-    # behalve als hij daarmee leeg raakt. De stap van 0,1 kWh liet het
-    # plan om en om 0,1 kWh ontladen bij een huis van 0,17 kWh: de
-    # accu ging in werkelijkheid sneller leeg dan het plan dacht.
-    if streng and b < -EPS_KWH and tekort > EPS_KWH and -b < min(tekort, af_max) - 0.5 * STAP_KWH:
-        geldig = geldig & (doel == 0)
-        if not geldig.any():
-            return None
-    # v5.183.0: dekken - het huis uit de accu zolang er inhoud is.
-    if streng and k.dekken and tekort > EPS_KWH and b >= -EPS_KWH:
-        geldig = geldig & (doel == 0)
-        if not geldig.any():
-            return None
-    zon_geldig, extra = _zon_regel(k, accu, int(s), float(b), s_min, min_kwh, min_laad)
-    if zon_geldig is not None:
-        geldig = geldig & zon_geldig
-        if not geldig.any():
-            return None
-    kosten = np.full(niveaus, np.inf)
-    kosten[geldig] = (
-        _kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
-                     k.teruglever_eur, np.full(geldig.sum(), b), accu, tl_accu)
-        + waarde[doel[geldig]]
-        + (extra[geldig] if isinstance(extra, np.ndarray) else extra)
-    )
-    if accu.bewaarkost_eur_per_kwh_uur:
-        # v5.183.0 (punt 2): wat erin blijft, kost een beetje per uur.
-        kosten[geldig] += doel[geldig] * STAP_KWH * accu.bewaarkost_eur_per_kwh_uur * grenzen[0]
-    return kosten
-
 
 
 def eindwaarde(kwartieren, accu: Accu, eta_o: float) -> float:
@@ -503,134 +377,415 @@ def eindwaarde(kwartieren, accu: Accu, eta_o: float) -> float:
     return max(0.0, basis * ontlaadrendement(huis_w, accu, eta_o) - accu.slijtage_eur)
 
 
-def _laadwaarde(waardes, t: int, i: int, eta_l: float) -> float | None:
-    """v5.177.0 (A3): wat het plan verwacht dat een kWh die in kwartier t uit
-    het net de accu in gaat later oplevert (EUR per kWh AC, na rendement en
-    slijtage): de marginale waarde van de inhoud na dat kwartier."""
-    v = waardes[t] if waardes is not None else None
-    if v is None or len(v) < 2:
+def eindwaarde_knik(kwartieren, accu: Accu, eta_l: float, eta_o: float, hoog: float,
+                    cap: float) -> tuple[float, float]:
+    """(knik in kWh inhoud, waarde daarboven per kWh) van de eindwaarde (v5.186.0, punt 4).
+
+    Was lineair: elke kWh aan het eind telde tegen de dure prijs, ook wat het
+    huis na de horizon niet nodig heeft. Het plan laadde dan aan het eind uit
+    het net alleen voor die eindwaarde. Nu: tot het verwachte huistekort na de
+    horizon (het patroon van de laatste 24 uur van het plan, tot de zon de accu
+    weer zou vullen) tegen `hoog`; daarboven wat een verkoop uit de accu
+    oplevert (mediaan van de terugleverwaarde x rendement - slijtage - marge),
+    nooit meer dan `hoog`.
+    """
+    if len(kwartieren) < 96:
+        # Korter dan een etmaal: geen patroon voor na de horizon; dan de oude,
+        # lineaire eindwaarde (alles tegen `hoog`).
+        return cap, hoog
+    patroon = kwartieren[-96:]
+    op_slim = (accu.laden_slim_kw or accu.laden_kw)
+    lopend = 0.0
+    nodig = 0.0
+    for k in patroon:
+        uren = getattr(k, "uren", 0.25) or 0.25
+        tekort = min(max(k.verbruik_kwh - k.zon_kwh, 0.0), accu.ontladen_kw * uren)
+        overschot = min(max(k.zon_kwh - k.verbruik_kwh, 0.0), op_slim * uren) if accu.zon_opslaan else 0.0
+        lopend += tekort / max(eta_o, 0.5) - overschot * eta_l
+        nodig = max(nodig, lopend)
+        if lopend <= nodig - cap:
+            break       # de zon had de accu vanaf de knik weer vol gemaakt
+    knik = min(cap, max(0.0, nodig))
+    terug = median(
+        (k.teruglever_eur if getattr(k, "teruglever_accu_eur", None) is None else k.teruglever_accu_eur)
+        for k in kwartieren
+    )
+    verkoop_kw = accu.verkoop_kw if accu.verkoop_kw is not None else accu.ontladen_kw
+    eta_v = ontlaadrendement(verkoop_kw * 1000, accu, eta_o)
+    laag = max(0.0, min(hoog, terug * eta_v - accu.slijtage_eur - accu.verkoopmarge_eur))
+    return knik, laag
+
+
+def _eindkosten(e, hoog: float, knik: float, laag: float):
+    """Kosten-to-go aan het eind (negatief = waard), stuksgewijs lineair (v5.186.0)."""
+    e = np.asarray(e, dtype=float)
+    return -(np.minimum(e, knik) * hoog + np.maximum(e - knik, 0.0) * laag)
+
+
+def _min_laad_net(accu: Accu, uren: float) -> float:
+    """v5.186.0: de kleinste netlading die als opdracht telt (kWh AC boven het
+    zonoverschot): de laadgrens, en nooit minder dan de drempel EPS_KWH."""
+    return max(_min_laad_kwh(accu, uren), EPS_KWH)
+
+
+class _Kw:
+    """Alles wat het plan per kwartier vaststaat (v5.186.0): grenzen, de
+    toegestane acties en hun stroom. Gedeeld door terug- en vooruitrekenen."""
+
+    __slots__ = ("k", "uren", "overschot", "tekort", "op_slim", "af_slim", "eta_h", "max_op",
+                 "tl_accu", "eis", "acties", "i_slim", "i_houden", "zonruimte", "stapkost")
+
+    def __init__(self, k, accu: Accu, eta_l: float, eta_o: float, af_s, af_b):
+        self.k = k
+        uren = self.uren = getattr(k, "uren", 0.25) or 0.25
+        overschot = self.overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
+        tekort = self.tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
+        self.op_slim = (accu.laden_slim_kw or accu.laden_kw) * uren
+        self.af_slim = accu.ontladen_kw * uren
+        huis_ac = min(tekort, self.af_slim)
+        self.eta_h = max(0.5, ontlaadrendement(huis_ac / uren * 1000, accu, eta_o))
+        self.max_op = int(accu.laden_kw * uren * eta_l / STAP_KWH + 1e-9)
+        self.tl_accu = getattr(k, "teruglever_accu_eur", None)
+        self.eis = None
+        #: v5.186.0 (punt 9): ruimte die de zon na dit kwartier nog vult (zie `_zonruimte`).
+        self.zonruimte = 0.0
+        # ("slim" | "houden" | "laden" | "export" | "verkopen", stappen, AC-stroom)
+        acties = [("slim", 0, 0.0)]
+        self.i_slim = 0
+        self.i_houden = None
+        if tekort > EPS_KWH:
+            self.i_houden = len(acties)
+            acties.append(("houden", 0, 0.0))
+        min_laad = _min_laad_net(accu, uren)
+        for s in range(1, self.max_op + 1):
+            b = s * STAP_KWH / eta_l
+            net = b - overschot
+            if net > EPS_KWH:
+                if not accu.netladen or k.geen_netladen or net < min_laad - 1e-9:
+                    continue
+            elif accu.zon_opslaan:
+                continue        # geen netlading: dat doet de slimme stand al
+            acties.append(("laden", s, b))
+        if (accu.zon_opslaan and accu.zon_export_afdwingbaar and not k.geen_zon_export
+                and overschot > EPS_KWH):
+            min_laad_kwh = _min_laad_kwh(accu, uren)
+            for s in range(0, self.max_op + 1):
+                b = s * STAP_KWH / eta_l
+                if b >= min(overschot, self.op_slim) - 1e-9:
+                    break
+                if s == 0 or b >= min_laad_kwh - 1e-9:
+                    acties.append(("export", s, b))
+        zon_mee = overschot > EPS_KWH and (k.geen_zon_export or not accu.verkopen_bij_zon)
+        if accu.verkopen and not k.verkoop_verboden and not zon_mee:
+            # v5.186.0 (punt 1): alleen een ECHTE verkoop (boven het huistekort,
+            # vanaf de opdrachtgrens) is een stap; een restje erboven was
+            # afronding en is nu de exacte slimme dekking.
+            grens = (accu.verkoop_kw if accu.verkoop_kw is not None else accu.ontladen_kw) * uren
+            min_kwh = max(accu.min_actie_w / 1000 * uren, EPS_KWH)
+            for s, b in zip(af_s, af_b):
+                ac = -float(b)
+                if ac - tekort >= min_kwh - 1e-9 and ac <= grens + 1e-9:
+                    acties.append(("verkopen", int(s), -ac))
+        self.acties = acties
+        #: v5.186.0: de kosten van een stap met vaste stroom (alles behalve 'slim').
+        self.stapkost = [None if soort == "slim" else _kosten_een(k, b, accu, self.tl_accu)
+                         for soort, _s, b in acties]
+
+    def slim(self, accu: Accu, e, cap: float, eta_l: float):
+        """(AC-stroom, inhoud erna) van de slimme stand, exact (v5.186.0, punt 2)."""
+        if self.overschot > 1e-9 and accu.zon_opslaan:
+            erin = np.minimum(min(self.overschot, self.op_slim) * eta_l, np.maximum(cap - e, 0.0))
+            return erin / eta_l, e + erin
+        if self.tekort > 1e-9:
+            ac = np.minimum(min(self.tekort, self.af_slim), np.maximum(e, 0.0) * self.eta_h)
+            return -ac, e - ac / self.eta_h
+        return np.zeros_like(e), e
+
+    def evalueer(self, j: int, accu: Accu, e, waarde, raster, cap: float, eta_l: float, streng: bool = True):
+        """(kosten, AC-stroom, inhoud erna) van actie j voor de inhouden `e`."""
+        soort, s, b0 = self.acties[j]
+        k = self.k
+        extra = 0.0
+        geldig = None
+        if soort == "slim":
+            b, e2 = self.slim(accu, e, cap, eta_l)
+            if accu.huis_eerst and accu.zon_opslaan and self.overschot > EPS_KWH and accu.verkoopmarge_eur:
+                # v5.186.0 (punt 9): zon die over de rand van een volle accu gaat,
+                # telt (net als zon terugleveren, `export`) met de verkoopmarge.
+                # Anders was 's middags netladen tot vol en de zon erna
+                # terugleveren winst (teruglevering = prijs + premie): de
+                # netlading werd via de zon verkocht.
+                gemist = np.maximum(min(self.overschot, self.op_slim) * eta_l - (e2 - e), 0.0)
+                extra = gemist * accu.verkoopmarge_eur
+        elif soort == "houden":
+            b, e2 = np.zeros_like(e), e
+            if accu.bewaarmarge_eur:
+                # v5.186.0 (punt 3): de bewaarmarge in het plan zelf - bewaren
+                # terwijl het huis op het net draait kost de marge per kWh die de
+                # accu had kunnen dekken. Zo bewaart het plan alleen voor minstens
+                # die marge meer later; de toets achteraf (`te_duur_bewaard`)
+                # blijft als controle (was: ronde na ronde kwartieren op dekken).
+                extra = np.minimum(min(self.tekort, self.af_slim), np.maximum(e, 0.0) * self.eta_h) \
+                    * accu.bewaarmarge_eur
+            if streng and k.dekken:
+                # v5.186.0 (punt 5): dekken verbiedt alleen bewaren met inhoud.
+                geldig = e <= EPS_KWH
+        elif soort == "laden":
+            # v5.186.0: de laatste stap mag de accu tot vol laden (de accu stopt
+            # dan zelf); met een doorlopende inhoud past een hele stap daar niet.
+            e2 = np.minimum(e + s * STAP_KWH, cap)
+            b = (e2 - e) / eta_l
+            geldig = e + (s - 1) * STAP_KWH < cap - 1e-9
+            if self.zonruimte > 0:
+                # v5.186.0 (punt 9, huis eerst): niet uit het net laden in de
+                # ruimte die de zon daarna nog vult - anders raakt de accu vol en
+                # gaat die zon het net op: de netlading via de zon verkocht.
+                geldig = geldig & (e2 <= np.maximum(cap - self.zonruimte, e) + 1e-9)
+            if accu.bewaarmarge_eur and self.tekort > EPS_KWH:
+                # v5.186.0: netladen terwijl het huis op het net draait is ook
+                # bewaren (de accu dekt dan niet); zelfde marge als 'houden',
+                # anders ontliep een mini-netlading de marge (koken 17:00).
+                extra = np.minimum(min(self.tekort, self.af_slim), np.maximum(e, 0.0) * self.eta_h) \
+                    * accu.bewaarmarge_eur
+            if streng and k.dekken and k.inkoop_eur >= 0 and self.tekort > EPS_KWH:
+                # v5.186.0 (punt 5): in een dekkwartier ook geen netlading met
+                # inhoud: bij dezelfde prijs is laden voor later nog minder waard
+                # dan bewaren (de bewaarmarge haalt het al niet). Zonder deze
+                # regel laadde het plan tijdens het koken uit het net (17:00,
+                # 47-49 ct) om de dekplicht te ontlopen. Leeg mag het wel.
+                geldig = geldig & (e <= EPS_KWH)
+        else:
+            b = np.full(e.shape, b0)
+            e2 = e + s * STAP_KWH
+            if soort == "export":
+                erin, _ = self.slim(accu, e, cap, eta_l)
+                erin = erin * eta_l
+                geldig = s * STAP_KWH < erin - 1e-9      # minder dan de slimme stand
+                extra = np.maximum(erin - s * STAP_KWH, 0.0) * accu.verkoopmarge_eur
+            else:   # verkopen
+                geldig = e2 >= max(0.0, k.verkoop_vloer_kwh) - 1e-9
+        stap = self.stapkost[j]
+        if stap is None or (soort == "laden" and (e + s * STAP_KWH > cap + 1e-9).any()):
+            # v5.186.0: zonder verkoop (b ligt tussen -tekort en +overschot, of
+            # laadt): geen accu-export, dus een eenvoudige vorm (sneller).
+            g = (k.verbruik_kwh - k.zon_kwh) + b
+            stap = np.where(g >= 0, g * k.inkoop_eur, g * k.teruglever_eur) + np.maximum(-b, 0.0) * accu.slijtage_eur
+            if accu.netlaadmarge_eur:
+                stap = stap + np.maximum(b - self.overschot, 0.0) * accu.netlaadmarge_eur
+        kosten = stap + np.interp(e2, raster, waarde) + extra
+        if accu.bewaarkost_eur_per_kwh_uur:
+            # v5.183.0 (punt 2): wat erin blijft, kost een beetje per uur.
+            kosten = kosten + e2 * accu.bewaarkost_eur_per_kwh_uur * self.uren
+        if self.eis is not None:
+            # v5.186.0 (punt 6): zachte eis - een boete per kWh te kort.
+            kosten = kosten + np.maximum(self.eis - e2, 0.0) * BOETE_EIS_EUR_PER_KWH
+        if geldig is not None:
+            kosten = np.where(geldig, kosten, np.inf)
+        return kosten, b, e2
+
+    def label(self, j: int, accu: Accu, b: float) -> tuple[str, float]:
+        """(actie, kWh) van actie j bij AC-stroom b, voor de planrij."""
+        soort = self.acties[j][0]
+        if soort == "slim":
+            if self.overschot > EPS_KWH and accu.zon_opslaan:
+                return "zon", max(b, 0.0)
+            if self.tekort > EPS_KWH:
+                return ("huis", -b) if -b > EPS_KWH else ("houden", 0.0)
+            if b < -1e-6:
+                return "huis", -b    # v5.186.0 (punt 7): ook een klein (kort) kwartier
+            return "zon", max(b, 0.0)
+        if soort == "houden":
+            return "houden", 0.0
+        if soort == "laden":
+            net = b - self.overschot
+            return ("laden_net", net) if net > EPS_KWH else ("zon", b)
+        if soort == "export":
+            return "zon_export", max(b, 0.0)
+        return "verkopen", -b - self.tekort
+
+
+def _marginaal(waarde, raster, c: float) -> float | None:
+    """v5.186.0: de marginale waarde van een kWh inhoud bij inhoud c (EUR per
+    kWh inhoud): (V(c - stap) - V(c)) / stap. None als die niet eindig is."""
+    if waarde is None or len(raster) < 2:
         return None
-    a, b = (i - 1, i) if i > 0 else (0, 1)
-    verschil = float(v[a] - v[b])
-    if not np.isfinite(verschil):
+    lo = max(0.0, c - STAP_KWH)
+    hi = lo + STAP_KWH
+    if hi > raster[-1]:
+        hi = raster[-1]
+        lo = hi - STAP_KWH
+    v = np.interp([lo, hi], raster, waarde)
+    verschil = float(v[0] - v[1]) / STAP_KWH
+    if not np.isfinite(verschil) or abs(verschil) >= GROOT_EUR / 10:
         return None
-    return round(verschil / STAP_KWH * eta_l, 4)
+    return verschil
 
 
-def _accu_ac_slim(rij: dict, k, accu: Accu, actie: str, i_voor: int, uren: float, eta_o: float) -> None:
-    """v5.177.0 (A12): wat de slimme standen werkelijk doen, aan de netkant.
+def _terugrekenen(kws: list, accu: Accu, raster, waarde, cap: float, eta_l: float,
+                  waardes: list, vangnet: list):
+    """Achterwaarts: per kwartier en inhoud de goedkoopste actie (v5.186.0).
 
-    'huis' (smart) dekt het hele tekort uit de accu (tot het vermogen en de
-    inhoud), 'houden' (smart_charging) zonder overschot doet niets. De stap
-    van 0,1 kWh in de inhoud gaf de planvolging een gepland vermogen dat de
-    accu niet kan volgen (400 W gepland bij een huis van 200 W)."""
-    if uren <= 0:
-        return
-    tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
-    if actie == "huis":
-        ac = min(tekort, accu.ontladen_kw * uren, i_voor * STAP_KWH * eta_o)
-    elif actie == "houden" and k.zon_kwh <= k.verbruik_kwh + EPS_KWH:
-        ac = 0.0
-    else:
-        return
-    rij["accu_ac_w"] = round(ac / uren * 1000)
-    if actie == "huis":
-        # v5.183.2 (kaart claude-ems 04-11): accu + net = huis. De tabel gaf
-        # 18:00 accu 693 W (deze dekking) en net 292 W (de afgeronde stap van
-        # 0,1 kWh): ~300 W meer dan het huis vroeg.
-        rij["accu_stap_kwh"] = rij["accu_kwh"]   # de stap van het plan (rendement per band)
-        rij["accu_kwh"] = round(-ac, 3)
-        rij["net_kwh"] = round(max(0.0, tekort - ac), 3)
-
-
-def _rij_zon(rij: dict, k, accu: Accu, i_voor: int, uren: float, eta_l: float) -> None:
-    """v5.175.0: wat de slimme stand aan de netkant laadt (W, - = laden): het
-    hele overschot, tot het laadvermogen en tot vol. Ongeschaald door de stap
-    van 0,1 kWh, voor tabel en planvolging."""
-    ruimte_ac = max(0.0, (accu.bruikbaar_kwh - i_voor * STAP_KWH) / eta_l)
-    overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
-    ac = min(overschot, accu.laden_kw * uren, ruimte_ac)
-    rij["accu_ac_w"] = round(-ac / uren * 1000) if uren > 0 else 0
-    # v5.175.2: het net volgt dezelfde lading, niet de afgeronde stap
-    # (tabel: +212 W net bij 276 W overschot in de slimme stand).
-    rij["accu_kwh"] = round(ac, 3)
-    rij["net_kwh"] = round(k.verbruik_kwh - k.zon_kwh + ac, 3)
-
-
-def _zon_export(k, accu: Accu, actie: str, s: int, i_voor: int, niveaus: int, eta_l: float, max_op: int) -> bool:
-    """v5.177.0 (A11): slaat het plan minder op dan de slimme stand zou doen?
-    Dan moet de sturing het overschot laten terugleveren (handmatig, 0 W of
-    een vast laadvermogen) - de slimme standen laden het anders zelf op."""
-    if actie != "zon" or not (accu.zon_opslaan and accu.zon_export_afdwingbaar) or k.geen_zon_export:
-        return False
-    overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
-    if overschot <= EPS_KWH:
-        return False
-    s_min = zon_opslag_stappen(overschot, eta_l, max_op, niveaus, not accu.netladen)
-    return s < int(s_min[i_voor])
+    `waardes[t]` = de kosten-to-go na kwartier t (op het raster). v5.184.2
+    (vangnet): blijft er voor een inhoud geen geldige actie over, dan nog eens
+    zonder de dekregel. Een inhoud zonder enige actie krijgt GROOT_EUR.
+    """
+    n = len(kws)
+    niveaus = len(raster)
+    keuze = np.zeros((n, niveaus), dtype=np.int16)
+    for t in range(n - 1, -1, -1):
+        kw = kws[t]
+        waardes[t] = waarde
+        beste = np.full(niveaus, np.inf)
+        beste_j = np.zeros(niveaus, dtype=np.int16)
+        for j in range(len(kw.acties)):
+            kosten, _b, _e2 = kw.evalueer(j, accu, raster, waarde, raster, cap, eta_l)
+            beter = kosten < beste
+            beste[beter] = kosten[beter]
+            beste_j[beter] = j
+        open_ = ~np.isfinite(beste)
+        if open_.any():
+            los = np.full(niveaus, np.inf)
+            los_j = np.zeros(niveaus, dtype=np.int16)
+            for j in range(len(kw.acties)):
+                kosten, _b, _e2 = kw.evalueer(j, accu, raster, waarde, raster, cap, eta_l, streng=False)
+                beter = kosten < los
+                los[beter] = kosten[beter]
+                los_j[beter] = j
+            gebruikt = open_ & np.isfinite(los)
+            beste[gebruikt] = los[gebruikt]
+            beste_j[gebruikt] = los_j[gebruikt]
+            vangnet[t] = gebruikt
+        keuze[t] = beste_j
+        waarde = np.where(np.isfinite(beste), np.minimum(beste, GROOT_EUR), GROOT_EUR)
+    return keuze, waarde
 
 
-def _vooruit(kwartieren, accu: Accu, keuze, index, b_stap, i: int, niveaus: int,
-             eta_l: float, eta_o: float, waardes, vangnet=None) -> tuple[list, float, float, int]:
-    """Vooruit langs de gekozen stappen: de planrijen en de kosten."""
+def _vooruit(kws: list, accu: Accu, keuze, raster, waardes, c: float, cap: float,
+             eta_l: float) -> tuple[list, float, float, float]:
+    """Vooruit met een doorlopende inhoud (v5.186.0): per kwartier de beste
+    van de acties die op de twee buurpunten gekozen zijn, plus de slimme stand
+    en bewaren, opnieuw doorgerekend bij de echte inhoud."""
     rijen = []
     kosten_plan = 0.0
     kosten_zonder = 0.0
-    for t, k in enumerate(kwartieren):
-        s = int(keuze[t, i])
-        via_vangnet = bool(vangnet is not None and vangnet[t] is not None and vangnet[t][i])
-        b = float(b_stap[index[s]])
-        uren, _op, _af, max_op = _kwartier_grenzen(k, accu, eta_l)
-        actie, kwh = actie_van(b, k.verbruik_kwh, k.zon_kwh, accu.min_actie_w / 1000 * uren,
-                               _min_laad_kwh(accu, uren))
+    niveaus = len(raster)
+    for t, kw in enumerate(kws):
+        k = kw.k
+        waarde = waardes[t]
+        j0 = min(int(c / STAP_KWH + 1e-9), niveaus - 1)
+        j1 = min(j0 + 1, niveaus - 1)
+        kandidaten = {int(keuze[t, j0]), int(keuze[t, j1]), kw.i_slim}
+        if kw.i_houden is not None:
+            kandidaten.add(kw.i_houden)
+        e = np.array([c])
+        beste = None
+        for streng in (True, False):
+            for j in sorted(kandidaten if streng else range(len(kw.acties))):
+                kosten, b, e2 = kw.evalueer(j, accu, e, waarde, raster, cap, eta_l, streng)
+                if np.isfinite(kosten[0]) and (beste is None or kosten[0] < beste[0] - 1e-12):
+                    beste = (float(kosten[0]), j, float(b[0]), float(e2[0]))
+            if beste is not None:
+                via_vangnet = not streng
+                break
+        if beste is None:   # kan niet (de slimme stand is altijd geldig); zeker is zeker
+            beste, via_vangnet = (0.0, kw.i_slim, 0.0, c), True
+        _kost, j, b, c2 = beste
+        c2 = min(max(c2, 0.0), cap)
+        actie, kwh = kw.label(j, accu, b)
         g = k.verbruik_kwh - k.zon_kwh + b
         kosten_plan += float(_kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur, k.teruglever_eur,
-                                          np.array([b]), accu, getattr(k, "teruglever_accu_eur", None))[0])
+                                          np.array([b]), accu, kw.tl_accu)[0])
         g0 = k.verbruik_kwh - k.zon_kwh
         kosten_zonder += g0 * (k.inkoop_eur if g0 >= 0 else k.teruglever_eur)
-        i_voor = i
-        i = min(max(i + s, 0), niveaus - 1)
-        if _zon_export(k, accu, actie, s, i_voor, niveaus, eta_l, max_op):
-            actie, kwh = "zon_export", max(b, 0.0)
-        if k.dekken and actie == "verkopen" and kwh < STAP_KWH:
-            # v5.183.2: afronding van de stap in een dekkwartier (zie boven).
-            actie, kwh = "huis", min(-b, max(k.verbruik_kwh - k.zon_kwh, 0.0))
+        soort, s, _b0 = kw.acties[j]
         rij = {
             "begin": k.begin,
             "actie": actie,
             "kwh": round(kwh, 3),
             "accu_kwh": round(b, 3),
             "net_kwh": round(g, 3),
-            "inhoud_kwh": round(i * STAP_KWH, 2),
-            "inhoud_delta_kwh": round((i - i_voor) * STAP_KWH, 2),
+            # v5.186.0: doorlopende inhoud (was het raster van 0,1 kWh)
+            "inhoud_kwh": round(c2, 3),
+            "inhoud_delta_kwh": round(c2 - c, 3),
             # v5.183.3: waarmee het plan rekende (incl. live correctie en
             # apparaten), zodat de tabel accu + net = huis laat zien.
             "verbruik_kwh": round(k.verbruik_kwh, 3),
             "zon_kwh": round(k.zon_kwh, 3),
-            # v5.162.0: de grootste laadstap = vol vermogen. De stap van
-            # 0,1 kWh rondt af: bij 2,4 kW zou er 2.196 W op de accu staan.
-            # v5.177.0 (A4): de grootste stap van DIT kwartier.
-            "vol_vermogen": s > 0 and s == max_op,
+            # v5.162.0 / v5.177.0 (A4): de grootste laadstap van DIT kwartier
+            # = vol vermogen.
+            "vol_vermogen": soort == "laden" and s > 0 and s == kw.max_op,
             # v5.168.0: wat het kwartier kost (incl. belasting) en waarmee
             # het plan rekende (de marginale prijs, bij een overschot lager).
             "prijs_eur": round(k.inkoop_eur if k.prijs_incl_eur is None else k.prijs_incl_eur, 4),
             "rekenprijs_eur": round(k.inkoop_eur, 4),
             # v5.165.0: de duur waarover verbruik en zon gelden.
-            "uren": round(uren, 4),
-            # v5.177.0 (A1): de verkoopvloer waarmee het plan rekende; de
-            # sturing houdt een verkoop alleen daaronder tegen.
+            "uren": round(kw.uren, 4),
+            # v5.177.0 (A1): de verkoopvloer waarmee het plan rekende.
+            # v5.186.0: ook in een kwartier met een verboden verkoop de echte vloer.
             "verkoop_vloer_kwh": round(k.verkoop_vloer_kwh, 2),
         }
+        # v5.186.0 (punt 3): de marginale waarde van de inhoud na dit kwartier
+        # (EUR per kWh inhoud) - de maat voor bewaren en verkopen achteraf.
+        lam = _marginaal(waarde, raster, c2)
+        if lam is not None:
+            rij["waarde_inhoud_eur_per_kwh"] = round(lam, 4)
+        if actie == "houden" and kw.tekort > EPS_KWH and c2 > EPS_KWH:
+            # v5.186.0 (punt 3): wat de inhoud die dekken hier had gekost het
+            # plan later waard is (EUR per kWh inhoud, gemiddeld over die daling).
+            daling = min(min(kw.tekort, kw.af_slim) / kw.eta_h, c2)
+            v = np.interp([c2 - daling, c2], raster, waarde)
+            gem = float(v[0] - v[1]) / daling
+            if np.isfinite(gem) and abs(gem) < GROOT_EUR / 10:
+                rij["waarde_dekking_eur_per_kwh"] = round(gem, 4)
         if via_vangnet:
             rij["vangnet"] = True   # v5.184.2: zonder de dekregels gekozen
         if actie == "laden_net":
-            rij["waarde_eur_per_kwh"] = _laadwaarde(waardes, t, i, eta_l)
-        if accu.zon_opslaan and actie == "zon":
-            _rij_zon(rij, k, accu, i_voor, uren, eta_l)
-        else:
-            _accu_ac_slim(rij, k, accu, actie, i_voor, uren, eta_o)
+            # v5.177.0 (A3): wat een kWh uit het net hier later oplevert (per kWh AC).
+            rij["waarde_eur_per_kwh"] = None if lam is None else round(lam * eta_l, 4)
+        if soort == "slim" or actie == "houden":
+            # v5.175.0 / v5.177.0 (A12): wat de slimme stand aan de netkant doet
+            # (W, - = laden); nu exact, dus gelijk aan de stroom van het plan.
+            rij["accu_ac_w"] = round(-b / kw.uren * 1000) if kw.uren > 0 else 0
         rijen.append(rij)
-    return rijen, kosten_plan, kosten_zonder, i
+        c = c2
+    return rijen, kosten_plan, kosten_zonder, c
+
+
+def _zonruimte(kws: list, accu: Accu, eta_l: float) -> None:
+    """v5.186.0 (punt 9): per kwartier hoeveel inhoud de zon daarna nog
+    opslaat voordat de avond begint (het eerste kwartier met tekort en zonder
+    zon), met de tekorten van bewolkte kwartieren ertussen verrekend: het
+    hoogste lopende saldo. Alleen met huis eerst; bij een negatieve prijs geen
+    grens (dan verdient netladen zelf)."""
+    if not (accu.huis_eerst and accu.zon_opslaan):
+        return
+    lopend_na = []          # per kwartier: (bijdrage, avond begint hier)
+    for kw in kws:
+        winst = min(kw.overschot, kw.op_slim) * eta_l
+        verlies = min(kw.tekort, kw.af_slim) / kw.eta_h
+        avond = kw.tekort > EPS_KWH and kw.k.zon_kwh <= EPS_KWH
+        lopend_na.append((winst - verlies, avond))
+    n = len(kws)
+    for t in range(n):
+        if kws[t].k.inkoop_eur < 0:
+            continue
+        saldo = hoogste = 0.0
+        for u in range(t + 1, n):
+            bijdrage, avond = lopend_na[u]
+            if avond:
+                break
+            saldo += bijdrage
+            hoogste = max(hoogste, saldo)
+        kws[t].zonruimte = hoogste
+
+
+def _eis_niveau(kws: list, accu: Accu, t_eis: int, c_start: float, cap: float, eta_l: float) -> float:
+    """v5.186.0 (punt 6): de inhoud die na kwartier `t_eis` hooguit haalbaar
+    is, met het lopende (korte) kwartier naar zijn resterende tijd."""
+    c = c_start
+    for kw in kws[: t_eis + 1]:
+        c = min(cap, c + kw.max_op * STAP_KWH)
+    return c
 
 
 def zon_export_laat_huis_tekort(rijen: list[dict], leeg_kwh: float = 0.01) -> bool:
@@ -646,20 +801,20 @@ def zon_export_laat_huis_tekort(rijen: list[dict], leeg_kwh: float = 0.01) -> bo
         actie = r.get("actie")
         # v5.181.2 (g): een verkoop met zonoverschot levert de zon ook terug
         # (het net krijgt meer dan de accu levert).
-        zon_mee = actie == "verkopen" and -(r.get("net_kwh") or 0.0) > -(r.get("accu_kwh") or 0.0) + 0.01
-        if actie == "zon_export" or zon_mee:
+        if actie == "zon_export" or _zon_mee(r):
             gezien = True
             continue
         if not gezien:
             continue
         if actie == "laden_net":
             return False
-        if actie != "verkopen" and (r.get("net_kwh") or 0.0) > 0.01 and (r.get("inhoud_kwh") or 0.0) <= leeg_kwh:
+        if actie != "verkopen" and (r.get("net_kwh") or 0.0) > EPS_KWH and (r.get("inhoud_kwh") or 0.0) <= leeg_kwh:
             return True
     return False
 
 
-def vloeren_gelijktrekken(kwartieren: list[Kwartier], bodem_kwh: float = 0.0) -> list[Kwartier]:
+def vloeren_gelijktrekken(kwartieren: list[Kwartier], bodem_kwh: float = 0.0,
+                          eta_o: float = 1.0) -> list[Kwartier]:
     """Eén verkoopvloer langs het hele plan (v5.181.2).
 
     Gemeten 04-11 11:27: met een volle accu dekte het plan om 16:45
@@ -684,25 +839,41 @@ def vloeren_gelijktrekken(kwartieren: list[Kwartier], bodem_kwh: float = 0.0) ->
     vervalt. Een kwartier waarvan de volgende vloer op de bodem staat (in
     het blok, of niets nodig) is zelf een anker. Het tekort telt aan de
     netkant (zonder ontlaadverlies): bij twijfel liever eerder dan later.
+
+    v5.186.0 (punt 10): de vloer geldt voor de inhoud NA kwartier t; erbij
+    komt dus het tekort van kwartier t+1 (was dat van t zelf: een kwartier
+    verschoven), gedeeld door het ontlaadrendement. Een rendement boven 1
+    (inhoud -> AC) telt als 1: de vloer zakt niet onder het tekort aan de netkant.
     """
     n = len(kwartieren)
     uit = list(kwartieren)
     bodem = max(0.0, float(bodem_kwh or 0.0)) + 1e-9
+    eta = max(0.5, min(1.0, float(eta_o or 1.0)))
     volgende = None
+    tekort_volgende = 0.0
     for t in range(n - 1, -1, -1):
         k = kwartieren[t]
         oud = max(0.0, float(k.verkoop_vloer_kwh or 0.0))
         vloer = oud
         if volgende is not None and volgende > bodem:
-            vloer = min(oud, volgende + max(0.0, k.verbruik_kwh - k.zon_kwh))
+            vloer = min(oud, volgende + tekort_volgende / eta)
         if vloer < oud - 1e-12:
             uit[t] = replace(k, verkoop_vloer_kwh=vloer)
         volgende = vloer
+        tekort_volgende = max(0.0, k.verbruik_kwh - k.zon_kwh)
     return uit
 
 
-def zinloze_verkopen(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu) -> list[int]:
-    """Verkoopkwartieren die de accu later duurder terugvult (v5.181.2, g).
+def _zon_mee(r: dict) -> bool:
+    """Een verkoop met zonoverschot levert de zon ook terug (v5.181.2, g): het
+    net krijgt meer dan de accu levert."""
+    return (r.get("actie") == "verkopen"
+            and -(r.get("net_kwh") or 0.0) > -(r.get("accu_kwh") or 0.0) + EPS_KWH)
+
+
+def zinloze_verkopen(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu,
+                     uitgebreid: bool = False) -> list[int]:
+    """Verkoopkwartieren die niet meer opleveren dan bewaren (v5.181.2, g).
 
     Live 04-11 12:01: verkopen om 12:00 (rekenprijs 26,6 ct + 2 ct premie)
     en vanaf 12:15 de accu weer vullen met zon die 26-30 ct aan teruglevering
@@ -713,38 +884,59 @@ def zinloze_verkopen(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu) 
     Een verkoop blijft alleen staan als hij per kWh inhoud meer oplevert
     (prijs x ontlaadrendement - slijtage - marge) dan het goedkoopste latere
     bijvullen kost: zon tegen de gemiste teruglevering, net tegen de
-    inkoopprijs plus de netlaadmarge, beide gedeeld door het laadrendement.
+    inkoopprijs plus de netlaadmarge, beide gedeeld door het laadrendement
+    (alles per kWh inhoud).
+
+    v5.186.0 (punt 3): bewust NIET de marginale waarde uit het plan. Het plan
+    verkoopt precies tot die waarde (de laatste verkochte kWh is altijd een
+    gelijkspel): elke ronde een nieuwe 'zinloze' verkoop, tot de rondegrens.
+    De nepverkopen uit de afronding (de oorzaak van 04-11 12:01) bestaan niet
+    meer sinds de exacte slimme dekking.
+
+    v5.186.0: `uitgebreid` (voor `plan`) geeft ook de kwartieren zonder verkoop
+    waarin een verkoop even zinloos zou zijn (rendement van de verkoopband):
+    anders schoof het plan de verkoop elke ronde één kwartier op.
     """
-    eta_l, _eta_o = rendementen(accu)
+    eta_l, eta_o = rendementen(accu)
+    n = len(rijen)
+    # het goedkoopste bijvullen NA elk kwartier (achteraan beginnen)
+    na: list = [None] * n
+    beste = None
+    for u in range(n - 1, -1, -1):
+        na[u] = beste
+        ru, ku = rijen[u], kwartieren[u]
+        if (ru.get("accu_kwh") or 0.0) <= EPS_KWH:
+            continue
+        if ru.get("actie") == "laden_net":
+            kost = (ku.inkoop_eur + accu.netlaadmarge_eur) / eta_l
+        elif ru.get("actie") in ("zon", "zon_export"):
+            kost = ku.teruglever_eur / eta_l
+        else:
+            continue
+        beste = kost if beste is None else min(beste, kost)
+    verkoop_kw = accu.verkoop_kw if accu.verkoop_kw is not None else accu.ontladen_kw
+    eta_v = ontlaadrendement(verkoop_kw * 1000, accu, eta_o)
     uit = []
     for t, r in enumerate(rijen):
-        if r.get("actie") != "verkopen":
-            continue
-        inhoud = -(r.get("inhoud_delta_kwh") or 0.0)
-        ac = -(r.get("accu_kwh") or 0.0)
-        if inhoud <= 1e-9 or ac <= 1e-9:
+        if na[t] is None:
             continue
         k = kwartieren[t]
         prijs = k.teruglever_eur if getattr(k, "teruglever_accu_eur", None) is None else k.teruglever_accu_eur
-        opbrengst = (ac / inhoud) * (prijs - accu.slijtage_eur - accu.verkoopmarge_eur)
-        bijvullen = None
-        for u in range(t + 1, len(rijen)):
-            ru, ku = rijen[u], kwartieren[u]
-            if (ru.get("accu_kwh") or 0.0) <= EPS_KWH:
-                continue
-            if ru.get("actie") == "laden_net":
-                kost = (ku.inkoop_eur + accu.netlaadmarge_eur) / eta_l
-            elif ru.get("actie") in ("zon", "zon_export"):
-                kost = ku.teruglever_eur / eta_l
-            else:
-                continue
-            bijvullen = kost if bijvullen is None else min(bijvullen, kost)
-        if bijvullen is not None and opbrengst <= bijvullen + 1e-9:
+        inhoud = -(r.get("inhoud_delta_kwh") or 0.0)
+        ac = -(r.get("accu_kwh") or 0.0)
+        if r.get("actie") == "verkopen" and inhoud > 1e-9 and ac > 1e-9:
+            verhouding = ac / inhoud
+        elif uitgebreid:
+            verhouding = eta_v
+        else:
+            continue
+        if verhouding * (prijs - accu.slijtage_eur - accu.verkoopmarge_eur) <= na[t] + 1e-9:
             uit.append(t)
     return uit
 
 
-def verkopen_voor_huis(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu) -> list[int]:
+def verkopen_voor_huis(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu,
+                       uitgebreid: bool = False) -> list[int]:
     """Verkoopkwartieren die tegen de huis-eerst-regel ingaan (v5.182.0).
 
     Akkoord Ruud 04-11 13:45. Live 13:38: netladen om 13:30 voor 37 ct,
@@ -753,36 +945,60 @@ def verkopen_voor_huis(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu
     volgende ochtend. Financieel een paar cent per kWh beter (de 2 ct
     terugleverpremie), maar Ruud wil de lading liever in de woning.
 
-    Een verkoop is verboden als:
-    * er sinds de accu voor het laatst leeg stond uit het net is geladen
-      (die lading is voor het huis gekocht, niet om door te verkopen); of
-    * de inhoud na de verkoop niet het huistekort dekt tot het volgende
-      bijvullen (een netlading, of het eerste kwartier met zonoverschot).
+    v5.186.0 (punt 8): een verkoop is verboden als
+    * hij lading uit het net zou verkopen: het plan houdt bij hoeveel inhoud
+      uit het net kwam (het deel van een netlading boven het zonoverschot, x
+      laadrendement); het huis gebruikt die lading eerst, een verkoop alleen
+      de rest. Was: één netlading (hoe klein ook) verbood elke latere verkoop
+      tot de accu leeg stond; of
+    * het huis daarna, in de slimme stand, met een lege accu aan het net komt
+      voordat de accu weer vol raakt (zon) of uit het net laadt. Het
+      zonoverschot telt mee naar wat het werkelijk bijvult (was: het eerste
+      kwartier met een klein overschot gold al als bijvullen).
+
+    `uitgebreid` (voor `plan`): bij een huistekort ook de kwartieren tot waar
+    het huis leeg zou staan - een verkoop daar heeft hetzelfde probleem, en
+    anders schoof het plan de verkoop elke ronde één kwartier op.
     """
-    _eta_l, eta_o = rendementen(accu)
+    eta_l, eta_o = rendementen(accu)
     eta_o = max(eta_o, 0.5)
+    cap = int(accu.bruikbaar_kwh / STAP_KWH + 1e-9) * STAP_KWH
+    op_slim = accu.laden_slim_kw or accu.laden_kw
     n = len(rijen)
     uit = []
-    netgeladen = False
+    uit_net = 0.0       # inhoud (kWh) die uit het net kwam
+    vorige = max(0.0, min(accu.inhoud_kwh, cap))
     for t, r in enumerate(rijen):
+        k = kwartieren[t]
         actie = r.get("actie")
         inhoud = r.get("inhoud_kwh") or 0.0
+        delta = r.get("inhoud_delta_kwh")
+        if delta is None:
+            delta = inhoud - vorige
         if actie == "verkopen" and -(r.get("accu_kwh") or 0.0) > 1e-9:
-            if netgeladen:
-                uit.append(t)
+            if inhoud < uit_net - EPS_KWH:
+                uit.append(t)               # verkoopt lading uit het net
             else:
-                tekort = 0.0
+                c = inhoud
                 for u in range(t + 1, n):
-                    k = kwartieren[u]
-                    if rijen[u].get("actie") == "laden_net" or k.zon_kwh - k.verbruik_kwh > EPS_KWH:
+                    ku = kwartieren[u]
+                    if rijen[u].get("actie") == "laden_net":
                         break
-                    tekort += max(0.0, k.verbruik_kwh - k.zon_kwh)
-                if inhoud + 1e-9 < tekort / eta_o:
-                    uit.append(t)
+                    uren = getattr(ku, "uren", 0.25) or 0.25
+                    c -= min(max(ku.verbruik_kwh - ku.zon_kwh, 0.0), accu.ontladen_kw * uren) / eta_o
+                    if c < -EPS_KWH:
+                        uit.extend(range(t, u + 1) if uitgebreid else (t,))
+                        break
+                    c += min(max(ku.zon_kwh - ku.verbruik_kwh, 0.0), op_slim * uren) * eta_l
+                    if c >= cap - EPS_KWH:
+                        break               # de zon vult de accu weer: de verkoop was overschot
         if actie == "laden_net":
-            netgeladen = True
-        elif inhoud <= EPS_KWH:
-            netgeladen = False
+            overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
+            uit_net += max(0.0, (r.get("accu_kwh") or 0.0) - overschot) * eta_l
+        elif actie == "huis" and delta < 0:
+            uit_net += delta                # het huis gebruikt de netlading eerst
+        uit_net = max(0.0, min(uit_net, inhoud))
+        vorige = inhoud
     return uit
 
 
@@ -796,15 +1012,18 @@ def te_duur_bewaard(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu,
     bijladen kostte met verlies, slijtage en datacorrectie net iets meer.
     Het verschil was een paar cent; Ruud wil de lading dan in de woning.
 
-    Per bewaarkwartier: wat de bewaarde lading later oplevert - de prijs van
-    het eerste latere kwartier waarin de accu levert (huis of verkoop), of de
-    eindprijs - maar nooit meer dan wat het bijladen ertussen kost (net:
-    (prijs + netlaadmarge) / laadrendement + slijtage). Is dat minder dan
-    `bewaarmarge_eur` boven de prijs nu, dan moet de accu hier dekken.
+    v5.186.0 (punt 3): wat de bewaarde lading later oplevert is de marginale
+    waarde uit het plan (`waarde_inhoud_eur_per_kwh`, per kWh inhoud), omgerekend
+    naar een prijs aan de netkant: waarde / ontlaadrendement + slijtage. Was de
+    prijs van het eerste latere leverkwartier, ook als de lading pas veel later
+    of helemaal niet daar terechtkwam. Is die prijs minder dan
+    `bewaarmarge_eur` boven de prijs nu, dan moet de accu hier dekken. Rijen
+    zonder die waarde (losse toetsen) houden de oude schatting, met het
+    bijladen nu door beide rendementen.
     """
     if not accu.bewaarmarge_eur:
         return []
-    eta_l, _eta_o = rendementen(accu)
+    eta_l, eta_o = rendementen(accu)
     eind = accu.eindprijs_eur
     if eind is None:
         eind = float(np.percentile([k.inkoop_eur for k in kwartieren], 75))
@@ -812,28 +1031,40 @@ def te_duur_bewaard(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu,
     uit = []
     for t, r in enumerate(rijen):
         k = kwartieren[t]
-        if r.get("actie") != "houden" or (r.get("net_kwh") or 0.0) <= 0.01:
+        if r.get("actie") != "houden" or (r.get("net_kwh") or 0.0) <= EPS_KWH:
             continue
         if (r.get("inhoud_kwh") or 0.0) <= leeg_kwh or k.verbruik_kwh - k.zon_kwh <= EPS_KWH:
             continue
-        later = None
-        bijladen = None
-        for u in range(t + 1, n):
-            ru, ku = rijen[u], kwartieren[u]
-            if ru.get("actie") == "laden_net":
-                kost = (ku.inkoop_eur + accu.netlaadmarge_eur) / eta_l + accu.slijtage_eur
-                bijladen = kost if bijladen is None else min(bijladen, kost)
-            elif ru.get("actie") in ("huis", "verkopen") and (ru.get("accu_kwh") or 0.0) < -EPS_KWH:
-                later = ku.inkoop_eur if ru.get("actie") == "huis" else (
-                    ku.teruglever_eur if ku.teruglever_accu_eur is None else ku.teruglever_accu_eur)
-                break
-        if later is None:
-            later = eind
-        if bijladen is not None:
-            later = min(later, bijladen)
+        lam = r.get("waarde_dekking_eur_per_kwh", r.get("waarde_inhoud_eur_per_kwh"))
+        if lam is not None:
+            uren = getattr(k, "uren", 0.25) or 0.25
+            ac = min(k.verbruik_kwh - k.zon_kwh, accu.ontladen_kw * uren)
+            eta_h = max(0.5, ontlaadrendement(ac / uren * 1000, accu, eta_o))
+            later = lam / eta_h + accu.slijtage_eur
+        else:
+            later = None
+            bijladen = None
+            for u in range(t + 1, n):
+                ru, ku = rijen[u], kwartieren[u]
+                if ru.get("actie") == "laden_net":
+                    kost = (ku.inkoop_eur + accu.netlaadmarge_eur) / (eta_l * eta_o) + accu.slijtage_eur
+                    bijladen = kost if bijladen is None else min(bijladen, kost)
+                elif ru.get("actie") in ("huis", "verkopen") and (ru.get("accu_kwh") or 0.0) < -EPS_KWH:
+                    later = ku.inkoop_eur if ru.get("actie") == "huis" else (
+                        ku.teruglever_eur if ku.teruglever_accu_eur is None else ku.teruglever_accu_eur)
+                    break
+            if later is None:
+                later = eind
+            if bijladen is not None:
+                later = min(later, bijladen)
         if later - k.inkoop_eur < accu.bewaarmarge_eur - 1e-9:
             uit.append(t)
     return uit
+
+
+def _vol_kwh(accu: Accu) -> float:
+    """Vanaf deze inhoud telt de accu als vol voor de toetsen."""
+    return accu.bruikbaar_kwh - STAP_KWH - 1e-9
 
 
 def zon_export_zonder_overschot(rijen: list[dict], accu: Accu) -> list[int]:
@@ -848,13 +1079,12 @@ def zon_export_zonder_overschot(rijen: list[dict], accu: Accu) -> list[int]:
     alleen als de accu daarna vol raakt voordat hij weer levert, uit het net
     laadt of het huis het net op gaat.
     """
-    vol = accu.bruikbaar_kwh - STAP_KWH - 1e-9
+    vol = _vol_kwh(accu)
     n = len(rijen)
     uit = []
     for t, r in enumerate(rijen):
         actie = r.get("actie")
-        zon_mee = actie == "verkopen" and -(r.get("net_kwh") or 0.0) > -(r.get("accu_kwh") or 0.0) + 0.01
-        if actie != "zon_export" and not zon_mee:
+        if actie != "zon_export" and not _zon_mee(r):
             continue
         overschot = False
         for u in range(t, n):
@@ -863,94 +1093,204 @@ def zon_export_zonder_overschot(rijen: list[dict], accu: Accu) -> list[int]:
                 overschot = True
                 break
             if u > t and (ru.get("actie") in ("huis", "verkopen", "laden_net")
-                          or (ru.get("net_kwh") or 0.0) > 0.01):
+                          or (ru.get("net_kwh") or 0.0) > EPS_KWH):
                 break
         if not overschot:
             uit.append(t)
     return uit
 
 
+def netladen_voor_zonoverloop(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu) -> list[int]:
+    """Netladen vlak voor zon die toch over de rand gaat (v5.186.0, punt 9).
+
+    Raakt de accu na een netlading vol en levert de zon dan terug voordat de
+    accu weer iets levert, dan had die zon de ruimte zelf gevuld: de netlading
+    wordt zo via de zon alsnog verkocht. Verboden worden de LAATSTE
+    netladingen vóór die overloop, tot ze samen de teruggeleverde zon dekken
+    (de eerdere blijven: die heeft het huis nog nodig). Een negatieve
+    inkoopprijs telt niet (dan verdient laden zelf al).
+    """
+    vol = _vol_kwh(accu)
+    uit: list[int] = []
+    open_: list[tuple[int, float]] = []    # netladingen sinds de accu voor het laatst leverde
+    overloop = 0.0
+
+    def afsluiten():
+        nonlocal overloop
+        if overloop > EPS_KWH:
+            gedekt = 0.0
+            for t, kwh in reversed(open_):
+                if gedekt >= overloop - 1e-9:
+                    break
+                uit.append(t)
+                gedekt += kwh
+        open_.clear()
+        overloop = 0.0
+
+    for t, r in enumerate(rijen):
+        actie = r.get("actie")
+        if actie in ("huis", "verkopen") and (r.get("accu_kwh") or 0.0) < -EPS_KWH:
+            afsluiten()
+            continue
+        if actie == "laden_net" and kwartieren[t].inkoop_eur >= 0:
+            if overloop > EPS_KWH:
+                afsluiten()
+            open_.append((t, float(r.get("kwh") or 0.0)))
+        elif open_ and (r.get("inhoud_kwh") or 0.0) >= vol and (r.get("net_kwh") or 0.0) < -EPS_KWH:
+            overloop += -(r.get("net_kwh") or 0.0)
+    afsluiten()
+    return sorted(uit)
+
+
+def _zon_export_voor_tekort(rijen: list[dict], leeg_kwh: float = 0.01) -> list[int]:
+    """De terugleverkwartieren vóór het huis met een lege accu aan het net komt
+    (v5.179.1, zie `zon_export_laat_huis_tekort`); leeg = er is geen."""
+    gezien: list[int] = []
+    for t, r in enumerate(rijen):
+        actie = r.get("actie")
+        if actie == "zon_export" or _zon_mee(r):
+            gezien.append(t)
+            continue
+        if not gezien:
+            continue
+        if actie == "laden_net":
+            return []
+        if actie != "verkopen" and (r.get("net_kwh") or 0.0) > EPS_KWH and (r.get("inhoud_kwh") or 0.0) <= leeg_kwh:
+            return gezien
+    return []
+
+
+def _overtredingen(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu,
+                   uitgebreid: bool = False) -> dict[str, set]:
+    """Alle toetsen achteraf op een plan (v5.186.0), per soort de kwartieren.
+    `uitgebreid`: de vlaggen voor de volgende ronde (zie de toetsen)."""
+    uit = {"zinloze_verkopen": set(zinloze_verkopen(rijen, kwartieren, accu, uitgebreid))}
+    if accu.huis_eerst:
+        uit["verkopen_voor_huis"] = set(verkopen_voor_huis(rijen, kwartieren, accu, uitgebreid))
+        uit["zon_export_zonder_overschot"] = set(zon_export_zonder_overschot(rijen, accu))
+        uit["netladen_voor_zonoverloop"] = set(netladen_voor_zonoverloop(rijen, kwartieren, accu))
+    if accu.bewaarmarge_eur:
+        uit["te_duur_bewaard"] = set(te_duur_bewaard(rijen, kwartieren, accu))
+    if accu.zon_export_afdwingbaar:
+        # v5.186.0 (punt 14): was `_waardeplan_huis_eerst` in de sturing - die
+        # zette terugleveren en verkopen bij zon voor de hele horizon uit en
+        # rekende opnieuw. Nu per kwartier, zoals de andere toetsen.
+        uit["zon_export_laat_huis_tekort"] = set(_zon_export_voor_tekort(rijen))
+    return uit
+
+
+#: v5.186.0: welke vlag een overtreding in de volgende ronde zet.
+_VLAG_VAN = {
+    "zinloze_verkopen": "verkoop_verboden",
+    "verkopen_voor_huis": "verkoop_verboden",
+    "te_duur_bewaard": "dekken",
+    "zon_export_zonder_overschot": "geen_zon_export",
+    "zon_export_laat_huis_tekort": "geen_zon_export",
+    "netladen_voor_zonoverloop": "geen_netladen",
+}
+
+
+#: v5.186.0: de volgorde waarin de toetsen vlaggen zetten (zie `plan`).
+_GROEPEN = (
+    ("zinloze_verkopen", "verkopen_voor_huis"),
+    ("te_duur_bewaard", "zon_export_zonder_overschot", "zon_export_laat_huis_tekort"),
+    ("netladen_voor_zonoverloop",),
+)
+
+
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     """Het goedkoopste accuplan over de gegeven kwartieren.
 
-    v5.181.2 (g): met een toets achteraf - een verkoop die de accu later
-    duurder terugvult (`zinloze_verkopen`) wordt in dat kwartier verboden
-    (vloer boven vol) en het plan opnieuw berekend; hooguit een paar rondes.
+    v5.181.2 (g): met toetsen achteraf - een overtreding zet een vlag op dat
+    kwartier (geen verkoop, dekken, geen zon terug, geen netlading) en het plan
+    wordt opnieuw berekend; hooguit MAX_RONDES rondes.
+
+    v5.186.0 (punt 5/15): elke ronde toetst het plan van die ronde op de
+    kwartieren met de vlaggen tot dan toe. De vlaggen blijven staan (de
+    vereniging over de rondes): dat is de rem tegen heen-en-weer schuiven,
+    niet de toets zelf - een vlag verbiedt alleen die ene keuze (dekken
+    alleen nog bewaren met inhoud). De uitkomst zegt hoeveel rondes het kostte,
+    welke overtredingen er nog staan en of de grens bereikt is.
     """
-    res = _plan(kwartieren, accu)
-    verboden: set[int] = set()
-    # v5.182.0: met de huis-eerst-regel meer rondes (elke ronde kan een
-    # verkoop naar een ander kwartier schuiven).
-    dekken: set[int] = set()
-    geen_zon: set[int] = set()
-    for _ in range(16 if (accu.huis_eerst or accu.bewaarmarge_eur) else 4):
-        if not res.beschikbaar:
+    basis = list(kwartieren)
+    werk = basis
+    res = _plan(werk, accu)
+    vlaggen: dict[str, set] = {v: set() for v in set(_VLAG_VAN.values())}
+    rondes = 1
+    limiet = False
+    while res.beschikbaar:
+        over = _overtredingen(res.kwartieren, werk, accu, uitgebreid=True)
+        nieuw = False
+        voorstel = {v: set(s) for v, s in vlaggen.items()}
+        # v5.186.0: per ronde alleen de eerste groep met nieuwe overtredingen;
+        # een latere groep hangt van de eerdere af (een netlading voor de
+        # verkoop lijkt anders 'overbodig' omdat de accu vol raakt, en verdwijnt
+        # samen met de verkoop, terwijl het huis hem daarna wel nodig heeft).
+        for groep in _GROEPEN:
+            for soort in groep:
+                kwartieren_ = over.get(soort) or set()
+                vlag = _VLAG_VAN[soort]
+                if kwartieren_ - voorstel[vlag]:
+                    nieuw = True
+                    voorstel[vlag] |= kwartieren_
+            if nieuw:
+                break
+        if not nieuw:
             break
-        nieuw = set(zinloze_verkopen(res.kwartieren, kwartieren, accu))
-        if accu.huis_eerst:
-            nieuw |= set(verkopen_voor_huis(res.kwartieren, kwartieren, accu))
-        nieuw -= verboden
-        # v5.183.0: bewaarmarge - te goedkoop bewaard, dan hier het huis dekken.
-        nieuw_dekken = set(te_duur_bewaard(res.kwartieren, kwartieren, accu)) - dekken
-        # v5.184.0: zon alleen terug als het echt overschot is (huis eerst).
-        nieuw_zon = (set(zon_export_zonder_overschot(res.kwartieren, accu)) - geen_zon
-                     if accu.huis_eerst else set())
-        if not nieuw and not nieuw_dekken and not nieuw_zon:
+        if rondes >= MAX_RONDES:
+            limiet = True
             break
-        verboden |= nieuw
-        dekken |= nieuw_dekken
-        geen_zon |= nieuw_zon
-        dicht = accu.bruikbaar_kwh + STAP_KWH
-        kwartieren = [replace(k, verkoop_vloer_kwh=dicht if t in verboden else k.verkoop_vloer_kwh,
-                              dekken=k.dekken or t in dekken,
-                              geen_zon_export=k.geen_zon_export or t in geen_zon)
-                      for t, k in enumerate(kwartieren)]
-        res = _plan(kwartieren, accu)
+        vlaggen = voorstel
+        werk = [replace(k,
+                        verkoop_verboden=k.verkoop_verboden or t in vlaggen["verkoop_verboden"],
+                        dekken=k.dekken or t in vlaggen["dekken"],
+                        geen_zon_export=k.geen_zon_export or t in vlaggen["geen_zon_export"],
+                        geen_netladen=k.geen_netladen or t in vlaggen["geen_netladen"])
+                for t, k in enumerate(basis)]
+        res = _plan(werk, accu)
+        rondes += 1
+    res.rondes = rondes
+    res.rondelimiet = limiet
+    res.zon_export_geweigerd = len(vlaggen["geen_zon_export"])
+    if res.beschikbaar:
+        over = _overtredingen(res.kwartieren, werk, accu)
+        res.resterend = {soort: len(s) for soort, s in over.items() if s}
     return res
 
 
 def _plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
-    """Het goedkoopste accuplan over de gegeven kwartieren (zonder de toets)."""
+    """Het goedkoopste accuplan over de gegeven kwartieren (zonder de toetsen)."""
     n = len(kwartieren)
     if n == 0:
         return Uitkomst(False, "geen prijzen vooruit")
     if accu.bruikbaar_kwh <= STAP_KWH:
         return Uitkomst(False, "geen bruikbare accu-inhoud")
     eta_l, eta_o = rendementen(accu)
-    niveaus = int(accu.bruikbaar_kwh / STAP_KWH) + 1
-    e = np.arange(niveaus) * STAP_KWH
-    max_op = int(accu.laden_kw * accu.duur_h * eta_l / STAP_KWH + 1e-9)
-    # v5.165.0: ontladen per vermogensband; laden en stilstaan zoals voorheen.
-    af_s, af_b = _ontlaadstappen(accu, eta_o)
-    op_s = np.arange(0, max_op + 1)
-    stappen = np.concatenate([af_s, op_s])
-    # AC-stroom per stap (kWh)
-    b_stap = np.concatenate([af_b, op_s * STAP_KWH / eta_l])
-    index = {int(st): j for j, st in enumerate(stappen)}
-
+    niveaus = int(accu.bruikbaar_kwh / STAP_KWH + 1e-9) + 1
+    raster = np.arange(niveaus) * STAP_KWH
+    cap = float(raster[-1])
+    # v5.165.0: verkopen per vermogensband (v5.183.5: op het handmatige vermogen).
+    af_s, af_b = _ontlaadstappen(accu, eta_o, accu.verkoop_kw)
+    kws = [_Kw(k, accu, eta_l, eta_o, af_s, af_b) for k in kwartieren]
+    _zonruimte(kws, accu, eta_l)
     eind = eindwaarde(kwartieren, accu, eta_o)
-    waarde = -e * eind                 # kosten-to-go aan het eind (negatief = waard)
-    # vooruit, vanaf de huidige inhoud. v5.177.0 (A12): naar beneden
-    # afgerond - 0,06 kWh telde als 0,1 en het plan ontlaadde aan het eind
-    # van de nacht een accu die al leeg stond (06:30: 267 W gepland, 0 gemeten).
-    i = int(min(max(accu.inhoud_kwh, 0.0), accu.bruikbaar_kwh) / STAP_KWH + 1e-6)
-    i = min(i, niveaus - 1)
-    i_start = i
-    eis = None
+    knik, laag = eindwaarde_knik(kwartieren, accu, eta_l, eta_o, eind, cap)
+    waarde = _eindkosten(raster, eind, knik, laag)
+    # v5.186.0: de inhoud loopt door (was naar beneden afgerond op 0,1 kWh,
+    # v5.177.0 A12): de slimme dekking is nu exact, ook voor een restje.
+    c = min(max(accu.inhoud_kwh, 0.0), cap)
+    c_start = c
     if accu.vol_na_kwartier is not None and accu.netladen and 0 <= accu.vol_na_kwartier < n:
-        # Nooit meer eisen dan de tijd toelaat: een onhaalbare eis laat geen
-        # enkel plan over.
-        t = accu.vol_na_kwartier
-        eis = (t, min(niveaus - 1, i_start + (t + 1) * max_op))
+        t_eis = accu.vol_na_kwartier
+        kws[t_eis].eis = _eis_niveau(kws, accu, t_eis, c_start, cap, eta_l)
     waardes: list = [None] * n
     vangnet: list = [None] * n
-    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus, eis, eta_l, max_op, waardes,
-                          vangnet)
-    rijen, kosten_plan, kosten_zonder, i = _vooruit(
-        kwartieren, accu, keuze, index, b_stap, i, niveaus, eta_l, eta_o, waardes, vangnet
-    )
+    keuze, waarde0 = _terugrekenen(kws, accu, raster, waarde, cap, eta_l, waardes, vangnet)
+    if float(np.interp(c_start, raster, waarde0)) >= GROOT_EUR / 2:
+        return Uitkomst(False, "geen haalbaar plan")
+    rijen, kosten_plan, kosten_zonder, c = _vooruit(kws, accu, keuze, raster, waardes, c_start, cap, eta_l)
     # verschil in inhoud tegen de eindwaarde verrekenen (begin en eind)
-    kosten_plan -= (i - i_start) * STAP_KWH * eind
+    kosten_plan += float(_eindkosten(c, eind, knik, laag)) - float(_eindkosten(c_start, eind, knik, laag))
     return Uitkomst(
         True,
         "",
@@ -958,4 +1298,6 @@ def _plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
         round(kosten_plan, 3),
         round(kosten_zonder, 3),
         round(eind, 4),
+        eindwaarde_knik_kwh=round(knik, 2),
+        eindwaarde_laag_eur_per_kwh=round(laag, 4),
     )

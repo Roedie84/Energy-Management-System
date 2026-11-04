@@ -71,27 +71,15 @@ def test_lege_accu_voor_de_export_telt_niet():
 
 
 def test_coordinator_plant_opnieuw_zonder_export(make_coordinator):
-    c = make_coordinator({})
-
-    class Res:
-        def __init__(self, rijen):
-            self.beschikbaar, self.kwartieren = True, rijen
-
-    class Accu:
-        zon_export_afdwingbaar = True
-
-    met = Res([_r("zon_export", -0.2, 0.7), _r("houden", 0.3, 0.0)])
-    zonder = Res([_r("zon", -0.0, 0.9), _r("huis", 0.0, 0.2)])
-    gevraagd = []
-    orig = wp.plan
-    wp.plan = lambda k, a: (gevraagd.append(a.zon_export_afdwingbaar), zonder)[1]
-    try:
-        accu = Accu()
-        assert c._waardeplan_huis_eerst([], accu, met) is zonder
-        assert gevraagd == [False] and c.waardeplan_zon_export_geweigerd is True
-        accu2 = Accu()
-        goed = Res([_r("zon_export", -0.2, 2.0), _r("huis", 0.0, 1.0)])
-        assert c._waardeplan_huis_eerst([], accu2, goed) is goed
-        assert c.waardeplan_zon_export_geweigerd is False
-    finally:
-        wp.plan = orig
+    """v5.186.0 (punt 14): de herberekening zonder terugleveren zit in het plan
+    zelf (per kwartier, `plan` -> zon_export_geweigerd); de sturing neemt de
+    uitkomst over in `waardeplan_zon_export_geweigerd` en het attribuut."""
+    from pathlib import Path
+    import custom_components.energy_management_system as pkg
+    code = (Path(pkg.__file__).parent / "waardeplan_sturing.py").read_text(encoding="utf-8")
+    assert "_waardeplan_huis_eerst" not in code
+    assert 'self.waardeplan_zon_export_geweigerd = bool(getattr(res, "zon_export_geweigerd", 0))' in code
+    rijen = [_r("zon_export", -0.2, 0.7), _r("houden", 0.3, 0.0)]
+    assert wp._zon_export_voor_tekort(rijen) == [0]
+    goed = [_r("zon_export", -0.2, 2.0), _r("huis", 0.0, 1.0)]
+    assert wp._zon_export_voor_tekort(goed) == []
