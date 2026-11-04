@@ -6,12 +6,12 @@
 3. De uitlegtekst noemt wat het getal is: tot het blok plus de lange horizon.
 4. De tweede prijslaag leest de accustand met de modulesprong.
 """
-import inspect
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from custom_components.energy_management_system import coordinator as mod
+from tests._coordinator_bron import coordinator_bron
 
 NU = datetime(2026, 10, 10, 19, 30, tzinfo=timezone(timedelta(hours=2)))
 BLOK = NU + timedelta(hours=15, minutes=15)
@@ -126,5 +126,6 @@ def test_de_uitleg_noemt_wat_het_getal_is(make_coordinator, hass):
 
 
 def test_de_tweede_prijslaag_rekent_met_de_modulesprong():
-    bron = inspect.getsource(mod.EnergyManagementSystemCoordinator)
+    # B4.5: deze tak staat sinds de splitsing in een mixin; lees de hele coordinator.
+    bron = coordinator_bron()
     assert "secondary_available_kwh = self._na_module_leeg(" in bron
