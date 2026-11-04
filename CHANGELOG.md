@@ -34768,3 +34768,12 @@ Gemeld Ruud 04-11 08:44: "nu graag een professionele uitstraling".
 - `zuinig_schrijven`: de eerste schrijfactie gebeurt bij het toevoegen van de entiteit, vóór de eerste ronde, met lege kenmerken. Een sensor met vaste stand (bijv. Accu-modulegezondheid, stand 0) hield de gevulde kenmerken dan tot 300 s vast. Nu gaat leeg → gevuld (en de eerste 5 minuten na de eerste schrijfactie) direct door, hooguit eens per 25 s. Gold voor 31 sensoren.
 
 Tests: `test_v5179_cockpit_ontwerp.py`, `test_v5173_zuinig_schrijven.py` (+7); drie tests op de oude opmaak herschreven.
+
+## v5.180.0 — coordinator opgesplitst, deel 1 (B4)
+
+Akkoord Ruud 04-11 07:11. Puur verplaatsen, geen gedragswijziging.
+
+- Nieuw mixinpatroon: `EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, AccuToestandMixin, UitlegMixin)`; methodes ongewijzigd verplaatst.
+- `waardeplan_sturing.py` (901 regels), `financien.py` (960), `accutoestand.py` (1.653), `uitleg.py` (755). Gedeelde hulpfuncties in `coordinator_hulp.py` (`_nl`, `accu_is_leeg`, `PriceEntry`, `demp_soc_stap`, `effectieve_ondergrens`), opnieuw geëxporteerd uit `coordinator.py`.
+- `coordinator.py`: 57.021 → 52.755 regels. Loggernaam blijft `...coordinator`.
+- Tests die de bron van de coordinator lezen gebruiken `tests/_coordinator_bron.py` (coordinator + mixins samengevoegd), zodat verbodstoetsen voor alle delen blijven gelden.
