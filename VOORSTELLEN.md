@@ -459,8 +459,15 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: test met capaciteit 11,52 → 8,64 = cycli gelijk; live: 253,0 keert terug naar ~190.
 
 ## L-EMS-063 · airco-besluit verwarmt elke ochtend terwijl jullie hem 's ochtends niet gebruiken (sturing, alleen met knop aan)
-- Status: **open** (04-11 07:40; verandert het airco-besluit → Ruud beslist). Knop staat uit, dus nu geen effect op verbruik of reserve.
+- Status: **gebouwd v5.177.0** (akkoord Ruud 04-11 07:53; A16: ochtendvenster alleen 'verwarmen' bij geleerde ochtendkans ≥ 30 %). Toets: morgenochtend geen 'verwarmen' 04-11 uur in de history. Was: open (04-11 07:40).
 - Onderbouwing (history `airco_besluit` 27-10 t/m 03-11, n=8 ochtenden + dagritme): tussen 04 en 11 uur 8/8 ochtenden 'verwarmen', 176/213/144/134/229/239/121/155 min, gemiddeld 176 min. Dagritme: 0/18 werkdagochtenden en 1/8 weekendochtenden aan; `warm_om` leeg; aan rond 15:58 (werkdag) en 16:30 (weekend). De `verwachting` zegt tegelijk 'niet verwacht' tot 11:15, dus het besluit en de reserve spreken elkaar tegen. Vandaag 07:33: 47 ct, 17,0 °C, doel 20,5.
 - Voorstel: zonder geleerd ochtendmoment (`warm_om` leeg) geen 'verwarmen' uit het gewone besluit tussen 04:00 en het begin van het geleerde dagvenster. Handmatig gaat altijd voor. Alternatief: niets doen, want de airco is goedkoper dan gas en de bewoners zijn wakker.
 - Verwacht effect met de knop aan: ~1,1 kWh per ochtend minder (176 min × 0,37 kW geleerd, schatting, geen meting), ~€ 0,50 bij 45 ct, gas niet meegerekend. Comfort: de woonkamer blijft 's ochtends koud, net als nu.
 - Meten: geen 'verwarmen' tussen 04:00 en het dagvenster in de history; dagritme blijft leren.
+
+## L-EMS-064 · leermodus blijft hangen als een herstart vlak na 'handmatig uit' valt (bug, acuut)
+- Status: **gebouwd v5.181.2** (04-11 11:40, tussenronde: het EMS stuurde niet meer; suite 7069 groen, workflow groen, HACS ververst; wacht op installatie). Test `test_v51812_leermodus_direct.py` (5; 3 falen op de oude code).
+- Onderbouwing (history + logbook, n=1): 11:22:20 smart charge aan, 11:22:24 leermodus aan, 11:25:38 Ruud zet smart charge uit, herstart ~11:26 (installatie v5.181.1). Geen leermodus-uit in de history en geen opruimregel in het log (bij de herstart van 10:16 wel). `LearningOnlySwitch` pollde, dus HA had nog 'aan'; het herstellen zette `learning_only` terug, de vlag was al False. Daarna: `select.zendure_manager_operation` smart_charging, uitleg "Niet naar de accu gestuurd: leermodus". `leermodus_sinds` is niet bewaard, dus de melding na 2 uur kwam ook niet.
+- Bouw: schakelaar luistert naar de coordinator, `async_set_learning_only` meldt meteen, herstel op 'aan' neemt de begintijd uit de vorige stand. Sturing ongewijzigd.
+- Let op: de stand van nu is niet te onderscheiden van een bewuste leermodus. Ruud moet hem één keer zelf uitzetten.
+- Meten: leermodus uit na de volgende handmatige stand met herstart; melding `leermodus_lang_aan` komt na een herstart wel.

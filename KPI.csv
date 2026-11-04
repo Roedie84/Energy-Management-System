@@ -1275,3 +1275,11 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-04 07:40,TUSSEN,ems_airco_verwarmen_ochtend_min,176,8,27-10..03-11 04-11 uur: 176/213/144/134/229/239/121/155 min; 8/8 ochtenden; eigen gebruik 1/26 ochtenden; L-EMS-063
 2026-11-04 07:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.384,60,03:40 0.396
 2026-11-04 07:40,TUSSEN,ems_stilstand_functies,0,12,"12 wachten, 0 doen; airco 'verwarmen', knop uit -> rekent"
+2026-11-04 11:40,TUSSEN,ems_verkoop_onder_reserve,0,1,verkoopkwartieren leeg; teruglevering 0.137 kWh t/m 11:41 (zon)
+2026-11-04 11:40,TUSSEN,ems_leermodus_onbedoeld_min,18,1,sinds 11:22 aan; smart charge uit 11:25:38; herstart ~11:26 zette hem terug; L-EMS-064; nog aan om 11:52
+2026-11-04 11:40,TUSSEN,ems_tekortnacht_kwh,1.646,1,nacht 03->04 definitief; record om middernacht
+2026-11-04 11:40,TUSSEN,ems_pv_tot_nu_kwh,3.252,1,11:45; Solcast dag 7.27
+2026-11-04 11:40,TUSSEN,ems_planvolging_vandaag_pct,76.1,46,"sturing 6 (handmatig/leermodus), accu 2, zon 2, verbruik 1"
+2026-11-04 11:40,TUSSEN,ems_digital_twin_kwartierplan_mae_kwh,0.394,60,07:40 0.384
+2026-11-04 11:40,TUSSEN,ems_mc_tekortkans_tot_blok_pct,100,1000,horizon 05-11 09:00; det. 7.99 kWh
+2026-11-04 11:40,TUSSEN,ems_stilstand_functies,0,11,"11 wachten, 0 doen; airco 'verwarmen', knop uit -> rekent"

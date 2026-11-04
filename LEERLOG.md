@@ -1032,3 +1032,18 @@ laatste ronde: 04-11 03:40, gemeten t/m 04-11 03:46
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
 
 laatste ronde: 04-11 07:40, gemeten t/m 04-11 07:45
+
+## 04-11 11:40 · tussenronde
+- Draait v5.181.1 (herstart ~11:26). Vanochtend veel releases uit de chat (v5.176.4-v5.181.1, grote controle, cockpit, opsplitsing coordinator). Herstarts 08:42, 09:16, 10:17, 11:26.
+- **ACUUT, leermodus staat aan zonder reden (L-EMS-064):** sinds 11:22 stuurt het EMS niet. Ruud zette smart charge om 11:25:38 uit, de herstart viel binnen de 30 s poll, het herstellen zette de leermodus terug. Zendure blijft op smart_charging tot iemand hem uitzet. Geen melding, omdat `leermodus_sinds` niet bewaard is.
+- **Gebouwd v5.181.2:** tussenrelease wegens fout gedrag nu. Suite 7069 groen, workflow groen, HACS ververst. Herstelt de huidige stand niet: Ruud moet de leermodus zelf uitzetten. Sturing ongewijzigd.
+- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg. Teruglevering vandaag 0,137 kWh t/m 11:41 (zon).
+- **Nacht 03→04 definitief 1,646 kWh** tekort (> 0,5, tekortdag). Record en soort komen om middernacht, niet om 09:00: mijn eerdere 'uitslag 09:00' klopte niet. H-EMS-15 en de Brier-telling dus in de dagafsluiting van 05-11 03:40.
+- Zon tot 11:45 3,25 kWh, Solcast dag 7,27; dag nog niet te beoordelen. SoC 18 → 36 %.
+- Planvolging vandaag **76,1 %** (n=46; 93,3 om 07:40): daling komt van 6 × 'sturing', alle tijdens handmatig/leermodus. Twin 0,394 (0,384), laatste twee 0,755 en 0,96 met meer zon dan gepland. MC tot 09:00 morgen 100 % (det. 7,99 kWh; rekent zonder sturing niet door).
+- **Nieuw H-EMS-18:** netlaadplan springt na een herstart: 11:27 '11:30-14:45 5,5 kWh', 11:28 '11:30-12:00 1,2 kWh', 11:30 geen. Reden `huis-eerst-regel aan`. n=1, deed niets (leermodus). Volgen bij de volgende herstart.
+- L-EMS-063 gebouwd v5.177.0, toets morgenochtend (nu overdag 'verwarmen', knop uit → rekent). L-EMS-061, regeloverschot: niet te toetsen. Stilstand: **geen echte** (11 wachten, 0 doen).
+- Niet gemeten: effect van de leermodus in euro's (dag loopt, avondpiek nog te komen).
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart). H-EMS-14 geparkeerd.
+
+laatste ronde: 04-11 11:40, gemeten t/m 04-11 11:52
