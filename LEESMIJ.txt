@@ -1,3 +1,13 @@
+EMS v5.184.4 - vaatwasser en wasmachine volgens hun eigen verbruiksprofiel
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Een gepland apparaat telde met zijn hele cyclus in het eerste kwartier (morgen 05:00
+  huis 5.112 W in het plan). Nu volgens het geleerde profiel van dat apparaat: uit de
+  vermogensmeting, per kwartier vanaf de start (vaatwasser ~34/25/30/10 %, wasmachine
+  het meeste in het eerste uur). Ook een lopende cyclus volgt het profiel. Zonder
+  profiel: gelijk verdeeld over de duur.
+
 EMS v5.184.3 - opbrengst in het plan volgt het waardeplan
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

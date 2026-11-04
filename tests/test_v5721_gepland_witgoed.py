@@ -52,10 +52,12 @@ def test_alleen_het_segment_met_de_start(make_coordinator, hass):
         c.geplande_witgoed_kwh_in_periode(a, b) for a, b in _uursegmenten(NU, 22)
     ]
 
-    # 09:17 + 59 min = 10:16 UTC: het tweede segment (10:00-11:00).
+    # 09:17 + 59 min = 10:16 UTC: begint in het tweede segment (10:00-11:00).
+    # v5.184.4: verdeeld over de cyclus (zonder profiel 120 min), dus tot 12:16.
     assert per_segment[0] == 0
-    assert per_segment[1] == 1.14
-    assert sum(1 for k in per_segment if k) == 1
+    assert per_segment[1] > 0
+    assert round(sum(per_segment), 2) == 1.14
+    assert sum(1 for k in per_segment if k) <= 3
 
 
 def test_een_latere_periode_rekent_vanaf_nu(make_coordinator, hass):
@@ -64,8 +66,9 @@ def test_een_latere_periode_rekent_vanaf_nu(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass, 6 * 3600)
 
     later = NU + timedelta(hours=3)
-    assert c.geplande_witgoed_kwh_in_periode(later, later + timedelta(hours=4)) == 1.14
-    assert c.geplande_witgoed_kwh_in_periode(NU + timedelta(hours=7), NU + timedelta(hours=12)) == 0
+    # v5.184.4: de cyclus loopt 2 uur (zonder profiel), dus tot NU + 8 u
+    assert round(c.geplande_witgoed_kwh_in_periode(later, later + timedelta(hours=6)), 2) == 1.14
+    assert c.geplande_witgoed_kwh_in_periode(NU + timedelta(hours=9), NU + timedelta(hours=12)) == 0
 
 
 def test_de_wandeling_telt_hem_een_keer(make_coordinator, hass):
@@ -96,5 +99,6 @@ def test_een_start_over_zes_uur_telt_in_de_wandeling(make_coordinator, hass):
 
     verbruik = [v for v, _z in wandeling]
     assert round(sum(verbruik), 2) == round(12 * 0.3 + 1.14, 2)
-    # 09:17 + 6 u = 15:17 UTC: segment 15:00-16:00 (index 6).
-    assert round(verbruik[6] - verbruik[5], 2) == 1.14
+    # 09:17 + 6 u = 15:17 UTC: begint in segment 15:00-16:00 (index 6);
+    # v5.184.4: verdeeld over 2 uur, dus ook in de segmenten erna.
+    assert verbruik[6] > verbruik[5] and verbruik[5] == verbruik[4]

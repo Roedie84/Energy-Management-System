@@ -64,6 +64,7 @@ from homeassistant.helpers.storage import Store
 from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon, slimme_bronnen, vooruitplan, planvolging, dipplan
 from . import thuiskomst as thuiskomst_mod
 from . import witgoedplanning
+from . import witgoedprofiel
 from . import waterkosten
 from . import waardeplan as waardeplan_mod
 from . import salderingspositie as salderingspositie_mod
@@ -1335,6 +1336,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         # v1.61.0: wat een witgoedcyclus werkelijk kost, per apparaat.
         self.appliance_cycle_kwh: dict[str, float] = {}
         self._appliance_cycle_history: dict[str, list[float]] = {}
+        #: v5.184.4: geleerd verbruiksprofiel per apparaat (witgoedprofiel.py).
+        self.witgoed_profielen: dict[str, list[float]] = {}
+        self._witgoed_profiel_geleerd: datetime | None = None
         # Vermogensmetingen tijdens een lopende cyclus, om achteraf de
         # kWh te kunnen bepalen.
         self._appliance_power_samples: dict[str, list] = {}
@@ -4411,6 +4415,44 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             return None
         return dt_util.as_local(eind).replace(tzinfo=None)
 
+    async def async_leer_witgoedprofielen(self, now: datetime) -> None:
+        """Het verbruiksprofiel per apparaat uit de 5-minutengemiddelden van de
+        vermogenssensor (v5.184.4, zie witgoedprofiel.py). Elke 6 uur, over de
+        bewaarde korte statistiek (standaard 10 dagen)."""
+        if self._witgoed_profiel_geleerd and now - self._witgoed_profiel_geleerd < timedelta(hours=6):
+            return
+        self._witgoed_profiel_geleerd = now
+        bronnen = {
+            naam: self.config.get(conf)
+            for naam, conf in (("vaatwasser", CONF_DISHWASHER_POWER_SENSOR),
+                               ("wasmachine", CONF_WASHING_MACHINE_POWER_SENSOR))
+            if self.config.get(conf)
+        }
+        if not bronnen:
+            return
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import statistics_during_period
+        except ImportError:
+            return
+        eind = now.astimezone(timezone.utc)
+        begin = eind - timedelta(days=10)
+        ids = set(bronnen.values())
+
+        def _ophalen():
+            return statistics_during_period(self.hass, begin, eind, ids, "5minute", None, {"mean"})
+
+        rijen = await get_instance(self.hass).async_add_executor_job(_ophalen)
+        veranderd = False
+        for naam, ent in bronnen.items():
+            reeks = [float(r.get("mean") or 0.0) for r in (rijen or {}).get(ent) or []]
+            prof = witgoedprofiel.profiel(reeks)
+            if prof and prof != (self.witgoed_profielen or {}).get(naam):
+                self.witgoed_profielen[naam] = prof
+                veranderd = True
+        if veranderd:
+            self.schedule_persisted_state_save()
+
     async def _rondrit_statistiek(self, now: datetime, ids: set) -> tuple:
         """(rijen per entiteit, eenheid per entiteit) of (None, None)."""
         from . import rondrit as R
@@ -4438,6 +4480,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         """De staartstappen die de recorder lezen (v5.169.0: samen, zodat de
         bevroren `_async_update_locked` niet groeit)."""
         await self.async_vul_dagverloop_aan_uit_recorder(now)
+        try:
+            await self.async_leer_witgoedprofielen(now)
+        except Exception:  # noqa: BLE001 - leren mag de sturing nooit raken
+            _LOGGER.debug("Witgoedprofielen niet geleerd", exc_info=True)
         try:
             await self.async_ververs_rondrit_meter(now)
         except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
@@ -10278,6 +10324,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             eind = dt_util.parse_datetime(planning["eind"])
             if eind is not None:
                 regel["eindtijd_kort"] = dt_util.as_local(eind).strftime("%H:%M")
+                regel["eind"] = planning["eind"]   # v5.184.4: om de cyclus te verdelen
+        if planning.get("duur_minuten"):
+            regel["duur_minuten"] = planning["duur_minuten"]
         if planning.get("start_bron") in ("geleerd", "eindtijd"):
             duur = planning.get("duur_minuten")
             regel["let_op"] = (
@@ -11163,7 +11212,14 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             )
             if eind is not None:
                 rest_min = max(5.0, (eind - nu).total_seconds() / 60)
-            totaal += rest_kwh * _overlap(nu, nu + timedelta(minutes=rest_min))
+            # v5.184.4: met een geleerd profiel de rest zoals het apparaat hem
+            # verbruikt (opwarmen vooraan), anders gelijk over de resttijd.
+            prof = (self.witgoed_profielen or {}).get(naam)
+            rest_prof = witgoedprofiel.rest_fracties(prof, verstreken_min) if prof else []
+            if rest_prof:
+                totaal += witgoedprofiel.kwh_in_periode(rest_kwh, nu, rest_prof, start, einde)
+            else:
+                totaal += rest_kwh * _overlap(nu, nu + timedelta(minutes=rest_min))
 
         # v3.99.4: de vaste post blijft het hele uur staan, ook als de
         # bevestiging tussendoor even wegvalt. In het logboek van 2
@@ -11209,9 +11265,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         """
         totaal = 0.0
         for regel in self.get_planned_appliance_load().get("apparaten", []):
-            moment = dt_util.parse_datetime(regel["start"])
-            if moment is not None and start <= moment < einde:
-                totaal += regel["kwh"]
+            totaal += witgoed_kwh_in_periode(
+                regel, start, einde, (self.witgoed_profielen or {}).get(regel.get("apparaat")))
         return totaal
 
     def _beoordeel_celspreiding(
@@ -46611,3 +46666,38 @@ def _reken_prijsverwachting(P, prijzen: dict, weer: dict, vandaag, bekend_tot, b
         uit["backtest"] = nieuw.get("backtest") or P.backtest(prijzen, weer, dagen=21, vooruit=2, gas=gas)
         uit["keuze"] = nieuw
     return uit
+
+
+#: v5.184.4: cyclusduur als de planning geen eind of duur kent.
+WITGOED_STANDAARD_DUUR_MIN = 120.0
+
+
+def witgoed_kwh_in_periode(regel: dict, start: datetime, einde: datetime,
+                           profiel: list[float] | None = None) -> float:
+    """Het deel van een geplande cyclus dat in [start, einde) valt (v5.184.4).
+
+    Kaart claude-controle 04-11 19:18: de vaatwasser telde helemaal in zijn
+    eerste kwartier (morgen 05:00 huis 5.112 W in het plan). Nu verdeeld over
+    de cyclus: van de start tot het eind uit de planning, anders start plus de
+    duur (geleerd of van het programma), anders WITGOED_STANDAARD_DUUR_MIN.
+    Gelijkmatig; het opwarmen vooraan telt zo iets te laag, maar niet meer
+    alles in één kwartier.
+    """
+    moment = dt_util.parse_datetime(regel.get("start") or "")
+    if moment is None:
+        return 0.0
+    kwh = float(regel.get("kwh") or 0.0)
+    if profiel:
+        # v5.184.4: het geleerde profiel van dit apparaat (witgoedprofiel.py)
+        return witgoedprofiel.kwh_in_periode(kwh, moment, profiel, start, einde)
+    eind = dt_util.parse_datetime(regel.get("eind") or "") if regel.get("eind") else None
+    if eind is None or eind <= moment:
+        try:
+            duur = float(regel.get("duur_minuten") or WITGOED_STANDAARD_DUUR_MIN)
+        except (TypeError, ValueError):
+            duur = WITGOED_STANDAARD_DUUR_MIN
+        eind = moment + timedelta(minutes=max(duur, 15.0))
+    overlap = (min(eind, einde) - max(moment, start)).total_seconds()
+    if overlap <= 0:
+        return 0.0
+    return kwh * overlap / (eind - moment).total_seconds()

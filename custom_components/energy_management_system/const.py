@@ -3946,6 +3946,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_kosten_meter_dagbegin": {"type": "plain"},
     "appliance_cycle_kwh": {"type": "plain"},
     "_appliance_cycle_history": {"type": "plain"},
+    # v5.184.4: geleerd verbruiksprofiel per apparaat (fractie per kwartier)
+    "witgoed_profielen": {"type": "plain"},
     "presence_timeline": {"type": "plain"},
     "presence_state": {"type": "plain"},
     "quarter_plan_first_seen": {"type": "plain"},

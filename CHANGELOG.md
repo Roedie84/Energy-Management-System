@@ -34944,3 +34944,14 @@ Kaart claude-ems 04-11 18:12: 05-11 00:15-00:45 daalde `cumulatief_eur` € 0,24
 - Sturing ongewijzigd: alleen weergave en dagvergelijking lezen dit.
 
 Tests: `test_v5184_3_plan_opbrengst.py`.
+
+## v5.184.4 — vaatwasser en wasmachine volgens hun eigen verbruiksprofiel
+
+Kaart claude-controle 04-11 19:18: vaatwasser gepland 05-11 05:00, in het plan huis 5.112 W in dat ene kwartier; `geplande_witgoed_kwh_in_periode` boekte de hele cyclus op het startmoment. Ruud 19:22: "Je weet inmiddels aardig wat van het verbruik van mijn apparaten, je kunt het dus zeer specifiek verdelen?"
+
+- Nieuw `witgoedprofiel.py`: cycli herkennen in de 5-minutengemiddelden van de vermogenssensor (boven 20 W, klaar na 30 min stil, vanaf 0,3 kWh), per kwartier vanaf de start de fractie van de cyclusenergie, gemiddeld over de cycli (max. 4 uur). Gemeten 27/28-10: vaatwasser 34 / 25 / 30 / 10 %, wasmachine 16 / 31 / 15 / 17 / 5 / 4 / 2 / 2 / 2 / 3 / 2 %.
+- `async_leer_witgoedprofielen`: elke 6 uur uit de korte statistiek van de recorder (10 dagen); bewaard als `witgoed_profielen`.
+- Gepland witgoed (`witgoed_kwh_in_periode`) volgt het profiel; zonder profiel gelijk verdeeld van de start tot het eind uit de planning (anders `duur_minuten`, anders 120 min). `_geplande_regel` geeft `eind` en `duur_minuten` mee.
+- Een lopende cyclus (`lopend_witgoed_kwh_in_periode`) verdeelt de rest volgens het profiel vanaf de verstreken tijd (`rest_fracties`).
+
+Tests: `test_v5184_4_witgoed_verdelen.py`.
