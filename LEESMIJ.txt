@@ -1,3 +1,39 @@
+EMS v5.186.0 - grote doorloop: plan, uitvoering, voorspellingen en cijfers (57 punten)
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+Plan
+- De accu dekt het huis nu exact (geen afrondingsstappen van 0,1 kWh meer): geen uren
+  'sparen' meer door een restje, de nacht loopt niet te vroeg leeg, geen om-en-om
+  wisselen in de laatste minuten van een kwartier.
+- Bewaren alleen als het plan zelf zegt dat het minstens 5 ct/kWh oplevert; aflopende
+  eindwaarde (geen netladen meer puur voor het eind van de horizon).
+- Geen netladen vlak voor zon die de accu toch vol maakt; 'woning eerst' houdt bij welke
+  kWh uit het net kwam (alleen die mag niet verkocht worden).
+- Rekenen buiten de event loop van Home Assistant; sneller (gemiddeld 0,09 s).
+
+Uitvoering
+- Midden in een kwartier alleen het vermogen bijsturen, geen standwissel (tenzij nodig).
+- Zon-export laadt nooit meer dan het echte overschot.
+- Time-out op schrijven naar de accu; ronde direct na elke kwartiergrens.
+- Een fout in een adviesonderdeel slaat de ronde niet meer over; na 3 rondes zonder
+  besluit in handmatig terug naar smart.
+- Panelen na herstart tijdens een negatieve prijs weer op 100 %.
+- Foutmeldingen verdwijnen weer als het herstelt (geen elk uur kritieke push meer).
+- Herinnering bij kalibratie/force manual langer dan 2 uur.
+
+Voorspellingen
+- Zonvoorspelling vandaag nu met de geleerde correctie en de recente opbrengst (stond
+  structureel ~13 % te hoog); leren niet meer van afgeknepen of halve uren.
+- Witgoed en koken niet meer dubbel geteld; airco- en temperatuurextra in het plan.
+- Zonbron weg = gat in het plan, niet stil 0 kWh.
+
+Cijfers en cockpit
+- Maandmelding over de afgelopen maand; besparing totaal en deze maand op dezelfde maat;
+  week = 7 dagen; netladen-marge op de laaddag; terugleverpremie niet dubbel.
+- Melding modules met de juiste nummers (3 modules).
+- Cockpitscript één keer geladen.
+
 EMS v5.185.1 - geldcijfers eerlijker: netladen, belasting tijdens de saldering
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

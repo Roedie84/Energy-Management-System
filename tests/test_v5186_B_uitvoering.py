@@ -132,6 +132,10 @@ def _waardeplan(c, actie="huis", **nu):
     plan = {"beschikbaar": True, "berekend_om": NU.isoformat(), "inhoud_kwh": 3.0,
             "nu": {"actie": actie, "kwh": 0.0, "accu_kwh": 0.0, "uren": 0.2, **nu}}
     c._waardeplan_nu = lambda now, entries: plan
+    # v5.186.0 (A20): het plan komt async uit de executor.
+    async def _async_plan(n, e):
+        return plan
+    c._async_waardeplan_nu = _async_plan
     c._is_emergency_low_battery = lambda: False
     c._update_financial_tracking = lambda *a, **k: None
     c._update_shortfall_detection = lambda *a, **k: None

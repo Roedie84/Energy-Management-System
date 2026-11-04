@@ -34976,3 +34976,32 @@ Onderzoek kosten/besparing 04-11 19:44 (punten 1-3); Ruud 20:00: "Jij weet wat h
 - **"jaar" in het kostenoverzicht.** `get_energy_cost_overview` zegt nu wat week/maand/jaar zijn (laatste 7/30/365 voltooide dagen; jaar = sinds start meting zolang korter), met `jaar_dagen`.
 
 Tests: `test_v5185_1_geld.py`.
+
+## v5.186.0 — grote doorloop: plan, uitvoering, voorspellingen en cijfers
+
+Diepe analyse 04-11 (60 punten, `EMS-verbeterlijst-2026-11-04.md`). Ruud: "Jij bepaald voor alle punten of we het doorvoeren of niet". Gebouwd in vier sporen; 57 punten doorgevoerd, 39/40/41 niet, 5 en 55 deels.
+
+**A. Plan (`waardeplan.py`, `waardeplan_sturing.py`)**
+- Exacte slimme dekking (`_Kw`, interpolatie in de DP, continue inhoud vooruit) i.p.v. stappen van 0,1 kWh (punten 1, 2, 7). Verkoopvloer alleen bij echte verkoop; de dekken-uitzondering van v5.183.2 vervalt.
+- `te_duur_bewaard` op de marginale waarde uit de DP (`waarde_inhoud_eur_per_kwh`, `waarde_dekking_eur_per_kwh`); bewaarmarge als kost in de DP (3). `zinloze_verkopen` houdt de oude vergelijking (marginale waarde gaf elke ronde een gelijkspel).
+- Aflopende eindwaarde (`eindwaarde_knik`) (4). Dekken verbiedt alleen vasthouden; netladen in een dekkwartier bij prijs ≥ 0 blijft verboden (5, deels).
+- Zachte balanceer-eis (€5/kWh tekort), laadrendement i.p.v. wortel rondrit (6).
+- Netherkomst in de accu bijgehouden; alleen die mag niet verkocht worden (8). `netladen_voor_zonoverloop` (9). Vloer met tekort[t+1]/eta_o (10).
+- `Accu.laden_slim_kw` (13). `_waardeplan_huis_eerst` opgegaan in `plan()` (14). Eén EPS, `rondes`/`resterend`/`rondelimiet`, waarschuwing bij rondelimiet (15).
+- Rekenen in de executor (`_async_waardeplan_nu`) (20).
+
+**B. Uitvoering**
+- Midden in een kwartier alleen vermogen; standwissel bij veiligheid of ≥ €0,05 voordeel (`WAARDEPLAN_MIDKWARTIER_WISSEL_EUR`), herplanningen geteld (11). Zon-export begrensd op het echte overschot (12).
+- Adviesstappen via `_voer_staartstap_uit`; vangnet na 3 rondes zonder besluit in handmatig → smart (16). Time-out 12 s op schrijven, triggers overslaan bij bezet slot (17). Opdrachtcontrole aan het begin van de ronde met tolerantie, escalatie na 3 (18).
+- Panelen na start/herladen terug op 100 % (19). Opstartfase vanaf de eerste ronde + ronde bij het einde (21). Schrijfuitkomst teruggegeven, `niet_gestuurd` gevuld (22). Inhaalvermogen ≤ 1,5× gepland; ronde 3 s na elke kwartiergrens (23).
+- P1-regeldoel terugval op ruwe P1 (24); 'unknown' blokkeert alleen de eigen entiteit (25); knoppen schrijven binnen het slot (26); herinnering kalibratie/force manual (27); `_bewaak_stap` wist fouten bij herstel (28); celbescherming bewaard, melding bij vervallen handmatige stand (29).
+
+**C. Voorspellingen**
+- Zon: niet leren van afgeknepen/halve uren, begrenzing per monster (30); vandaag de geleerde correctie × recente opbrengst (0,5-1,3, dooft uit in 4 uur) (36) — oorzaak van de ~13 % te hoge voorspelling.
+- Witgoedaandeel per uur (`witgoed_uuraandeel`), niet dubbel tellen (31). Correctieverhouding tegen het uur van nu (32). Eigen correctiebudget voor de reserve (33). Airco/temperatuurextra in de planbalans (34); airco gemiddelde i.p.v. mediaan (35). Uur telt vanaf 45 min (37). Zonbuffer tot eigen eindtijd, gat in daglicht knipt de horizon (38). Witgoed zwaar vanaf 100 W (42). Profiel gerekt naar de geplande duur, `MIN_CYCLI` 2 (43).
+- Niet: 39 (niet gewenst), 40 (backtest: dagtotaal slechter, 0,95 → 1,03 kWh MAE), 41 (effect ~0,3 ct/kwartier).
+
+**D. Cijfers en cockpit**
+- `maand_vorige` voor de maandmelding (44). Dagreset-kostenmeter (45, deels). `besparing_totaal_gecorrigeerd_eur`, 2 decimalen (46, 53). Rij vandaag met saldo (47). Oude sensoren verouderd, dashboardkaarten vervangen (48). `_laatste_dagstand` bewaard, gaten gevuld, vensters op datum (49). Week = 7 dagen (50). Premie alleen in het kostprijsmodel (51). Modulemelding alleen huidige modules (52). Attributen per ronde gecachet (54); kwartierplanning compacter (55, deels). Netladenmarge op de laaddag (56). regime2027 per dag met waarde (57). Cockpitscript `?v=versie-hash` (58). Contractstart gevalideerd, 29 feb (59). `pv_daily_history` weg, € eenheid, CO2 state_class (60). Melding negatieve prijzen alleen komende kwartieren, weinig zon één keer per dag.
+
+Tests: `test_v5186_A_waardeplan.py`, `test_v5186_B_*.py`, `test_v5186_C_*.py`, `test_v5186_D_geld.py` (156 nieuw).

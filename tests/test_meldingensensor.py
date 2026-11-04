@@ -40,8 +40,11 @@ def test_de_meldingensensor_draagt_ze_wel(make_coordinator, hass):
     from custom_components.energy_management_system.sensor import MeldingenSensor
 
     c = make_coordinator({})
+    # v5.186.0: momenten van het afgelopen uur (de toestand telt de laatste 24 uur).
+    from datetime import datetime, timedelta, timezone
+    nu = datetime.now(timezone.utc)
     c.notification_history = [
-        {"moment": f"2026-09-10T09:{i:02d}:00+02:00", "soort": "cheap_block_soon",
+        {"moment": (nu - timedelta(minutes=29 - i)).isoformat(), "soort": "cheap_block_soon",
          "titel": "'t Goedkope blok begint zo", "bericht": "Van 09:30 tot 17:30.",
          "verstuurd": True}
         for i in range(30)
@@ -51,7 +54,7 @@ def test_de_meldingensensor_draagt_ze_wel(make_coordinator, hass):
     assert s.native_value == 30
     meldingen = s.extra_state_attributes["meldingen"]
     assert len(meldingen) == 12
-    assert meldingen[0]["moment"].endswith("09:29:00+02:00")   # nieuwste bovenaan
+    assert meldingen[0]["moment"] == c.notification_history[-1]["moment"]   # nieuwste bovenaan
     assert meldingen[0]["bericht"] == "Van 09:30 tot 17:30."
 
 

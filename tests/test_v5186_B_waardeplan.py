@@ -47,6 +47,10 @@ def _plan(berekend, actie, accu_kwh=-0.2, uren=0.24, prijs=0.25, eind=0.26):
 
 def _ronde(c, plan, now):
     c._waardeplan_nu = lambda n, e: plan
+    # v5.186.0 (A20): het plan komt async uit de executor.
+    async def _async_plan(n, e):
+        return plan
+    c._async_waardeplan_nu = _async_plan
     _run(c._waardeplan_als_nodig(now, []))
     return c.last_waardeplan
 

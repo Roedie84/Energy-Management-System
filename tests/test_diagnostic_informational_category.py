@@ -44,6 +44,9 @@ def _add_duplicate_pair(coordinator):
 
 def test_duplicates_alone_keep_the_summary_nominal(make_coordinator, hass):
     coordinator = make_coordinator({})
+    # v5.186.0: los van de kalender - binnen 60 dagen voor het einde van de
+    # saldering komt er (terecht) een informatieve regel bij.
+    coordinator._salderen_days_remaining = lambda: 365
     _add_duplicate_pair(coordinator)
 
     summary = coordinator.get_diagnostic_summary()
@@ -124,6 +127,9 @@ def test_narrative_still_says_let_op_for_real_points(make_coordinator, hass):
 
 def test_narrative_returns_none_when_nothing_at_all(make_coordinator, hass):
     coordinator = make_coordinator({})
+    # v5.186.0: los van de kalender - binnen 60 dagen voor het einde van de
+    # saldering komt er (terecht) een informatieve regel bij.
+    coordinator._salderen_days_remaining = lambda: 365
 
     assert coordinator._narrate_attention() is None
 
