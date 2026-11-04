@@ -31,9 +31,16 @@ Per kwartier t, bij inhoud e (kWh boven de ondergrens):
                     het net de accu in gaat (v5.165.0, de datacorrectie)
 Het ontlaadrendement hangt af van het vermogen (v5.165.0): per stap het
 gemeten rendement van die vermogensband, anders het ene getal.
-Wat er aan het eind van de horizon in de accu zit, is de mediaan van de
-inkoopprijs waard (maal rendement, min slijtage): niet alles op de laatste
-dag weggeven, en ook niet eindeloos vasthouden.
+Wat er aan het eind van de horizon in de accu zit, is de prijs van na de
+horizon waard (maal rendement, min slijtage): niet alles op de laatste dag
+weggeven, en ook niet eindeloos vasthouden. v5.177.0 (A10): die prijs komt
+uit de prijsverwachting voor de uren direct na de horizon als die er is,
+anders het 75e percentiel van de planprijzen (was de mediaan: de rest gaat
+naar de dure uren, niet naar een gemiddeld uur).
+
+v5.177.0 (A9): een kWh die uit de ACCU het net op gaat kan minder opbrengen
+dan een kWh zonoverschot (de zonnebonus van 2027 geldt alleen voor zon):
+`Kwartier.teruglever_accu_eur`.
 """
 from __future__ import annotations
 
@@ -67,6 +74,10 @@ class Kwartier:
     #: een marginale prijs rekent (saldering met een verwacht overschot:
     #: `inkoop_eur` is dan de prijs zonder belastingdeel). None = gelijk.
     prijs_incl_eur: float | None = None
+    #: v5.177.0 (A9): wat een kWh die uit de accu het net op gaat oplevert.
+    #: Vanaf 2027 zonder de zonnebonus (die geldt alleen voor zonnestroom).
+    #: None = gelijk aan `teruglever_eur`.
+    teruglever_accu_eur: float | None = None
 
 
 @dataclass
@@ -114,6 +125,13 @@ class Accu:
     #: plan dat ook niet. True = het mag, maar alleen als terugleveren minstens
     #: `verkoopmarge_eur` per kWh beter is dan opslaan voor later.
     zon_export_afdwingbaar: bool = False
+    #: v5.177.0 (A12): onder dit vermogen (W, netkant) laadt het plan niet
+    #: uit het net. Onder ~500 W haalde laden 72 % tegen 85 % bij 500-1500 W:
+    #: liever minder kwartieren op een hoger vermogen. 0 = `min_actie_w`.
+    min_laad_w: float = 0.0
+    #: v5.177.0 (A10): de (reken)prijs per kWh voor de uren direct na de
+    #: horizon, uit de prijsverwachting. None = 75e percentiel van het plan.
+    eindprijs_eur: float | None = None
 
 
 @dataclass
@@ -126,14 +144,22 @@ class Uitkomst:
     eindwaarde_eur_per_kwh: float | None = None
 
 
-def _kosten_stap(verbruik, zon, inkoop, teruglever, b, accu: Accu):
-    """Kosten van een stap voor een rij accustromen b (numpy)."""
+def _kosten_stap(verbruik, zon, inkoop, teruglever, b, accu: Accu, teruglever_accu=None):
+    """Kosten van een stap voor een rij accustromen b (numpy).
+
+    v5.177.0 (A9): van wat het net op gaat, telt het deel uit de accu tegen
+    `teruglever_accu` (zonder zonnebonus) en de rest (zon) tegen `teruglever`.
+    """
     g = verbruik - zon + b
-    kosten = np.where(g >= 0, g * inkoop, g * teruglever)
     uit = np.maximum(-b, 0.0)
+    naar_net = np.minimum(np.maximum(-g, 0.0), uit)
+    if teruglever_accu is None or teruglever_accu == teruglever:
+        export = g * teruglever
+    else:
+        export = (g + naar_net) * teruglever - naar_net * teruglever_accu
+    kosten = np.where(g >= 0, g * inkoop, export)
     kosten = kosten + uit * accu.slijtage_eur
     if accu.verkoopmarge_eur:
-        naar_net = np.minimum(np.maximum(-g, 0.0), uit)
         kosten = kosten + naar_net * accu.verkoopmarge_eur
     if accu.netlaadmarge_eur:
         # v5.165.0: alleen wat boven het zonoverschot uit het net komt.
@@ -192,7 +218,9 @@ def _ontlaadstappen(accu: Accu, eta_o: float) -> tuple[np.ndarray, np.ndarray]:
     return s[houden], -ac[houden]
 
 
-def actie_van(b: float, verbruik: float, zon: float, min_kwh: float = 0.0) -> tuple[str, float]:
+def actie_van(
+    b: float, verbruik: float, zon: float, min_kwh: float = 0.0, min_laad_kwh: float | None = None
+) -> tuple[str, float]:
     """Wat de accu in een kwartier doet, en hoeveel (kWh, AC).
 
     v5.172.0 (punt 2): een netlading of verkoop onder `min_kwh` is geen
@@ -201,11 +229,14 @@ def actie_van(b: float, verbruik: float, zon: float, min_kwh: float = 0.0) -> tu
     zonoverschot van 0,09 = `laden_net` 0,027 kWh, en de Zendure ging op
     manual. Nu: met zonoverschot 'zon' (de slimme stand laadt dat vanzelf),
     zonder 'houden'; een verkooprestje wordt 'huis'.
+    v5.177.0 (A12): een netlading telt vanaf `min_laad_kwh` (None = `min_kwh`).
     """
     overschot = max(zon - verbruik, 0.0)
     tekort = max(verbruik - zon, 0.0)
+    if min_laad_kwh is None:
+        min_laad_kwh = min_kwh
     if b > overschot + EPS_KWH:
-        if b - overschot >= min_kwh:
+        if b - overschot >= min_laad_kwh:
             return "laden_net", b - overschot
         if overschot > EPS_KWH:
             return "zon", overschot
@@ -237,7 +268,7 @@ def zon_opslag_stappen(
     return np.minimum(opslag, ruimte)
 
 
-def _zon_regel(k, accu: Accu, s: int, b: float, s_min, min_kwh: float):
+def _zon_regel(k, accu: Accu, s: int, b: float, s_min, min_kwh: float, min_laad_kwh: float = 0.0):
     """Welke inhouden deze stap mogen bij de zonregel, en wat hij extra kost
     (v5.175.0). (geldig-masker of None = alle, extra kosten per inhoud of 0)."""
     if s_min is None or s >= 0 and (s_min <= s).all():
@@ -248,7 +279,12 @@ def _zon_regel(k, accu: Accu, s: int, b: float, s_min, min_kwh: float):
     if accu.zon_export_afdwingbaar and s >= 0:
         # Terugleveren wat de slimme stand zou opslaan mag, met de marge.
         gemist = np.maximum(s_min - s, 0) * STAP_KWH
-        return None, gemist * accu.verkoopmarge_eur
+        # v5.177.0 (A11/A12): minder opslaan dan het overschot gaat met een
+        # vast laadvermogen (handmatig); onder de laadgrens alleen 0 W.
+        geldig = None
+        if 0 < s and b < min_laad_kwh - 1e-9:
+            geldig = s_min <= s
+        return geldig, gemist * accu.verkoopmarge_eur
     if s < 0:
         # Een ontlaadrestje onder de opdrachtgrens wordt 'huis' (smart): die
         # ontlaadt niet bij een overschot, maar slaat het op.
@@ -256,33 +292,75 @@ def _zon_regel(k, accu: Accu, s: int, b: float, s_min, min_kwh: float):
     return s_min <= s, 0.0
 
 
+def _kwartier_grenzen(k, accu: Accu, eta_l: float) -> tuple[float, float, float, int]:
+    """(uren, laadgrens, ontlaadgrens (kWh AC), grootste laadstap) van een
+    kwartier. v5.177.0 (A4): het lopende kwartier telt maar zijn resterende
+    uren; met een vast kwartier plande het meer dan er in de tijd past."""
+    uren = getattr(k, "uren", 0.25) or 0.25
+    max_op = int(accu.laden_kw * uren * eta_l / STAP_KWH + 1e-9)
+    return uren, accu.laden_kw * uren + 1e-9, accu.ontladen_kw * uren + 1e-9, max_op
+
+
+def _min_laad_kwh(accu: Accu, uren: float) -> float:
+    """De kleinste netlading (kWh AC) in een kwartier van `uren` (v5.177.0)."""
+    return (accu.min_laad_w or accu.min_actie_w) / 1000 * uren
+
+
+def _stap_toegestaan(accu: Accu, b: float, overschot: float, tekort: float, grenzen, eta_l: float) -> bool:
+    """Mag deze stap in dit kwartier? (v5.177.0, A4 en A12)
+
+    A12: een netlading tussen een afrondingsrestje (een halve stap boven het
+    zonoverschot) en de laadgrens voert de sturing niet uit ('zon'/'houden');
+    het plan rekende er wel mee: 13-23 kwartieren per dag 'afwijking accu'.
+    Zo'n stap bestaat nu niet meer in het plan.
+    """
+    uren, op, af, _max = grenzen
+    if b > op or -b > af:
+        return False
+    if b > 0 and not accu.netladen and b > overschot + 1e-9:
+        return False
+    if b < 0 and not accu.verkopen and -b > tekort + 1e-9:
+        return False
+    min_laad = _min_laad_kwh(accu, uren)
+    if b > 0 and min_laad > 0:
+        net = b - overschot
+        if STAP_KWH / eta_l / 2 + EPS_KWH < net < min_laad - 1e-9:
+            return False
+    return True
+
+
 def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=None,
-                  eta_l: float = 1.0, max_op: int = 0):
+                  eta_l: float = 1.0, max_op: int = 0, waardes: list | None = None):
     """Achterwaarts: per kwartier en inhoud de goedkoopste stap.
 
     `eis` = (kwartier, niveau): na dat kwartier minstens dat niveau.
     v5.175.0: met `accu.zon_opslaan` slaat elke stap die niet echt verkoopt
     minstens het zonoverschot op (zie `zon_opslag_stappen`).
+    v5.177.0: `waardes[t]` = de kosten-to-go na kwartier t (voor de waarde
+    van een netlading, A3); de grenzen per kwartier (A4, A12).
     """
     n = len(kwartieren)
     keuze = np.zeros((n, niveaus), dtype=np.int16)
     for t in range(n - 1, -1, -1):
         k = kwartieren[t]
+        if waardes is not None:
+            waardes[t] = waarde
         if eis is not None and t == eis[0]:
             waarde = waarde.copy()
             waarde[: eis[1]] = np.inf
         overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
         tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
+        grenzen = _kwartier_grenzen(k, accu, eta_l)
         beste = np.full(niveaus, np.inf)
         beste_s = np.zeros(niveaus, dtype=np.int16)
         s_min = None
         if accu.zon_opslaan and overschot > EPS_KWH:
-            s_min = zon_opslag_stappen(overschot, eta_l, max_op, niveaus, not accu.netladen)
-        min_kwh = accu.min_actie_w / 1000 * (getattr(k, "uren", 0.25) or 0.25)
+            s_min = zon_opslag_stappen(overschot, eta_l, grenzen[3], niveaus, not accu.netladen)
+        min_kwh = accu.min_actie_w / 1000 * grenzen[0]
+        min_laad = _min_laad_kwh(accu, grenzen[0])
+        tl_accu = getattr(k, "teruglever_accu_eur", None)
         for s, b in zip(stappen, b_stap):
-            if b > 0 and not accu.netladen and b > overschot + 1e-9:
-                continue
-            if b < 0 and not accu.verkopen and -b > tekort + 1e-9:
+            if not _stap_toegestaan(accu, float(b), overschot, tekort, grenzen, eta_l):
                 continue
             doel = np.arange(niveaus) + s
             geldig = (doel >= 0) & (doel < niveaus)
@@ -293,7 +371,7 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
                 geldig = geldig & (doel * STAP_KWH >= k.verkoop_vloer_kwh - 1e-9)
                 if not geldig.any():
                     continue
-            zon_geldig, extra = _zon_regel(k, accu, int(s), float(b), s_min, min_kwh)
+            zon_geldig, extra = _zon_regel(k, accu, int(s), float(b), s_min, min_kwh, min_laad)
             if zon_geldig is not None:
                 geldig = geldig & zon_geldig
                 if not geldig.any():
@@ -301,7 +379,7 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
             kosten = np.full(niveaus, np.inf)
             kosten[geldig] = (
                 _kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
-                             k.teruglever_eur, np.full(geldig.sum(), b), accu)
+                             k.teruglever_eur, np.full(geldig.sum(), b), accu, tl_accu)
                 + waarde[doel[geldig]]
                 + (extra[geldig] if isinstance(extra, np.ndarray) else extra)
             )
@@ -311,6 +389,136 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
         keuze[t] = beste_s
         waarde = beste
     return keuze
+
+
+def eindwaarde(kwartieren, accu: Accu, eta_o: float) -> float:
+    """Wat een kWh die aan het eind in de accu zit waard is (per kWh inhoud).
+
+    v5.165.0: tegen het rendement van de band van het gewone huisverbruik.
+    v5.177.0 (A10): de prijs van na de horizon (`accu.eindprijs_eur`, uit de
+    prijsverwachting), anders het 75e percentiel van de planprijzen. Met de
+    mediaan gaf het plan de lading aan het eind te goedkoop weg: wat er dan
+    nog in zit, gaat naar de dure uren.
+    """
+    huis_w = median(k.verbruik_kwh / (getattr(k, "uren", 0.25) or 0.25) for k in kwartieren) * 1000
+    basis = accu.eindprijs_eur
+    if basis is None:
+        basis = float(np.percentile([k.inkoop_eur for k in kwartieren], 75))
+    return max(0.0, basis * ontlaadrendement(huis_w, accu, eta_o) - accu.slijtage_eur)
+
+
+def _laadwaarde(waardes, t: int, i: int, eta_l: float) -> float | None:
+    """v5.177.0 (A3): wat het plan verwacht dat een kWh die in kwartier t uit
+    het net de accu in gaat later oplevert (EUR per kWh AC, na rendement en
+    slijtage): de marginale waarde van de inhoud na dat kwartier."""
+    v = waardes[t] if waardes is not None else None
+    if v is None or len(v) < 2:
+        return None
+    a, b = (i - 1, i) if i > 0 else (0, 1)
+    verschil = float(v[a] - v[b])
+    if not np.isfinite(verschil):
+        return None
+    return round(verschil / STAP_KWH * eta_l, 4)
+
+
+def _accu_ac_slim(rij: dict, k, accu: Accu, actie: str, i_voor: int, uren: float, eta_o: float) -> None:
+    """v5.177.0 (A12): wat de slimme standen werkelijk doen, aan de netkant.
+
+    'huis' (smart) dekt het hele tekort uit de accu (tot het vermogen en de
+    inhoud), 'houden' (smart_charging) zonder overschot doet niets. De stap
+    van 0,1 kWh in de inhoud gaf de planvolging een gepland vermogen dat de
+    accu niet kan volgen (400 W gepland bij een huis van 200 W)."""
+    if uren <= 0:
+        return
+    tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
+    if actie == "huis":
+        ac = min(tekort, accu.ontladen_kw * uren, i_voor * STAP_KWH * eta_o)
+    elif actie == "houden" and k.zon_kwh <= k.verbruik_kwh + EPS_KWH:
+        ac = 0.0
+    else:
+        return
+    # accu_kwh en net_kwh blijven de stap van het plan (rendement per band).
+    rij["accu_ac_w"] = round(ac / uren * 1000)
+
+
+def _rij_zon(rij: dict, k, accu: Accu, i_voor: int, uren: float, eta_l: float) -> None:
+    """v5.175.0: wat de slimme stand aan de netkant laadt (W, - = laden): het
+    hele overschot, tot het laadvermogen en tot vol. Ongeschaald door de stap
+    van 0,1 kWh, voor tabel en planvolging."""
+    ruimte_ac = max(0.0, (accu.bruikbaar_kwh - i_voor * STAP_KWH) / eta_l)
+    overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
+    ac = min(overschot, accu.laden_kw * uren, ruimte_ac)
+    rij["accu_ac_w"] = round(-ac / uren * 1000) if uren > 0 else 0
+    # v5.175.2: het net volgt dezelfde lading, niet de afgeronde stap
+    # (tabel: +212 W net bij 276 W overschot in de slimme stand).
+    rij["accu_kwh"] = round(ac, 3)
+    rij["net_kwh"] = round(k.verbruik_kwh - k.zon_kwh + ac, 3)
+
+
+def _zon_export(k, accu: Accu, actie: str, s: int, i_voor: int, niveaus: int, eta_l: float, max_op: int) -> bool:
+    """v5.177.0 (A11): slaat het plan minder op dan de slimme stand zou doen?
+    Dan moet de sturing het overschot laten terugleveren (handmatig, 0 W of
+    een vast laadvermogen) - de slimme standen laden het anders zelf op."""
+    if actie != "zon" or not (accu.zon_opslaan and accu.zon_export_afdwingbaar):
+        return False
+    overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
+    if overschot <= EPS_KWH:
+        return False
+    s_min = zon_opslag_stappen(overschot, eta_l, max_op, niveaus, not accu.netladen)
+    return s < int(s_min[i_voor])
+
+
+def _vooruit(kwartieren, accu: Accu, keuze, index, b_stap, i: int, niveaus: int,
+             eta_l: float, eta_o: float, waardes) -> tuple[list, float, float, int]:
+    """Vooruit langs de gekozen stappen: de planrijen en de kosten."""
+    rijen = []
+    kosten_plan = 0.0
+    kosten_zonder = 0.0
+    for t, k in enumerate(kwartieren):
+        s = int(keuze[t, i])
+        b = float(b_stap[index[s]])
+        uren, _op, _af, max_op = _kwartier_grenzen(k, accu, eta_l)
+        actie, kwh = actie_van(b, k.verbruik_kwh, k.zon_kwh, accu.min_actie_w / 1000 * uren,
+                               _min_laad_kwh(accu, uren))
+        g = k.verbruik_kwh - k.zon_kwh + b
+        kosten_plan += float(_kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur, k.teruglever_eur,
+                                          np.array([b]), accu, getattr(k, "teruglever_accu_eur", None))[0])
+        g0 = k.verbruik_kwh - k.zon_kwh
+        kosten_zonder += g0 * (k.inkoop_eur if g0 >= 0 else k.teruglever_eur)
+        i_voor = i
+        i = min(max(i + s, 0), niveaus - 1)
+        if _zon_export(k, accu, actie, s, i_voor, niveaus, eta_l, max_op):
+            actie, kwh = "zon_export", max(b, 0.0)
+        rij = {
+            "begin": k.begin,
+            "actie": actie,
+            "kwh": round(kwh, 3),
+            "accu_kwh": round(b, 3),
+            "net_kwh": round(g, 3),
+            "inhoud_kwh": round(i * STAP_KWH, 2),
+            "inhoud_delta_kwh": round((i - i_voor) * STAP_KWH, 2),
+            # v5.162.0: de grootste laadstap = vol vermogen. De stap van
+            # 0,1 kWh rondt af: bij 2,4 kW zou er 2.196 W op de accu staan.
+            # v5.177.0 (A4): de grootste stap van DIT kwartier.
+            "vol_vermogen": s > 0 and s == max_op,
+            # v5.168.0: wat het kwartier kost (incl. belasting) en waarmee
+            # het plan rekende (de marginale prijs, bij een overschot lager).
+            "prijs_eur": round(k.inkoop_eur if k.prijs_incl_eur is None else k.prijs_incl_eur, 4),
+            "rekenprijs_eur": round(k.inkoop_eur, 4),
+            # v5.165.0: de duur waarover verbruik en zon gelden.
+            "uren": round(uren, 4),
+            # v5.177.0 (A1): de verkoopvloer waarmee het plan rekende; de
+            # sturing houdt een verkoop alleen daaronder tegen.
+            "verkoop_vloer_kwh": round(k.verkoop_vloer_kwh, 2),
+        }
+        if actie == "laden_net":
+            rij["waarde_eur_per_kwh"] = _laadwaarde(waardes, t, i, eta_l)
+        if accu.zon_opslaan and actie == "zon":
+            _rij_zon(rij, k, accu, i_voor, uren, eta_l)
+        else:
+            _accu_ac_slim(rij, k, accu, actie, i_voor, uren, eta_o)
+        rijen.append(rij)
+    return rijen, kosten_plan, kosten_zonder, i
 
 
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
@@ -332,16 +540,12 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     b_stap = np.concatenate([af_b, op_s * STAP_KWH / eta_l])
     index = {int(st): j for j, st in enumerate(stappen)}
 
-    inkoop = [k.inkoop_eur for k in kwartieren]
-    # v5.165.0: wat er aan het eind in zit, gaat meestal naar het huis; dus
-    # het rendement van de band van het gewone huisverbruik. Met het ene
-    # (hogere) getal hield het plan de lading vast die het huis met 69 %
-    # zou dekken.
-    huis_w = median(k.verbruik_kwh / (getattr(k, "uren", 0.25) or 0.25) for k in kwartieren) * 1000
-    eind = max(0.0, median(inkoop) * ontlaadrendement(huis_w, accu, eta_o) - accu.slijtage_eur)
+    eind = eindwaarde(kwartieren, accu, eta_o)
     waarde = -e * eind                 # kosten-to-go aan het eind (negatief = waard)
-    # vooruit, vanaf de huidige inhoud
-    i = int(round(min(max(accu.inhoud_kwh, 0.0), accu.bruikbaar_kwh) / STAP_KWH))
+    # vooruit, vanaf de huidige inhoud. v5.177.0 (A12): naar beneden
+    # afgerond - 0,06 kWh telde als 0,1 en het plan ontlaadde aan het eind
+    # van de nacht een accu die al leeg stond (06:30: 267 W gepland, 0 gemeten).
+    i = int(min(max(accu.inhoud_kwh, 0.0), accu.bruikbaar_kwh) / STAP_KWH + 1e-6)
     i = min(i, niveaus - 1)
     i_start = i
     eis = None
@@ -350,53 +554,11 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
         # enkel plan over.
         t = accu.vol_na_kwartier
         eis = (t, min(niveaus - 1, i_start + (t + 1) * max_op))
-    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus, eis, eta_l, max_op)
-
-    rijen = []
-    kosten_plan = 0.0
-    kosten_zonder = 0.0
-    for t, k in enumerate(kwartieren):
-        s = int(keuze[t, i])
-        b = float(b_stap[index[s]])
-        uren = getattr(k, "uren", 0.25) or 0.25
-        actie, kwh = actie_van(b, k.verbruik_kwh, k.zon_kwh, accu.min_actie_w / 1000 * uren)
-        g = k.verbruik_kwh - k.zon_kwh + b
-        kosten_plan += float(_kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
-                                          k.teruglever_eur, np.array([b]), accu)[0])
-        g0 = k.verbruik_kwh - k.zon_kwh
-        kosten_zonder += g0 * (k.inkoop_eur if g0 >= 0 else k.teruglever_eur)
-        i_voor = i
-        i = min(max(i + s, 0), niveaus - 1)
-        rijen.append({
-            "begin": k.begin,
-            "actie": actie,
-            "kwh": round(kwh, 3),
-            "accu_kwh": round(b, 3),
-            "net_kwh": round(g, 3),
-            "inhoud_kwh": round(i * STAP_KWH, 2),
-            "inhoud_delta_kwh": round((i - i_voor) * STAP_KWH, 2),
-            # v5.162.0: de grootste laadstap = vol vermogen. De stap van
-            # 0,1 kWh rondt af: bij 2,4 kW zou er 2.196 W op de accu staan.
-            "vol_vermogen": s == max_op,
-            # v5.168.0: wat het kwartier kost (incl. belasting) en waarmee
-            # het plan rekende (de marginale prijs, bij een overschot lager).
-            "prijs_eur": round(k.inkoop_eur if k.prijs_incl_eur is None else k.prijs_incl_eur, 4),
-            "rekenprijs_eur": round(k.inkoop_eur, 4),
-            # v5.165.0: de duur waarover verbruik en zon gelden.
-            "uren": round(getattr(k, "uren", 0.25) or 0.25, 4),
-        })
-        if accu.zon_opslaan and actie == "zon":
-            # v5.175.0: wat de slimme stand aan de netkant laadt (W, - =
-            # laden): het hele overschot, tot het laadvermogen en tot vol.
-            # Ongeschaald door de stap van 0,1 kWh, voor tabel en planvolging.
-            ruimte_ac = max(0.0, (accu.bruikbaar_kwh - i_voor * STAP_KWH) / eta_l)
-            overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
-            ac = min(overschot, accu.laden_kw * uren, ruimte_ac)
-            rijen[-1]["accu_ac_w"] = round(-ac / uren * 1000) if uren > 0 else 0
-            # v5.175.2: het net volgt dezelfde lading, niet de afgeronde stap
-            # (tabel: +212 W net bij 276 W overschot in de slimme stand).
-            rijen[-1]["accu_kwh"] = round(ac, 3)
-            rijen[-1]["net_kwh"] = round(k.verbruik_kwh - k.zon_kwh + ac, 3)
+    waardes: list = [None] * n
+    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus, eis, eta_l, max_op, waardes)
+    rijen, kosten_plan, kosten_zonder, i = _vooruit(
+        kwartieren, accu, keuze, index, b_stap, i, niveaus, eta_l, eta_o, waardes
+    )
     # verschil in inhoud tegen de eindwaarde verrekenen (begin en eind)
     kosten_plan -= (i - i_start) * STAP_KWH * eind
     return Uitkomst(

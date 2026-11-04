@@ -40,13 +40,15 @@ def _c(make_coordinator, monkeypatch, config):
     return c
 
 
-def test_standaard_tien_cent():
-    assert DEFAULT_VERKOOP_MIN_WINST_CT == 10.0
-    assert abs(VERKOOP_NA_BLOK_MIN_WINST_EUR - 0.10) < 1e-9
+def test_standaard_twee_cent():
+    # v5.177.0 (B1, akkoord Ruud): de standaard is 2 ct (was 10).
+    assert DEFAULT_VERKOOP_MIN_WINST_CT == 2.0
+    assert abs(VERKOOP_NA_BLOK_MIN_WINST_EUR - 0.02) < 1e-9
 
 
 def test_casus_28_10_verkoopt_niet_meer(make_coordinator, monkeypatch):
-    c = _c(make_coordinator, monkeypatch, {})
+    # v5.177.0: met 10 ct ingesteld (niet meer de standaard).
+    c = _c(make_coordinator, monkeypatch, {CONF_VERKOOP_MIN_WINST_CT: 10})
     uit = c._verkoopreserve_uit(10.37, U, BLOK, BLOK_EIND, 0.555, _reeks())
     assert not uit["toegepast"]
     assert uit["reserve_kwh"] == 10.37
@@ -68,7 +70,7 @@ def test_instelbaar_twee_cent_is_het_oude_gedrag(make_coordinator, monkeypatch):
 
 def test_leeg_veld_valt_terug_op_standaard(make_coordinator, monkeypatch):
     c = _c(make_coordinator, monkeypatch, {CONF_VERKOOP_MIN_WINST_CT: None})
-    assert c._verkoop_min_winst_eur() == 0.10
+    assert c._verkoop_min_winst_eur() == 0.02
 
 
 def test_in_de_opties_en_vertalingen():

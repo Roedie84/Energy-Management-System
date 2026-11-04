@@ -1,3 +1,19 @@
+EMS v5.177.0 - grote controle: plan stuurt overal, minder meldingen
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- Het waardeplan stuurt nu echt: geen oude reserveregel meer die verkopen tegenhoudt,
+  oude regels alleen nog als terugval. Valt het plan uit, dan zie je dat in de status.
+- Verkopen mag vanaf 2 ct winst per kWh (was 10 ct).
+- Tot 1-1-2027 levert het plan zon terug als opslaan verlies geeft.
+- Een definitie van "accu leeg"; besparing rekent met het gemeten accuvermogen.
+- Meldingen: stil tussen 23:00 en 07:00 (behalve als je iets moet doen). Meldingen
+  waarbij je niets hoeft te doen staan alleen in het dagoverzicht. "Den accu haalt de
+  nacht neet" en "kump tekort" komen niet meer zolang het plan stuurt.
+- Airco: 's ochtends alleen verwarmen als jullie dat zelf vaak doen (L-EMS-063).
+- Sensoren zijn veel kleiner (geen SVG-plaatje meer in de cockpit-sensor);
+  'battery_protection' is verwijderd.
+
 EMS v5.176.4 - geen foutmelding meer als het weer bij het opstarten nog niet klaar is
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

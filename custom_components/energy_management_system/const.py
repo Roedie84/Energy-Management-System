@@ -1695,6 +1695,12 @@ SUSTAINED_HEAVY_LOAD_SOURCES = {"airco", "slaapkamer"}
 LIVING_ROOM_TEMP_BUCKET_SIZE_C = 0.5
 AIRCO_PREDICTION_LOOKAHEAD_MINUTES = 60
 AIRCO_PREDICTION_MIN_SAMPLES = 5
+# v5.177.0 (A16, L-EMS-063): 's ochtends (04:00-11:00, het ochtendvenster van
+# airco_ritme) alleen 'verwarmen' als jullie hem op dit soort dag minstens zo
+# vaak 's ochtends aanzetten. airco_besluit zei 8 van 8 ochtenden 'verwarmen'
+# omdat het binnen onder de 18,5 °C was, terwijl het dagritme werkdag 0 van 18
+# ochtenden en weekend 1 van 8 liet zien.
+AIRCO_OCHTEND_MIN_KANS = 0.30
 AIRCO_PREDICTION_HISTORY_LENGTH = 20
 # v5.58: per bakje hooguit één nieuwe waarneming per
 # AIRCO_PREDICTION_LOOKAHEAD_MINUTES. Tot v5.57 startte elke coordinator-
@@ -2330,7 +2336,12 @@ MARGE_TELT_NIET_MEE_SOORTEN = ("economisch", "onbekend")
 # blijft de accu voor het huis, en de echte pieken (70-80 ct) worden nog
 # wel verkocht.
 CONF_VERKOOP_MIN_WINST_CT = "verkoop_min_winst_ct"
-DEFAULT_VERKOOP_MIN_WINST_CT = 10.0
+# v5.177.0 (B1, akkoord Ruud): 2 ct/kWh (was 10). Het waardeplan rekent
+# rendement en slijtage al mee; 10 ct hield bijna elke verkoop tegen.
+DEFAULT_VERKOOP_MIN_WINST_CT = 2.0
+#: v5.177.0 (B1): een opgeslagen 10 ct (de oude standaard) wordt eenmalig 2 ct.
+VERKOOP_MIN_WINST_OUDE_STANDAARD_CT = 10.0
+CONF_VERKOOP_MIN_WINST_GEMIGREERD = "verkoop_min_winst_v5177"
 VERKOOP_NA_BLOK_MIN_WINST_EUR = DEFAULT_VERKOOP_MIN_WINST_CT / 100
 
 # Fallback threshold (kWh) for the emergency low-battery charge trigger,
@@ -2777,6 +2788,25 @@ REASON_REGISTRY: dict[str, dict] = {
         "waarom_vraag": "Waarom levert de accu niets?",
         "korte_naam": "accu leeg",
         "emoji": "🪫",
+    },
+    # v5.177.0 (A11): zon terugleveren in plaats van opslaan - tijdens de
+    # saldering levert een kWh terug de inkoopprijs op; opslaan loont dan
+    # alleen als het later meer oplevert dan prijs / rendement + slijtage.
+    "waardeplan_terugleveren": {
+        "mode": OPTION_MANUAL,
+        "titel": "Zon terugleveren (waardeplan)",
+        "uitleg": (
+            "Het zonoverschot gaat dit kwartier het net op in plaats van de "
+            "accu in: terugleveren levert nu meer op dan de stroom later uit "
+            "de accu waard is, na rendement en slijtage. De accu staat "
+            "handmatig op 0 W (of laadt een vast deel)."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "zon terugleveren (waardeplan)",
+        "waarom_vraag": "Waarom gaat de zon nu niet de accu in?",
+        "korte_naam": "waardeplan terugleveren",
+        "emoji": "🧮☀️",
     },
     "emergency_low_battery": {
         "mode": OPTION_MANUAL,
@@ -5127,8 +5157,11 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
     (
         "daily_summary",
         "Dagoverzicht",
-        "Een samenvatting van de dag: besparing, opbrengst, verbruik.",
-        False,
+        # v5.177.0 (B2b): standaard aan - meldingen met "Wat te doen: Niets"
+        # gaan niet meer naar de telefoon maar staan in dit overzicht.
+        "Een samenvatting van de dag: besparing, opbrengst, verbruik, en de "
+        "meldingen die niet naar de telefoon gingen.",
+        True,
         720,
     ),
     (
@@ -5575,6 +5608,38 @@ ZONNEPLAN_COST_MISMATCH_MIN_STANDEN = 3
 # Meldingen die een GEBEURTENIS beschrijven (apparaat klaar, goedkoop
 # blok begint, dagoverzicht) horen hier bewust niet bij: daar valt niets
 # aan te herstellen.
+# --- v5.177.0 (B2, akkoord Ruud): minder pushmeldingen -----------------
+# (a) Stille uren: van MELDING_STIL_VAN_UUR tot MELDING_STIL_TOT_UUR (lokaal)
+# gaat er niets naar de telefoon, behalve de kritieke meldingen die nu een
+# handeling vragen. Wat tegengehouden wordt, staat in de meldingengeschiedenis
+# met reden "stille uren" (en in het dagoverzicht).
+MELDING_STIL_VAN_UUR = 23
+MELDING_STIL_TOT_UUR = 7
+MELDING_STIL_REDEN = "stille uren"
+MELDING_STIL_TOEGESTAAN = frozenset(
+    {
+        "integration_error",
+        "interne_fout",
+        "accu_niet_aanstuurbaar",
+        "opdracht_niet_aangekomen",
+        "celspanning_laag",
+        "installatie_onvolledig",
+        "kalibratie_vol",
+        "sensor_unavailable",
+    }
+)
+# (b) Een melding waarvan het advies ("Wat te doen") met "Niets" begint, gaat
+# niet naar de telefoon maar alleen in het dagoverzicht. Eén regel in de
+# verzendfunctie, niet per aanroep. De overzichten zelf gaan wel.
+MELDING_DAGOVERZICHT_REDEN = "alleen in het dagoverzicht"
+MELDING_ALTIJD_PUSHEN = frozenset({"daily_summary", "monthly_summary"})
+#: Zoveel regels "ter kennisgeving" hooguit in het dagoverzicht.
+DAGOVERZICHT_MAX_MELDINGEN = 8
+# (c) Zolang het waardeplan stuurt, bestaan deze meldingen niet (ook niet in
+# het dagoverzicht): het plan laat de besparing al zien, en ze wisselden met
+# hun herstel (03-11: zes keer).
+MELDING_NIET_ONDER_WAARDEPLAN = frozenset({"battery_wont_last_night", "plan_tekort"})
+
 NOTIFICATION_RECOVERY_KINDS = {
     "sensor_unavailable": (
         "✅ Sensor is weer uitleesbaar",
@@ -7524,7 +7589,27 @@ WAARDEPLAN_HORIZON_UUR = 36
 # Wijkt de inhoud meer af van het plan, dan binnen het kwartier opnieuw rekenen.
 WAARDEPLAN_HERREKEN_AFWIJKING_KWH = 0.5
 # Onder dit vermogen geen handmatige opdracht (laden of verkopen).
-WAARDEPLAN_MIN_VERMOGEN_W = 150
+# v5.177.0 (A12): gelijk aan de grens van het plan (WAARDEPLAN_MIN_ACTIE_W,
+# hieronder): planner en sturing gebruiken één grens, zodat het plan nooit een
+# vermogen bevat dat de sturing niet stuurt. Was 150 tegen 400.
+WAARDEPLAN_MIN_VERMOGEN_W = 400.0
+# v5.177.0 (A12): netladen pas vanaf dit vermogen (W, netkant). Onder 500 W
+# haalde laden 72 % tegen 85 % bij 500-1500 W: minder kwartieren, hoger vermogen.
+WAARDEPLAN_MIN_LAAD_W = 500.0
+# v5.177.0 (A5): zoveel kwartieren moet het plan minstens hebben; bij een gat in
+# verbruik, zon of prijs knipt het plan de horizon daar af in plaats van weg te vallen.
+WAARDEPLAN_MIN_KWARTIEREN = 4
+# v5.177.0 (A5): slijtage (ct per kWh uit de accu) als de slijtageberekening
+# niets geeft: 3 x EUR 729 over 8,64 kWh x 6000 cycli = 4,22 ct.
+WAARDEPLAN_SLIJTAGE_TERUGVAL_CT = 4.22
+# v5.177.0 (A5): zo lang (minuten) zonder waardeplan wordt een aandachtspunt.
+WAARDEPLAN_WEG_AANDACHT_MINUTEN = 30
+# v5.177.0 (A10): zoveel uur na de horizon telt de prijsverwachting voor de
+# waarde van wat er aan het eind in de accu zit (75e percentiel).
+WAARDEPLAN_EINDPRIJS_UREN = 12
+# v5.177.0 (A13): was de weerentiteit bij het opstarten nog niet geladen, dan
+# na zoveel minuten opnieuw (in plaats van een ERROR en 30 minuten wachten).
+WEER_OPNIEUW_MINUTEN = 2
 CELBESCHERMING_START_V = 2.90
 CELBESCHERMING_BUFFER_KWH = 0.5
 CELBESCHERMING_VRIJ_KWH = 2.0
@@ -7902,8 +7987,6 @@ APPARAAT_LOOPT_NOG = frozenset({"run", "pause", "delayedstart", "actionrequired"
 # toestand is het tijdstip van de laatste druk).
 DASHBOARD_ONBEKEND_IS_NORMAAL = frozenset(
     {
-        # Geen ontlaadgrens actief: de kaart toont "geen grens actief".
-        "sensor.energy_management_system_battery_protection",
         # Nog te weinig waarnemingen in dit bakje: "nog niet genoeg
         # waarnemingen".
         "sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur",
@@ -8131,6 +8214,7 @@ SOC_DEMPER_STROOM_FRACTIE = 0.5
 # Zendure op manual. 400 W = 0,1 kWh per kwartier; onder ~500 W ontlaadt de
 # Zendure op ~69 % en elke wissel is een schrijfactie.
 WAARDEPLAN_MIN_ACTIE_W = 400.0
+assert WAARDEPLAN_MIN_VERMOGEN_W == WAARDEPLAN_MIN_ACTIE_W  # v5.177.0 (A12): één grens
 
 # Punt 4: de effectieve ondergrens. Stopt de accu met leveren terwijl het huis
 # nog van het net neemt en de stand de accu laat leveren (smart), ruim boven de

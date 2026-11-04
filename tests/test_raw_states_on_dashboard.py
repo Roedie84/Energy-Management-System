@@ -58,12 +58,12 @@ def test_the_bridge_check_is_translated():
     assert "nog niet beoordeeld" in tekst
 
 
-def test_the_battery_protection_has_a_unit():
-    """"1600.0" is een getal zonder betekenis."""
-    kaart = _kaart_voor("battery_protection")
+def test_the_battery_protection_is_gone():
+    """v5.177.0 (A13): de sensor stond sinds het waardeplan altijd op
+    'unknown'; hij en zijn kaart zijn weg."""
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
 
-    assert "W ontlaadgrens" in str(kaart)
-    assert "geen grens actief" in str(kaart)
+    assert "battery_protection" not in yaml_tekst
 
 
 # --- borging ---------------------------------------------------------
@@ -91,7 +91,7 @@ def test_these_three_cards_are_template_cards():
     for sleutel in (
         "simulated_action",
         "energy_bridge_check",
-        "battery_protection",
+        # v5.177.0 (A13): battery_protection is verwijderd.
     ):
         kaart = _kaart_voor(sleutel)
         assert "template-card" in str(kaart.get("type")), sleutel

@@ -159,7 +159,7 @@ def test_cockpit_een_keer_per_toestand(make_coordinator, hass):
 
     assert waarde == "GOED"
     assert attributen["reden"] == "alles goed"
-    assert attributen["plaat"]
+    assert "plaat" not in attributen  # v5.177.0 (A14)
     assert len(keren) == 1
 
 

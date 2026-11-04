@@ -162,7 +162,8 @@ def test_coordinator_gebruikt_de_correctie_alleen_bij_netladen():
 def test_laadwaarde_zonder_correctie_vastgelegd():
     from custom_components.energy_management_system.coordinator import EnergyManagementSystemCoordinator as C
 
-    c = SimpleNamespace(last_laadbesluit={"laden": True, "waarde_eur": 0.30, "datacorrectie_ct": 1.5})
+    c = SimpleNamespace(last_laadbesluit={"laden": True, "waarde_eur": 0.30, "datacorrectie_ct": 1.5},
+                        _waardeplan_stuurt_nu=lambda: False)  # v5.177.0 (A3)
     assert C._laad_waarde_ct(c) == pytest.approx(31.5)
     c.last_laadbesluit = {"laden": False, "waarde_eur": 0.30}
     assert C._laad_waarde_ct(c) is None

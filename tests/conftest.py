@@ -449,6 +449,10 @@ def make_coordinator(hass, coordinator_cls):
             "beschikbaar": False,
             "reden": "niet van toepassing in de toetsomgeving",
         }
+        # v5.177.0 (B2a): de stille uren hangen van de klok af; de toetsen
+        # mogen niet anders uitvallen als ze 's nachts draaien. Standaard
+        # uit; tests/test_v5177_meldingen.py zet ze zelf aan.
+        c._stille_uren = lambda now: False
         return c
 
     return _make

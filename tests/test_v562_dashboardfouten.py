@@ -260,7 +260,6 @@ def test_de_borging_had_de_fout_gevonden():
     [
         "button.water_was_toilet",
         "button.water_was_douche",
-        "sensor.energy_management_system_battery_protection",
         "sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur",
     ],
 )

@@ -317,11 +317,23 @@ def _verwerk(partijen, tel, dag, r, delta, eta_laad, eta_ontlaad, slijtage_eur) 
     _boek_levering(partijen, tel, dag, weg, eta_ontlaad, eta_laad, prijs, slijtage_eur, _korting(r))
 
 
+def _laadverwachting(r: dict) -> float | None:
+    """De verwachte waarde van een netlading (ct per kWh die erin ging).
+
+    v5.177.0 (A3): onder het waardeplan (reden 'waardeplan_*') kwam die tot
+    v5.177.0 uit het bevroren laadbesluit van de oude regels; zulke regels
+    (zonder `laad_waarde_bron`) tellen niet mee in de datacorrectie.
+    """
+    if str(r.get("reden") or "").startswith("waardeplan_") and r.get("laad_waarde_bron") != "waardeplan":
+        return None
+    return _getal(r, "laad_waarde_ct")
+
+
 def _boek_lading(partijen, tel, dag, r, opgeslagen, eta_laad, prijs) -> None:
     """`opgeslagen` kWh erbij, verdeeld over net en zon naar de netmeter."""
     dagtel = _dagtel(tel, dag)
     net = _aandeel_net(r)
-    verwacht = _getal(r, "laad_waarde_ct")
+    verwacht = _laadverwachting(r)
     for bron, deel in (("net", net), ("zon", 1.0 - net)):
         kwh = opgeslagen * deel
         if kwh <= 0:

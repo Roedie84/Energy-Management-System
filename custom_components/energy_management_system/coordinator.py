@@ -690,6 +690,21 @@ from .const import (
     WAARDEPLAN_HORIZON_UUR,
     WAARDEPLAN_HERREKEN_AFWIJKING_KWH,
     WAARDEPLAN_MIN_VERMOGEN_W,
+    # v5.177.0
+    WAARDEPLAN_MIN_LAAD_W,
+    WAARDEPLAN_MIN_KWARTIEREN,
+    WAARDEPLAN_SLIJTAGE_TERUGVAL_CT,
+    WAARDEPLAN_WEG_AANDACHT_MINUTEN,
+    WAARDEPLAN_EINDPRIJS_UREN,
+    WEER_OPNIEUW_MINUTEN,
+    MELDING_STIL_VAN_UUR,
+    MELDING_STIL_TOT_UUR,
+    MELDING_STIL_REDEN,
+    MELDING_STIL_TOEGESTAAN,
+    MELDING_DAGOVERZICHT_REDEN,
+    MELDING_ALTIJD_PUSHEN,
+    DAGOVERZICHT_MAX_MELDINGEN,
+    MELDING_NIET_ONDER_WAARDEPLAN,
     VASTE_NACHT_VAN_UUR,
     VASTE_NACHT_TOT_UUR,
     HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH,
@@ -1219,7 +1234,7 @@ def _tel_rangorde(paren: list[tuple[float, float]]) -> tuple[int, int]:
     return eens, totaal
 
 
-def accu_is_leeg(soc, inhoud_kwh, vloer: float) -> bool:
+def accu_is_leeg(soc, inhoud_kwh, vloer: float, grens_kwh: float | None = None) -> bool:
     """Staat de accu leeg, voor de tekortmeting? (v5.33, v5.171.0)
 
     Leeg: de laadstand op de vloer (minimum + TEKORT_LEEG_MARGE_PROCENT), of
@@ -1227,7 +1242,14 @@ def accu_is_leeg(soc, inhoud_kwh, vloer: float) -> bool:
     TEKORT_LEEG_INHOUD_KWH, los van de laadstand: een module die eerder op
     zijn celgrens zit, maakt de accu leeg bij 15-16 %. Geen van beide
     bekend: niet leeg.
+
+    v5.177.0 (A7): met `grens_kwh` (zie `EnergyManagementSystemCoordinator.
+    accu_leeg_grens_kwh`) beslist de gecorrigeerde inhoud als die bekend is:
+    leeg tot en met die grens (de marge boven de ondergrens in kWh). Alleen
+    zonder inhoud de laadstand.
     """
+    if grens_kwh is not None and isinstance(inhoud_kwh, (int, float)):
+        return inhoud_kwh <= grens_kwh + 1e-9
     if isinstance(inhoud_kwh, (int, float)) and inhoud_kwh < TEKORT_LEEG_INHOUD_KWH:
         return True
     return isinstance(soc, (int, float)) and soc <= vloer
@@ -5574,6 +5596,54 @@ class EnergyManagementSystemCoordinator:
             return False
         return (now - moment).total_seconds() / 60 < venster
 
+    def _push_tegenhouden(self, soort: str | None, now: datetime) -> str | None:
+        """Waarom deze melding niet naar de telefoon gaat, of None (v5.177.0, B2).
+
+        Eén regel voor alle meldingen (akkoord Ruud):
+        (b) begint het advies "Wat te doen" met "Niets", dan alleen in het
+            dagoverzicht - een herstelmelding volgt het advies van haar
+            probleemmelding;
+        (a) tussen 23:00 en 07:00 alleen de kritieke meldingen die nu een
+            handeling vragen (MELDING_STIL_TOEGESTAAN).
+        """
+        if not soort:
+            return None
+        basis = soort.removesuffix("_hersteld")
+        if soort not in MELDING_ALTIJD_PUSHEN:
+            advies = MELDING_ADVIES.get(soort) or MELDING_ADVIES.get(basis)
+            if advies and str(advies[1]).strip().lower().startswith("niets"):
+                return MELDING_DAGOVERZICHT_REDEN
+        if basis not in MELDING_STIL_TOEGESTAAN and self._stille_uren(now):
+            return MELDING_STIL_REDEN
+        return None
+
+    def _stille_uren(self, now: datetime) -> bool:
+        """Valt `now` in de stille uren (23:00-07:00 lokaal)? (v5.177.0, B2a)"""
+        uur = dt_util.as_local(now).hour
+        return uur >= MELDING_STIL_VAN_UUR or uur < MELDING_STIL_TOT_UUR
+
+    def _dagoverzicht_meldingen(self, now: datetime | None = None) -> str:
+        """De meldingen die niet gepusht zijn, compact voor het dagoverzicht
+        (v5.177.0, B2): sinds het vorige dagoverzicht, per titel geteld."""
+        now = now or dt_util.now()
+        vorige = dt_util.parse_datetime(self.notification_last_sent.get("daily_summary") or "")
+        vanaf = vorige or dt_util.as_local(now).replace(hour=0, minute=0, second=0, microsecond=0)
+        tellingen: dict[str, int] = {}
+        for regel in self.notification_history or []:
+            if regel.get("reden_niet_verstuurd") not in (MELDING_DAGOVERZICHT_REDEN, MELDING_STIL_REDEN):
+                continue
+            moment = dt_util.parse_datetime(regel.get("moment") or "")
+            if moment is None or moment <= vanaf:
+                continue
+            titel = str(regel.get("titel") or regel.get("soort") or "?").strip()
+            tellingen[titel] = tellingen.get(titel, 0) + 1
+        if not tellingen:
+            return ""
+        delen = [f"{t} ({n}x)" if n > 1 else t for t, n in list(tellingen.items())[:DAGOVERZICHT_MAX_MELDINGEN]]
+        if len(tellingen) > DAGOVERZICHT_MAX_MELDINGEN:
+            delen.append(f"en {len(tellingen) - DAGOVERZICHT_MAX_MELDINGEN} meer")
+        return "\n\nTer kennisgeving (niet gepusht): " + "; ".join(delen) + "."
+
     def is_notification_allowed(self, kind: str, now: datetime) -> tuple[bool, str]:
         """Mag deze melding nu verstuurd worden? (v1.2.0)
 
@@ -5700,39 +5770,12 @@ class EnergyManagementSystemCoordinator:
             return False
         return (now - sinds).total_seconds() >= NACHT_TEKORT_AANHOUDEND_MIN * 60
 
-    def _evaluate_new_notifications(self, now: datetime) -> None:
-        """De meldingen die in v1.2.0 zijn toegevoegd (v1.2.0).
-
-        Allemaal gebaseerd op waarden die de coordinator toch al
-        berekent - er wordt hier niets extra gemeten. Elke melding gaat
-        via `_dispatch_notification` met zijn eigen soort, dus de
-        schakelaar en het dempingsvenster gelden automatisch; deze
-        functie hoeft daar niets voor te doen.
-        """
-        notify = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
-        # De coordinator bewaart deze twee al als `last_*`; ze hier
-        # opnieuw laten doorgeven zou een tweede waarheid opleveren die
-        # uit de pas kan lopen met wat de beslislogica gebruikte.
-        cheap_block_start = self.last_cheap_block_start
-        discharge_start = self.last_discharge_start
-
-        # v1.6.2: welke TOESTAND-meldingen deze ronde afgingen. Wat er
-        # vorige ronde in stond en nu niet meer, is opgelost - en dat
-        # verdient een herstelmelding.
-        actief_nu: list[str] = []
-
-        def stuur(kind: str, titel: str, bericht: str) -> None:
-            if kind in NOTIFICATION_RECOVERY_KINDS:
-                actief_nu.append(kind)
-            self._dispatch_notification(
-                notify_service=notify,
-                title=titel,
-                message=bericht,
-                notification_id=f"ems_{kind}",
-                kind=kind,
-            )
-
-        # --- accu en energie ---
+    def _meld_nacht_tekort(self, now: datetime, stuur) -> None:
+        """"Accu haalt de nacht niet" (v5.13, uit `_evaluate_new_notifications`
+        gehaald in v5.177.0). v5.177.0 (B2c): zolang het waardeplan stuurt,
+        bestaat deze melding niet; alleen onder de oude regels."""
+        if self._plan_volgt_waardeplan():
+            return
         beschikbaar = self.last_available_kwh
         # v5.13: vergelijken met wat er WERKELIJK nodig is, niet met de
         # reserve inclusief veiligheidsmarge. Op 18 september 06:58 was er
@@ -5777,6 +5820,42 @@ class EnergyManagementSystemCoordinator:
                     "spaart de accu voor de duurste uren."
                     + self._tekort_soort_zin(),
                 )
+
+    def _evaluate_new_notifications(self, now: datetime) -> None:
+        """De meldingen die in v1.2.0 zijn toegevoegd (v1.2.0).
+
+        Allemaal gebaseerd op waarden die de coordinator toch al
+        berekent - er wordt hier niets extra gemeten. Elke melding gaat
+        via `_dispatch_notification` met zijn eigen soort, dus de
+        schakelaar en het dempingsvenster gelden automatisch; deze
+        functie hoeft daar niets voor te doen.
+        """
+        notify = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+        # De coordinator bewaart deze twee al als `last_*`; ze hier
+        # opnieuw laten doorgeven zou een tweede waarheid opleveren die
+        # uit de pas kan lopen met wat de beslislogica gebruikte.
+        cheap_block_start = self.last_cheap_block_start
+        discharge_start = self.last_discharge_start
+
+        # v1.6.2: welke TOESTAND-meldingen deze ronde afgingen. Wat er
+        # vorige ronde in stond en nu niet meer, is opgelost - en dat
+        # verdient een herstelmelding.
+        actief_nu: list[str] = []
+
+        def stuur(kind: str, titel: str, bericht: str) -> None:
+            if kind in NOTIFICATION_RECOVERY_KINDS:
+                actief_nu.append(kind)
+            self._dispatch_notification(
+                notify_service=notify,
+                title=titel,
+                message=bericht,
+                notification_id=f"ems_{kind}",
+                kind=kind,
+            )
+
+        # --- accu en energie ---
+        # v5.177.0: eigen functie (ratel); onder het waardeplan niets (B2c).
+        self._meld_nacht_tekort(now, stuur)
 
         # v1.31.1: rechtstreeks, zie `accustand_procent`.
         soc = self.accustand_procent()
@@ -6149,6 +6228,12 @@ class EnergyManagementSystemCoordinator:
         nu = now or dt_util.now()
         if self._voorwaarde_weg_sinds is None:
             self._voorwaarde_weg_sinds = {}
+        # v5.177.0 (B2c): onder het waardeplan verdwijnen deze toestanden
+        # stil - geen herstelmelding voor een melding die niet meer bestaat.
+        if self._plan_volgt_waardeplan():
+            self.notification_active_conditions = [
+                k for k in self.notification_active_conditions if k not in MELDING_NIET_ONDER_WAARDEPLAN
+            ]
         opgelost = []
         nog_niet = []
         for kind in self.notification_active_conditions:
@@ -7486,6 +7571,8 @@ class EnergyManagementSystemCoordinator:
             f"{self.grid_import_today_kwh:.1f} kWh van het net. "
             f"Kosten {self.actual_cost_today_eur:.2f} € tegenover "
             f"{self.counterfactual_cost_today_eur:.2f} € zonder accu - {zin}"
+            # v5.177.0 (B2): wat niet naar de telefoon ging.
+            + self._dagoverzicht_meldingen()
         )
 
     def get_savings_correction(self) -> dict:
@@ -12406,7 +12493,7 @@ class EnergyManagementSystemCoordinator:
 
         if reden in (
             "waardeplan_laden", "waardeplan_verkopen", "waardeplan_huis", "waardeplan_houden",
-            "waardeplan_leeg",
+            "waardeplan_leeg", "waardeplan_terugleveren",
         ):
             # v5.158.0
             return self._waarom_waardeplan()
@@ -16996,6 +17083,16 @@ class EnergyManagementSystemCoordinator:
     def _laad_waarde_ct(self) -> float | None:
         """Wat het laadbesluit van dit moment verwachtte dat een kWh uit het
         net waard wordt (ct per kWh die erin gaat), als er geladen wordt."""
+        # v5.177.0 (A3): zolang het waardeplan stuurt, draait het oude
+        # laadbesluit niet en bleef `last_laadbesluit` bevroren staan; de
+        # datacorrectie (accukosten.correctie -> netlaadmarge) leerde dan van
+        # een verwachting die niet meer bestond. Nu de eigen verwachting van
+        # het plan voor deze netlading: de marginale waarde van de lading.
+        if self._waardeplan_stuurt_nu():
+            nu = (self.last_waardeplan or {}).get("nu") or {}
+            if nu.get("actie") != "laden_net" or nu.get("waarde_eur_per_kwh") is None:
+                return None
+            return round(float(nu["waarde_eur_per_kwh"]) * 100, 2)
         besluit = self.last_laadbesluit or {}
         if not besluit.get("laden") or besluit.get("waarde_eur") is None or besluit.get("verdringt_zon"):
             return None
@@ -21455,21 +21552,30 @@ class EnergyManagementSystemCoordinator:
         # Nu schrijft deze functie die regel, met de tekst die
         # daadwerkelijk is verstuurd.
         if geschiedenis_soort is not None:
-            self.notification_history.append(
-                {
-                    "moment": now.isoformat(),
-                    "soort": geschiedenis_soort,
-                    "titel": title,
-                    "bericht": message,
-                }
-            )
+            # v5.177.0 (B2): stille uren en "Niets"-advies ook voor herstel.
+            tegen = self._push_tegenhouden(geschiedenis_soort, now) if kind is None else None
+            regel = {
+                "moment": now.isoformat(),
+                "soort": geschiedenis_soort,
+                "titel": title,
+                "bericht": message,
+            }
+            if tegen:
+                regel.update({"verstuurd": False, "reden_niet_verstuurd": tegen})
+            self.notification_history.append(regel)
             self.notification_history = self.notification_history[
                 -NOTIFICATION_HISTORY_LENGTH:
             ]
+            if tegen:
+                self.schedule_persisted_state_save()
+                return
 
         toegestaan = True
         if kind is not None:
             toegestaan, reden = self.is_notification_allowed(kind, now)
+            # v5.177.0 (B2): de centrale regels voor stille uren en "Niets".
+            if toegestaan and (tegen := self._push_tegenhouden(kind, now)):
+                toegestaan, reden = False, tegen
 
             # v1.12.5, gevraagd: "Als ik door een button een melding
             # uitzet moet hij niet meer naar mijn iPhone, maar nog wel
@@ -25813,7 +25919,9 @@ class EnergyManagementSystemCoordinator:
         return {
             "nabeschouwing_7d": nabeschouwing,
             # De laatste 24 (de diagnostiek heeft er 48): attribuut klein houden.
-            "reserve_sprongen": list(self.reserve_sprongen)[-24:],
+            # v5.177.0 (A14): de laatste 12, compact (alleen wat veranderde):
+            # 24 volle sprongen waren 23,8 kB.
+            "reserve_sprongen": [self._sprong_kort(r) for r in list(self.reserve_sprongen)[-12:]],
             "reserve_sprongen_aantal": sum(
                 1 for r in self.reserve_sprongen
                 if not (isinstance(r, dict) and (r.get("na_herstart") or r.get("alleen_behoefte")))
@@ -25840,6 +25948,24 @@ class EnergyManagementSystemCoordinator:
             "spaarplan_eigen_tot_blok_kwh": plan.get("spaarplan_eigen_tot_blok_kwh"),
             "spaarplan_nodig_tot_blok_kwh": plan.get("nodig_tot_blok_kwh"),
         }
+
+    @staticmethod
+    def _sprong_kort(r) -> dict:
+        """Een reservesprong compact voor het attribuut (v5.177.0, A14): de
+        rondetijden weg, van de paren [oud, nieuw] alleen wat veranderde,
+        van de bijdragen alleen wat niet nul is."""
+        if not isinstance(r, dict):
+            return r
+        uit = {}
+        for k, v in r.items():
+            if k in ("ronde_oud", "ronde_nieuw"):
+                continue
+            if isinstance(v, list) and len(v) == 2 and v[0] == v[1]:
+                continue
+            if k == "bijdragen_kwh" and isinstance(v, dict):
+                v = {kk: vv for kk, vv in v.items() if vv}
+            uit[k] = v
+        return uit
 
     @staticmethod
     def _huis_gaat_voor_kpi(verkoop: list, regeloverschot: dict) -> dict:
@@ -26865,6 +26991,8 @@ class EnergyManagementSystemCoordinator:
         "huis": "smart",
         "houden": "smart_charging (sparen)",
         "zon": "smart",
+        # v5.177.0 (A11): zon terugleveren in plaats van opslaan.
+        "zon_export": "manual (terugleveren)",
     }
 
     def _met_waardeplan(self, plan: list[dict]) -> list[dict]:
@@ -26887,6 +27015,7 @@ class EnergyManagementSystemCoordinator:
         bruikbaar = capaciteit * (100 - min_soc) / 100 if capaciteit else None
         uit = []
         eerste = rijen[0]
+        leeg_kwh = self.accu_leeg_grens_plan_kwh()  # v5.177.0 (A7)
         # v5.175.0: "tot bijladen" = tot de eerste netlading van het
         # waardeplan, niet tot het goedkope blok van de oude planning.
         geladen = False
@@ -26917,7 +27046,7 @@ class EnergyManagementSystemCoordinator:
             # rendement in de cellen komt (toonde 2,0 kW bij 2,4 kW laden).
             if r.get("actie") == "laden_net":
                 nieuw["laden_w"] = self._waardeplan_laadvermogen_w(r)
-            nieuw["tekort"] = self._waardeplan_tekort(r)
+            nieuw["tekort"] = self._waardeplan_tekort(r, leeg_kwh)
             nieuw["bron"] = "waardeplan"
             if bruikbaar:
                 nieuw["soc_procent"] = round(min_soc + (100 - min_soc) * r["inhoud_kwh"] / bruikbaar)
@@ -26926,7 +27055,7 @@ class EnergyManagementSystemCoordinator:
         return uit
 
     @staticmethod
-    def _waardeplan_tekort(rij: dict) -> bool:
+    def _waardeplan_tekort(rij: dict, leeg_kwh: float = PLAN_SPAREN_LEEG_KWH) -> bool:
         """Hangt het huis in dit waardeplankwartier aan het net omdat de accu
         niets meer kan leveren? (v5.164.1)
 
@@ -26938,11 +27067,12 @@ class EnergyManagementSystemCoordinator:
         een keuze van het plan (bewaren voor duurder), net als laden en
         verkopen.
         """
-        if rij.get("actie") in ("laden_net", "verkopen"):
+        if rij.get("actie") in ("laden_net", "verkopen", "zon_export"):
             return False
         if (rij.get("net_kwh") or 0.0) <= 0.01:
             return False
-        return (rij.get("inhoud_kwh") or 0.0) <= PLAN_SPAREN_LEEG_KWH
+        # v5.177.0 (A7): de grens van `accu_leeg`, op de stap van het plan.
+        return (rij.get("inhoud_kwh") or 0.0) <= leeg_kwh + 1e-9
 
     @staticmethod
     def _waardeplan_net_kwh(rij: dict, uren: float | None, eerste: bool) -> float | None:
@@ -27114,7 +27244,8 @@ class EnergyManagementSystemCoordinator:
                 {k: v for k, v in r.items() if k in ("van", "gepland_accu_w", "gemeten_accu_w", "oorzaak", "status")}
                 for r in self._planvolging_kwartieren[-8:]
             ],
-            "dagen": list(self.planvolging_dagen[-14:]),
+            # v5.177.0 (A14): 7 dagen op de sensor (de diagnostiek heeft er 30).
+            "dagen": list(self.planvolging_dagen[-7:]),
         }
 
     def get_laadplan_gewijzigd(self) -> dict:
@@ -27338,7 +27469,7 @@ class EnergyManagementSystemCoordinator:
                 soc, net = self._plan_laadkwartier(
                     soc, bruikbaar, geladen, laad_kwh, netregels, min_soc, verbruik, zon
                 )
-            elif soc > PLAN_SPAREN_LEEG_KWH and (
+            elif soc > self.accu_leeg_grens_plan_kwh() and (  # v5.177.0 (A7)
                 # v5.156.0: een lege accu spaart niets - dan "smart", zodat
                 # een netafname als tekort telt (zie PLAN_SPAREN_LEEG_KWH).
                 start in netregels["gespaard"]
@@ -27591,10 +27722,25 @@ class EnergyManagementSystemCoordinator:
             )
         except Exception:  # noqa: BLE001 - de tabel mag hier niet op stuklopen
             vermogens = [{} for _ in plan]
+        # v5.177.0 (A14): standaardwaarden weg (dag "", gewijzigd/tekort
+        # False, eerst_voorspeld zonder wijziging): 64 regels x ~75 tekens.
+        # Cockpit en dashboard lezen ze als waar/onwaar of leeg.
         return [
-            {**{veld: regel.get(veld) for veld in velden}, **extra}
+            self._compacte_planregel({**{veld: regel.get(veld) for veld in velden}, **extra})
             for regel, extra in zip(plan, vermogens)
         ]
+
+    @staticmethod
+    def _compacte_planregel(r: dict) -> dict:
+        """Een planregel zonder velden met hun standaardwaarde (v5.177.0, A14)."""
+        if not r.get("dag"):
+            r.pop("dag", None)
+        if not r.get("gewijzigd"):
+            r.pop("gewijzigd", None)
+            r.pop("eerst_voorspeld", None)
+        if not r.get("tekort"):
+            r.pop("tekort", None)
+        return r
 
     def _plan_startvoorraad_kwh(self) -> float | None:
         """De bruikbare voorraad nu, het beginpunt van het kwartierplan (v5.146.0)."""
@@ -28103,6 +28249,12 @@ class EnergyManagementSystemCoordinator:
         )
         # v5.118.0: de melding toetst de mediaan van de laatste 15 minuten.
         tekorten = self._plan_tekort_gedempt(now, tekorten)
+        if self._plan_volgt_waardeplan():
+            # v5.177.0 (B2c): geen plan_tekort (en geen herstel) onder het
+            # waardeplan; het wisselde 03-11 zes keer met zijn herstel.
+            self._last_plan_alert.pop("plan_tekort", None)
+            self.last_plan_shortfall["vrij_sinds"] = None
+            tekorten = -1
 
         if tekorten >= PLAN_SHORTFALL_ALERT_MIN_QUARTERS:
             self.last_plan_shortfall["vrij_sinds"] = None
@@ -28117,7 +28269,7 @@ class EnergyManagementSystemCoordinator:
                     f"{samenvatting.get('laagste_soc_procent')}%."
                 ),
             )
-        elif tekorten > 0:
+        elif tekorten > 0 or tekorten < 0:
             # Eén of twee kwartieren: ruis rond de rekengrens. Geen
             # melding, maar de teller voor "hersteld" ook niet starten -
             # er is immers nog een tekort.
@@ -28227,6 +28379,7 @@ class EnergyManagementSystemCoordinator:
         if not self._plan_volgt_waardeplan():
             return None
         rijen = self._waardeplan_rijen or []
+        leeg_kwh = self.accu_leeg_grens_plan_kwh()  # v5.177.0 (A7)
         tot, na = 0.0, 0.0
         geladen = False
         perioden: list[list] = []
@@ -28235,7 +28388,7 @@ class EnergyManagementSystemCoordinator:
         for r in rijen:
             if r.get("actie") == "laden_net":
                 geladen = True
-            if self._waardeplan_tekort(r):
+            if self._waardeplan_tekort(r, leeg_kwh):
                 net = max(0.0, float(r.get("net_kwh") or 0.0))
                 if geladen:
                     na += net
@@ -28251,7 +28404,7 @@ class EnergyManagementSystemCoordinator:
             elif (
                 not eerste_tekort and r.get("actie") == "houden"
                 and float(r.get("net_kwh") or 0.0) > 0.01
-                and float(r.get("inhoud_kwh") or 0.0) > PLAN_SPAREN_LEEG_KWH
+                and float(r.get("inhoud_kwh") or 0.0) > leeg_kwh + 1e-9
             ):
                 inhoud = float(r.get("inhoud_kwh") or 0.0)
                 vastgehouden = inhoud if vastgehouden is None else max(vastgehouden, inhoud)
@@ -28566,6 +28719,8 @@ class EnergyManagementSystemCoordinator:
             # v5.115.0: wat het laadbesluit verwachtte dat een kWh uit het net
             # waard wordt, zodat de nacalculatie (accukosten.py) het kan toetsen.
             "laad_waarde_ct": self._laad_waarde_ct(),
+            # v5.177.0 (A3): waar die verwachting vandaan komt.
+            "laad_waarde_bron": "waardeplan" if self._waardeplan_stuurt_nu() else None,
             # v5.168.0: het belastingdeel dat de beslissingen van de prijs
             # aftrokken (salderingsoverschot); de nacalculatie rekent ermee.
             "korting_ct": round(k * 100, 2) if (k := self._salderingskorting_eur(now)) else None,
@@ -30860,33 +31015,24 @@ class EnergyManagementSystemCoordinator:
             self._noodlading_actief = False
             return False
 
-        soc_entity = self.config.get(CONF_SOC_SENSOR)
-        if soc_entity:
-            soc = self._read_sensor_float(soc_entity)
-            if soc is not None:
-                min_soc = float(
-                    self.effective_min_soc_percent()
-                )
-                # v3.99.4: dode zone. Aan op de ondergrens, pas uit als
-                # de laadstand er EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT
-                # boven staat. Anders: laden tot een procent erboven,
-                # stoppen, het huis trekt hem eronder, weer laden - op het
-                # moment in de winter dat het er het meest toe doet.
-                if self._noodlading_actief:
-                    self._noodlading_actief = (
-                        soc < min_soc + EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT
-                    )
-                else:
-                    self._noodlading_actief = soc <= min_soc
-                return self._noodlading_actief
-
-        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
-        if available_entity:
-            available_kwh = self._read_sensor_float(available_entity)
-            if available_kwh is not None:
-                return available_kwh <= EMERGENCY_LOW_BATTERY_KWH_THRESHOLD
-
-        return False
+        # v3.99.4: dode zone. Aan als de accu leeg is, pas uit als hij
+        # EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT boven die grens staat.
+        # Anders: laden tot een procent erboven, stoppen, het huis trekt hem
+        # eronder, weer laden - op het moment in de winter dat het er het
+        # meest toe doet.
+        # v5.177.0 (A7): leeg volgens de ene definitie (`accu_leeg`: de
+        # gecorrigeerde inhoud boven de effectieve ondergrens), niet meer de
+        # laadstand tegen de min-SoC of 0,3 kWh op de ruwe sensor.
+        # De noodregel begint op de ondergrens zelf (geen marge van 3 %):
+        # zelfde maat, zelfde gedrag als voorheen.
+        op_de_grens = -TEKORT_LEEG_MARGE_PROCENT
+        if self._noodlading_actief:
+            self._noodlading_actief = self.accu_leeg(
+                extra_procent=op_de_grens + EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT
+            )
+        else:
+            self._noodlading_actief = self.accu_leeg(extra_procent=op_de_grens)
+        return self._noodlading_actief
 
     # v3.99.0: is er vandaag een kookpiek boven de ontlaadgrens gezien?
     _vermogensgrens_gezien_today: bool = False
@@ -31117,15 +31263,9 @@ class EnergyManagementSystemCoordinator:
         tot = dt_util.parse_datetime(self.piekverkoop_tot or "")
         if tot is not None and now < tot:
             return False
-        try:
-            inhoud = self.beschikbare_energie_kwh()
-        except Exception:  # noqa: BLE001 - zonder inhoud de SoC-regel
-            inhoud = None
         # v5.172.0 (punt 4): de vloer is de effectieve ondergrens.
-        return accu_is_leeg(
-            self.accustand_procent(), inhoud,
-            self.effectieve_ondergrens_procent(now) + TEKORT_LEEG_MARGE_PROCENT,
-        )
+        # v5.177.0 (A7): de ene definitie.
+        return self.accu_leeg(now)
 
     def _update_shortfall_detection(
         self,
@@ -35236,7 +35376,7 @@ class EnergyManagementSystemCoordinator:
             # v5.171.0 (L-EMS-059): ook leeg bij een bruikbare inhoud onder
             # TEKORT_LEEG_INHOUD_KWH; oudere regels zonder inhoud: de SoC.
             if net_w is None or net_w <= 0 or not accu_is_leeg(
-                r.get("soc"), r.get("beschikbaar_kwh"), vloer
+                r.get("soc"), r.get("beschikbaar_kwh"), vloer, self.accu_leeg_grens_kwh()
             ):
                 continue
             if r.get("reden") in REDENEN_BEWUSTE_NETAFNAME:
@@ -38038,11 +38178,21 @@ class EnergyManagementSystemCoordinator:
 
     last_waardeplan: dict | None = None
     _waardeplan_cache: tuple | None = None
+    #: v5.177.0 (A5): waar een gat de horizon afknipte; sinds wanneer er geen plan is.
+    _waardeplan_knip: datetime | None = None
+    _waardeplan_weg_sinds: datetime | None = None
+    waardeplan_weg_teller: dict | None = None
 
     def _waardeplan_kwartieren(self, now: datetime, entries) -> list | None:
         """De kwartieren vooruit voor het waardeplan, met verwacht verbruik,
         verwachte zon (de gewone verwachting, niet de voorzichtige band),
-        inkoopprijs en terugleverwaarde. None als iets ontbreekt."""
+        inkoopprijs en terugleverwaarde. None als iets ontbreekt.
+
+        v5.177.0 (A5): één gat (geen verbruik/zon of geen kale prijs) liet het
+        hele plan wegvallen en de oude regels stil overnemen. Nu knipt het gat
+        de horizon af; pas met minder dan WAARDEPLAN_MIN_KWARTIEREN kwartieren
+        vóór het gat is er geen plan. Waar geknipt is: `_waardeplan_knip`.
+        """
         horizon = now + timedelta(hours=WAARDEPLAN_HORIZON_UUR)
         kaal = {}
         try:
@@ -38053,39 +38203,90 @@ class EnergyManagementSystemCoordinator:
         feedin_cost = float(
             self.instelling(CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH) or 0.0
         )
-        from . import overschotwaarde as OW
-
         uit = []
+        self._waardeplan_knip = None
         # v5.160.0: per kwartier de verkoopreserve die de sturing dan toepast.
         reserve_cache: dict = {}
         for begin, eind, prijs in entries or []:
             if eind <= now or begin >= horizon:
                 continue
-            van = max(begin, now)
-            segmenten = self._segmenten_verbruik_zon(van, eind, veilig=False)
-            if segmenten is None:
-                return None
-            verbruik = sum(v for v, _z in segmenten)
-            zon = self._estimate_pv_kwh_for_period(van, eind, veilig=False)
-            inkoop = prijs / PRICE_SCALE_FACTOR
-            incl = inkoop
-            if self._is_salderen_active(begin):
-                # v5.168.0: bij een verwacht overschot aan het eind van het
-                # salderingsjaar de marginale prijs (zonder belastingdeel).
-                inkoop, teruglever = salderingspositie_mod.marginale_prijzen(
-                    incl, self._salderingskorting_eur(begin), FEEDIN_PREMIUM_EUR_PER_KWH, True
-                )
-            elif begin in kaal:
-                teruglever = OW.terugleverwaarde_2027(kaal[begin], feedin_cost)
-            else:
-                return None
-            vloer = self._planning_verkoopreserve_kwh(begin, reserve_cache, entries, incl)
-            uit.append(waardeplan_mod.Kwartier(
-                begin, max(0.0, verbruik), max(0.0, zon), inkoop, teruglever, max(0.0, vloer or 0.0),
-                uren=(eind - van).total_seconds() / 3600,
-                prijs_incl_eur=incl if inkoop != incl else None,
-            ))
+            k = self._waardeplan_kwartier(now, begin, eind, prijs, kaal, feedin_cost, reserve_cache, entries)
+            if k is None:
+                self._waardeplan_knip = begin
+                break
+            uit.append(k)
+        if self._waardeplan_knip is not None and len(uit) < WAARDEPLAN_MIN_KWARTIEREN:
+            return None
         return uit or None
+
+    def _waardeplan_kwartier(self, now, begin, eind, prijs, kaal, feedin_cost, reserve_cache, entries):
+        """Eén kwartier voor het waardeplan, of None bij een gat (v5.177.0)."""
+        from . import overschotwaarde as OW
+
+        van = max(begin, now)
+        segmenten = self._segmenten_verbruik_zon(van, eind, veilig=False)
+        if segmenten is None:
+            return None
+        verbruik = sum(v for v, _z in segmenten)
+        zon = self._estimate_pv_kwh_for_period(van, eind, veilig=False)
+        inkoop = prijs / PRICE_SCALE_FACTOR
+        incl = inkoop
+        teruglever_accu = None
+        if self._is_salderen_active(begin):
+            # v5.168.0: bij een verwacht overschot aan het eind van het
+            # salderingsjaar de marginale prijs (zonder belastingdeel).
+            # v5.177.0 (A11): terugleveren levert onder de saldering de
+            # inkoopprijs plus de premie op - zon opslaan kost dus die prijs.
+            inkoop, teruglever = salderingspositie_mod.marginale_prijzen(
+                incl, self._salderingskorting_eur(begin), FEEDIN_PREMIUM_EUR_PER_KWH, True
+            )
+        elif begin in kaal:
+            teruglever = OW.terugleverwaarde_2027(kaal[begin], feedin_cost)
+            # v5.177.0 (A9): uit de accu zonder zonnebonus.
+            teruglever_accu = OW.terugleverwaarde_accu_2027(kaal[begin], feedin_cost)
+        else:
+            return None
+        vloer = self._planning_verkoopreserve_kwh(begin, reserve_cache, entries, incl)
+        return waardeplan_mod.Kwartier(
+            begin, max(0.0, verbruik), max(0.0, zon or 0.0), inkoop, teruglever, max(0.0, vloer or 0.0),
+            uren=(eind - van).total_seconds() / 3600,
+            prijs_incl_eur=incl if inkoop != incl else None,
+            teruglever_accu_eur=teruglever_accu,
+        )
+
+    def _waardeplan_slijtage_ct(self) -> float:
+        """Slijtage per kWh uit de accu voor het plan (v5.177.0, A5): de
+        berekening, anders de vaste terugval (geen plan zonder slijtage meer)."""
+        slijt_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        return WAARDEPLAN_SLIJTAGE_TERUGVAL_CT if slijt_ct is None else float(slijt_ct)
+
+    def _waardeplan_eindprijs(self, kwartieren: list) -> float | None:
+        """De (reken)prijs voor de uren direct na de horizon (v5.177.0, A10).
+
+        Het 75e percentiel van de prijsverwachting over WAARDEPLAN_EINDPRIJS_UREN
+        uur na het laatste plankwartier. Tijdens de saldering zonder het
+        belastingdeel, net als de planprijzen. None zonder verwachting.
+        """
+        if not kwartieren:
+            return None
+        eind = kwartieren[-1].begin + timedelta(minutes=15)
+        tot = eind + timedelta(hours=WAARDEPLAN_EINDPRIJS_UREN)
+        prijzen = []
+        for d in ((self.prijsverwachting or {}).get("dagen") or {}).values():
+            for u in ((d or {}).get("model") or {}).get("uren") or []:
+                try:
+                    t = datetime.strptime(u["sleutel"], "%Y-%m-%dT%H").replace(tzinfo=timezone.utc)
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if eind <= t < tot and u.get("prijs_eur") is not None:
+                    prijzen.append(float(u["prijs_eur"]))
+        if len(prijzen) < 4:
+            return None
+        prijzen.sort()
+        p75 = prijzen[min(len(prijzen) - 1, int(round(0.75 * (len(prijzen) - 1))))]
+        if any(k.prijs_incl_eur is not None for k in kwartieren) and self._is_salderen_active(eind):
+            p75 -= max(0.0, self._salderingskorting_eur(eind))
+        return p75
 
     def bereken_waardeplan(self, now: datetime, entries) -> dict:
         """Het waardeplan van nu (v5.158.0) - zie waardeplan.py."""
@@ -38097,9 +38298,8 @@ class EnergyManagementSystemCoordinator:
         )
         # slijtage per kWh uit de accu (zoals bij verkopen); de datacorrectie
         # op netladen komt er sinds v5.165.0 apart bij (`_waardeplan_rendementen`)
-        slijt_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
-        if beschikbaar is None or not capaciteit or not rendement or slijt_ct is None:
-            uit["reden"] = "accu-inhoud, capaciteit, rendement of slijtage onbekend"
+        if beschikbaar is None or not capaciteit or not rendement:
+            uit["reden"] = "accu-inhoud, capaciteit of rendement onbekend"
             return uit
         # v5.172.0 (punt 4): boven de effectieve ondergrens (gelijk aan de
         # min-SoC zolang de accu niet eerder stopt), net als de inhoud.
@@ -38110,41 +38310,60 @@ class EnergyManagementSystemCoordinator:
         if not kwartieren:
             uit["reden"] = "geen verbruiksverwachting of prijzen vooruit"
             return uit
-        laden_kw = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0) / 1000
-        ontladen_kw = abs(self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER) or 0) / 1000
-        accu = waardeplan_mod.Accu(
-            inhoud_kwh=max(0.0, beschikbaar),
-            bruikbaar_kwh=bruikbaar,
-            laden_kw=laden_kw or 2.4,
-            ontladen_kw=ontladen_kw or 2.4,
-            rendement=rendement / 100,
-            slijtage_eur=slijt_ct / 100,
-            verkoopmarge_eur=self._verkoop_min_winst_eur(),
-            netladen=True,
-            verkopen=True,
-            # v5.172.0 (punt 2): geen mini-opdrachten (zie waardeplan.actie_van).
-            min_actie_w=WAARDEPLAN_MIN_ACTIE_W,
-            **self._waardeplan_rendementen(now),
-        )
+        accu = self._waardeplan_accu(now, beschikbaar, bruikbaar, rendement, kwartieren)
         balans = self._waardeplan_balanceren(now, kwartieren, accu)
         accu.vol_na_kwartier = balans.get("kwartier")
         res = waardeplan_mod.plan(kwartieren, accu)
         if not res.beschikbaar:
             uit["reden"] = res.reden
             return uit
-        nu = res.kwartieren[0]
         self._waardeplan_rijen = res.kwartieren
-        uit.update({
+        uit.update(self._waardeplan_uitkomst(res, accu, bruikbaar, kwartieren, balans))
+        return uit
+
+    def _waardeplan_accu(self, now, beschikbaar, bruikbaar, rendement, kwartieren):
+        """De accu voor het waardeplan (v5.177.0 uit `bereken_waardeplan`)."""
+        laden_kw = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0) / 1000
+        ontladen_kw = abs(self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER) or 0) / 1000
+        return waardeplan_mod.Accu(
+            inhoud_kwh=max(0.0, beschikbaar),
+            bruikbaar_kwh=bruikbaar,
+            laden_kw=laden_kw or 2.4,
+            ontladen_kw=ontladen_kw or 2.4,
+            rendement=rendement / 100,
+            slijtage_eur=self._waardeplan_slijtage_ct() / 100,
+            verkoopmarge_eur=self._verkoop_min_winst_eur(),
+            netladen=True,
+            verkopen=True,
+            # v5.172.0 (punt 2): geen mini-opdrachten (zie waardeplan.actie_van).
+            min_actie_w=WAARDEPLAN_MIN_ACTIE_W,
+            # v5.177.0 (A12): netladen vanaf 500 W.
+            min_laad_w=WAARDEPLAN_MIN_LAAD_W,
+            # v5.177.0 (A11): de sturing kan terugleveren afdwingen (handmatig,
+            # zie `_waardeplan_als_nodig`), dus mag het plan het kiezen.
+            zon_export_afdwingbaar=True,
+            # v5.177.0 (A10): de waarde aan het eind uit de prijsverwachting.
+            eindprijs_eur=self._waardeplan_eindprijs(kwartieren),
+            **self._waardeplan_rendementen(now),
+        )
+
+    def _waardeplan_uitkomst(self, res, accu, bruikbaar, kwartieren, balans) -> dict:
+        """De attributen van een berekend waardeplan (v5.177.0 uit `bereken_waardeplan`)."""
+        nu = res.kwartieren[0]
+        return {
             "beschikbaar": True,
             "inhoud_kwh": round(accu.inhoud_kwh, 2),
             "bruikbaar_kwh": round(bruikbaar, 2),
             "kwartieren": len(res.kwartieren),
+            # v5.177.0 (A5): tot waar het plan reikt als een gat het afknipte.
+            "afgeknipt_bij": self._waardeplan_knip.isoformat() if self._waardeplan_knip else None,
             "kosten_plan_eur": res.kosten_plan_eur,
             "kosten_zonder_accu_eur": res.kosten_zonder_accu_eur,
             "besparing_plan_eur": round(
                 (res.kosten_zonder_accu_eur or 0) - (res.kosten_plan_eur or 0), 2
             ),
             "eindwaarde_eur_per_kwh": res.eindwaarde_eur_per_kwh,
+            "eindprijs_bron": "prijsverwachting" if accu.eindprijs_eur is not None else "75e percentiel plan",
             "verkoopmarge_eur": accu.verkoopmarge_eur,
             # v5.165.0: de datacorrectie op netladen en de rendementen.
             "netlaadmarge_eur": accu.netlaadmarge_eur,
@@ -38166,8 +38385,7 @@ class EnergyManagementSystemCoordinator:
                 if any(k.prijs_incl_eur is not None for k in kwartieren) else "prijs incl. belasting"
             ),
             "salderingspositie": self.salderingspositie_weergave(),
-        })
-        return uit
+        }
 
     def _waardeplan_rendementen(self, now: datetime) -> dict:
         """De datacorrectie en de rendementen voor het waardeplan (v5.165.0).
@@ -38267,7 +38485,13 @@ class EnergyManagementSystemCoordinator:
         # v5.163.0: alleen als er vóór het doel genoeg kwartieren onder de
         # prijsgrens zijn; anders geen eis, zodat het plan niet duurder bijkoopt.
         nodig = math.ceil((accu.bruikbaar_kwh - accu.inhoud_kwh) / per_kwartier)
-        goedkoop = sum(1 for k in kwartieren[: index + 1] if k.inkoop_eur < BALANCEER_MAX_PRIJS_EUR)
+        # v5.177.0 (A2): de grens is een prijs incl. belasting; tijdens de
+        # saldering met overschot is `inkoop_eur` de marginale prijs (~11 ct
+        # lager) en kwamen er te veel kwartieren onder de grens.
+        goedkoop = sum(
+            1 for k in kwartieren[: index + 1]
+            if (k.inkoop_eur if k.prijs_incl_eur is None else k.prijs_incl_eur) < BALANCEER_MAX_PRIJS_EUR
+        )
         if goedkoop < nodig:
             self._balanceer_doel = None
             grens = BALANCEER_MAX_PRIJS_EUR * 100
@@ -38317,7 +38541,15 @@ class EnergyManagementSystemCoordinator:
         ingesteld = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0)
         if rij.get("vol_vermogen"):
             return ingesteld
-        return min(ingesteld, float(rij.get("accu_kwh") or 0.0) * 4000)
+        # v5.177.0 (A4): energie gedeeld door de duur van de rij (het lopende
+        # kwartier is korter dan 0,25 uur), niet x 4000.
+        return min(ingesteld, float(rij.get("accu_kwh") or 0.0) * self._per_uur_w(rij))
+
+    @staticmethod
+    def _per_uur_w(rij: dict) -> float:
+        """kWh van een planrij naar W: 1000 / de duur van de rij (v5.177.0)."""
+        uren = float(rij.get("uren") or 0.25)
+        return 1000 / uren if uren > 0 else 4000
 
     async def _waardeplan_als_nodig(self, now: datetime, entries) -> bool:
         """Past het waardeplan toe (v5.158.0, akkoord Ruud 02-11).
@@ -38329,41 +38561,11 @@ class EnergyManagementSystemCoordinator:
             # Bijna leeg: de noodregel van de oude sturing gaat voor.
             return False
         plan = self.last_waardeplan = dict(self._waardeplan_nu(now, entries))
+        self._noteer_waardeplan_beschikbaar(now, plan)
         if not plan.get("beschikbaar"):
             return False
         nu = plan.get("nu") or {}
-        actie = nu.get("actie")
-        charge_power = None
-        discharge_power = None
-        if actie == "laden_net":
-            vermogen = self._waardeplan_laadvermogen_w(nu)
-            if vermogen < WAARDEPLAN_MIN_VERMOGEN_W:
-                actie = "houden"
-            else:
-                charge_power = -round(vermogen)
-        if actie == "verkopen":
-            reserve = (self.verkoopreserve(now, self.last_cheap_block_start, entries) or {}).get("reserve_kwh")
-            inhoud = self.beschikbare_energie_kwh()
-            vrij = None if reserve is None or inhoud is None else max(0.0, inhoud - reserve)
-            plan["verkoopreserve_kwh"] = round(reserve, 2) if reserve is not None else None
-            if not vrij or vrij <= 0.05:
-                # Het huis gaat voor: niets verkopen onder de verkoopreserve.
-                actie = "huis"
-                plan["verkoop_tegengehouden"] = (
-                    "verkoopreserve onbekend (geen goedkoop blok in zicht)"
-                    if reserve is None else "onder de verkoopreserve"
-                )
-            else:
-                tekort = max(0.0, -float(nu.get("accu_kwh") or 0.0) - float(nu.get("kwh") or 0.0))
-                verkoop = min(float(nu.get("kwh") or 0.0), vrij)
-                vermogen = min(
-                    abs(self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER) or 0),
-                    (tekort + verkoop) * 4000,
-                )
-                if vermogen < WAARDEPLAN_MIN_VERMOGEN_W:
-                    actie = "huis"
-                else:
-                    discharge_power = round(vermogen)
+        actie, charge_power, discharge_power = self._waardeplan_opdracht(now, plan, nu)
         if actie in ("houden", "zon") and not self.smart_charging_supported():
             actie = "huis"
         plan["uitgevoerd"] = actie
@@ -38374,6 +38576,11 @@ class EnergyManagementSystemCoordinator:
         elif discharge_power is not None:
             await self._async_apply_manual(discharge_power)
             self.last_reason = "waardeplan_verkopen"
+        elif actie == "zon_export":
+            # v5.177.0 (A11): het overschot het net op - handmatig op 0 W, de
+            # slimme standen zouden het zelf opladen.
+            await self._async_apply_manual(0)
+            self.last_reason = "waardeplan_terugleveren"
         elif actie == "huis":
             await self._async_apply_operation(OPTION_SMART)
             self.last_reason = "waardeplan_huis"
@@ -38392,16 +38599,139 @@ class EnergyManagementSystemCoordinator:
         self._finish_decision_tick(now)
         return True
 
+    def _waardeplan_opdracht(self, now: datetime, plan: dict, nu: dict) -> tuple:
+        """(actie, laadvermogen, ontlaadvermogen) voor de planrij van nu (v5.177.0).
+
+        Uit `_waardeplan_als_nodig` gehaald. Eén vermogensgrens met het plan
+        (A12) en de duur van de rij in plaats van x 4000 (A4).
+        """
+        actie = nu.get("actie")
+        charge_power = None
+        discharge_power = None
+        if actie == "laden_net":
+            vermogen = self._waardeplan_laadvermogen_w(nu)
+            if vermogen < WAARDEPLAN_MIN_VERMOGEN_W:
+                actie = "houden"
+            else:
+                charge_power = -round(vermogen)
+        elif actie == "zon_export":
+            # v5.177.0 (A11): een deel opslaan op een vast vermogen, de rest terug.
+            vermogen = float(nu.get("kwh") or 0.0) * self._per_uur_w(nu)
+            if vermogen >= WAARDEPLAN_MIN_LAAD_W - 1:
+                ingesteld = abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER) or 0)
+                charge_power = -round(min(ingesteld, vermogen))
+        elif actie == "verkopen":
+            actie, discharge_power = self._waardeplan_verkoop(now, plan, nu)
+        return actie, charge_power, discharge_power
+
+    def _waardeplan_verkoop(self, now: datetime, plan: dict, nu: dict) -> tuple:
+        """Verkopen volgens het plan, boven de vloer die het plan zelf gebruikte.
+
+        v5.177.0 (A1): de sturing toetste een verkoop opnieuw aan de oude
+        verkoopreserve (`verkoopreserve`, het goedkope blok) en maakte er dan
+        'huis' van, terwijl het plan al rekende met zijn eigen vloer per
+        kwartier (`Kwartier.verkoop_vloer_kwh`). Nu alleen die vloer.
+        """
+        vloer = float(nu.get("verkoop_vloer_kwh") or 0.0)
+        inhoud = self.beschikbare_energie_kwh()
+        vrij = None if inhoud is None else max(0.0, inhoud - vloer)
+        plan["verkoopreserve_kwh"] = round(vloer, 2)
+        if not vrij or vrij <= 0.05:
+            # Het huis gaat voor: niets verkopen onder de vloer van het plan.
+            plan["verkoop_tegengehouden"] = (
+                "accu-inhoud onbekend" if inhoud is None else "onder de verkoopreserve van het plan"
+            )
+            return "huis", None
+        tekort = max(0.0, -float(nu.get("accu_kwh") or 0.0) - float(nu.get("kwh") or 0.0))
+        verkoop = min(float(nu.get("kwh") or 0.0), vrij)
+        vermogen = min(
+            abs(self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER) or 0),
+            (tekort + verkoop) * self._per_uur_w(nu),
+        )
+        if vermogen < WAARDEPLAN_MIN_VERMOGEN_W:
+            return "huis", None
+        return "verkopen", round(vermogen)
+
+    def _noteer_waardeplan_beschikbaar(self, now: datetime, plan: dict) -> None:
+        """Telt hoe vaak en sinds wanneer er geen waardeplan is (v5.177.0, A5).
+
+        Zonder plan sturen de oude regels; dat stond alleen in een attribuut
+        `reden`. Nu een teller per dag en, na WAARDEPLAN_WEG_AANDACHT_MINUTEN,
+        een aandachtspunt (`_waardeplan_aandachtspunt`).
+        """
+        dag = dt_util.as_local(now).date().isoformat()
+        teller = self.waardeplan_weg_teller
+        if not isinstance(teller, dict) or teller.get("dag") != dag:
+            teller = self.waardeplan_weg_teller = {"dag": dag, "rondes": 0, "laatste_reden": None}
+        if plan.get("beschikbaar"):
+            self._waardeplan_weg_sinds = None
+            return
+        teller["rondes"] = int(teller.get("rondes") or 0) + 1
+        teller["laatste_reden"] = plan.get("reden")
+        teller["laatst"] = now.isoformat()
+        if self._waardeplan_weg_sinds is None:
+            self._waardeplan_weg_sinds = now
+
+    def _waardeplan_aandachtspunt(self, now: datetime | None = None) -> str | None:
+        """Een aandachtspunt als het waardeplan al een tijd niet rekent (v5.177.0)."""
+        sinds = self._waardeplan_weg_sinds
+        if not WAARDEPLAN_STUURT or sinds is None:
+            return None
+        now = now or dt_util.now()
+        minuten = (now - sinds).total_seconds() / 60
+        if minuten < WAARDEPLAN_WEG_AANDACHT_MINUTEN:
+            return None
+        reden = (self.waardeplan_weg_teller or {}).get("laatste_reden") or "onbekend"
+        return (
+            f"Het waardeplan rekent al {minuten:.0f} minuten niet ({reden}); "
+            "de oude regels sturen de accu zolang."
+        )
+
     def _waardeplan_accu_leeg(self, now: datetime) -> bool:
         """Staat de accu leeg, met dezelfde maat als de tekortmeting? (v5.175.3)"""
         try:
-            inhoud = self.beschikbare_energie_kwh()
-            return accu_is_leeg(
-                self.accustand_procent(), inhoud,
-                self.effectieve_ondergrens_procent(now) + TEKORT_LEEG_MARGE_PROCENT,
-            )
+            return self.accu_leeg(now)
         except Exception:  # noqa: BLE001 - bij twijfel de gewone naam
             return False
+
+    # --- v5.177.0 (A7): één definitie van "leeg" ---------------------------
+    #
+    # Er waren er zes: TEKORT_LEEG_INHOUD_KWH (0,1), PLAN_SPAREN_LEEG_KWH (0,3),
+    # EMERGENCY_LOW_BATTERY_KWH_THRESHOLD (0,3 op de ruwe sensor, zonder
+    # modulecorrectie), ondergrens + 3 % in `accu_is_leeg`, en in de noodregel
+    # de min-SoC in plaats van de effectieve ondergrens. v5.176.1 kwam
+    # daaruit voort (plan "kump neet meer tekort", status "accu leeg"). Nu:
+    # leeg = de gecorrigeerde bruikbare inhoud (boven de effectieve
+    # ondergrens) tot en met TEKORT_LEEG_MARGE_PROCENT van de capaciteit;
+    # zonder inhoud de laadstand tegen de effectieve ondergrens + die marge.
+
+    def accu_leeg_grens_kwh(self, extra_procent: float = 0.0) -> float:
+        """Tot en met deze inhoud (kWh boven de ondergrens) heet de accu leeg."""
+        try:
+            cap = self.bruikbare_capaciteit_kwh()
+        except Exception:  # noqa: BLE001 - zonder capaciteit de vaste grens
+            cap = None
+        if not cap:
+            return PLAN_SPAREN_LEEG_KWH + extra_procent / 100 * 8.64
+        return cap * (TEKORT_LEEG_MARGE_PROCENT + extra_procent) / 100
+
+    def accu_leeg_grens_plan_kwh(self) -> float:
+        """De grens op de stap van het waardeplan (0,1 kWh, naar boven): 0,26
+        kWh bij 8,64 kWh wordt 0,3 - de inhoud in het plan staat op stappen."""
+        return math.ceil(self.accu_leeg_grens_kwh() / 0.1 - 1e-6) * 0.1
+
+    def accu_leeg(self, now: datetime | None = None, extra_procent: float = 0.0) -> bool:
+        """Staat de accu leeg? De ene definitie (v5.177.0, A7)."""
+        now = now or dt_util.now()
+        try:
+            inhoud = self.beschikbare_energie_kwh()
+        except Exception:  # noqa: BLE001 - zonder inhoud de laadstand
+            inhoud = None
+        return accu_is_leeg(
+            self.accustand_procent(), inhoud,
+            self.effectieve_ondergrens_procent(now) + TEKORT_LEEG_MARGE_PROCENT + extra_procent,
+            self.accu_leeg_grens_kwh(extra_procent),
+        )
 
     def _waarom_waardeplan(self) -> list[str]:
         """Waarom-regels bij het waardeplan (v5.158.0)."""
@@ -38411,8 +38741,13 @@ class EnergyManagementSystemCoordinator:
         if nu.get("prijs_eur") is not None:
             regels.append(f"stroom kost dit kwartier {nu['prijs_eur'] * 100:.1f} ct")
         if p.get("inhoud_kwh") is not None:
+            # v5.177.0 (A8): `bruikbaar_kwh` van het plan is de capaciteit
+            # boven de ondergrens, niet wat erin zit. "er zit 0,7 kWh in de
+            # accu (bruikbaar 7,8)" las als 7,8 kWh beschikbaar.
+            ruimte = max(0.0, float(p.get("bruikbaar_kwh") or 0.0) - float(p["inhoud_kwh"]))
             regels.append(
-                f"er zit {p['inhoud_kwh']:.1f} kWh in de accu (bruikbaar {p.get('bruikbaar_kwh', 0):.1f})"
+                f"er zit {_nl(p['inhoud_kwh'])} kWh boven de ondergrens "
+                f"(ruimte tot vol {_nl(ruimte)} kWh)"
             )
         # v5.172.0 (punt 4): zegt het als de accu eerder stopt dan de min-SoC.
         try:
@@ -38946,7 +39281,8 @@ class EnergyManagementSystemCoordinator:
             return
 
         if reason in ("expensive_quarter", "expensive_quarter_peak", "waardeplan_verkopen") and discharge_power_w:
-            energy_kwh = (discharge_power_w / 1000) * elapsed_hours
+            # v5.177.0 (A6): het gemeten vermogen, niet de opdracht.
+            energy_kwh = (self._gemeten_accu_w(discharge_power_w, 1) / 1000) * elapsed_hours
 
             export_kwh, load_kwh = self._split_discharge_export_vs_load(
                 energy_kwh, elapsed_hours
@@ -38978,10 +39314,27 @@ class EnergyManagementSystemCoordinator:
             )
             and charge_power_w
         ):
-            energy_kwh = (abs(charge_power_w) / 1000) * elapsed_hours
+            energy_kwh = (self._gemeten_accu_w(abs(charge_power_w), -1) / 1000) * elapsed_hours
             cost_eur = energy_kwh * current_price
             self.total_charge_cost_eur += cost_eur
             self.current_month_charge_cost_eur += cost_eur
+
+    def _gemeten_accu_w(self, opdracht_w: float, richting: int) -> float:
+        """Het gemeten accuvermogen in de richting van de opdracht (W, >= 0).
+
+        v5.177.0 (A6): de waarde van ontladen en de kosten van laden telden
+        opdracht x tijd. De opdracht is niet wat de accu doet (begrensd, vol,
+        leeg, de eerste seconden na een wissel); nu het gecorrigeerde gemeten
+        vermogen, zoals de kostprijs. Zonder meting de opdracht.
+        `richting` 1 = ontladen, -1 = laden.
+        """
+        try:
+            gemeten = self._read_corrected_battery_power()
+        except Exception:  # noqa: BLE001 - zonder meting de opdracht
+            gemeten = None
+        if gemeten is None:
+            return abs(opdracht_w)
+        return max(0.0, float(gemeten) * richting)
 
     def _update_battery_cost_basis_and_savings(
         self, now: datetime, entries: list[PriceEntry]
@@ -45334,6 +45687,12 @@ class EnergyManagementSystemCoordinator:
         # van "kapot".
         for regel in self.get_metingen_stilstand():
             uit.append(regel["wat"])
+        # v5.177.0 (A5): zonder waardeplan sturen de oude regels - zichtbaar.
+        try:
+            if punt := self._waardeplan_aandachtspunt():
+                uit.append(punt)
+        except Exception:  # noqa: BLE001 - een aandachtspunt mag niets breken
+            pass
         # v5.3: een geweerde weerbron hoorde hier, niet als telefoonmelding.
         # v5.144.0 (akkoord Ruud 29-10): hij staat nu bij de informatieve
         # punten (`_weerbron_melding`). Het weren is bedoeld gedrag; als
@@ -47835,6 +48194,19 @@ class EnergyManagementSystemCoordinator:
 
         return {**exact, "basis": "geen"}
 
+    #: v5.177.0 (A13): de weerentiteit was er nog niet (opstarten).
+    _weer_opnieuw_proberen: bool = False
+    _weer_niet_klaar_gemeld: bool = False
+
+    def _weer_nog_niet_klaar(self, entity_id: str, err: Exception) -> bool:
+        """Is de weerentiteit gewoon nog niet geladen? (v5.177.0, A13)"""
+        try:
+            weer = self.hass.states.get(entity_id)
+            # v5.176.4 + v5.177.0: ook een weerentiteit die nog 'unavailable' is.
+            return weer is None or weer.state == "unavailable"
+        except Exception:  # noqa: BLE001
+            return "did not match any entities" in str(err)
+
     async def _async_fetch_hourly_outdoor_forecast(
         self, entity_id: str
     ) -> list[tuple[datetime, float]] | None:
@@ -47855,17 +48227,24 @@ class EnergyManagementSystemCoordinator:
                 blocking=True,
                 return_response=True,
             )
-        except Exception:  # noqa: BLE001 - a forecast fetch must never crash the tick
-            # v5.176.4: bij het opstarten is de weerentiteit vaak nog niet
-            # geladen; dat is geen fout en geen traceback waard.
-            weer = self.hass.states.get(entity_id)
-            if weer is None or weer.state == "unavailable":
-                self._climate_forecast_weer_niet_geladen = True
-                _LOGGER.debug("Weerentiteit %s is nog niet geladen", entity_id)
-            else:
-                _LOGGER.exception(
-                    "Kon geen uurlijkse weersvoorspelling ophalen bij %s", entity_id
-                )
+        except Exception as err:  # noqa: BLE001 - a forecast fetch must never crash the tick
+            # v5.177.0 (A13): bij het opstarten is de weerentiteit vaak nog
+            # niet geladen ("Service call requested response data but did not
+            # match any entities"). Dat is geen fout: een waarschuwing (één
+            # keer) en over een paar minuten opnieuw. Andere fouten blijven
+            # een uitzondering in het log.
+            if self._weer_nog_niet_klaar(entity_id, err):
+                self._weer_opnieuw_proberen = True
+                if not self._weer_niet_klaar_gemeld:
+                    self._weer_niet_klaar_gemeld = True
+                    _LOGGER.warning(
+                        "Weerentiteit %s is nog niet beschikbaar (%s); de uurverwachting "
+                        "wordt over enkele minuten opnieuw opgehaald", entity_id, err,
+                    )
+                return None
+            _LOGGER.exception(
+                "Kon geen uurlijkse weersvoorspelling ophalen bij %s", entity_id
+            )
             return None
 
         if not response or entity_id not in response:
@@ -47975,13 +48354,13 @@ class EnergyManagementSystemCoordinator:
             self.climate_forecast_note = self._climate_forecast_fetch_note
             return
 
-        self._climate_forecast_weer_niet_geladen = False
+        self._weer_opnieuw_proberen = False
         forecast = await self._async_fetch_hourly_outdoor_forecast(weather_entity)
-        if self._climate_forecast_weer_niet_geladen:
-            # v5.176.4: niet de vaste 30 minuten wachten op een entiteit die zo komt.
+        if self._weer_opnieuw_proberen:
+            # v5.177.0 (A13): over WEER_OPNIEUW_MINUTEN opnieuw, niet pas na
+            # het gewone interval.
             self._climate_forecast_last_fetch = now - timedelta(
-                minutes=CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES
-                - CLIMATE_FORECAST_RETRY_NIET_GELADEN_MINUTES
+                minutes=max(0, CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES - WEER_OPNIEUW_MINUTEN)
             )
         if not forecast:
             # v5.114.0: de vorige verwachting blijft gelden voor de uren die nog komen
@@ -50291,6 +50670,94 @@ class EnergyManagementSystemCoordinator:
 
         return " ".join(parts)
 
+    async def _negatieve_prijs_ronde(self, now: datetime, entries) -> None:
+        """De ronde bij een negatieve prijs (uit `_async_update_locked`, v5.177.0).
+
+        De panelen gaan omlaag zoals altijd. v5.177.0 (A15): de accu volgt het
+        waardeplan - dat rekent met de negatieve inkoopprijs en laadt dan zelf
+        uit het net. Alleen zonder plan (of bij celbescherming) de vaste
+        handmatige lading zoals voorheen.
+        """
+        if not self._is_negative_price_active:
+            self._is_negative_price_active = True
+            self._start_solar_ramp(0.0)
+        if WAARDEPLAN_STUURT and not (self.celbeschermingsbesluit(now) or {}).get("actie"):
+            if await self._waardeplan_als_nodig(now, entries):
+                return
+        charge_power = self.instelling(CONF_NEGATIVE_PRICE_CHARGE_POWER, DEFAULT_NEGATIVE_PRICE_CHARGE_POWER)
+        await self._async_apply_manual(charge_power)
+        self.last_reason = "negative_price"
+        self.last_charge_power_applied = charge_power
+        self._update_financial_tracking(
+            now, entries, self.last_reason, None, charge_power
+        )
+        self._finish_decision_tick(now)
+
+    def _secundaire_laag(self, now: datetime, entries, cheap_block_start) -> bool:
+        """Mag er in de secundaire laag verkocht worden? (uit `_async_update_locked`,
+        v5.177.0). Zie de toelichting daar. v5.177.0 (A15): stuurt het
+        waardeplan deze ronde, dan alleen de drempel (weergave) en verder niets:
+        de reserves en de waardetoets worden dan door niets gebruikt."""
+        secondary_threshold_raw = self._get_secondary_expensive_price_threshold(
+            entries, now
+        )
+        self.last_secondary_price_threshold = (
+            secondary_threshold_raw / PRICE_SCALE_FACTOR
+            if secondary_threshold_raw is not None
+            else None
+        )
+        if self._waardeplan_gaat_sturen(now, entries):
+            return False
+        secondary_available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        # v5.81.1: met de modulesprong (L-EMS-014), net als elke andere
+        # lezer van de beschikbare energie.
+        secondary_available_kwh = self._na_module_leeg(
+            self._read_sensor_float(secondary_available_entity)
+            if secondary_available_entity
+            else None
+        )
+        if secondary_available_kwh is not None and secondary_available_kwh > 0:
+            secondary_reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
+                now, cheap_block_start
+            )
+            # v5.70: verkopen - de verkoopreserve.
+            if secondary_reserve_kwh is not None:
+                _verkoop = self.verkoopreserve(
+                    now, cheap_block_start, entries
+                ).get("reserve_kwh")
+                if _verkoop is not None:
+                    secondary_reserve_kwh = _verkoop
+            if secondary_reserve_kwh is not None:
+                secondary_headroom_kwh = max(
+                    0.0, secondary_available_kwh - secondary_reserve_kwh
+                )
+                secondary_discharge_power = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
+                # v3.99.9: en alleen als de verkooptoets niet dicht
+                # staat. Elke minuut om op 3 september, 23:35-23:38:
+                # de dode zones zitten in `may_sell_now`, maar zegt
+                # die nee, dan viel de code hier door en rekende deze
+                # laag zijn eigen ruimte uit - zonder rem. Twee
+                # poorten voor dezelfde vraag, waarvan er een geremd
+                # was.
+                if self._secundaire_laag_toegestaan() and (
+                    self._is_worth_discharging_at_secondary_tier(
+                        entries, now, secondary_headroom_kwh, secondary_discharge_power
+                    )
+                ):
+                    return True
+
+        return False
+
+    def _waardeplan_gaat_sturen(self, now: datetime, entries) -> bool:
+        """Stuurt het waardeplan deze ronde? (v5.177.0, A15) Het plan van dit
+        kwartier (gecachet; `_waardeplan_als_nodig` gebruikt hetzelfde)."""
+        if not WAARDEPLAN_STUURT:
+            return False
+        try:
+            return bool(self._waardeplan_nu(now, entries).get("beschikbaar"))
+        except Exception:  # noqa: BLE001 - bij twijfel de oude regels
+            return False
+
     async def _async_update_locked(self) -> None:
         now = dt_util.now()
         if self.first_seen_date is None:
@@ -50800,17 +51267,8 @@ class EnergyManagementSystemCoordinator:
         is_negative_price = self._is_negatieve_prijs(current_price_per_kwh, now)
 
         if is_negative_price:
-            if not self._is_negative_price_active:
-                self._is_negative_price_active = True
-                self._start_solar_ramp(0.0)
-            charge_power = self.instelling(CONF_NEGATIVE_PRICE_CHARGE_POWER, DEFAULT_NEGATIVE_PRICE_CHARGE_POWER)
-            await self._async_apply_manual(charge_power)
-            self.last_reason = "negative_price"
-            self.last_charge_power_applied = charge_power
-            self._update_financial_tracking(
-                now, entries, self.last_reason, None, charge_power
-            )
-            self._finish_decision_tick(now)
+            # v5.177.0 (A15): eigen functie; het waardeplan beslist over de accu.
+            await self._negatieve_prijs_ronde(now, entries)
             return
 
         # Price just turned positive again - restore the panels, then fall
@@ -50870,53 +51328,12 @@ class EnergyManagementSystemCoordinator:
         # surrounding quarters at only a slightly lower price went
         # unused). Never applies if the winter guard above already
         # suppressed selling today, or while grid-charged.
-        if not is_expensive:
-            secondary_threshold_raw = self._get_secondary_expensive_price_threshold(
-                entries, now
-            )
-            self.last_secondary_price_threshold = (
-                secondary_threshold_raw / PRICE_SCALE_FACTOR
-                if secondary_threshold_raw is not None
-                else None
-            )
-            secondary_available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
-            # v5.81.1: met de modulesprong (L-EMS-014), net als elke andere
-            # lezer van de beschikbare energie.
-            secondary_available_kwh = self._na_module_leeg(
-                self._read_sensor_float(secondary_available_entity)
-                if secondary_available_entity
-                else None
-            )
-            if secondary_available_kwh is not None and secondary_available_kwh > 0:
-                secondary_reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
-                    now, cheap_block_start
-                )
-                # v5.70: verkopen - de verkoopreserve.
-                if secondary_reserve_kwh is not None:
-                    _verkoop = self.verkoopreserve(
-                        now, cheap_block_start, entries
-                    ).get("reserve_kwh")
-                    if _verkoop is not None:
-                        secondary_reserve_kwh = _verkoop
-                if secondary_reserve_kwh is not None:
-                    secondary_headroom_kwh = max(
-                        0.0, secondary_available_kwh - secondary_reserve_kwh
-                    )
-                    secondary_discharge_power = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
-                    # v3.99.9: en alleen als de verkooptoets niet dicht
-                    # staat. Elke minuut om op 3 september, 23:35-23:38:
-                    # de dode zones zitten in `may_sell_now`, maar zegt
-                    # die nee, dan viel de code hier door en rekende deze
-                    # laag zijn eigen ruimte uit - zonder rem. Twee
-                    # poorten voor dezelfde vraag, waarvan er een geremd
-                    # was.
-                    if self._secundaire_laag_toegestaan() and (
-                        self._is_worth_discharging_at_secondary_tier(
-                            entries, now, secondary_headroom_kwh, secondary_discharge_power
-                        )
-                    ):
-                        is_expensive = True
-                        expensive_tier = "secondary"
+        # v5.177.0 (A15): de secundaire laag (reserve, verkoopreserve,
+        # waardetoets) alleen als de oude regels sturen; de drempel zelf blijft
+        # voor de weergave. Stuurt het waardeplan, dan beslist dat.
+        if not is_expensive and self._secundaire_laag(now, entries, cheap_block_start):
+            is_expensive = True
+            expensive_tier = "secondary"
 
         self.last_expensive_tier = expensive_tier
 
@@ -52939,6 +53356,8 @@ class EnergyManagementSystemCoordinator:
                 ),
                 airco_ritme.OCHTEND_VAN,
             ),
+            # v5.177.0 (A16): 's ochtends alleen verwarmen als jullie dat doen
+            ochtend=airco_ritme.ochtend_kans(self._airco_ritme(), now),
         )
         uit = self._airco_ritme_ronde(now, uit, stand)
         uit = self._airco_kort_weg_ronde(now, uit)

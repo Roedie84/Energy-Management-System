@@ -234,6 +234,24 @@ def geleerd(ritme: dict, soort: str) -> dict:
     }
 
 
+def ochtend_kans(ritme: dict, moment: datetime) -> dict | None:
+    """De geleerde ochtendkans voor de dagsoort van `moment` (v5.177.0, A16).
+
+    None buiten het ochtendvenster of zonder getelde ochtenden. Anders
+    kans, keer (ochtenden waarop jullie hem aanzetten) en ochtenden (met
+    iemand thuis).
+    """
+    if not is_ochtend(moment):
+        return None
+    soort = dagsoort(moment)
+    leer = geleerd(ritme, soort)
+    if leer["kans"] is None:
+        return None
+    aan = ritme["aan"][soort]
+    keer = sum(1 for d in ritme["ochtenden"][soort] if d in aan)
+    return {"kans": leer["kans"], "keer": keer, "ochtenden": leer["ochtenden"], "dagsoort": soort}
+
+
 def klok(m: int | None) -> str:
     if m is None:
         return "—"

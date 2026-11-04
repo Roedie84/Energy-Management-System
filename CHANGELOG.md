@@ -34703,3 +34703,39 @@ Gemeld kaart claude-ems, 04-11. Bij de herstart van 06:39 gaf `weather.get_forec
 Niet veranderd: de sturing en de klimaatprojectie bij een geslaagde oproep.
 
 Tests: `test_v51764_weer_niet_geladen.py` (4).
+
+## v5.177.0 — grote controle: plan stuurt overal, verkoopmarge 2 ct, stille meldingen
+
+Akkoord Ruud 04-11 07:11 (controle A1–A15, B1, B2) en 07:53 (L-EMS-063).
+
+**Sturing en plan**
+- A1: een plankeuze 'verkopen' wordt alleen nog begrensd door de eigen vloer van het plan (`verkoop_vloer_kwh`), niet meer door de oude goedkoop-blokreserve.
+- A2: de balanceergrens (22 ct all-in) vergelijkt met de all-in prijs, niet met de marginale prijs (~11 ct lager).
+- A3: het plan legt per netlaadkwartier zijn eigen verwachte waarde vast; de leercorrectie gebruikt die en negeert de bevroren verwachting van de oude regel.
+- A4: het lopende kwartier rekent met de echte resterende duur (planner en kWh→W).
+- A5: een gat kort de horizon in (plan blijft bij ≥ 4 kwartieren); slijtage valt terug op 4,22 ct; "geen plan" telt per dag en wordt na 30 min een aandachtspunt.
+- A7: één definitie van leeg (`accu_leeg()`); de noodregel gebruikt dezelfde inhoudsmaat.
+- A10: restwaarde aan het eind van het plan uit het 75e percentiel van de prijsverwachting erna.
+- A11: tot 1-1-2027 kan het plan zon terugleveren (`zon_export`, uitgevoerd als handmatig 0 W, reden `waardeplan_terugleveren`) als opslaan verlies geeft.
+- A12: startinhoud wordt naar beneden afgerond (geen ontladen van een lege accu meer in het plan); planner en uitvoering delen één ondergrens van 400 W; netladen vanaf 500 W.
+- A15: negatieve prijzen lopen via het plan; de oude pijplijn draait alleen als terugval.
+- B1: standaard verkoopmarge 2 ct (eenmalige migratie van een opgeslagen 10 ct).
+
+**Boekhouding en uitleg**
+- A6: besparing rekent met het gemeten accuvermogen, niet met de opdracht.
+- A8: uitleg "X kWh boven de ondergrens (ruimte tot vol Y kWh)".
+- A9: accu-teruglevering in 2027 zonder de zonnebonus van 10 %.
+
+**Meldingen (B2)**
+- Stille uren 23:00–07:00: alleen kritieke meldingen waarbij je iets moet doen; de rest staat met reden "stille uren" in de historie.
+- Meldingen met advies "Niets..." gaan alleen in het dagoverzicht (centrale regel).
+- Zolang het plan stuurt komen `battery_wont_last_night`, `plan_tekort` en hun herstelmeldingen niet meer.
+
+**Airco (L-EMS-063)**
+- In het ochtendvenster alleen 'verwarmen' bij een geleerde ochtendkans ≥ 30 % (`AIRCO_OCHTEND_MIN_KANS`).
+
+**Opruimen en prestaties**
+- A13: weerentiteit die bij het opstarten nog niet geladen is: geen traceback, na 2 min opnieuw (samengevoegd met v5.176.4). `battery_protection` verwijderd (met registeropruiming).
+- A14: grote sensorattributen ingekort (prijsverwachting, diagnose_sturing, kwartierplanning, klimaatprojectie, gacs, nilm); het SVG-plaatje `plaat` van de cockpit-sensor en de markdownkaart in het oude dashboard zijn weg.
+
+Tests: 7 nieuwe testbestanden `test_v5177_*.py`.

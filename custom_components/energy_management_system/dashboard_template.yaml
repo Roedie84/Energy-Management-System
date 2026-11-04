@@ -594,7 +594,7 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
-      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_cockpit'', ''plaat'') }}'
+      content: 'De visuele plaat staat in de [EMS-cockpit](/ems-cockpit).'
     - type: horizontal-stack
       cards:
       - type: button
@@ -2026,13 +2026,6 @@ views:
       secondary: Energie-check
       icon: mdi:clock-check-outline
       entity: sensor.energy_management_system_energy_bridge_check
-      tap_action:
-        action: more-info
-    - type: custom:mushroom-template-card
-      primary: '{% set v = states(''sensor.energy_management_system_battery_protection'') %}{{ v ~ '' W ontlaadgrens'' if v not in [''unknown'',''unavailable'',''''] else ''geen grens actief'' }}'
-      secondary: Accubescherming
-      icon: mdi:battery-lock
-      entity: sensor.energy_management_system_battery_protection
       tap_action:
         action: more-info
     - type: markdown
