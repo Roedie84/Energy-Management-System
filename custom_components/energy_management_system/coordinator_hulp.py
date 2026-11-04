@@ -6,11 +6,15 @@ ze opnieuw, dus `from .coordinator import ...` blijft werken.
 """
 from __future__ import annotations
 
+from datetime import (
+    datetime,
+)
 from .const import (
     TEKORT_LEEG_INHOUD_KWH,
 )
 
 # ---- verhuisd uit coordinator.py ----
+
 
 def _nl(getal: float, decimalen: int = 1) -> str:
     """Een getal met een komma (v5.42)."""
@@ -36,3 +40,7 @@ def accu_is_leeg(soc, inhoud_kwh, vloer: float, grens_kwh: float | None = None) 
     if isinstance(inhoud_kwh, (int, float)) and inhoud_kwh < TEKORT_LEEG_INHOUD_KWH:
         return True
     return isinstance(soc, (int, float)) and soc <= vloer
+
+
+# (interval start, interval end, price)
+PriceEntry = tuple[datetime, datetime, float]
