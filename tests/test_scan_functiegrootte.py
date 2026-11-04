@@ -82,7 +82,8 @@ BEVROREN = {
     "coordinator.py:_build_forecast_timeline": 66,
     "coordinator.py:_compute_mpc_plan": 83,
     "coordinator.py:_evaluate_new_notifications": 103,
-    "coordinator.py:_finalize_nilm_device_day": 71,
+    # B4.7: verhuisd naar de mixin nilm_glue.py (ongewijzigd, zelfde grens).
+    "nilm_glue.py:_finalize_nilm_device_day": 71,
     # v3.50.0: +2, de tijdstempels bij de twee schrijvers van
     # `last_soc_percent` in deze functie.
     "coordinator.py:_update_advisory_readiness": 68,
