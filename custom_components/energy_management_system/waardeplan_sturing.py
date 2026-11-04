@@ -140,6 +140,10 @@ class WaardeplanSturingMixin:
                 nieuw["soc_procent"] = round(min_soc + (100 - min_soc) * r["inhoud_kwh"] / bruikbaar)
                 nieuw["soc_bruikbaar_procent"] = round(100 * r["inhoud_kwh"] / bruikbaar)
             uit.append(nieuw)
+        # v5.183.1: de ondergrens (laadstand bij een lege accu) voor de
+        # grafiek; alleen op de eerste rij (attribuutgrootte).
+        if uit and bruikbaar:
+            uit[0] = {**uit[0], "ondergrens_procent": round(min_soc)}
         return uit
 
     @staticmethod
@@ -158,6 +162,11 @@ class WaardeplanSturingMixin:
         if rij.get("actie") in ("laden_net", "verkopen", "zon_export"):
             return False
         if (rij.get("net_kwh") or 0.0) <= 0.01:
+            return False
+        # v5.183.1: levert de accu nog (laatste kwartieren boven de bodem), dan
+        # is het "huis voeden", geen tekort (04-11 14:33: "Accu leeg" om 20:00
+        # terwijl de accu nog 615 W leverde en de lijn op 13 % stond).
+        if (rij.get("accu_kwh") or 0.0) < -0.05:
             return False
         # v5.177.0 (A7): de grens van `accu_leeg`, op de stap van het plan.
         return (rij.get("inhoud_kwh") or 0.0) <= leeg_kwh + 1e-9

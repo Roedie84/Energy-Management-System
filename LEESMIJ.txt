@@ -1,3 +1,12 @@
+EMS v5.183.1 - "Accu leeg" pas als de accu niets meer levert
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Kwartieren waarin de accu nog levert, heten "Huis voeden", ook vlak boven de bodem;
+  "Accu leeg" begint pas als de accu op de ondergrens staat en niets meer levert.
+- De grafiek toont de ondergrens als stippellijn ("leeg (10 %)"): leeg is die
+  laadstand, niet 0 % op de as.
+
 EMS v5.183.0 - de accu bewaart alleen bij duidelijk voordeel
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

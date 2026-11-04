@@ -34872,3 +34872,12 @@ Akkoord Ruud 04-11 14:04 (punten 1-3). Live 14:01: 1,9 kWh (32 %) bleef van 18:0
 - Punt 3, datacorrectie: `_laadverwachting` telt alleen netladingen met `laad_waarde_bron = waardeplan`. De 5 ct (mediaan 5,1 ct over 5 dagen, 38 kWh) kwam vooral uit ladingen van de oude regels (vóór het waardeplan van 02-11). Tot er 5 dagen en 10 kWh aan waardeplanladingen zijn: geen correctie.
 
 Tests: `test_v5183_bewaarmarge.py`.
+
+## v5.183.1 — "Accu leeg" pas als de accu niets meer levert
+
+Melding Ruud 04-11 14:33: "Accu leeg maar accu lijn in grafiek nog niet op 10%". De Vooruitblik gaf "Accu leeg 20:45-05:00, 15 -> 10 %, ontlaadt 0,1 kW": `_waardeplan_tekort` keek alleen naar netafname en inhoud onder de leeg-grens, en de kwartieren waarin de accu nog ~615 W leverde (13 -> 10 %) heetten al tekort.
+
+- `_waardeplan_tekort`: levert de accu in het kwartier nog (> 0,05 kWh), dan geen tekort.
+- Grafiek: de ondergrens als stippellijn met legenda "leeg (10 %)"; `ondergrens_procent` op de eerste planrij.
+
+Tests: `test_v5183_1_leeg.py`.

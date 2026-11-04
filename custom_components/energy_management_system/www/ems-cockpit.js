@@ -672,6 +672,7 @@ button { font: inherit; }
 .staaf.tekort::after { content: ""; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px; background: var(--rood); }
 .staaf:hover { opacity: 1; }
 .g-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.vloer { stroke: var(--tekst3); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
 .soc-lijn { fill: none; stroke: var(--tekst); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
 .zon-vlak { fill: rgba(214, 166, 79, .10); stroke: rgba(214, 166, 79, .45); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .drempel { stroke: rgba(224, 101, 108, .5); stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
@@ -1986,10 +1987,15 @@ class EmsCockpitCard extends HTMLElement {
       ` 100,100`;
     const drempel = num(attr(this._s("uitleg"), "expensive_price_threshold"));
     const drempelY = drempel != null ? 100 - ((drempel * 100 - bodem) / bereik) * 100 : null;
+    // v5.183.1: de ondergrens van de accu (leeg = deze laadstand, niet 0 %).
+    const vloer = num((rijen[0] || {}).ondergrens_procent);
+    const vloerLijn = vloer != null && vloer > 0 && vloer < 100
+      ? `<line class="vloer" x1="0" x2="100" y1="${(100 - vloer).toFixed(2)}" y2="${(100 - vloer).toFixed(2)}"/>` : "";
     const svg =
       `<svg class="g-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
       `<polygon class="zon-vlak" points="${zonPunten}"/>` +
       (drempelY != null && drempelY > 0 && drempelY < 100 ? `<line class="drempel" x1="0" x2="100" y1="${drempelY.toFixed(2)}" y2="${drempelY.toFixed(2)}"/>` : "") +
+      vloerLijn +
       (socPunten ? `<polyline class="soc-lijn" points="${socPunten}"/>` : "") +
       `</svg>`;
 
@@ -2018,6 +2024,7 @@ class EmsCockpitCard extends HTMLElement {
       Object.keys(DOEN).filter((k) => gezien.has(k))
         .map((k) => `<span><i style="background:${DOEN[k].kleur}"></i>${DOEN[k].label.toLowerCase()}</span>`).join("") +
       `<span><i class="lijn-i" style="background:var(--tekst)"></i>accu %</span>` +
+      (vloer != null ? `<span><i class="lijn-i" style="background:var(--tekst3)"></i>leeg (${fmt(vloer)} %)</span>` : "") +
       `<span><i style="background:rgba(214,166,79,.45)"></i>zon</span></div>`;
     // v5.181.2 (d): de eenheden boven de assen
     return (
