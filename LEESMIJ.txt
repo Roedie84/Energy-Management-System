@@ -1,3 +1,11 @@
+EMS v5.180.1 - huis gaat voor bij zon terugleveren; cockpit toont terugleveren
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Het plan levert geen zon meer terug als het huis daarna met een lege accu aan het
+  net hangt; dan slaat de accu de zon op.
+- De cockpit toont "Zon terugleveren" in de Vooruitblik (levert x kW terug) en in de grafiek.
+
 EMS v5.180.0 - coordinator opgesplitst (deel 1), geen gedragswijziging
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

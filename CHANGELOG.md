@@ -34777,3 +34777,13 @@ Akkoord Ruud 04-11 07:11. Puur verplaatsen, geen gedragswijziging.
 - `waardeplan_sturing.py` (901 regels), `financien.py` (960), `accutoestand.py` (1.653), `uitleg.py` (755). Gedeelde hulpfuncties in `coordinator_hulp.py` (`_nl`, `accu_is_leeg`, `PriceEntry`, `demp_soc_stap`, `effectieve_ondergrens`), opnieuw geëxporteerd uit `coordinator.py`.
 - `coordinator.py`: 57.021 → 52.755 regels. Loggernaam blijft `...coordinator`.
 - Tests die de bron van de coordinator lezen gebruiken `tests/_coordinator_bron.py` (coordinator + mixins samengevoegd), zodat verbodstoetsen voor alle delen blijven gelden.
+
+## v5.180.1 — huis gaat voor bij zon terugleveren; cockpit toont terugleveren
+
+Akkoord Ruud 04-11 09:34. Aanleiding 04-11: het plan leverde 09:30–11:15 zon terug (`zon_export`, ~0,76 kWh) terwijl het huis vanaf ~18:45 tot 06:00 met een lege accu aan het net hing; het geldverschil was een paar cent.
+
+- `waardeplan.zon_export_laat_huis_tekort(rijen)`: True als na een `zon_export`-rij, vóór de eerste `laden_net`, een rij komt met netafname (> 0,01 kWh) bij een lege accu (≤ 0,01 kWh) en een andere actie dan `verkopen`.
+- `_waardeplan_huis_eerst` (in `waardeplan_sturing.py`, aangeroepen in `bereken_waardeplan`): rekent dan opnieuw met `zon_export_afdwingbaar = False`, zodat de slimme stand de zon opslaat; kenmerk `zon_export_geweigerd`.
+- Cockpit: modus "Zon terugleveren" (kleur #b9c46a) in grafiek en Vooruitblik, met "levert x kW terug".
+
+Tests: `test_v51791_cockpit_terugleveren.py` (7).
