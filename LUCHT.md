@@ -692,4 +692,12 @@ Maatstaf: UltimateSensor woonkamer (PM2.5 µg/m³). Getallen staan in LUCHT.csv.
 - CO₂ hele ronde > 1.200 (gem 1.535, max 1.641, nu 1.370), ramen dicht. Vocht 51,2-58,4%, temperatuur 22,2 → 18,4 °C, schimmelindicator 80, buiten 99% / 8,3 °C. VOC-index 54 → 397 (20:50-21:40, nu 338) zonder PM-stijging: oorzaak niet te zien. Ochtend luchten en verwarmen; luchtreiniger lost dit niet op.
 - Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 17). H2 auto bij koken 6x: 61, 22,6, 7,2, 6,6, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=26): reiniger aan houdt het laag; auto blijft bij apparaat op 2 hangen (wachttijd n=6), mid daalt direct (n=3); onder de norm, dus klein belang, oorzaak nog niet bewezen. Geen toets voor H1/H2.
 
-laatste ronde: 04-11 00:25, gemeten t/m 00:20
+## 04-11 04:25 (ronde 92)
+- PM2.5 00:20-04:20: gem 0,69, mediaan 0,67, P95 0,86, max 1,05 (00:25-00:30) (n=48); 0 uur > 15. Dag t/m nu ~0,7; 7d (28-10/03-11) 2,61 (nulmeting okt 2025 9,1).
+- Geen piek > 25, geen kookmoment (kookplaat/oven inactive), ramen dicht, tv uit, geen aanwezigheid.
+- Stand: hele ronde mid (240 min, gem 0,69), 0 min unavailable. Daling van 23:25 loopt uit: 0,97 → 0,6, sinds ~02:20 vlak op 0,55-0,69 (achtergrond); geen nieuwe halvering.
+- Werking: 5/5 traces failed_conditions (nachtvenster, verwacht), geen fout; 0 wissels. 0 HA-herstarts (start 22:16 staat nog). Lokaal 69 mislukt op 195.301 (geen nieuwe), uitval 0, 272 verbindingen, sturen 440/441 (geen opdrachten), filter 0%. Apparaat-PM2.5 vast op 2 bij Ultimate 0,5-1,05.
+- CO₂ 1.379 → 954 (gem 1.132, nu 946), 1,25 u > 1.200 (onder 1.200 vanaf ~01:40), ramen dicht, niemand. Vocht 58,5 → 57,7% bij 18,3 → 17,3 °C, schimmelindicator 80 → 81, buiten 99% / 6,7 °C. Ochtend luchten en verwarmen; luchtreiniger lost dit niet op.
+- Hypotheses: H1 ramen dicht nodig, niet voldoende voor kookpiek (6 van 17). H2 auto bij koken 6x: 61, 22,6, 7,2, 6,6, 5,4, 2,4; mid 1x: 1.147; uit 1x (oven): 3,9. Turbo ongetoetst. H3 (n=27): reiniger aan houdt het laag; auto blijft bij apparaat op 2 hangen (wachttijd n=6), mid daalt direct (n=3) tot achtergrond ~0,6 (deze nacht); oorzaak nog niet bewezen. Geen toets voor H1/H2.
+
+laatste ronde: 04-11 04:25, gemeten t/m 04:20
