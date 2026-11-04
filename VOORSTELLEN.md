@@ -473,7 +473,19 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: leermodus uit na de volgende handmatige stand met herstart; melding `leermodus_lang_aan` komt na een herstart wel.
 
 ## L-EMS-065 · huis en zon van het lopende kwartier lopen op in het plan (meetfout, regressie v5.183.3)
-- Status: **gebouwd v5.183.4** (04-11 15:40, tussenronde: foute data nu; suite 7137 groen, 6 nieuw; sturing ongewijzigd). Test `test_v5183_4_lopend_kwartier.py`.
+- Status: **geverifieerd** (04-11 19:40, n=2 standen: huis rij 0 682 W, gemeten 627 W; was 2.201 tegen 613 W). Eerder: **gebouwd v5.183.4** (04-11 15:40, tussenronde: foute data nu; suite 7137 groen, 6 nieuw; sturing ongewijzigd). Test `test_v5183_4_lopend_kwartier.py`.
 - Onderbouwing (live 15:41, n=1): plan voor 15:30 huis 2201 W, zon 893 W, gemeten 613 W, 196 W; kwartier erna 772 W en 312 W. `plan_verbruik_kwh`/`plan_zon_kwh` gelden voor de rest van het kwartier bij de berekening (15:34), `uren` voor de rest van nu. `beoordeel` rekende ermee, dus zon/verbruik/rest in de planvolging zaten ernaast.
 - Bouw: `_waardeplan_deel` schaalt beide, zelfde rekening als `_waardeplan_net_kwh`.
 - Meten: na installatie `gepland_huis_w` bij het einde van een kwartier gelijk aan het begin; `onverklaard_w` niet meer hoog bij een plan dat klopt.
+
+## L-EMS-066 · net van het lopende kwartier te hoog na een berekening midden in het kwartier (meetfout, regressie v5.183.2)
+- Status: **open, zelf te bouwen** (04-11 19:40; dagafsluiting 05-11 03:40, geen tussenrelease: alleen weergave).
+- Onderbouwing (live, n=2): 19:41 accu 683 + net 415 bij huis 680 W, 19:43 683 + 413 bij 682 W; P1 gemeten ~4-80 W. `_rij_dekking` zet `accu_kwh` sinds v5.183.2 op de dekking over de rest van het kwartier; `_waardeplan_net_kwh` rekent de accustap nog als heel kwartier. Net ≈ huis × (1 − rij_uren/0,25): 680 × (1 − 0,1/0,25) = 408 W.
+- Bouw: bij een rij met `accu_stap_kwh` de accu mee schalen als het huis-min-zon-deel (of `net_kwh` van de rij zelf gebruiken). Controleer ook `_rij_zon`. Sturing ongewijzigd; raakt plantabel en `cumulatief_eur` van het lopende kwartier.
+- Meten: rij 0 accu + net + zon = huis binnen 20 W, ook midden in een kwartier.
+
+## L-EMS-067 · laadplanwijzigingen van de laatste 24 uur bewaren (meetbaarheid, H-EMS-18)
+- Status: **open, zelf te bouwen** (04-11 19:40; dagafsluiting 05-11 03:40).
+- Onderbouwing: `laadplan_gewijzigd` bewaart alleen de laatste wijziging en attributen staan sinds v5.76.0 niet in de recorder. Van vier herstarts sinds 15:40 is er één te zien. H-EMS-18 is zo alleen te toetsen als een ronde er toevallig naast staat.
+- Bouw: lijst van max. 30 wijzigingen (om, was, blokken, reden, kort na herstart ja/nee) als attribuut op `diagnose_sturing`. Sturing ongewijzigd.
+- Meten: elke herstart staat erin; H-EMS-18 per herstart te tellen.

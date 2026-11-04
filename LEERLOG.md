@@ -1062,3 +1062,20 @@ laatste ronde: 04-11 11:40, gemeten t/m 04-11 11:52
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart). H-EMS-14 geparkeerd.
 
 laatste ronde: 04-11 15:40, gemeten t/m 04-11 16:00
+
+## 04-11 19:40 · tussenronde
+- Draait v5.184.4, HACS gelijk. Sinds 15:40 zeven releases uit de chat (v5.183.4-v5.184.4) en herstarts 16:12, 16:59, 17:20, 19:36. Geen release: alleen weergave, en de chat heeft vandaag al veel uitgebracht.
+- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg. Maar `huis_gaat_voor` 04-11 staat nu op **geschonden**: regeloverschot **0,145 kWh** (15:40 0,013), grens 0,1. Geen verkoop.
+- **Koken sinds v5.184.1:** accu volgt nu: 5-min gemiddelde P1 17:05-19:40 max 339 W (16:45-17:00 tot 3.713 W, SoC bleef 40 %). Keerzijde: bij aan/uit van de kookplaat P1-dips tot −1.974 W, samen het regeloverschot hierboven. n=1 avond. Volgen; geen voorstel.
+- **Nieuw L-EMS-066 (zelf te bouwen, dagafsluiting):** eerste planrij klopt niet na een berekening midden in het kwartier: 19:41 en 19:43 accu 683 + net 413 bij huis 682 W, gemeten ~0-80 W. Rij `huis` sinds v5.183.2: `_waardeplan_net_kwh` neemt de accustap als heel kwartier, maar die is nu de rest van het kwartier. Sturing niet geraakt.
+- **v5.184.4 werkt:** vaatwasser 05-11 05:00-05:45 huis 1.824/1.448/1.756/652 W (was 5.112 W in één kwartier), aandeel 33/25/31/9 % tegen profiel 34/25/30/10.
+- **L-EMS-065 geverifieerd:** huis rij 0 682 W, gemeten 627 W (was 2.201 tegen 613 W).
+- Zon dag **6,62 kWh** (Solcast 7,27, **−9,0 %**, voorlopig). Import 5,25, export 0,57 t/m 19:00. SoC 50 → 16 % tussen 15:45 en 19:41, accu leeg rond 20:15.
+- Planvolging 54,5 % (n=77), twin 0,598 (grote fouten 15:30/16:30 uit ochtendplannen; laatste 0,091). Besparing −€ 0,03. MC tot blok 99,7 % (det. 2,08 kWh, horizon 00:00), soort live 'planning'.
+- **H-EMS-18:** 19:36 viel 13:00-13:15 uit het plan (reden 'opstartfase'); 16:12/16:59/17:20 niet te meten, want `laadplan_gewijzigd` bewaart alleen de laatste en attributen staan niet in de recorder → **L-EMS-067 (zelf te bouwen, dagafsluiting)**. `reserve_sprongen` 19:36: lange horizon 4,80 → 6,33 kWh.
+- Witgoedadvies: unknown na elke herstart, terug op het volgende kwartier (13× vandaag, 3-25 min). Geen stilstand.
+- L-EMS-061: accu nog niet op 10 %, 20:15 volgende ronde. L-EMS-063: toets morgenochtend. L-EMS-064: n=0. Stilstand: **geen echte** (10 wachten, 0 doen). Airco 'niets', knop uit → rekent.
+- Niet gemeten: euro's van de kookfout 16:45, SoC-voorspelling en kwartierbeslissingen tegen optimum (dagafsluiting).
+- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart). H-EMS-14 geparkeerd.
+
+laatste ronde: 04-11 19:40, gemeten t/m 04-11 19:47
