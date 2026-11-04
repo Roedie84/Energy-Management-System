@@ -549,6 +549,10 @@ def _vooruit(kwartieren, accu: Accu, keuze, index, b_stap, i: int, niveaus: int,
             "net_kwh": round(g, 3),
             "inhoud_kwh": round(i * STAP_KWH, 2),
             "inhoud_delta_kwh": round((i - i_voor) * STAP_KWH, 2),
+            # v5.183.3: waarmee het plan rekende (incl. live correctie en
+            # apparaten), zodat de tabel accu + net = huis laat zien.
+            "verbruik_kwh": round(k.verbruik_kwh, 3),
+            "zon_kwh": round(k.zon_kwh, 3),
             # v5.162.0: de grootste laadstap = vol vermogen. De stap van
             # 0,1 kWh rondt af: bij 2,4 kW zou er 2.196 W op de accu staan.
             # v5.177.0 (A4): de grootste stap van DIT kwartier.

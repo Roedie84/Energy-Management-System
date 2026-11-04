@@ -82,8 +82,11 @@ def gepland_uit_plan(rij: dict, start_kwh: float) -> dict:
         "van": rij.get("van"),
         "modus": rij.get("modus"),
         "accu_w": round(_accu_w({**rij, "soc_kwh": rij.get("soc_kwh") or 0.0}, start_kwh)),
-        "zon_w": round((rij.get("zon_kwh") or 0.0) * per_uur),
-        "huis_w": round((rij.get("verbruik_kwh") or 0.0) * per_uur),
+        # v5.183.3: zon en huis waarmee het waardeplan rekende, als die er zijn.
+        "zon_w": round((rij.get("plan_zon_kwh") if rij.get("plan_zon_kwh") is not None
+                        else rij.get("zon_kwh") or 0.0) * per_uur),
+        "huis_w": round((rij.get("plan_verbruik_kwh") if rij.get("plan_verbruik_kwh") is not None
+                         else rij.get("verbruik_kwh") or 0.0) * per_uur),
     }
 
 
@@ -104,11 +107,16 @@ def vermogens_per_kwartier(rijen: list[dict], start_kwh: float | None) -> list[d
         accu = _accu_w(rij, vorige)
         accu = None if accu is None else round(accu)
         net = rij.get("net_kwh")
+        # v5.183.3: huis en zon waarmee het waardeplan rekende (live correctie,
+        # apparaten); anders liep de tabel uiteen (16:15 accu 1261 W bij een
+        # huis van 804 W, 15:30 net 2428 W bij 760 W).
+        zon = rij.get("plan_zon_kwh") if rij.get("plan_zon_kwh") is not None else rij.get("zon_kwh")
+        huis = rij.get("plan_verbruik_kwh") if rij.get("plan_verbruik_kwh") is not None else rij.get("verbruik_kwh")
         uit.append({
             "accu_w": accu,
             "net_w": None if net is None else round(net * per_uur),
-            "zon_w": round((rij.get("zon_kwh") or 0.0) * per_uur),
-            "huis_w": round((rij.get("verbruik_kwh") or 0.0) * per_uur),
+            "zon_w": round((zon or 0.0) * per_uur),
+            "huis_w": round((huis or 0.0) * per_uur),
         })
         vorige = soc
     return uit

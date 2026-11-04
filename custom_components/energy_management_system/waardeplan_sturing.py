@@ -120,6 +120,10 @@ class WaardeplanSturingMixin:
             # v5.161.3: wat het plan in dit kwartier in de accu doet, los van
             # de startstand. Voor het vermogen; zie planvolging._accu_w.
             nieuw["inhoud_delta_kwh"] = r.get("inhoud_delta_kwh")
+            # v5.183.3: huis en zon zoals het waardeplan ze rekende, voor de tabel.
+            if r.get("verbruik_kwh") is not None:
+                nieuw["plan_verbruik_kwh"] = r["verbruik_kwh"]
+                nieuw["plan_zon_kwh"] = r.get("zon_kwh")
             # v5.175.0: zon opslaan - het overschot aan de netkant.
             if r.get("accu_ac_w") is not None:
                 nieuw["accu_ac_w"] = r["accu_ac_w"]

@@ -24553,6 +24553,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             "gewijzigd",
             "eerst_voorspeld",
             "tekort",
+            # v5.183.3: de ondergrens voor de grafiek (alleen op de eerste rij)
+            "ondergrens_procent",
         )
         plan = self.get_quarter_plan(now)
         # v5.146.0: het geplande vermogen per kwartier, voor de Vooruitblik
@@ -24581,6 +24583,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             r.pop("eerst_voorspeld", None)
         if not r.get("tekort"):
             r.pop("tekort", None)
+        if r.get("ondergrens_procent") is None:
+            r.pop("ondergrens_procent", None)
         return r
 
     def _plan_startvoorraad_kwh(self) -> float | None:

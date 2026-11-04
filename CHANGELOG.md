@@ -34892,3 +34892,12 @@ Kaart claude-ems 04-11 (twee punten) en Ruud 15:06 ("waarom hier sparen ipv slim
 
 Tests: `test_v5183_2_dekking_en_status.py`; drie oudere waardeplantests rekenen met de stap (`accu_stap_kwh`) of de volle dekking.
 - `cockpit_accu`: zonder tekortschatting tot het blok (None) geen TypeError meer (zag in de testlog).
+
+## v5.183.3 — plantabel met het huis en de zon van het waardeplan
+
+Controle na de herstart 04-11 15:21 (v5.183.2): 15:30 net 2428 W bij een huis van 760 W, 16:15 accu 1261 W bij een huis van 804 W. Het waardeplan rekent met de live gecorrigeerde verwachting (en apparaten), de tabel nam huis en zon uit de oude planregel.
+
+- Waardeplanrijen dragen `verbruik_kwh`/`zon_kwh`; `_met_waardeplan` geeft ze door als `plan_verbruik_kwh`/`plan_zon_kwh`; `vermogens_per_kwartier` en `gepland_uit_plan` gebruiken die.
+- `ondergrens_procent` (v5.183.1) stond niet in de veldenlijst van het attribuut `kwartierplanning` en kwam dus nooit in de cockpit; nu wel (alleen de eerste rij).
+
+Tests: `test_v5183_3_tabel.py`.

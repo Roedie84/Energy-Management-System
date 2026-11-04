@@ -1,3 +1,11 @@
+EMS v5.183.3 - plantabel rekent met hetzelfde huisverbruik als het plan
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Vooruitblik en planvolging tonen het huis en de zon waarmee het plan rekent (met de
+  live correctie en apparaten); accu + net = huis klopt nu ook daar.
+- De stippellijn voor de ondergrens ("leeg") staat nu echt in de grafiek.
+
 EMS v5.183.2 - bewaarmarge werkt ook bij een klein huisverbruik; plantabel klopt
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
