@@ -1,3 +1,11 @@
+EMS v5.183.4 - huis en zon van het lopende kwartier kloppen weer
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Sinds v5.183.3 liep het geplande huis en de geplande zon van het lopende kwartier
+  op naarmate het kwartier vorderde (15:41: huis 2201 W, gemeten 613 W). Nu niet meer,
+  en de oorzaak in de planvolging klopt daardoor ook weer. Sturing ongewijzigd.
+
 EMS v5.183.3 - plantabel rekent met hetzelfde huisverbruik als het plan
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

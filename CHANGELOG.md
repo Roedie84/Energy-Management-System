@@ -34901,3 +34901,12 @@ Controle na de herstart 04-11 15:21 (v5.183.2): 15:30 net 2428 W bij een huis va
 - `ondergrens_procent` (v5.183.1) stond niet in de veldenlijst van het attribuut `kwartierplanning` en kwam dus nooit in de cockpit; nu wel (alleen de eerste rij).
 
 Tests: `test_v5183_3_tabel.py`.
+
+## v5.183.4 — huis en zon van het lopende kwartier over de juiste duur
+
+Leerronde 04-11 15:41: de plantabel en de planvolging toonden voor 15:30 een huis van 2201 W en zon van 893 W, gemeten 613 W en 196 W. Sinds v5.183.3 komen huis en zon uit de waardeplanrij. Die rij rekent over de rest van het kwartier op het moment van de berekening (15:34), de planregel deelt door de rest van nu. Hoe later in het kwartier, hoe groter de fout. Dezelfde fout als v5.165.0 bij het net.
+
+- `_met_waardeplan` schaalt `plan_verbruik_kwh` en `plan_zon_kwh` met het deel dat nog telt (`_waardeplan_deel`, zelfde rekening als `_waardeplan_net_kwh`).
+- Ook de oorzaak in de planvolging klopt daardoor weer: `beoordeel` rekende met dezelfde getallen. Sturing ongewijzigd.
+
+Tests: `test_v5183_4_lopend_kwartier.py`.
