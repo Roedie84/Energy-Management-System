@@ -143,7 +143,8 @@ def test_vrij_te_verkopen_valt_terug_op_het_veld_van_de_verkooptoets():
 
 def test_tijdens_het_blok_een_tekst_in_plaats_van_streepjes():
     assert "_blokLoopt()" in JS and "laadblok loopt" in JS
-    assert 'verkoop: ["gacs", "mc", "tekort", "uitleg", "blok"]' in JS
+    # v5.178.0: zon zit in hetzelfde paneel, dus de lijst loopt door
+    assert 'verkoop: ["gacs", "mc", "tekort", "uitleg", "blok",' in JS
 
 
 def test_apparaatstanden_hebben_een_label():

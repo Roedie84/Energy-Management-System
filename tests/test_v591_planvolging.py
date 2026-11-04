@@ -191,7 +191,11 @@ def test_de_kaart_toont_de_planvolging():
     js = (Path(pkg.__file__).parent / "www" / "ems-cockpit.js").read_text(encoding="utf-8")
     assert "_planvolgingRegel" in js
     assert '"planvolging"' in js
-    assert 'stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan"' in js
+    # v5.178.0: de energiestroom is opgegaan in de tegel Accu nu; de
+    # planvolging staat in de tegel Plan vandaag.
+    assert 'accu: ["soc", "beschikbaar", "capaciteit", "accu_vermogen", "pv", "net", "huis"' in js
+    assert 'planvandaag: ["plan"' in js
+    assert "this._planvolgingRegel()" in js
 
 
 def test_de_kaart_toont_de_resterende_laadtijd():

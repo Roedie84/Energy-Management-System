@@ -2,9 +2,9 @@
 
 Gevraagd 21-10 07:03 (screenshot): "De energie cockpit is nu vrij groot
 geworden, graag kijken of je de indeling kunt optimaliseren en het zo
-compacter kunt maken". De rechterkolom (verkoop, geld, zon) was bijna twee
-keer zo lang als de andere: de prijsgrafiek, de kwaliteit van de verwachting
-en een tabel van 14 dagen zaten allemaal in Geld.
+compacter kunt maken". De prijzen een week vooruit kregen toen een eigen
+paneel; sinds v5.178.0 zijn ze het tabblad "7 dagen" van Prijs en lading en
+staat de kwaliteit van de verwachting zichtbaar in dat tabblad.
 """
 from pathlib import Path
 
@@ -17,13 +17,12 @@ def _methode(naam):
     return JS[begin:JS.index("\n  }\n", begin)]
 
 
-def test_prijzen_eigen_paneel_in_de_middenkolom():
-    k2 = JS[JS.index('<div class="kol k2">'):JS.index('<div class="kol k3">')]
-    assert 'data-p="planning"' in k2 and 'data-p="prijzen"' in k2 and 'data-p="huis"' in k2
-    assert k2.index('data-p="planning"') < k2.index('data-p="prijzen"') < k2.index('data-p="huis"')
-    assert 'prijzen: ["prijsverwachting", "plan", "uitleg"]' in JS
-    p = _methode("_prijzen")
-    assert "this._prijsGrafiek()" in p and "this._prijsKwaliteit()" in p
+def test_prijzen_zijn_het_tabblad_7_dagen():
+    assert 'planning: ["plan", "schema", "uitleg", "blok", "soc", "prijsverwachting"]' in JS
+    w = _methode("_week")
+    assert "this._prijsGrafiek()" in w and "this._prijsKwaliteit()" in w
+    assert "this._week()" in _methode("_planning")
+    assert "  _prijzen(" not in JS
 
 
 def test_geld_zonder_prijzen():
@@ -37,10 +36,9 @@ def test_per_dag_ingeklapt_en_blijft_zo():
     k = _methode("_prijsKwaliteit")
     assert 'this._uitklap("prijs_per_dag"' in k
     assert 'addEventListener("toggle"' in JS and "this._uitgeklapt[d.dataset.uitklap] = d.open" in JS
-    assert all(ord(c) < 128 for c in _methode("_prijzen") + _methode("_uitklap") + k)
+    assert all(ord(c) < 128 for c in _methode("_week") + _methode("_uitklap") + k)
 
 
-def test_raster_kent_het_paneel_op_elke_breedte():
-    assert '"stroom" "planning" "prijzen"' in JS
-    assert '"prijzen prijzen"' in JS
-    assert ".p-prijzen { grid-area: prijzen; }" in JS
+def test_raster_kent_elk_paneel():
+    for p in ("planning", "verkoop", "modules", "huis", "bediening"):
+        assert f".p-{p} {{ grid-area: {p}; }}" in JS

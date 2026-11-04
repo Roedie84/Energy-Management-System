@@ -548,8 +548,10 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .melding.gevaar { background: linear-gradient(90deg, rgba(251, 77, 101, .28), rgba(251, 77, 101, .08)); border-color: rgba(251, 77, 101, .6); }
 .melding.gevaar .ic { color: var(--rood); }
 
-/* ---- statusrij ---- */
-.hero { display: grid; gap: 10px; grid-template-columns: 1fr; margin-bottom: 10px; }
+/* ---- statusrij (v5.178: drie tegels) ---- */
+.hero { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); margin-bottom: 10px; }
+.hero > .hv { display: flex; min-width: 0; }
+.hero > .hv > .tegel { flex: 1 1 auto; }
 .tegel {
   position: relative; overflow: hidden; padding: 12px 14px 12px 17px; border-radius: var(--r);
   background: linear-gradient(160deg, rgba(26, 40, 64, .74), rgba(10, 16, 30, .74));
@@ -567,8 +569,8 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .sub b { color: var(--tekst); font-weight: 600; }
 .tekst-m { font-size: 16px; font-weight: 700; line-height: 1.3; margin: 5px 0 4px; }
 .klem { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.accu-t { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; }
-.ring { width: 96px; height: 96px; display: block; }
+.accu-t { display: grid; grid-template-columns: 84px 1fr; gap: 12px; align-items: center; margin-top: 6px; }
+.ring { width: 84px; height: 84px; display: block; }
 .ring-t { font-size: 30px; font-weight: 800; fill: var(--tekst); font-variant-numeric: tabular-nums; }
 .ring-p { font-size: 14px; fill: var(--tekst2); font-weight: 700; }
 .ring-o { font-size: 10px; fill: var(--tekst2); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -600,10 +602,10 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .redenen li { display: flex; gap: 8px; }
 .redenen li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent, var(--tekst3)); margin-top: 7px; flex: none; }
 
-/* ---- raster ---- */
+/* ---- raster (v5.178: brede kaart links, smalle kolom rechts) ---- */
 .raster {
   display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "stroom" "planning" "prijzen" "verkoop" "modules" "zon" "huis" "bediening" "geld";
+  grid-template-areas: "planning" "bediening" "modules" "verkoop" "huis";
 }
 .paneel {
   min-width: 0; border-radius: var(--r);
@@ -613,15 +615,11 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
   padding: 0 0 12px; display: flex; flex-direction: column;
 }
 .kol { display: contents; }
-.p-stroom { grid-area: stroom; }
 .p-planning { grid-area: planning; }
 .p-verkoop { grid-area: verkoop; }
 .p-modules { grid-area: modules; }
-.p-zon { grid-area: zon; }
 .p-huis { grid-area: huis; }
 .p-bediening { grid-area: bediening; }
-.p-geld { grid-area: geld; }
-.p-prijzen { grid-area: prijzen; }
 .ph { display: flex; align-items: center; gap: 8px; padding: 10px 14px 7px; color: var(--tekst2); min-width: 0; flex-wrap: wrap; }
 .ph h2 { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--tekst); }
 .ph .ic { color: var(--amber); }
@@ -649,42 +647,50 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .zin { font-size: 13px; color: var(--tekst2); line-height: 1.45; padding: 7px 10px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); }
 .zin b { color: var(--tekst); }
 
-/* ---- energiestroom (v5.91) ---- */
-.stroom { position: relative; width: 100%; max-width: 480px; margin: 0 auto; aspect-ratio: 1.12 / 1; }
-.stroom svg.lijnen { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.spoor { fill: none; stroke: rgba(255,255,255,.07); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; }
-.loop {
-  fill: none; stroke-linecap: round; vector-effect: non-scaling-stroke;
-  stroke-dasharray: 0.1 13; animation: loop var(--snel, 1.6s) linear infinite;
-  filter: drop-shadow(0 0 4px var(--kl, transparent));
-}
-.loop.terug { animation-direction: reverse; }
-@keyframes loop { to { stroke-dashoffset: -26.2; } }
-@media (prefers-reduced-motion: reduce) { .loop { animation: none; stroke-dasharray: none; opacity: .55; } }
-.knoop {
-  position: absolute; transform: translate(-50%, -50%); width: 32%; min-height: 25%;
-  display: flex; flex-direction: column; justify-content: center; gap: 3px;
-  padding: 7px 10px; border-radius: 14px; text-align: left;
-  background: linear-gradient(160deg, rgba(22, 34, 56, .92), rgba(8, 13, 25, .92));
-  border: 1px solid var(--rand2);
-  box-shadow: 0 10px 26px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.05), 0 0 26px var(--gloed, transparent);
-}
-.knoop::before { content: ""; position: absolute; left: 12px; right: 12px; top: 0; height: 2px; border-radius: 0 0 2px 2px; background: var(--k); opacity: var(--actief, .25); }
-.knoop .kk { display: flex; align-items: center; gap: 7px; }
-.knoop .badge { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--k) 16%, transparent); }
-.knoop .badge .ic { width: 16px; height: 16px; color: var(--k); }
-.knoop .n { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--tekst2); }
-.knoop .v { font-size: 20px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.knoop .v small { font-size: 11px; }
-.knoop .s { font-size: 11.5px; color: var(--tekst2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.knoop .s.rest { color: var(--tekst3); font-size: 11px; white-space: normal; }
-.knoop .soc { height: 4px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 2px; }
-.knoop .soc i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--groen), #6ee7b7); }
-.hub {
-  position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; border-radius: 50%; transform: translate(-50%,-50%);
-  background: radial-gradient(circle at 35% 35%, #fff7d6, var(--amber) 55%, #b45309);
-  box-shadow: 0 0 0 4px rgba(251,191,36,.12), 0 0 18px rgba(251,191,36,.7);
-}
+.tk { display: flex; align-items: center; justify-content: space-between; gap: 6px 8px; flex-wrap: wrap; min-width: 0; }
+.tk .meer { width: 24px; height: 24px; }
+.tegel .uitklap { margin-top: 8px; }
+.rest { font-size: 12px; color: var(--tekst2); margin-top: 4px; }
+.vier { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.cel4 { padding: 5px 7px; border-radius: 10px; background: rgba(0,0,0,.18); border: 1px solid var(--rand); border-top: 2px solid var(--k, var(--rand)); min-width: 0; }
+.cel4 .l { display: block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--tekst3); }
+.cel4 b { display: block; font-size: 15px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.cel4 b small { font-size: 10px; }
+.cel4 .s { display: block; font-size: 11px; color: var(--tekst2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip { display: flex; height: 14px; border-radius: 6px; overflow: hidden; gap: 1px; margin-top: 9px; background: rgba(255,255,255,.04); }
+.strip i { flex: 1 1 0; min-width: 0; opacity: .9; }
+.strip-x { position: relative; height: 15px; font-size: 10px; color: var(--tekst3); font-variant-numeric: tabular-nums; }
+.strip-x span { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
+.strip-x span:first-child { transform: none; }
+.geld-r { gap: 4px; font-size: 13px; margin-top: 6px; }
+.geld-r b { white-space: normal; text-align: right; }
+.geld-r .bij { white-space: nowrap; }
+.tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: rgba(255,255,255,.04); border: 1px solid var(--rand); }
+.tabs button { font: inherit; font-size: 12px; font-weight: 650; color: var(--tekst2); background: none; border: 0; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: rgba(56, 215, 240, .14); color: var(--tekst); box-shadow: inset 0 0 0 1px rgba(56, 215, 240, .45); }
+.tabs button:disabled { opacity: .35; cursor: default; }
+.tabs button:focus-visible, .links button:focus-visible { outline: 2px solid var(--cyaan); outline-offset: 2px; }
+.chip .leeg { font-weight: 500; margin-left: 2px; }
+.trio.vast { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rijen.vrij b { white-space: normal; text-align: right; }
+.geld-kop { margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bij { font-style: normal; font-weight: 500; color: var(--tekst3); margin-left: 6px; }
+.geld-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 18px; }
+.geld-grid .geld-kop { margin-top: 7px; }
+.regel .rs { font-size: 11.5px; line-height: 1.3; }
+.pl-legenda.klein { gap: 3px 10px; font-size: 11px; margin: -3px 0 6px; }
+.lijst.huislijst { gap: 6px; }
+.planvolg { margin: 2px 0 6px; padding: 6px 8px; gap: 5px 8px; }
+.planvolg > div.rk { grid-column: auto; margin: 0; align-self: center; font-size: 9.5px; }
+.planvolg > div.rij3 { grid-column: 2; }
+.planvolg .rij3 { gap: 6px; }
+.planvolg .cel { padding: 3px 7px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; font-size: 13px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.planvolg .cel > .w { display: contents; }
+.planvolg .cel .l { font-size: 9.5px; }
+.planvolg .cel .w { font-size: 13px; }
+.planvolg .cel .s { font-size: 11px; font-weight: 500; }
+.planvolg .zinpv { font-size: 12.5px; }
+.vb-vak { margin: 10px 0 0; }
 .planvolg {
   display: grid; grid-template-columns: auto 1fr; gap: 7px 10px; align-items: center;
   padding: 8px 10px; border-radius: 13px; background: rgba(255,255,255,.035); border: 1px solid var(--rand);
@@ -756,42 +762,35 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .tabel.vb td small { color: var(--tekst3); }
 .vb-samen { margin-top: 10px; font-size: 12.5px; line-height: 1.55; color: var(--tekst2); }
 
-/* ---- modules ---- */
-.module { display: grid; gap: 5px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); }
-.module.zwak { border-color: rgba(251, 146, 60, .45); background: rgba(251, 146, 60, .06); }
-.module-kop { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.module-kop b { font-size: 14px; }
-.module-kop .w { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.module-cijfers { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--tekst2); }
+/* ---- modules (v5.178: een regel per module) ---- */
+.modrij { display: grid; grid-template-columns: minmax(64px, auto) minmax(40px, 1fr) 44px; gap: 4px 10px; align-items: center; padding: 5px 10px; border-radius: 10px; background: rgba(255,255,255,.035); border: 1px solid var(--rand); font-size: 13px; }
+.modrij.zwak { border-color: rgba(251, 146, 60, .45); background: rgba(251, 146, 60, .06); }
+.modrij .w { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.modrij .module-cijfers { grid-column: 1 / -1; }
+.module-cijfers { display: flex; gap: 2px 10px; flex-wrap: wrap; align-items: center; font-size: 11.5px; color: var(--tekst2); }
+.module-cijfers b.hoog { color: var(--oranje); }
 .module-cijfers b { color: var(--tekst); font-variant-numeric: tabular-nums; }
 .vlaggen { display: flex; gap: 6px; flex-wrap: wrap; }
 
-/* ---- bediening ---- */
-.knoppen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* ---- bediening (v5.178: compacte knoppen) ---- */
+.knoppen { display: flex; flex-wrap: wrap; gap: 6px; }
 .knop {
   font: inherit; color: var(--tekst); text-align: left; cursor: pointer;
-  display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 9px;
-  padding: 7px 10px; border-radius: 12px; border: 1px solid var(--rand);
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  padding: 3px 10px 3px 3px; border-radius: 12px; border: 1px solid var(--rand);
   background: rgba(255,255,255,.035); transition: background .2s, border-color .2s, transform .1s;
   min-width: 0;
 }
 .knop:hover { border-color: var(--rand2); background: rgba(255,255,255,.06); }
 .knop:active { transform: scale(.985); }
 .knop:focus-visible { outline: 2px solid var(--cyaan); outline-offset: 2px; }
-.knop .kic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: rgba(255,255,255,.05); color: var(--tekst2); }
-.knop .kic .ic { width: 18px; height: 18px; }
-.knop .kt { min-width: 0; }
-.knop .kn { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.knop .ks { font-size: 11.5px; color: var(--tekst3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.knop .schakel { width: 38px; height: 22px; border-radius: 99px; background: rgba(255,255,255,.12); position: relative; transition: background .2s; }
-.knop .schakel::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
-.knop.aan { border-color: color-mix(in srgb, var(--kk) 55%, transparent); background: color-mix(in srgb, var(--kk) 12%, transparent); }
-.knop.aan .kic { background: color-mix(in srgb, var(--kk) 22%, transparent); color: var(--kk); }
-.knop.aan .schakel { background: var(--kk); }
-.knop.aan .schakel::after { left: 19px; }
+.knop .kic { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: rgba(255,255,255,.05); color: var(--tekst2); flex: none; }
+.knop .kic .ic { width: 16px; height: 16px; }
+.knop .kn { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.knop .aan-t { font-size: 11px; font-weight: 700; color: var(--kk); }
 .knop.bezig { opacity: .6; pointer-events: none; }
 .knop.weg { opacity: .4; pointer-events: none; }
-.knopgroep { font-size: 10.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--tekst3); margin: 2px 0 -4px; }
+.uitklap .knoppen { margin-top: 2px; }
 
 /* ---- huis ---- */
 .lijst { display: grid; gap: 6px; }
@@ -803,11 +802,11 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 .regel > div { min-width: 0; }
 
 /* ---- voet ---- */
-.voet { margin-top: 10px; }
-.links { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px; }
-.links button { font: inherit; font-size: 12px; font-weight: 650; color: var(--tekst2); background: rgba(255,255,255,.04); border: 1px solid var(--rand); padding: 6px 11px; border-radius: 999px; cursor: pointer; }
+.voet { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 0 2px; }
+.links { display: flex; gap: 5px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+.links button { font: inherit; font-size: 11.5px; font-weight: 650; color: var(--tekst2); background: rgba(255,255,255,.04); border: 1px solid var(--rand); padding: 4px 9px; border-radius: 999px; cursor: pointer; }
 .links button:hover { color: var(--tekst); border-color: var(--rand2); }
-.voetregel { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--tekst3); padding: 8px 14px 0; }
+.voetregel { font-size: 11.5px; color: var(--tekst3); margin-left: auto; }
 
 /* ---- geen bron ---- */
 .geenbron { padding: 40px 24px; text-align: center; color: var(--tekst2); font-size: 14px; line-height: 1.6; }
@@ -815,37 +814,33 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
 
 /* ---- breedtes ---- */
 @container (min-width: 620px) {
-  .kwart { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .knoppen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .huislijst { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @container (min-width: 820px) {
-  .hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "accu geld" "plan plan"; }
+  .t-accu { grid-area: accu; } .t-plan { grid-area: plan; } .t-geld { grid-area: geld; }
   .raster {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
       "planning planning"
-      "prijzen prijzen"
-      "stroom verkoop"
-      "modules zon"
-      "huis geld"
-      "bediening bediening";
+      "bediening bediening"
+      "modules verkoop"
+      "huis huis";
   }
-  .knoppen { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @container (min-width: 1260px) {
-  .hero { grid-template-columns: 1.2fr 1.15fr 1fr 1fr; }
+  .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr) minmax(0, 1.28fr); grid-template-areas: "accu plan geld"; }
+  .geld-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .geld-grid .geld-kop { margin-top: 6px; }
   .raster {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) minmax(0, 1fr);
-    grid-template-areas:
-      "k1 k2 k3"
-      "bediening bediening bediening";
+    grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
+    grid-template-areas: "k1 k2";
     align-items: start;
   }
   .kol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  .k1 { grid-area: k1; } .k2 { grid-area: k2; } .k3 { grid-area: k3; }
+  .k1 { grid-area: k1; } .k2 { grid-area: k2; }
   .gwrap { grid-template-rows: 210px 22px; }
-  .knoppen { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .p-huis .lijst { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .huislijst { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @container (max-width: 1259px) { .kop-mid { flex: 1 1 100%; order: 2; } }
 @container (max-width: 560px) {
@@ -853,14 +848,23 @@ small { font-size: .55em; font-weight: 600; color: var(--tekst2); margin-left: 3
   .kop-r { margin-left: 0; width: 100%; justify-content: space-between; order: 1; }
   .klok { order: -1; text-align: left; }
   .big { font-size: 26px; }
-  .accu-t { grid-template-columns: 96px 1fr; gap: 12px; }
-  .ring { width: 96px; height: 96px; }
   .trio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .knop { grid-template-columns: 32px 1fr; }
-  .knop .schakel { display: none; }
+  .trio.vast { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .trio.vast .mini { padding: 6px 8px; }
+  .trio.vast .mini .w { font-size: 16px; }
+  .vier { gap: 4px; }
+  .cel4 { padding: 4px 5px; }
+  .cel4 b { font-size: 14px; }
   .gwrap { grid-template-columns: 28px 1fr 28px; grid-template-rows: 180px 22px; }
   .tabel td, .tabel th { padding-left: 6px; padding-right: 6px; }
-  .knoop .v { font-size: 17px; }
+  .ph-r .tabs button { padding: 4px 8px; }
+  .knoppen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .knop .aan-t { display: none; }
+  .knop .kn { white-space: normal; line-height: 1.15; font-size: 12px; }
+  .kop-mid { gap: 6px; }
+  .chip.groot { font-size: 12px; padding: 4px 9px; }
+  .planvolg > div.rk, .planvolg > div.rij3 { grid-column: 1 / -1; }
+  .planvolg > div.rk { margin-bottom: -3px; }
 }
 `;
 
@@ -893,41 +897,63 @@ const ACHTERGROND = `
 const VB_HORIZONNEN = [2, 6, 12, 24];
 const VB_STANDAARD_UREN = 6;
 
+/* v5.178.0: de tabbladen van Prijs en lading, onthouden per browser. */
+const TABS = [["vandaag", "Vandaag"], ["morgen", "Morgen"], ["week", "7 dagen"]];
+
+/* v5.178.0: wat de accu per kwartier doet, voor de tijdlijn en de grafiek. */
+const DOEN = {
+  rust: { label: "Rust", kleur: "var(--blauw)" },
+  zon: { label: "Zon laden", kleur: "var(--amber)" },
+  net: { label: "Net laden", kleur: "var(--groen)" },
+  voeden: { label: "Huis voeden", kleur: "var(--cyaan)" },
+  verkopen: { label: "Verkopen", kleur: "var(--oranje)" },
+  leeg: { label: "Accu leeg", kleur: "#56607a" },
+};
+const doen = (r) => {
+  const m = modus(r.modus);
+  if (m.k === "verkopen") return "verkopen";
+  if (m.k === "laden") return "net";
+  if (r.tekort) return "leeg";
+  const a = num(r.accu_w);
+  if (a != null) return a <= -50 ? "zon" : a >= 50 ? "voeden" : "rust";
+  return m.k === "ontladen" ? "voeden" : "rust";
+};
+/* Eindtijd; middernacht als 24:00. */
+const eindKlok = (d) => (d.getHours() === 0 && d.getMinutes() === 0 ? "24:00" : klok(d));
+
 /* Per paneel de sleutels waar het van afhangt. */
 const AFHANKELIJK = {
-  kop: ["status", "cockpit", "prijs", "modus", "verwacht", "gezondheid"],
+  kop: ["status", "cockpit", "prijs", "modus", "verwacht", "gezondheid", "uitleg", "plan", "blok", "aanwezig"],
   meldingen: ["status", "tekort"],
-  hero: ["soc", "beschikbaar", "capaciteit", "accu_vermogen", "gacs", "reden", "verwacht", "prijs", "uitleg",
-    "blok", "besparing", "zelfvoorziening", "inkoop_vandaag", "teruglever_vandaag", "schema", "modus", "zon_werkelijk"],
-  stroom: ["pv", "net", "accu_vermogen", "huis", "soc", "plan", "beschikbaar", "capaciteit", "accuprijs"],
-  planning: ["plan", "schema", "uitleg", "blok"],
-  verkoop: ["gacs", "mc", "tekort", "uitleg", "blok"],
+  accu: ["soc", "beschikbaar", "capaciteit", "accu_vermogen", "pv", "net", "huis", "gacs", "reden", "verwacht",
+    "uitleg", "modus", "schema", "plan", "accuprijs"],
+  planvandaag: ["plan", "schema", "soc", "besparing", "uitleg"],
+  geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief", "rendement", "gacs"],
+  planning: ["plan", "schema", "uitleg", "blok", "soc", "prijsverwachting"],
+  verkoop: ["gacs", "mc", "tekort", "uitleg", "blok", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk",
+    "pvNauw", "bewolking", "pv"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
-  zon: ["gacs", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk", "pvNauw", "bewolking", "pv"],
   huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "vaatwasserPlan", "wasmachinePlan", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip"],
   bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "laderOverrule", "meldingenAan", "achterhoeks"],
-  geld: ["besparing", "maand", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief"],
-  prijzen: ["prijsverwachting", "plan", "uitleg"],
-  voet: ["meetlog", "gezondheid", "status"],
+  voet: ["meetlog", "gezondheid", "status", "cockpit"],
 };
 
-/* De knoppen: sleutel, naam, uitleg, icoon, kleur, vraag om bevestiging. */
+/* De knoppen: sleutel, naam, uitleg, icoon, kleur, vraag om bevestiging.
+   v5.178.0: zonder groepskoppen, de vaakst gebruikte eerst. */
 const KNOPPEN = [
-  { groep: "Accu" },
   { k: "nuLaden", n: "Nu laden", s: "Direct uit het net bijladen", ic: "bout", kl: "var(--groen)" },
   { k: "handLaden", n: "Handmatig laden", s: "Laden met vast vermogen", ic: "accu", kl: "var(--groen)", vraag: true },
   { k: "handSmart", n: "Smart charge", s: "Alleen zon de accu in", ic: "zon", kl: "var(--amber)", vraag: true },
+  { k: "vakantie", n: "Vakantiestand", s: "Minder verbruik verwacht", ic: "vakantie", kl: "var(--blauw)", vraag: true },
+  { k: "fietsenOverrule", n: "Fietsen nu laden", s: "Niet wachten op het blok", ic: "fiets", kl: "var(--groen)" },
+  { k: "stofzuigerOverrule", n: "Stofzuiger nu laden", s: "Niet wachten op het blok", ic: "stof", kl: "var(--groen)" },
+  { k: "meldingenAan", n: "Meldingen", s: "Alle meldingen aan of uit", ic: "bel", kl: "var(--amber)" },
+  { k: "aircoAutomaat", n: "Airco automaat", s: "EMS stuurt de airco", ic: "airco", kl: "var(--cyaan)" },
+  { k: "laderOverrule", n: "Batterijlader handmatig", s: "EMS laat de lader met rust", ic: "accu", kl: "var(--groen)" },
   { k: "forceManual", n: "Force manual", s: "Sturing zelf overnemen", ic: "hand", kl: "var(--oranje)", vraag: true },
   { k: "kalibratie", n: "Kalibratie", s: "Accu vol laden en ijken", ic: "ijk", kl: "var(--cyaan)", vraag: true },
   { k: "leermodus", n: "Leermodus", s: "Alleen leren, niet sturen", ic: "leren", kl: "var(--violet)", vraag: true },
-  { groep: "Huis" },
-  { k: "vakantie", n: "Vakantiestand", s: "Minder verbruik verwacht", ic: "vakantie", kl: "var(--blauw)", vraag: true },
-  { k: "aircoAutomaat", n: "Airco automaat", s: "EMS stuurt de airco", ic: "airco", kl: "var(--cyaan)" },
-  { k: "fietsenOverrule", n: "Fietsen nu laden", s: "Niet wachten op het blok", ic: "fiets", kl: "var(--groen)" },
-  { k: "stofzuigerOverrule", n: "Stofzuiger nu laden", s: "Niet wachten op het blok", ic: "stof", kl: "var(--groen)" },
-  { k: "laderOverrule", n: "Batterijlader handmatig", s: "EMS laat de lader met rust", ic: "accu", kl: "var(--groen)" },
-  { k: "meldingenAan", n: "Meldingen", s: "Alle meldingen aan of uit", ic: "bel", kl: "var(--amber)" },
   { k: "achterhoeks", n: "Achterhoeks", s: "Meldingen in de streektaal", ic: "taal", kl: "var(--violet)" },
 ];
 
@@ -1054,11 +1080,9 @@ class EmsCockpitCard extends HTMLElement {
 
   connectedCallback() {
     if (!this._tik) {
-      // Klok, "over x min" en de nu-lijn lopen ook zonder nieuwe states door
+      // Klok, "over x min", de tijdlijn en de nu-lijn lopen ook zonder nieuwe states door
       this._tik = setInterval(() => {
-        this._vuil.add("kop");
-        this._vuil.add("planning");
-        this._vuil.add("voet");
+        for (const p of ["kop", "accu", "planvandaag", "planning", "voet"]) this._vuil.add(p);
         this._plan();
       }, 30000);
     }
@@ -1083,33 +1107,26 @@ class EmsCockpitCard extends HTMLElement {
       `<header class="kop" data-p="kop"></header>` +
       `<div class="geenbron" data-p="geenbron" hidden></div>` +
       `<div class="meldingen" data-p="meldingen"></div>` +
-      `<section class="hero" data-p="hero" aria-label="Status"></section>` +
-      // v5.104.2: drie kolommen die elk hun eigen hoogte volgen. In een
-      // gewoon raster liep de planning over twee rijen en bleef eronder
-      // een groot gat ("Cockpit is opzich super! alleen de grote lege
-      // ruimte"). Op smallere schermen doen de kolommen niet mee
-      // (display: contents) en geldt het raster zoals het was.
+      // v5.178.0: drie tegels - accu nu, plan vandaag, geld (gevraagd 04-11:
+      // de pagina zo'n 40 % korter, minder herhaling, tekst ingeklapt).
+      `<section class="hero" aria-label="Status">` +
+      `<div class="hv t-accu" data-p="accu"></div>` +
+      `<div class="hv t-plan" data-p="planvandaag"></div>` +
+      `<div class="hv t-geld" data-p="geld"></div>` +
+      `</section>` +
+      // Breed: links Prijs en lading en het huis; rechts accu, reserve en knoppen.
+      // Smal doen de kolommen niet mee (display: contents) en geldt het raster.
       `<main class="raster">` +
       `<div class="kol k1">` +
-      `<section class="paneel p-stroom" data-p="stroom"></section>` +
-      `<section class="paneel p-modules" data-p="modules"></section>` +
-      `</div><div class="kol k2">` +
       `<section class="paneel p-planning" data-p="planning"></section>` +
-      // v5.113.0: prijzen een week vooruit en hoe goed de verwachting is -
-      // eigen paneel in de brede middenkolom; het paneel Geld was er bijna
-      // twee keer zo lang door ("cockpit is vrij groot geworden").
-      `<section class="paneel p-prijzen" data-p="prijzen"></section>` +
       `<section class="paneel p-huis" data-p="huis"></section>` +
-      `</div><div class="kol k3">` +
+      `</div><div class="kol k2">` +
+      `<section class="paneel p-modules" data-p="modules"></section>` +
       `<section class="paneel p-verkoop" data-p="verkoop"></section>` +
-      `<section class="paneel p-geld" data-p="geld"></section>` +
-      // v5.105.0: zon rechts - met echte gegevens was de middelste kolom
-      // ruim 500 px langer dan de rechter.
-      `<section class="paneel p-zon" data-p="zon"></section>` +
-      `</div>` +
       `<section class="paneel p-bediening" data-p="bediening"></section>` +
+      `</div>` +
       `</main>` +
-      `<footer class="paneel voet" data-p="voet"></footer>` +
+      `<footer class="voet" data-p="voet"></footer>` +
       `</div></div>`;
     this._el = {};
     for (const el of this.shadowRoot.querySelectorAll("[data-p]")) this._el[el.dataset.p] = el;
@@ -1133,6 +1150,16 @@ class EmsCockpitCard extends HTMLElement {
         this._ga(nav.dataset.nav);
         return;
       }
+      // v5.178.0: tabblad van Prijs en lading
+      const tab = doel.closest("[data-tab]");
+      if (tab) {
+        if (tab.disabled) return;
+        this._tabKeuze = tab.dataset.tab;
+        try { localStorage.setItem("ems-cockpit-tab", this._tabKeuze); } catch (e) { /* geen opslag */ }
+        this._vuil.add("planning");
+        this._plan();
+        return;
+      }
       // v5.146.1: horizon van de Vooruitblik (2/6/12/24 uur)
       const horizon = doel.closest("[data-horizon]");
       if (horizon) {
@@ -1142,6 +1169,7 @@ class EmsCockpitCard extends HTMLElement {
         this._plan();
         return;
       }
+      if (doel.closest("summary")) return;
       const info = doel.closest("[data-info]");
       if (info) this._info(info.dataset.info);
     });
@@ -1281,6 +1309,39 @@ class EmsCockpitCard extends HTMLElement {
     return v && typeof v === "object" ? v : {};
   }
 
+  /* v5.178.0: tot wanneer "vandaag" loopt: middernacht, maar minstens 6 uur. */
+  _vensterTot() {
+    const m = new Date();
+    m.setHours(24, 0, 0, 0);
+    return Math.max(m.getTime(), Date.now() + 6 * 3600000);
+  }
+
+  /* Het goedkope laadblok in woorden: "11:30-12:30 (over 4 u 23 min)". */
+  _blokTekst() {
+    const b = this._s("blok");
+    const start = bruikbaar(b) ? alsDatum(b.state) : null;
+    if (!start) return "";
+    const eind = alsDatum(attr(b, "end"));
+    const loopt = start.getTime() <= Date.now() && (!eind || eind.getTime() > Date.now());
+    return `${dagLabel(start)}${klok(start)}${eind ? "\u2013" + klokEind(start, eind) : ""}` +
+      (loopt ? " (loopt)" : ` (${overTijd(start)})`);
+  }
+
+  /* Laagste en hoogste prijs in de rest van het plan, met het tijdstip. */
+  _komendePrijzen() {
+    const rijen = this._planRijen();
+    const tijden = planTijden(rijen);
+    let laag = null;
+    let hoog = null;
+    rijen.forEach((r, i) => {
+      const p = num(r.prijs_ct);
+      if (p == null || tijden[i].getTime() + 15 * 60000 <= Date.now()) return;
+      if (!laag || p < laag.ct) laag = { ct: p, tijd: dagLabel(tijden[i]) + klok(tijden[i]) };
+      if (!hoog || p > hoog.ct) hoog = { ct: p, tijd: dagLabel(tijden[i]) + klok(tijden[i]) };
+    });
+    return { laag, hoog };
+  }
+
   /* ---- kopregel ---- */
 
   _kop() {
@@ -1302,16 +1363,31 @@ class EmsCockpitCard extends HTMLElement {
     const m = modus(attr(this._s("uitleg"), "expected_mode") || (bruikbaar(accuModus) ? accuModus.state : ""));
     const modusChip = chip(`<span class="stip" style="--kleur:${m.kleur}"></span>Accu: ${esc(m.label)}`, "groot");
 
+    // v5.178.0: de prijs staat in de kop (de tegel Stroomprijs is weg)
     const prijs = getal(this._s("prijs"));
     const drempel = num(attr(this._s("uitleg"), "expensive_price_threshold"));
-    const prijsKlasse = prijs != null && drempel != null && prijs >= drempel ? "let" : "";
-    const prijsChip = prijs != null ? chip(`${icoon("euro")}${ct(prijs)} ct/kWh`, `groot ${prijsKlasse}`) : "";
+    const duur = prijs != null && drempel != null && prijs >= drempel;
+    const prijsChip = prijs != null
+      ? `<span class="chip groot ${duur ? "let" : ""}">${icoon("euro")}Nu ${ct(prijs)} ct` +
+        `${drempel != null ? `<span class="leeg">${duur ? "duur" : "onder duur"} (${ct(drempel)})</span>` : ""}</span>`
+      : "";
+    const kom = this._komendePrijzen();
+    const blok = this._blokTekst();
+    const blokChip = blok ? `<span class="chip groot">${icoon("klok")}Goedkoopste blok <span class="leeg">${esc(blok)}</span></span>` : "";
+    const laag = kom.laag
+      ? `<span class="chip groot" title="Laagste prijs in het plan">` +
+        `<span class="stip" style="--kleur:var(--groen)"></span>Goedkoopst ${fmt(kom.laag.ct, 1)} ct${PUNT}${esc(kom.laag.tijd)}</span>`
+      : "";
+    const hoog = kom.hoog
+      ? `<span class="chip groot" title="Hoogste prijs in het plan">` +
+        `<span class="stip" style="--kleur:var(--oranje)"></span>Duurst ${fmt(kom.hoog.ct, 1)} ct${PUNT}${esc(kom.hoog.tijd)}</span>`
+      : "";
 
     return (
       `<div class="merk"><div class="logo">${icoon("bout")}</div>` +
       `<div><div class="merknaam">ENERGIECOCKPIT</div>` +
       `<div class="merksub">Energy Management System${this._hass.config && this._hass.config.location_name ? PUNT + esc(this._hass.config.location_name) : ""}</div></div></div>` +
-      `<div class="kop-mid">${status}${this._aanwezigChip()}${modusChip}${prijsChip}</div>` +
+      `<div class="kop-mid">${status}${this._aanwezigChip()}${modusChip}${prijsChip}${laag}${hoog}${blokChip}</div>` +
       `<div class="kop-r"><div class="klok"><div class="tijd">${tijd}</div><div class="datum">${esc(datum)}</div></div></div>`
     );
   }
@@ -1380,170 +1456,138 @@ class EmsCockpitCard extends HTMLElement {
     return uit.join("");
   }
 
-  /* ---- statusrij ---- */
+  /* ---- statusrij: accu nu ---- */
 
-  _hero() {
-    return this._tegelAccu() + this._tegelNu() + this._tegelPrijs() + this._tegelVandaag();
-  }
-
-  _tegelAccu() {
+  _accu() {
     const soc = getal(this._s("soc"));
     const ruw = getal(this._s("beschikbaar"));
     const besch = ruw == null ? null : Math.max(0, ruw);
     const cap = getal(this._s("capaciteit"));
     const w = this._accuW();
+    const pv = getal(this._s("pv"));
+    const net = getal(this._s("net"));
+    const huis = getal(this._s("huis"));
     const kleur = soc == null ? "var(--tekst3)" : soc >= 60 ? "var(--groen)" : soc >= 25 ? "var(--amber)" : "var(--rood)";
-    let actie = "In rust";
-    let actieKleur = "var(--tekst2)";
-    if (w != null && w < -25) {
-      actie = `Laadt ${fmt(Math.abs(w))} W`;
-      actieKleur = "var(--groen)";
-    } else if (w != null && w > 25) {
-      actie = `Levert ${fmt(w)} W`;
-      actieKleur = "var(--amber)";
-    }
-    const toets = this._gacs("verkooptoets");
-    const reserve = num(toets.nodig_voor_woning_kwh);
-    return (
-      `<div class="tegel" style="--accent:${kleur}" data-info="soc">` +
-      `<div class="lbl">Thuisaccu</div>` +
-      `<div class="accu-t">${ring(soc, kleur, "laadstand")}` +
-      `<div class="rijen">` +
-      `<span>Nu <b style="color:${actieKleur}">${actie}</b></span>` +
-      `<span>Beschikbaar <b>${fmt(besch, 2)} kWh</b></span>` +
-      (cap != null ? `<span>Capaciteit <b>${fmt(cap, 2)} kWh</b></span>` : "") +
-      (reserve != null ? `<span>Reserve tot blok <b>${fmt(reserve, 2)} kWh</b></span>` : "") +
-      `</div></div>` +
-      (typeof attr(this._s("gacs"), "haalt_de_accu_het") === "string"
-        ? `<div class="sub klem" style="margin-top:10px">${esc(attr(this._s("gacs"), "haalt_de_accu_het"))}</div>`
-        : "") +
-      `</div>`
-    );
-  }
-
-  _tegelNu() {
     const waarom = this._gacs("waarom_nu");
     const verwacht = attr(this._s("uitleg"), "expected_mode") || (bruikbaar(this._s("verwacht")) ? this._s("verwacht").state : "");
     const m = modus(verwacht);
     const kort = waarom.kop ? hoofd(waarom.kop) : waarom.kort ? hoofd(waarom.kort) : m.label;
     const redenen = Array.isArray(waarom.redenen) ? waarom.redenen.slice(0, 3) : [];
     const blok = this._blokken()[1];
-    return (
-      `<div class="tegel" style="--accent:${m.kleur}" data-info="verhaal">` +
-      `<div class="lbl">Wat doet het EMS nu</div>` +
-      `<div class="tekst-m">${esc(kort)}</div>` +
+    const haalt = attr(this._s("gacs"), "haalt_de_accu_het");
+    const resttijd = this._accuResttijd(w, soc);
+    const regel = [
+      besch != null ? `${fmt(besch, 2)} kWh bruikbaar${cap != null ? ` van ${fmt(cap, 2)}` : ""}` : "",
+      this._planUitkomst(soc),
+    ].filter(Boolean).join(PUNT);
+    const daarna = blok
+      ? `<div class="sub">Daarna: <b>${esc(modus(blok.mode).label)}</b> vanaf ${esc(blok.van_tekst || klokDag(blok.start) || "")}</div>`
+      : "";
+
+    // v5.178.0: de energiestroom als vier vakjes (alle waarden van het schema)
+    const cel = (naam, waarde, sub, k) =>
+      `<div class="cel4" style="--k:${k}"><span class="l">${naam}</span><b>${waarde}</b><span class="s">${sub}</span></div>`;
+    const vier =
+      `<div class="vier">` +
+      cel("Zon", watt(pv == null ? null : Math.max(0, pv)), pv != null && pv > 20 ? "wekt op" : "geen opwek", pv != null && pv > 20 ? "var(--amber)" : "var(--rand)") +
+      cel("Net", watt(net == null ? null : Math.abs(net)), net == null ? STREEP : net < -20 ? "teruglevering" : net > 20 ? "afname" : "in balans",
+        net != null && net < -20 ? "var(--cyaan)" : net != null && net > 20 ? "var(--rood)" : "var(--rand)") +
+      cel("Huis", watt(huis), "verbruik", "var(--blauw)") +
+      cel("Accu", watt(w == null ? null : Math.abs(w)), w == null ? STREEP : w < -20 ? "laadt" : w > 20 ? "ontlaadt" : "in rust",
+        w != null && w < -20 ? "var(--groen)" : w != null && w > 20 ? "var(--amber)" : "var(--rand)") +
+      `</div>`;
+    const waaromInhoud =
       (redenen.length ? `<ul class="redenen">${redenen.map((r) => `<li>${esc(hoofd(r))}</li>`).join("")}</ul>` : "") +
-      (blok
-        ? `<div class="sub" style="margin-top:10px">Daarna: <b>${esc(modus(blok.mode).label)}</b> vanaf ${esc(blok.van_tekst || klokDag(blok.start) || "")}</div>`
-        : "") +
+      (typeof haalt === "string" && haalt ? `<div class="sub" style="margin-top:6px">${esc(haalt)}</div>` : "");
+    return (
+      `<div class="tegel" style="--accent:${kleur}">` +
+      `<div class="lbl">Accu${PUNT}nu</div>` +
+      `<div class="accu-t"><div data-info="soc" title="Laadstand">${ring(soc, kleur, "laadstand")}</div>` +
+      `<div data-info="verhaal"><div class="tekst-m">${esc(kort)}</div><div class="sub">${esc(regel)}</div>${daarna}</div></div>` +
+      vier +
+      (resttijd ? `<div class="rest">Bij het huidige vermogen ${esc(resttijd)}</div>` : "") +
+      this._accuPrijsRegel() +
+      this._uitklap("waarom", "Waarom?", waaromInhoud) +
       `</div>`
     );
   }
 
-  _tegelPrijs() {
-    const prijs = getal(this._s("prijs"));
-    const uitleg = this._s("uitleg");
-    const drempel = num(attr(uitleg, "expensive_price_threshold"));
-    const duur = prijs != null && drempel != null && prijs >= drempel;
-    const kleur = duur ? "var(--oranje)" : "var(--groen)";
-    const blokStart = this._s("blok");
-    const start = bruikbaar(blokStart) ? alsDatum(blokStart.state) : null;
-    const eind = alsDatum(attr(blokStart, "end"));
+  /* Waar het plan de accu vandaag naartoe brengt: "vult tot 41% (14:45)". */
+  _planUitkomst(socNu) {
     const rijen = this._planRijen();
-    const prijzen = rijen.map((r) => num(r.prijs_ct)).filter((v) => v != null);
-    const duurste = prijzen.length ? Math.max(...prijzen) : null;
-    const goedkoopste = prijzen.length ? Math.min(...prijzen) : null;
-    let blokTekst = STREEP;
-    if (start) {
-      const loopt = start.getTime() <= Date.now() && (!eind || eind.getTime() > Date.now());
-      blokTekst = `${dagLabel(start)}${klok(start)}${eind ? "\u2013" + klokEind(start, eind) : ""}`;
-      blokTekst += loopt ? " (loopt)" : ` (${overTijd(start)})`;
-    }
-    return (
-      `<div class="tegel" style="--accent:${kleur}" data-info="prijs">` +
-      `<div class="lbl">Stroomprijs nu</div>` +
-      `<div class="big accent">${prijs == null ? STREEP : ct(prijs)}<small>ct/kWh</small></div>` +
-      `<div class="sub">${duur ? "<b>Duur kwartier</b>" : "Onder de drempel voor duur"}${drempel != null ? ` (${ct(drempel)} ct)` : ""}</div>` +
-      `<div class="rijen" style="margin-top:10px">` +
-      `<span>Goedkoopste blok <b>${blokTekst}</b></span>` +
-      (goedkoopste != null ? `<span>Laagste in plan <b>${fmt(goedkoopste, 1)} ct</b></span>` : "") +
-      (duurste != null ? `<span>Hoogste in plan <b>${fmt(duurste, 1)} ct</b></span>` : "") +
-      `</div></div>`
-    );
+    if (!rijen.length) return "";
+    const tijden = planTijden(rijen);
+    const tot = this._vensterTot();
+    let hoog = null;
+    let laag = null;
+    rijen.forEach((r, i) => {
+      const t = tijden[i].getTime();
+      const s = num(r.soc_procent);
+      if (s == null || t + 15 * 60000 <= Date.now() || t >= tot) return;
+      if (!hoog || s > hoog.s) hoog = { s, t: new Date(t + 15 * 60000) };
+      if (!laag || s < laag.s) laag = { s, t: new Date(t + 15 * 60000) };
+    });
+    if (!hoog) return "";
+    const basis = socNu == null ? hoog.s : socNu;
+    if (hoog.s >= basis + 2) return `plan vult tot ${fmt(hoog.s)}% (${eindKlok(hoog.t)})`;
+    if (laag.s <= basis - 2) return `plan zakt tot ${fmt(laag.s)}% (${eindKlok(laag.t)})`;
+    return `plan houdt ${fmt(basis)}%`;
   }
 
-  _tegelVandaag() {
+  /* ---- statusrij: plan vandaag ---- */
+
+  _planvandaag() {
+    const rijen = this._planRijen();
+    const tijden = planTijden(rijen);
+    const kop = `<div class="lbl">Plan vandaag</div>`;
+    const tot = this._vensterTot();
+    const nu = Date.now();
+    const segs = [];
+    const uren = [];
+    rijen.forEach((r, i) => {
+      const t0 = tijden[i].getTime();
+      if (t0 + 15 * 60000 <= nu || t0 >= tot) return;
+      const d = DOEN[doen(r)];
+      if (tijden[i].getMinutes() === 0) uren.push([segs.length, tijden[i].getHours()]);
+      segs.push(
+        `<i style="background:${d.kleur}" title="${esc(`${dagLabel(tijden[i])}${r.van}${PUNT}${d.label}` +
+          (num(r.prijs_ct) != null ? `${PUNT}${fmt(r.prijs_ct, 1)} ct` : "") +
+          (num(r.soc_procent) != null ? `${PUNT}accu ${fmt(r.soc_procent)}%` : ""))}"></i>`
+      );
+    });
+    const n = segs.length;
+    const stap = n > 48 ? 4 : n > 24 ? 3 : 2;
+    const labels = [`<span style="left:0">nu</span>`].concat(
+      uren
+        .filter(([j, h]) => h % stap === 0 && j / n > 0.06 && j / n < 0.95)
+        .map(([j, h]) => `<span style="left:${((j / n) * 100).toFixed(1)}%">${h === 0 ? "24" : String(h).padStart(2, "0")}</span>`)
+    ).join("");
+    const gezien = new Set(rijen.filter((r, i) => tijden[i].getTime() + 15 * 60000 > nu && tijden[i].getTime() < tot).map(doen));
+    const legenda = `<div class="pl-legenda klein">` +
+      Object.keys(DOEN).filter((k) => gezien.has(k)).map((k) => `<span><i style="background:${DOEN[k].kleur}"></i>${DOEN[k].label.toLowerCase()}</span>`).join("") +
+      `</div>`;
+    const strip = n
+      ? `<div class="strip" role="img" aria-label="Wat de accu doet tot ${esc(eindKlok(new Date(tot)))}">${segs.join("")}</div>` +
+        `<div class="strip-x" aria-hidden="true">${labels}</div>${legenda}`
+      : `<div class="sub" style="margin-top:8px">Nog geen kwartierplanning.</div>`;
+
+    // Een regel: het eerstvolgende netladen en wat de accu vandaag scheelt
+    const i = rijen.findIndex((r, j) => modus(r.modus).k === "laden" && tijden[j].getTime() + 15 * 60000 > nu);
     const bes = this._s("besparing");
     const kosten = num(attr(bes, "werkelijke_kosten_vandaag_eur"));
     const zonder = num(attr(bes, "tegenfeitelijke_kosten_vandaag_eur"));
-    const maand = num(attr(bes, "besparing_deze_maand_eur"));
-    const zv = getal(this._s("zelfvoorziening"));
-    const zon = this._gacs("zon_vandaag");
-    const kleur = "var(--cyaan)";
+    const regel = [
+      i >= 0 ? `Netladen <b>${dagLabel(tijden[i])}${klok(tijden[i])}</b>` : "Geen netladen gepland",
+      kosten != null && zonder != null ? `accu scheelt vandaag <b>${euroTeken(zonder - kosten)}</b> tegen geen accu` : "",
+    ].filter(Boolean).join(PUNT);
+
     return (
-      `<div class="tegel" style="--accent:${kleur}" data-info="besparing">` +
-      `<div class="lbl">Vandaag</div>` +
-      `<div class="big">${kosten == null ? STREEP : euro(kosten)}</div>` +
-      `<div class="sub">stroomkosten tot nu${zonder != null ? `, zonder accu ${euro(zonder)}` : ""}</div>` +
-      `<div class="rijen" style="margin-top:10px">` +
-      `<span>Besparing deze maand <b style="color:${maand != null && maand >= 0 ? "var(--groen)" : "var(--oranje)"}">${euroTeken(maand)}</b></span>` +
-      `<span>Zon opgewekt <b>${fmt(zon.opgewekt_kwh, 1)} / ${fmt(zon.voorspeld_kwh, 1)} kWh</b></span>` +
-      `<span>Zelfvoorzienend <b>${zv == null ? STREEP : fmt(zv) + "%"}</b></span>` +
-      `</div></div>`
-    );
-  }
-
-  /* ---- energiestroom (v5.91) ---- */
-
-  _stroom() {
-    const pv = Math.max(0, getal(this._s("pv")) || 0);
-    const net = getal(this._s("net"));
-    const accu = this._accuW();
-    const huis = getal(this._s("huis"));
-    const soc = getal(this._s("soc"));
-
-    // Coordinaten in procenten van het vlak
-    const P = { zon: [50, 15], net: [17, 50], huis: [83, 50], accu: [50, 85] };
-    const tak = (p) => `M${p[0]} ${p[1]} L50 50`;
-    const snel = (w) => `${Math.max(0.45, 2.2 - Math.min(Math.abs(w || 0), 4000) / 2200).toFixed(2)}s`;
-    const dikte = (w) => (3 + Math.min(Math.abs(w || 0), 3000) / 1000).toFixed(1);
-    // w > 0: stroomt naar het midden
-    const loop = (p, w, kleur) => {
-      if (w == null || Math.abs(w) < 20) return "";
-      return `<path class="loop${w < 0 ? " terug" : ""}" d="${tak(p)}" stroke="${kleur}" ` +
-        `style="--snel:${snel(w)};--kl:${kleur};stroke-width:${dikte(w)}"/>`;
-    };
-    const netKleur = net != null && net < 0 ? "var(--cyaan)" : "var(--rood)";
-    const accuKleur = accu != null && accu < 0 ? "var(--groen)" : "var(--amber)";
-    const lijnen =
-      `<svg class="lijnen" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
-      Object.values(P).map((p) => `<path class="spoor" d="${tak(p)}"/>`).join("") +
-      loop(P.zon, pv, "var(--amber)") +
-      loop(P.net, net, netKleur) +
-      loop(P.huis, huis == null ? null : -huis, "var(--blauw)") +
-      loop(P.accu, accu, accuKleur) +
-      `</svg>`;
-    const knoop = (pos, ic, naam, waarde, sub, kleur, actief, extra = "") =>
-      `<div class="knoop" style="left:${pos[0]}%;top:${pos[1]}%;--k:${kleur};--actief:${actief ? 1 : 0.25};` +
-      `--gloed:${actief ? `color-mix(in srgb, ${kleur} 22%, transparent)` : "transparent"}">` +
-      `<div class="kk"><span class="badge">${icoon(ic)}</span><span class="n">${naam}</span></div>` +
-      `<div class="v">${waarde}</div><div class="s">${sub}</div>${extra}</div>`;
-
-    const netSub = net == null ? STREEP : net < -20 ? "teruglevering" : net > 20 ? "afname van het net" : "in balans";
-    const accuSub = accu == null ? STREEP : accu < -20 ? "laadt" : accu > 20 ? "ontlaadt" : "in rust";
-    const socBalk = soc == null ? "" : `<div class="soc" title="Laadstand ${fmt(soc)}%"><i style="width:${Math.max(0, Math.min(100, soc))}%"></i></div>`;
-    const resttijd = this._accuResttijd(accu, soc);
-    return (
-      paneelKop("pulse", "Energiestroom", chip("live", "ok")) +
-      `<div class="pb"><div class="stroom">${lijnen}<div class="hub"></div>` +
-      knoop(P.zon, "zon", "Zon", watt(pv), pv > 20 ? "wekt op" : "geen opwek", "var(--amber)", pv > 20) +
-      knoop(P.net, "net", "Net", watt(net == null ? null : Math.abs(net)), netSub, netKleur, net != null && Math.abs(net) > 20) +
-      knoop(P.huis, "huis", "Huis", watt(huis), "verbruik", "var(--blauw)", huis != null && huis > 20) +
-      knoop(P.accu, "accu", "Accu", watt(accu == null ? null : Math.abs(accu)),
-        `${accuSub}${soc != null ? PUNT + fmt(soc) + "%" : ""}`, accuKleur, accu != null && Math.abs(accu) > 20,
-        socBalk + (resttijd ? `<div class="s rest" title="Bij het huidige vermogen">${resttijd}</div>` : "") +
-        this._accuPrijsRegel()) +
-      `</div>${this._planvolgingRegel()}</div>`
+      `<div class="tegel" style="--accent:var(--cyaan)">` +
+      kop + strip +
+      this._planvolgingRegel() +
+      this._laadplanRegel() +
+      `<div class="sub">${regel}</div>` +
+      `</div>`
     );
   }
 
@@ -1656,27 +1700,69 @@ class EmsCockpitCard extends HTMLElement {
     );
   }
 
-  /* ---- planning ---- */
+  /* ---- prijs en lading ---- */
+
+  /* v5.178.0: gekozen tabblad, onthouden per browser. */
+  _tab() {
+    if (this._tabKeuze == null) {
+      let t = null;
+      try { t = localStorage.getItem("ems-cockpit-tab"); } catch (e) { t = null; }
+      this._tabKeuze = TABS.some(([k]) => k === t) ? t : "vandaag";
+    }
+    return this._tabKeuze;
+  }
 
   _planning() {
     const rijen = this._planRijen().filter((r) => num(r.prijs_ct) != null);
-    const kop = paneelKop(
-      "grafiek",
-      "Planning",
-      `<div class="pl-legenda">` +
-        `<span><i style="background:var(--groen)"></i>laden</span>` +
-        `<span><i style="background:var(--oranje)"></i>verkopen</span>` +
-        `<span><i style="background:var(--blauw)"></i>sparen</span>` +
-        `<span><i style="background:var(--violet)"></i>slim</span>` +
-        `<span><i class="lijn-i" style="background:#fff"></i>accu %</span>` +
-        `<span><i style="background:rgba(250,204,21,.5)"></i>zon</span></div>`,
-      "detail-planning"
-    );
-    if (!rijen.length) return kop + `<div class="leegmelding">Nog geen kwartierplanning.</div>`;
-
-    // Tijden van de kwartieren: van/dag uit het plan, opgebouwd vanaf vandaag
     const tijden = planTijden(rijen);
+    const middernacht = new Date();
+    middernacht.setHours(24, 0, 0, 0);
+    const m0 = middernacht.getTime();
+    const deel = { vandaag: [], morgen: [] };
+    tijden.forEach((d, i) => {
+      const t = d.getTime();
+      if (t < m0) deel.vandaag.push(i);
+      else if (t < m0 + 86400000) deel.morgen.push(i);
+    });
+    const kw = attr(this._s("prijsverwachting"), "kwartieren");
+    const heeft = {
+      vandaag: deel.vandaag.length > 0,
+      morgen: deel.morgen.length > 0,
+      week: !!(kw && Array.isArray(kw.ct) && kw.ct.length > 1),
+    };
+    let tab = this._tab();
+    if (!heeft[tab]) tab = (TABS.find(([k]) => heeft[k]) || ["vandaag"])[0];
+    const knoppen =
+      `<div class="tabs" role="tablist" aria-label="Periode">` +
+      TABS.map(([k, naam]) =>
+        `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === tab}" aria-pressed="${k === tab}"` +
+        `${heeft[k] ? "" : ` disabled title="${k === "morgen" ? "Nog geen prijzen voor morgen" : "Geen gegevens"}"`}>${naam}</button>`
+      ).join("") +
+      `</div>`;
+    const kop = paneelKop("grafiek", "Prijs en lading", knoppen, "detail-planning");
 
+    // Vandaag en morgen: de grafiek met de Vooruitblik eronder. 7 dagen: de
+    // prijsverwachting met hoe goed die is.
+    let lichaam;
+    if (tab === "week" && heeft.week) lichaam = this._week();
+    else {
+      lichaam = heeft[tab]
+        ? this._planGrafiek(deel[tab].map((i) => rijen[i]), deel[tab].map((i) => tijden[i]))
+        : `<div class="sub">Nog geen kwartierplanning.</div>`;
+      if (rijen.length) lichaam += this._vooruitblik(rijen, tijden);
+    }
+
+    const drempel = num(attr(this._s("uitleg"), "expensive_price_threshold"));
+    const uitleg =
+      `<div class="meternoot">Vandaag en morgen: staaf = prijs per kwartier (ct/kWh) in de kleur van wat de accu dan doet; ` +
+      `witte lijn = verwachte accustand, geel = verwachte zon${drempel != null ? `, stippellijn = drempel voor duur (${ct(drempel)} ct)` : ""}. ` +
+      `7 dagen: vol = bekend, in de kleur van het plan; licht = verwachting, gekleurd naar de dagregel ` +
+      `(goedkoopste deel = laden, boven de drempel voor duur = verkopen). Alleen meten.</div>`;
+    return kop + `<div class="pb">${lichaam}${this._uitklap("grafiekuitleg", "Uitleg bij de grafiek", uitleg)}</div>`;
+  }
+
+  /* De grafiek van een dag: prijs per kwartier, accustand en zon. */
+  _planGrafiek(rijen, tijden) {
     const prijzen = rijen.map((r) => num(r.prijs_ct));
     const pMax = Math.max(...prijzen, 1);
     const pMin = Math.min(0, ...prijzen);
@@ -1684,17 +1770,21 @@ class EmsCockpitCard extends HTMLElement {
     const bodem = pMin < 0 ? Math.floor(pMin / 5) * 5 : 0;
     const bereik = Math.max(top - bodem, 1);
     const n = rijen.length;
+    const gezien = new Set();
 
     const staven = rijen
       .map((r, i) => {
         const m = modus(r.modus);
+        const dk = doen(r);
+        gezien.add(dk);
         const h = ((prijzen[i] - bodem) / bereik) * 100;
         const tip =
-          `${dagLabel(tijden[i])}${r.van} \u00b7 ${fmt(prijzen[i], 1)} ct \u00b7 ${m.label}` +
+          `${dagLabel(tijden[i])}${r.van} \u00b7 ${fmt(prijzen[i], 1)} ct \u00b7 ${DOEN[dk].label} (${m.label})` +
           (num(r.soc_procent) != null ? ` \u00b7 accu ${fmt(r.soc_procent)}%` : "") +
           (num(r.zon_kwh) ? ` \u00b7 zon ${fmt(r.zon_kwh, 2)} kWh` : "") +
           (r.tekort ? " \u00b7 tekort" : "");
-        return `<div class="staaf ${m.k}${r.tekort ? " tekort" : ""}" style="height:${Math.max(2, h).toFixed(1)}%;background:${m.kleur}" title="${esc(tip)}"></div>`;
+        const glans = dk === "verkopen" ? " verkopen" : dk === "net" ? " laden" : "";
+        return `<div class="staaf${glans}${r.tekort ? " tekort" : ""}" style="height:${Math.max(2, h).toFixed(1)}%;background:${DOEN[dk].kleur}" title="${esc(tip)}"></div>`;
       })
       .join("");
 
@@ -1731,52 +1821,34 @@ class EmsCockpitCard extends HTMLElement {
     const yRaster = [0.25, 0.5, 0.75].map((f) => `<div class="g-raster" style="top:${((1 - f) * 100).toFixed(1)}%"></div>`).join("");
     const y2Lab = [0, 50, 100].map((v) => `<span style="top:${(100 - v).toFixed(1)}%">${v}%</span>`).join("");
     const xLab = [];
+    const stap = n > 72 ? 4 : n > 40 ? 3 : 2;
     for (let i = 0; i < n; i++) {
       const d = tijden[i];
       if (d.getMinutes() !== 0) continue;
       const uur = d.getHours();
-      const stap = n > 72 ? 4 : n > 40 ? 3 : 2;
-      if (uur === 0) xLab.push(`<span class="dag" style="left:${x(i).toFixed(2)}%">${esc(d.toLocaleDateString("nl-NL", { weekday: "short" }))}</span>`);
-      else if (uur % stap === 0) xLab.push(`<span style="left:${x(i).toFixed(2)}%">${String(uur).padStart(2, "0")}:00</span>`);
+      if (uur % stap === 0 && x(i) > 3 && x(i) < 97) xLab.push(`<span style="left:${x(i).toFixed(2)}%">${String(uur).padStart(2, "0")}:00</span>`);
     }
-
-    const grafiek =
+    const legenda =
+      `<div class="pl-legenda">` +
+      Object.keys(DOEN).filter((k) => gezien.has(k))
+        .map((k) => `<span><i style="background:${DOEN[k].kleur}"></i>${DOEN[k].label.toLowerCase()}</span>`).join("") +
+      `<span><i class="lijn-i" style="background:#fff"></i>accu %</span>` +
+      `<span><i style="background:rgba(250,204,21,.5)"></i>zon</span></div>`;
+    return (
       `<div class="gwrap">` +
       `<div class="g-y">${yLab}</div>` +
       `<div class="g-plot">${yRaster}<div class="staven">${staven}</div>${svg}${nuLijn}</div>` +
       `<div class="g-y2">${y2Lab}</div>` +
       `<div class="g-x">${xLab.join("")}</div>` +
-      `</div>` +
-      `<div class="meternoot">Staaf: prijs per kwartier (ct/kWh) in de kleur van de geplande stand. Witte lijn: verwachte accustand. Geel: verwachte zon.${drempel != null ? ` Stippellijn: drempel voor duur (${ct(drempel)} ct).` : ""}</div>` +
-      this._laadplanRegel();
+      `</div>` + legenda
+    );
+  }
 
-    // Tabel met de blokken
-    const blokken = this._blokken();
-    const nu = Date.now();
-    const tabel = blokken.length
-      ? `<div class="tabelvak"><table class="tabel"><thead><tr><th>Van</th><th>Tot</th><th>Stand</th><th class="r">Prijs (ct)</th><th class="r">Accu</th></tr></thead><tbody>` +
-        blokken
-          .slice(0, 10)
-          .map((b) => {
-            const m = modus(b.mode);
-            const s = alsDatum(b.start);
-            const e = alsDatum(b.end);
-            const loopt = s && e && s.getTime() <= nu && e.getTime() > nu;
-            const lo = num(b.min_price_per_kwh);
-            const hi = num(b.max_price_per_kwh);
-            const prijs = lo == null ? STREEP : hi == null || hi - lo < 0.0005 ? ct(lo) : `${ct(lo)}\u2013${ct(hi)}`;
-            const accu = b.accu_tekst || this._accuTekst(b.soc_begin, b.soc_eind);
-            return (
-              `<tr class="${loopt ? "nu" : ""}"><td>${esc(b.van_tekst || klokDag(b.start) || "")}</td>` +
-              `<td>${esc(b.tot_tekst || klokDag(b.end) || "")}</td>` +
-              `<td><span class="modus" style="--kleur:${m.kleur}"><i></i>${esc(m.label)}</span></td>` +
-              `<td class="r">${prijs}</td><td class="r soc-pijl">${esc(accu)}</td></tr>`
-            );
-          })
-          .join("") +
-        `</tbody></table></div>`
-      : "";
-    return kop + `<div class="pb">${grafiek}${this._vooruitblik(rijen, tijden)}${tabel}</div>`;
+  /* Het tabblad 7 dagen: de prijsverwachting een week vooruit, en hoe goed die is. */
+  _week() {
+    const s = this._s("prijsverwachting");
+    const regel = [attr(s, "kaart_primair"), attr(s, "kaart_secundair")].filter(Boolean).map(esc).join(PUNT);
+    return (regel ? `<div class="za-s">${regel}</div>` : "") + this._prijsGrafiek() + this._prijsKwaliteit() + "";
   }
 
   /* v5.146.1: gekozen horizon, onthouden per browser. */
@@ -1879,13 +1951,7 @@ class EmsCockpitCard extends HTMLElement {
     );
   }
 
-  _accuTekst(begin, eind) {
-    if (num(eind) == null) return STREEP;
-    if (num(begin) == null || Math.round(begin) === Math.round(eind)) return `${Math.round(eind)}%`;
-    return `${Math.round(begin)}${PIJL}${Math.round(eind)}%`;
-  }
-
-  /* ---- verkoop en reserve ---- */
+  /* ---- zon, verkopen en reserve (v5.178: een paneel) ---- */
 
   _verkoop() {
     const toets = this._gacs("verkooptoets");
@@ -1905,8 +1971,50 @@ class EmsCockpitCard extends HTMLElement {
     const naBlokVrij = toets.verkoop_na_blok_toegepast ? num(toets.verkoop_na_blok_vrij_kwh) : null;
     const blokLoopt = this._blokLoopt();
     const terug = num(toets.terugladen_in_blok_eur);
+    const zon = this._gacs("zon_vandaag");
+    const verwacht = num(zon.voorspeld_kwh) ?? getal(this._s("zon_vandaag"));
+    const opgewekt = num(zon.opgewekt_kwh) ?? getal(this._s("zon_werkelijk"));
+    const rest = getal(this._s("zon_rest"));
+    const morgen = getal(this._s("zon_morgen"));
+    const pv = getal(this._s("pv"));
+    const nauw = getal(this._s("pvNauw"));
+    const bew = this._s("bewolking");
+    const uitstel = this._gacs("zon_uitstelplan");
+    const zonDeel = verwacht ? Math.min(1, (opgewekt || 0) / verwacht) : 0;
+    const onderdelen = Array.isArray(marge.onderdelen) ? marge.onderdelen : [];
+    const totaal = num(marge.totaal_procent);
+    const kans = getal(mc);
+    const kansKleur = kans == null ? "" : kans >= 50 ? "var(--rood)" : kans >= 20 ? "var(--oranje)" : "var(--groen)";
+    const kwh = (v, dec = 2) => (v == null ? STREEP : `${fmt(v, dec)}<small>kWh</small>`);
 
-    const rechts = chip(mag ? "verkopen mag" : "houdt vast", mag ? "ok" : "");
+    const rechts = chip(mag ? "verkopen mag" : "houdt vast", mag ? "ok" : "") +
+      (pv != null ? chip(`${watt(Math.max(0, pv))} zon nu`, pv > 20 ? "ok" : "") : "");
+    // v5.178.0: zon en verkopen in een raster van negen getallen
+    const cijfers =
+      `<div class="trio vast">` +
+      mini("Zon vandaag", kwh(opgewekt, 1), `van ${fmt(verwacht, 1)} kWh`, "var(--amber)") +
+      mini("Nog te komen", kwh(rest, 1), "vandaag") +
+      mini("Morgen", kwh(morgen, 1), "voorspeld") +
+      mini("Reserve tot blok", kwh(nodig), "nooit verkocht") +
+      (blokLoopt
+        ? mini("Tot het blok", "nu", `laadblok loopt${blokLoopt.eind ? " tot " + blokLoopt.eind : ""}`) +
+          mini("Na het blok", STREEP, "volgend blok nog niet bepaald")
+        : mini("Tot het blok", kwh(tot), "altijd beschermd") +
+          mini("Na het blok", kwh(na), "laadt het blok bij")) +
+      mini("Vrij te verkopen", vrij == null ? STREEP : `${fmt(vrij, 2)}<small>kWh</small>`, naBlokVrij && terug != null ? `waarvan ${fmt(naBlokVrij, 2)} kWh terugladen ${ct(terug)} ct` : toets.verkoop_na_blok_reden ? esc(toets.verkoop_na_blok_reden) : "", vrij ? "var(--oranje)" : "") +
+      mini("Kans op tekort", kans == null ? STREEP : `${fmt(kans)}<small>%</small>`, "tot het blok", kansKleur) +
+      mini("Veiligheidsmarge", totaal == null ? STREEP : `${fmtTeken(totaal)}<small>%</small>`, "op de reserve") +
+      `</div>`;
+    const tekortNu = num(attr(tekort, "tekortnacht_tot_nu_kwh"));
+    const regels =
+      `<div class="rijen vrij">` +
+      (onderdelen.length ? `<span>Marge <b>${onderdelen.map((o) => `${esc(o.naam)} ${fmtTeken(o.procent)}%`).join(PUNT)}</b></span>` : "") +
+      `<span>Bewolking <b>${bruikbaar(bew) ? `${fmt(getal(bew))}%${attr(bew, "label") ? PUNT + esc(attr(bew, "label")) : ""}` : STREEP}</b></span>` +
+      (nauw != null ? `<span>Zonvoorspelling gisteren <b>${fmtTeken(nauw, 1)}%</b></span>` : "") +
+      `<span>Tekortnachten 7 dagen <b>${fmt(getal(tekort))}${tekortNu ? `${PUNT}deze nacht ${fmt(tekortNu, 2)} kWh` : ""}</b></span>` +
+      (uitstel.reden ? `<span>Zon opvangen uitstellen <b>${uitstel.uitstellen ? "ja" : "nee"}</b></span>` : "") +
+      `</div>`;
+
     const meter =
       besch != null && nodig != null
         ? `<div class="meterrij"><div class="meterkop"><span class="lbl">Beschikbaar tegen nodig voor het huis</span>` +
@@ -1914,32 +2022,17 @@ class EmsCockpitCard extends HTMLElement {
           balk(nodig > 0 ? besch / Math.max(besch, nodig) : 1, mag ? "var(--groen)" : "var(--blauw)", nodig > 0 ? nodig / Math.max(besch, nodig) : null) +
           `<div class="meternoot">Het witte streepje is de reserve: daaronder verkoopt het EMS nooit.</div></div>`
         : "";
-    const cijfers =
-      `<div class="trio">` +
-      (blokLoopt
-        ? mini("Tot het blok", "nu", `laadblok loopt${blokLoopt.eind ? " tot " + blokLoopt.eind : ""}`) +
-          mini("Na het blok", STREEP, "volgend blok nog niet bepaald")
-        : mini("Tot het blok", tot == null ? STREEP : `${fmt(tot, 2)}<small>kWh</small>`, "altijd beschermd") +
-          mini("Na het blok", na == null ? STREEP : `${fmt(na, 2)}<small>kWh</small>`, "laadt het blok bij")) +
-      mini("Vrij te verkopen", vrij == null ? STREEP : `${fmt(vrij, 2)}<small>kWh</small>`, naBlokVrij && terug != null ? `waarvan ${fmt(naBlokVrij, 2)} kWh terugladen ${ct(terug)} ct` : toets.verkoop_na_blok_reden ? esc(toets.verkoop_na_blok_reden) : "", vrij ? "var(--oranje)" : "") +
-      `</div>`;
-
-    const onderdelen = Array.isArray(marge.onderdelen) ? marge.onderdelen : [];
-    const totaal = num(marge.totaal_procent);
-    const margeHtml = onderdelen.length
-      ? `<div class="meterrij"><div class="meterkop"><span class="lbl">Veiligheidsmarge</span><span class="w">${fmtTeken(totaal)}%</span></div>` +
-        `<div class="rijen">${onderdelen.map((o) => `<span>${esc(o.naam)} <b>${fmtTeken(o.procent)}%</b></span>`).join("")}</div></div>`
-      : "";
-
-    const kans = getal(mc);
-    const kansHtml =
-      kans != null
-        ? `<div class="meterrij"><div class="meterkop"><span class="lbl">Kans op tekort tot het blok</span><span class="w" style="color:${kans >= 50 ? "var(--rood)" : kans >= 20 ? "var(--oranje)" : "var(--groen)"}">${fmt(kans)}%</span></div>` +
-          balk(kans / 100, kans >= 50 ? "var(--rood)" : kans >= 20 ? "var(--oranje)" : "var(--groen)") +
-          `<div class="meternoot">Monte Carlo over verbruik en zon. Tekortnachten 7 dagen: <b>${fmt(getal(tekort))}</b>${num(attr(tekort, "tekortnacht_tot_nu_kwh")) ? ` \u00b7 deze nacht ${fmt(attr(tekort, "tekortnacht_tot_nu_kwh"), 2)} kWh van het net` : ""}.</div></div>`
-        : "";
-    const reden = toets.reden ? `<div class="zin">${esc(toets.reden)}</div>` : "";
-    return paneelKop("schild", "Verkopen en reserve", rechts, "detail-reservemarge") + `<div class="pb">${meter}${cijfers}${reden}${margeHtml}${kansHtml}</div>`;
+    const zonMeter =
+      `<div class="meterrij"><div class="meterkop"><span class="lbl">Zon vandaag opgewekt</span><span class="w">${fmt(opgewekt, 1)} / ${fmt(verwacht, 1)}<small>kWh</small></span></div>` +
+      balk(zonDeel, "var(--amber)") + `</div>`;
+    // Alleen de uitleg in tekst gaat in de uitklap
+    const uitleg =
+      (toets.reden ? `<div class="zin">${esc(toets.reden)}</div>` : "") +
+      meter + zonMeter +
+      (kans != null ? `<div class="meternoot">Kans op tekort: Monte Carlo over verbruik en zon, tot het volgende goedkope blok.</div>` : "") +
+      (uitstel.reden ? `<div class="zin"><b>Zon opvangen uitstellen: ${uitstel.uitstellen ? "ja" : "nee"}.</b> ${esc(uitstel.reden)}</div>` : "");
+    return paneelKop("schild", "Zon, verkopen en reserve", rechts, "detail-reservemarge") +
+      `<div class="pb">${cijfers}${regels}${this._uitklap("zon_reserve", "Uitleg reserve en zon", `<div class="lijst">${uitleg}</div>`)}</div>`;
   }
 
   /* ---- accumodules ---- */
@@ -1949,40 +2042,46 @@ class EmsCockpitCard extends HTMLElement {
     const koeling = this._s("koeling");
     const gez = this._s("accuGezondheid");
     const rend = getal(this._s("rendement"));
+    // v5.178.0: koeling als chip in de kop
+    const koelAan = !!attr(koeling, "ventilator_aan");
     const rechts = [
+      bruikbaar(koeling)
+        ? `<span class="chip ${koelAan ? "ok" : ""}">${icoon("ventilator")}koeling ${koelAan ? "aan" : "uit"}` +
+          `${num(attr(koeling, "accu_c")) != null ? `${PUNT}${fmt(attr(koeling, "accu_c"))}${GRAAD}C` : ""}</span>`
+        : "",
       rend != null ? chip(`rendement ${fmt(rend, 1)}%`) : "",
       bruikbaar(gez) ? chip(`${fmt(getal(gez))} cycli`) : "",
     ].join("");
     if (!Array.isArray(mods) || !mods.length) return paneelKop("cellen", "Accumodules", rechts, "detail-accu") + `<div class="leegmelding">Geen modulegegevens.</div>`;
-    const lijst = mods
-      .map((m) => {
-        const soc = num(m.soc_percent);
-        const zwak = (Array.isArray(m.drift_op) && m.drift_op.length) || (num(m.cel_min_v) != null && num(m.cel_min_v) < 3.0);
-        const kleur = soc == null ? "var(--tekst3)" : soc >= 60 ? "var(--groen)" : soc >= 20 ? "var(--amber)" : "var(--rood)";
-        const vlaggen = [
-          zwak && Array.isArray(m.drift_op) && m.drift_op.length ? chip("loopt uit de pas", "let") : "",
-          num(m.cel_min_v) != null && num(m.cel_min_v) < 3.0 ? chip(`cel ${fmt(m.cel_min_v, 2)} V`, "gevaar") : "",
-          m.melding_uit ? chip("melding uit", "uit") : "",
-        ].join("");
-        return (
-          `<div class="module${zwak ? " zwak" : ""}">` +
-          `<div class="module-kop"><b>${esc(m.naam || "Module " + m.module)}</b><span class="w" style="color:${kleur}">${soc == null ? STREEP : fmt(soc) + "%"}</span></div>` +
-          balk((soc || 0) / 100, kleur) +
-          `<div class="module-cijfers"><span>cel <b>${fmt(m.cel_min_v, 2)}\u2013${fmt(m.cel_max_v, 2)} V</b></span>` +
-          `<span>verschil <b>${fmt((num(m.cel_delta_v) || 0) * 1000)} mV</b></span>` +
-          `<span><b>${fmt(m.temperatuur_c)}${GRAAD}C</b></span>` +
-          `<span><b>${fmt(m.vermogen_w)} W</b></span></div>` +
-          (vlaggen ? `<div class="vlaggen">${vlaggen}</div>` : "") +
-          `</div>`
-        );
-      })
-      .join("");
-    const koel = bruikbaar(koeling)
-      ? `<div class="regel" style="--rk:${attr(koeling, "ventilator_aan") ? "var(--cyaan)" : "var(--tekst2)"}"><div class="ric">${icoon("ventilator")}</div>` +
-        `<div><div class="rn">Koeling ${attr(koeling, "ventilator_aan") ? "aan" : "uit"}</div><div class="rs">${esc(attr(koeling, "reden") || "")}</div></div>` +
-        `<div class="rw">${fmt(attr(koeling, "accu_c"))}${GRAAD}C</div></div>`
+    const regels = mods.map((m) => {
+      const soc = num(m.soc_percent);
+      const laag = num(m.cel_min_v) != null && num(m.cel_min_v) < 3.0;
+      const drift = Array.isArray(m.drift_op) && m.drift_op.length;
+      const zwak = drift || laag;
+      const kleur = soc == null ? "var(--tekst3)" : soc >= 60 ? "var(--groen)" : soc >= 20 ? "var(--amber)" : "var(--rood)";
+      const mv = Math.round((num(m.cel_delta_v) || 0) * 1000);
+      const temp = num(m.temperatuur_c);
+      const opval = (tekst, ja) => (ja ? `<b class="hoog">${tekst}</b>` : `<b>${tekst}</b>`);
+      // Een regel met alle cijfers; wat afwijkt in oranje
+      const cijfers =
+        `<span>cel ${opval(`${fmt(m.cel_min_v, 2)}\u2013${fmt(m.cel_max_v, 2)} V`, laag)}</span>` +
+        `<span>verschil ${opval(`${fmt(mv)} mV`, mv >= 50)}</span>` +
+        `<span>${opval(`${fmt(m.temperatuur_c)}${GRAAD}C`, temp != null && (temp >= 40 || temp <= 5))}</span>` +
+        `<span>${opval(`${fmt(m.vermogen_w)} W`, false)}</span>` +
+        (drift ? chip("loopt uit de pas", "let") : "") +
+        (laag ? chip(`cel ${fmt(m.cel_min_v, 2)} V`, "gevaar") : "") +
+        (m.melding_uit ? chip("melding uit", "uit") : "");
+      return (
+        `<div class="modrij${zwak ? " zwak" : ""}"><b>${esc(m.naam || "Module " + m.module)}</b>${balk((soc || 0) / 100, kleur)}` +
+        `<span class="w" style="color:${kleur}">${soc == null ? STREEP : fmt(soc) + "%"}</span>` +
+        `<div class="module-cijfers">${cijfers}</div></div>`
+      );
+    }).join("");
+    const koel = bruikbaar(koeling) && attr(koeling, "reden")
+      ? `<div class="za-s">Koeling ${koelAan ? "aan" : "uit"}: ${esc(attr(koeling, "reden"))}</div>`
       : "";
-    return paneelKop("cellen", "Accumodules", rechts, "detail-accu") + `<div class="pb"><div class="lijst">${lijst}</div>${koel}${this._accukosten()}</div>`;
+    return paneelKop("cellen", "Accumodules", rechts, "detail-accu") +
+      `<div class="pb"><div class="lijst">${regels}</div>${koel}${this._accukosten()}</div>`;
   }
 
   /* v5.115.0: wat de accu werkelijk kost en oplevert, nagerekend uit het
@@ -2013,36 +2112,6 @@ class EmsCockpitCard extends HTMLElement {
       tabel + verwacht +
       `<div class="za-s">Datacorrectie op netladen: <b>${ct((num(corr.eur) || 0) * 100)}</b> \u00b7 ${esc(corr.status || "")}</div>`;
     return this._uitklap("accukosten", `Wat de accu kost en oplevert (40 dagen): net ${fmtTeken(net.marge_eur, 2)} \u20ac`, inhoud);
-  }
-
-  /* ---- zon ---- */
-
-  _zon() {
-    const zon = this._gacs("zon_vandaag");
-    const verwacht = num(zon.voorspeld_kwh) ?? getal(this._s("zon_vandaag"));
-    const opgewekt = num(zon.opgewekt_kwh) ?? getal(this._s("zon_werkelijk"));
-    const rest = getal(this._s("zon_rest"));
-    const morgen = getal(this._s("zon_morgen"));
-    const pv = getal(this._s("pv"));
-    const nauw = getal(this._s("pvNauw"));
-    const bew = this._s("bewolking");
-    const uitstel = this._gacs("zon_uitstelplan");
-    const deel = verwacht ? Math.min(1, (opgewekt || 0) / verwacht) : 0;
-    return (
-      paneelKop("zon", "Zon", pv != null ? chip(`${watt(pv)} nu`, pv > 20 ? "ok" : "") : "", "detail-zon") +
-      `<div class="pb">` +
-      `<div class="meterrij"><div class="meterkop"><span class="lbl">Vandaag opgewekt</span><span class="w">${fmt(opgewekt, 1)} / ${fmt(verwacht, 1)}<small>kWh</small></span></div>` +
-      balk(deel, "var(--amber)") +
-      `</div>` +
-      `<div class="trio">` +
-      mini("Nog te komen", rest == null ? STREEP : `${fmt(rest, 1)}<small>kWh</small>`, "vandaag") +
-      mini("Morgen", morgen == null ? STREEP : `${fmt(morgen, 1)}<small>kWh</small>`, "voorspeld") +
-      mini("Bewolking", bruikbaar(bew) ? `${fmt(getal(bew))}<small>%</small>` : STREEP, esc(attr(bew, "label") || "")) +
-      `</div>` +
-      (nauw != null ? `<div class="meternoot">Voorspelling gisteren: ${fmtTeken(nauw, 1)}% tegen de werkelijkheid.</div>` : "") +
-      (uitstel.reden ? `<div class="zin"><b>Zon opvangen uitstellen: ${uitstel.uitstellen ? "ja" : "nee"}.</b> ${esc(uitstel.reden)}</div>` : "") +
-      `</div>`
-    );
   }
 
   /* ---- huis en apparaten ---- */
@@ -2163,9 +2232,10 @@ class EmsCockpitCard extends HTMLElement {
       }
     }
     const huis = getal(this._s("huis"));
+    // v5.178.0: alle regels blijven zichtbaar, in een dichter raster
     return (
       paneelKop("huis", "Huis en apparaten", huis != null ? chip(`${watt(huis)} nu`) : "", "detail-apparaten") +
-      (uit.length ? `<div class="pb"><div class="lijst">${uit.join("")}</div></div>` : `<div class="leegmelding">Geen apparaten ingesteld.</div>`)
+      (uit.length ? `<div class="pb"><div class="lijst huislijst">${uit.join("")}</div></div>` : `<div class="leegmelding">Geen apparaten ingesteld.</div>`)
     );
   }
 
@@ -2178,42 +2248,65 @@ class EmsCockpitCard extends HTMLElement {
     const week = per.week || {};
     const maand = per.maand || {};
     const vandaag = per.vandaag || {};
+    const kosten = num(attr(bes, "werkelijke_kosten_vandaag_eur"));
+    const zonder = num(attr(bes, "tegenfeitelijke_kosten_vandaag_eur"));
     const bmaand = num(attr(bes, "besparing_deze_maand_eur"));
     const ball = num(attr(bes, "besparing_all_time_eur"));
     const verkocht = num(attr(maandS, "current_month_discharge_value_eur"));
     const geladen = num(attr(maandS, "current_month_charge_cost_eur"));
     const netto = getal(maandS);
+    const zv = getal(this._s("zelfvoorziening"));
+    const kleur = (v) => (v != null && v >= 0 ? "var(--groen)" : "var(--oranje)");
+    // Een regel over de accu zelf: marge per kWh, slijtage en rendement
+    const ak = attr(this._s("rendement"), "accukosten") || {};
+    const rend = getal(this._s("rendement"));
+    const marge = ak.beschikbaar && ak.net ? num(ak.net.marge_ct_per_kwh) : null;
+    const accuRegel = [
+      marge != null ? `Accu-marge ${fmtTeken(marge, 1)} ct/kWh` : "",
+      ak.beschikbaar && num(ak.slijtage_ct) != null ? `slijtage ${fmt(ak.slijtage_ct, 1)} ct` : "",
+      rend != null ? `rendement ${fmt(rend)}%` : "",
+    ].filter(Boolean).join(PUNT);
     return (
-      paneelKop("euro", "Geld", "", "detail-besparing") +
-      `<div class="pb">` +
-      `<div class="duo">` +
-      // v5.105.2: de besparing vergelijkt met een huis ZONDER accu (alles
-      // wat de accu doet, ook het huis voeden in de stand slim). Gevraagd
-      // 19-10: "Wordt in deze kosten ook meegenomen de besparing omdat de
-      // accu het huis voedt....." - het onderschrift zei "zonder sturing".
-      mini("Besparing maand", euroTeken(bmaand), "t.o.v. zonder accu", bmaand != null && bmaand >= 0 ? "var(--groen)" : "var(--oranje)") +
-      mini("Besparing totaal", euroTeken(ball), "sinds de start", ball != null && ball >= 0 ? "var(--groen)" : "var(--oranje)") +
-      `</div>` +
+      `<div class="tegel" style="--accent:var(--groen)">` +
+      `<div class="tk"><span class="lbl">Geld</span><button class="meer" data-nav="detail-besparing" title="Details">${icoon("pijl")}</button></div>` +
+      `<div class="geld-grid"><div class="rijen geld-r">` +
+      `<span data-info="besparing" title="Stroomkosten vandaag tot nu">Vandaag <b>${euro(kosten)}${zonder != null ? `<i class="bij">zonder accu ${euro(zonder)}</i>` : ""}</b></span>` +
+      // v5.105.2: de besparing vergelijkt met een huis ZONDER accu
+      `<span title="${esc("t.o.v. zonder accu")}">Besparing deze maand <b style="color:${kleur(bmaand)}">${euroTeken(bmaand)}</b></span>` +
+      `<span title="sinds de start">Besparing totaal <b style="color:${kleur(ball)}">${euroTeken(ball)}</b></span>` +
+      `<span>Week <b>${euro(week.kosten_eur)}<i class="bij">${fmt(week.opwek_kwh, 0)} kWh zon</i></b></span>` +
+      `<span>Maand <b>${euro(maand.kosten_eur)}<i class="bij">${fmt(maand.opwek_kwh, 0)} kWh zon</i></b></span>` +
+      `<span>Van het net vandaag <b>${fmt(vandaag.import_kwh, 1)} kWh</b></span>` +
+      `<span>Zelfvoorzienend <b>${zv == null ? STREEP : fmt(zv) + "%"}</b></span>` +
+      `</div><div>` +
       // v5.105.2: alleen wat het EMS ACTIEF doet; het huis voeden in de
       // stand slim zit hier niet in (wel in de besparing hierboven).
-      `<div class="za-s">Actieve sturing deze maand - alleen wat het EMS zelf ingrijpt:</div>` +
-      `<div class="rijen" title="Alleen ontladen in dure kwartieren en laden uit het net. Dat de accu het huis voedt in de stand slim, of zon opslaat, staat hier niet in maar wel in de besparing.">` +
+      `<div class="za-s geld-kop" title="Alleen wat het EMS zelf ingrijpt">Actieve sturing deze maand - alleen wat het EMS zelf ingrijpt:</div>` +
+      `<div class="rijen geld-r" title="Alleen ontladen in dure kwartieren en laden uit het net. Dat de accu het huis voedt in de stand slim, of zon opslaat, staat hier niet in maar wel in de besparing.">` +
       `<span>Ontladen in dure kwartieren <b>${euro(verkocht)}</b></span>` +
       `<span>Laden uit het net <b>${euro(geladen)}</b></span>` +
-      `<span>Actieve sturing netto <b style="color:${netto != null && netto >= 0 ? "var(--groen)" : "var(--oranje)"}">${euroTeken(netto)}</b></span>` +
+      `<span>Actieve sturing netto <b style="color:${kleur(netto)}">${euroTeken(netto)}</b></span>` +
       `</div>` +
-      `<div class="trio">` +
-      mini("Vandaag", euro(vandaag.kosten_eur), `${fmt(vandaag.import_kwh, 1)} kWh van het net`) +
-      mini("Week", euro(week.kosten_eur), `${fmt(week.opwek_kwh, 0)} kWh zon`) +
-      mini("Maand", euro(maand.kosten_eur), `${fmt(maand.opwek_kwh, 0)} kWh zon`) +
-      `</div>` +
-      this._zelfanalyse() +
+      this._zelfanalyseRijen() +
+      `</div></div>` +
+      (accuRegel ? `<div class="sub" style="margin-top:6px">${esc(accuRegel)}</div>` : "") +
+      this._uitklap("geld_detail", "Toelichting zelfanalyse en archief", this._zelfanalyse()) +
       `</div>`
     );
   }
 
-  /* v5.100: zelfanalyse, prijsverwachting en repetitie 2027 - de teksten
-     komen kant-en-klaar uit de integratie (kaart_primair/kaart_secundair). */
+  /* v5.100: zelfanalyse, repetitie 2027 en dagarchief - het kerngetal
+     (kaart_primair) zichtbaar, de toelichting (kaart_secundair) ingeklapt. */
+  _zelfanalyseRijen() {
+    const regels = [["zelfanalyse", "Zelfanalyse"], ["repetitie", "Verwacht in 2027"], ["dagarchief", "Dagarchief"]]
+      .map(([k, naam]) => {
+        const s = this._s(k);
+        if (!s || !attr(s, "kaart_primair")) return "";
+        return `<span>${esc(naam)} <b>${esc(attr(s, "kaart_primair"))}</b></span>`;
+      }).join("");
+    return regels ? `<div class="rijen geld-r za-blok">${regels}</div>` : "";
+  }
+
   _zelfanalyse() {
     const blokken = [
       ["zelfanalyse", "Zelfanalyse"],
@@ -2222,42 +2315,26 @@ class EmsCockpitCard extends HTMLElement {
     ];
     const regels = blokken.map(([k, naam]) => {
       const s = this._s(k);
-      if (!s) return "";
-      return (
-        `<div class="za"><div class="za-k">${esc(naam)}<b>${esc(attr(s, "kaart_primair") || "")}</b></div>` +
-        `<div class="za-s">${esc(attr(s, "kaart_secundair") || "")}</div></div>`
-      );
+      if (!s || !attr(s, "kaart_secundair")) return "";
+      return `<div class="za-s"><b>${esc(naam)}:</b> ${esc(attr(s, "kaart_secundair"))}</div>`;
     }).join("");
-    if (!regels) return "";
     const gisteren = attr(this._s("zelfanalyse"), "gisteren") || {};
     const keuzes = (gisteren.niet_de_beste || []).slice(0, 3).map(
       (k) => `<li>${esc(k.tekst || "")} <i>${esc(k.oorzaak || "")}</i></li>`
     ).join("");
+    if (!regels && !keuzes) return "";
     return (
-      `<div class="za-blok">${regels}` +
-      (keuzes ? `<div class="za-s" style="margin-top:6px">Achteraf niet de beste (${esc(gisteren.datum || "")}):</div><ul class="za-l">${keuzes}</ul>` : "") +
-      `</div>`
+      regels +
+      (keuzes ? `<div class="za-s" style="margin-top:6px">Achteraf niet de beste (${esc(gisteren.datum || "")}):</div><ul class="za-l">${keuzes}</ul>` : "")
     );
   }
 
-  /* v5.113.0: eigen paneel voor de prijzen een week vooruit. */
-  _prijzen() {
-    const s = this._s("prijsverwachting");
-    if (!s) return null;
-    return (
-      paneelKop("grafiek", "Prijzen 7 dagen", chip(esc(attr(s, "kaart_primair") || ""))) +
-      `<div class="pb">` +
-      `<div class="za-s">${esc(attr(s, "kaart_secundair") || "")}</div>` +
-      this._prijsGrafiek() +
-      this._prijsKwaliteit() +
-      `</div>`
-    );
-  }
-
-  /* Uitklapbaar blok dat open blijft over een nieuwe opbouw heen. */
-  _uitklap(sleutel, kop, inhoud) {
+  /* Uitklapbaar blok dat open blijft over een nieuwe opbouw heen.
+     v5.178.0: "standaard" = open zolang er nog niet zelf is gekozen. */
+  _uitklap(sleutel, kop, inhoud, standaard = false) {
     if (!inhoud) return "";
-    const open = this._uitgeklapt && this._uitgeklapt[sleutel];
+    const keuze = this._uitgeklapt && this._uitgeklapt[sleutel];
+    const open = keuze == null ? standaard : keuze;
     return (
       `<details class="uitklap" data-uitklap="${esc(sleutel)}"${open ? " open" : ""}>` +
       `<summary>${esc(kop)}</summary>${inhoud}</details>`
@@ -2346,8 +2423,7 @@ class EmsCockpitCard extends HTMLElement {
       `${scheiding}</div>` +
       `<div class="g-x">${xLab.join("")}</div>` +
       `</div>` +
-      `<div class="meternoot">ct/kWh per kwartier. Vol: bekend, in de kleur van het plan. Licht: verwachting, ` +
-      `gekleurd naar de dagregel (goedkoopste deel = laden, boven de drempel voor duur = verkopen). Alleen meten.</div>`
+      ""
     );
   }
 
@@ -2429,22 +2505,22 @@ class EmsCockpitCard extends HTMLElement {
 
   /* ---- bediening ---- */
 
+  _knop(k) {
+    const s = this._s(k.k);
+    const aan = s.state === "on";
+    const weg = !bruikbaar(s);
+    const bezig = this._bezig.has(k.k);
+    return (
+      `<button type="button" class="knop${aan ? " aan" : ""}${bezig ? " bezig" : ""}${weg ? " weg" : ""}" data-knop="${k.k}" ` +
+      `style="--kk:${k.kl}" aria-pressed="${aan}" title="${esc(k.s + (aan ? " (aan)" : ""))}">` +
+      `<span class="kic">${icoon(k.ic)}</span><span class="kn">${esc(k.n)}</span>${aan ? `<span class="aan-t">aan</span>` : ""}</button>`
+    );
+  }
+
   _bediening() {
-    const knoppen = KNOPPEN.map((k) => {
-      if (k.groep) return `<div class="knopgroep" style="grid-column:1/-1">${esc(k.groep)}</div>`;
-      const s = this._s(k.k);
-      if (!s) return "";
-      const aan = s.state === "on";
-      const weg = !bruikbaar(s);
-      const bezig = this._bezig.has(k.k);
-      return (
-        `<button class="knop${aan ? " aan" : ""}${bezig ? " bezig" : ""}${weg ? " weg" : ""}" data-knop="${k.k}" ` +
-        `style="--kk:${k.kl}" aria-pressed="${aan}" title="${esc(k.s)}">` +
-        `<span class="kic">${icoon(k.ic)}</span><span class="kt"><div class="kn">${esc(k.n)}</div><div class="ks">${esc(aan ? "Aan" : k.s)}</div></span>` +
-        `<span class="schakel"></span></button>`
-      );
-    }).join("");
-    return paneelKop("knop", "Bediening", chip("tik om te schakelen")) + `<div class="pb"><div class="knoppen">${knoppen}</div></div>`;
+    // v5.178.0: alle knoppen zichtbaar, compact (zonder onderschrift)
+    const knoppen = KNOPPEN.filter((k) => this._s(k.k)).map((k) => this._knop(k)).join("");
+    return paneelKop("knop", "Bediening") + `<div class="pb"><div class="knoppen">${knoppen}</div></div>`;
   }
 
   /* ---- voet ---- */
@@ -2456,12 +2532,14 @@ class EmsCockpitCard extends HTMLElement {
     // v5.173.0: eerst de cockpit zelf (wordt bij elke meting getekend); de
     // systeemstatus schrijft nog alleen bij een echte wijziging.
     const bijgewerkt = attr(this._s("cockpit"), "bijgewerkt") || attr(st, "last_successful_update");
-    const links = LINKS.map(([n, p]) => `<button data-nav="${p}">${esc(n)}</button>`).join("");
-    return (
-      `<div class="links" style="padding-top:14px">${links}</div>` +
-      `<div class="voetregel"><span>${bruikbaar(gez) ? esc(gez.state) : ""}${bruikbaar(meetlog) ? PUNT + esc(meetlog.state) : ""}</span>` +
-      `<span>${bijgewerkt ? `Bijgewerkt ${esc(geleden(bijgewerkt) || "")}` + PUNT : ""}Cockpit v${esc(VERSIE)}</span></div>`
-    );
+    const links = LINKS.map(([n, p]) => `<button type="button" data-nav="${p}">${esc(n)}</button>`).join("");
+    const regel = [
+      bruikbaar(gez) ? esc(gez.state) : "",
+      bruikbaar(meetlog) ? esc(meetlog.state) : "",
+      bijgewerkt ? `Bijgewerkt ${esc(geleden(bijgewerkt) || "")}` : "",
+      `Cockpit v${esc(VERSIE)}`,
+    ].filter(Boolean).join(PUNT);
+    return `<nav class="links" aria-label="Detailpagina's">${links}</nav><span class="voetregel">${regel}</span>`;
   }
 }
 
