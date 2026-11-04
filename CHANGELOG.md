@@ -34682,3 +34682,14 @@ Gemeld leerronde 03-11 21:53 (kaart claude-ems, live op v5.176.0). De uitleg bij
 Alleen tekst; sturing en grenzen gelijk.
 
 Tests: `test_v51753_waardeplan_leeg.py` (+1).
+
+## v5.176.3 — bewolking van de dag overleeft een herstart, en een daglabel vraagt dekking
+
+L-EMS-060, meetfout uit de leerronde van 03-11. Op 03-11 stonden na de herstarts van 14:58 en 15:36 nog 3 kwartieren in `bewolking_vandaag` (08:15, 15:30, 15:45), en het label van die dag werd helemaal leeg.
+
+1. **Herstart.** `noteer_bewolking` wijzigde de tracker zonder de sensor te laten schrijven; een herstart haalde alleen terug wat er bij de vorige dagvergelijking stond. Nu schrijft de sensor eenmaal per nieuw zonkwartier.
+2. **Dekking.** De drempel van 4 kwartieren telde geen dekking: vier kwartieren aan het eind van de middag gaven een label voor de hele dag. Nu moet minstens de helft van de verwachte zon (`SOLAR_BEWOLKING_MIN_DEKKING`) in de kwartieren zitten; zo niet, dan geen label. Zonder dagverwachting blijft alleen het aantal gelden.
+
+Niet veranderd: sturing, reserve en de weging. Een dag zonder label telt niet mee in de vakken van `zonbias_percent`, zoals nu al bij te weinig kwartieren.
+
+Tests: `test_v51763_bewolking_herstart.py` (6).

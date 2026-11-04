@@ -5468,6 +5468,11 @@ SOLAR_BIAS_MIN_PER_VAK = 4
 # kwartieren met verwachte zon, gewogen met die verwachting. Minder dan dit
 # aantal zonkwartieren gezien (herstart, geen voorspelling) -> geen label.
 SOLAR_BEWOLKING_MIN_ZONKWARTIEREN = 4
+# v5.176.3 (L-EMS-060): een daglabel vraagt ook dekking: minstens dit deel van
+# de verwachte zon van die dag moet in de bewaarde kwartieren zitten. Bij elk
+# kwartier staat de kWh van het Solcast-halfuur, dus een halfuur telt dubbel.
+SOLAR_BEWOLKING_MIN_DEKKING = 0.5
+SOLAR_BEWOLKING_KWARTIEREN_PER_INTERVAL = 2
 # Zo heet de bron van dat label in `deviation_context`; dagen zonder (van
 # vóór v5.171.0: de stand om 23:59) tellen niet mee in de vakken.
 SOLAR_BEWOLKING_BRON = "zonkwartieren"

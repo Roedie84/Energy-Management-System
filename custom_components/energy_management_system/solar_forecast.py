@@ -27,6 +27,8 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     SOLAR_BEWOLKING_BRON,
+    SOLAR_BEWOLKING_KWARTIEREN_PER_INTERVAL,
+    SOLAR_BEWOLKING_MIN_DEKKING,
     SOLAR_BEWOLKING_MIN_ZONKWARTIEREN,
     SOLAR_EENZIJDIG_AANDEEL,
     SOLAR_EENZIJDIG_DAGEN,
@@ -335,13 +337,22 @@ class SolarForecastAccuracyTracker:
         if percent is None or not verwacht_kwh or verwacht_kwh <= 0:
             return
         sleutel = f"{moment.hour:02d}:{moment.minute // 15 * 15:02d}"
+        nieuw = sleutel not in self.bewolking_kwartieren
         self.bewolking_kwartieren[sleutel] = [round(float(percent), 1), round(float(verwacht_kwh), 4)]
+        # v5.176.3 (L-EMS-060): de kwartieren komen na een herstart terug uit
+        # de staat van de sensor. Zonder dit schrijft die alleen bij de
+        # dagvergelijking, en waren ze na een herstart weg.
+        if nieuw:
+            self._notify_listeners()
 
     def bewolking_van_de_dag(self, dag: date) -> float | None:
         """De bewolking van die dag, gewogen met de verwachte zon (v5.171.0).
 
         None bij minder dan SOLAR_BEWOLKING_MIN_ZONKWARTIEREN zonkwartieren:
-        liever geen label dan een verkeerd.
+        liever geen label dan een verkeerd. v5.176.3 (L-EMS-060): ook None
+        als de kwartieren minder dan SOLAR_BEWOLKING_MIN_DEKKING van de
+        verwachte zon van die dag dekken (`last_predicted_kwh`); zonder
+        dagverwachting telt alleen het aantal kwartieren.
         """
         if self.bewolking_dag != dag.isoformat():
             return None
@@ -352,6 +363,14 @@ class SolarForecastAccuracyTracker:
         if len(rijen) < SOLAR_BEWOLKING_MIN_ZONKWARTIEREN:
             return None
         totaal = sum(g for _, g in rijen)
+        verwacht = self.last_predicted_kwh
+        if (
+            verwacht
+            and self.last_compared_date == dag
+            and totaal / SOLAR_BEWOLKING_KWARTIEREN_PER_INTERVAL
+            < SOLAR_BEWOLKING_MIN_DEKKING * verwacht
+        ):
+            return None
         return round(sum(p * g for p, g in rijen) / totaal, 1)
 
     @staticmethod

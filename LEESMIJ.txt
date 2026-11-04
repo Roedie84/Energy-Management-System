@@ -1,3 +1,12 @@
+EMS v5.176.3 - bewolking van de dag overleeft een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- De bewolking per zonkwartier ging bij een herstart verloren, en vier late
+  kwartieren gaven al een label voor de hele dag. Nu blijven de kwartieren staan
+  en krijgt een dag alleen een label als minstens de helft van de verwachte zon
+  gedekt is. Alleen meten; sturing en reserve gelijk.
+
 EMS v5.176.2 - uitleg 'Accu leeg' klopt weer
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
