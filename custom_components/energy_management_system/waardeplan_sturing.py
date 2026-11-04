@@ -121,9 +121,12 @@ class WaardeplanSturingMixin:
             # de startstand. Voor het vermogen; zie planvolging._accu_w.
             nieuw["inhoud_delta_kwh"] = r.get("inhoud_delta_kwh")
             # v5.183.3: huis en zon zoals het waardeplan ze rekende, voor de tabel.
+            # v5.183.4: over de rest van het kwartier, net als `net_kwh`
+            # (de eerste rij is van de laatste berekening, de planregel van nu).
             if r.get("verbruik_kwh") is not None:
-                nieuw["plan_verbruik_kwh"] = r["verbruik_kwh"]
-                nieuw["plan_zon_kwh"] = r.get("zon_kwh")
+                deel = self._waardeplan_deel(r, regel.get("uren"), r is eerste)
+                nieuw["plan_verbruik_kwh"] = round(r["verbruik_kwh"] * deel, 4)
+                nieuw["plan_zon_kwh"] = None if r.get("zon_kwh") is None else round(r["zon_kwh"] * deel, 4)
             # v5.175.0: zon opslaan - het overschot aan de netkant.
             if r.get("accu_ac_w") is not None:
                 nieuw["accu_ac_w"] = r["accu_ac_w"]
@@ -174,6 +177,18 @@ class WaardeplanSturingMixin:
             return False
         # v5.177.0 (A7): de grens van `accu_leeg`, op de stap van het plan.
         return (rij.get("inhoud_kwh") or 0.0) <= leeg_kwh + 1e-9
+
+    @staticmethod
+    def _waardeplan_deel(rij: dict, uren: float | None, eerste: bool) -> float:
+        """Welk deel van een waardeplanrij nog telt voor de planregel van nu (v5.183.4).
+
+        Zelfde rekening als het huis-min-zon-deel van `_waardeplan_net_kwh`:
+        verbruik en zon van de rij gelden voor de duur waarover de rij rekende.
+        """
+        if not uren or uren >= 0.25:
+            return 1.0
+        rij_uren = rij.get("uren") or (uren if eerste else 0.25)
+        return min(1.0, uren / rij_uren) if rij_uren > 0 else 0.0
 
     @staticmethod
     def _waardeplan_net_kwh(rij: dict, uren: float | None, eerste: bool) -> float | None:
