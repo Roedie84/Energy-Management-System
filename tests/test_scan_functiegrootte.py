@@ -77,7 +77,8 @@ BEVROREN = {
     "coordinator.py:__init__": 400,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
-    "coordinator.py:_build_explanation": 73,
+    # B4.4: verhuisd naar de mixin uitleg.py (ongewijzigd, zelfde grens).
+    "uitleg.py:_build_explanation": 73,
     "coordinator.py:_build_forecast_timeline": 66,
     "coordinator.py:_compute_mpc_plan": 83,
     "coordinator.py:_evaluate_new_notifications": 103,
@@ -92,7 +93,7 @@ BEVROREN = {
     # `_weer_de_slechte_bronnen`; wat hier bij komt is de aanroep, en die
     # hoort in dit pad omdat hier de bewolking wordt bepaald.
     "coordinator.py:_update_weather_ensemble_check": 88,
-    "coordinator.py:_waarom_regels": 100,
+    "uitleg.py:_waarom_regels": 100,
     "coordinator.py:async_bootstrap_energy_history": 83,
     "coordinator.py:async_bootstrap_night_consumption_from_history": 99,
     "coordinator.py:get_consistency_checks": 81,
