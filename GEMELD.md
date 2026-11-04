@@ -270,3 +270,5 @@ Regel: <dd-mm HH:MM> | <sleutel>
 04-11 12:56 | label verlichting automation zithoek_lampen_uit_bij_afwezigheid
 04-11 12:56 | dode regel recorder-exclude luchtbevochtiger_1x_sonos_productievermogen
 04-11 12:56 | gold scalper kostenfilter/schaduw vaste slippage i.p.v. gemeten (0,12 ig, 0,08 pepperstone)
+04-11 14:52 | ems plantabel avond accu_w plus net_w dubbel (~0,3 kw te veel, soc-regel/leeg-moment kloppen niet)
+04-11 14:52 | ems cockpit/systeemstatus toont GOED/OK terwijl leermodus niet stuurt
