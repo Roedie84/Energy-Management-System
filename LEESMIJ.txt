@@ -1,3 +1,16 @@
+EMS v5.181.2 - leermodus blijft niet meer hangen na een herstart
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+Staat de leermodus nu nog aan terwijl je dat niet wilt, zet hem dan zelf uit:
+de update ruimt een stand van voor deze versie niet op.
+
+- Handmatig smart charge of laden uit en meteen een herstart: de leermodus ging
+  weer aan en het EMS stuurde niet meer. Nu is de stand direct bijgewerkt.
+- De melding 'leermodus staat nog aan' komt nu ook na een herstart.
+
+Sturing ongewijzigd.
+
 EMS v5.181.1 - cockpit live, plan en opdracht hetzelfde getal
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

@@ -3108,6 +3108,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             self.leermodus_sinds = None
             self._leermodus_laatste_herinnering = None
         self.learning_only = value
+        # v5.181.2: meteen in Home Assistant, niet pas bij de volgende poll.
+        self._notify_listeners()
         await self._handmatig_gezet()
 
     async def _waarschuw_bij_lange_leermodus(self, now: datetime) -> None:
@@ -3158,7 +3160,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             title="🎓 De leermodus staat nog aan",
             message=(
                 f"Al {uren:.0f} uur, sinds "
-                f"{self.leermodus_sinds.strftime('%H:%M')}. De integratie "
+                f"{dt_util.as_local(self.leermodus_sinds).strftime('%H:%M')}. De integratie "
                 f"rekent wel maar stuurt de accu niet aan.{prijs}"
             ),
             notification_id="ems_leermodus_lang_aan",

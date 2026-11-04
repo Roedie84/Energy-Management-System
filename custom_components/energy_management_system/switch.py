@@ -247,6 +247,22 @@ class LearningOnlySwitch(SwitchEntity, RestoreEntity):
         last_state = await self.async_get_last_state()
         if last_state is not None:
             self._coordinator.learning_only = last_state.state == "on"
+            # v5.181.2: `leermodus_sinds` wordt niet bewaard. Zonder dit
+            # komt de melding 'leermodus staat nog aan' na een herstart nooit.
+            if self._coordinator.learning_only and not getattr(
+                self._coordinator, "leermodus_sinds", None
+            ):
+                self._coordinator.leermodus_sinds = getattr(
+                    last_state, "last_changed", None
+                )
+        # v5.181.2: de coordinator zet deze stand ook zelf (handmatige stand
+        # uit). Dit is een pollende entiteit: de stand kwam tot 30 s later in
+        # Home Assistant. Viel daar een herstart in, dan zette het herstellen
+        # hierboven de leermodus weer aan (04-11 11:25:38, smart charge uit).
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._coordinator.unregister_listener(self.async_write_ha_state)
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._coordinator.async_set_learning_only(True)

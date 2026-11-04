@@ -34812,3 +34812,14 @@ Analyse 04-11 09:45–10:32 en meldingen Ruud 10:48–10:59.
 9. Standweergave: één vertaling (`standweergave.py`, gespiegeld in de JS) voor tegel, kopchip, tijdlijn en uitleg, bijv. "Zon laden" bij houden met zonlading.
 
 Tests: `test_v51811_live_0411.py` (28); `test_v571_cockpit` aangepast voor het veld `accu_teken`.
+
+## v5.181.2 — leermodus blijft niet hangen door een herstart
+
+Acute bug uit de leerronde van 04-11 11:40. Om 11:25:38 zette Ruud Handmatig smart charge uit; de coordinator zette de leermodus uit en bewaarde de vlag. `LearningOnlySwitch` is een pollende entiteit, dus Home Assistant had nog 'aan' toen het binnen de 30 s herstartte (installatie v5.181.1). Het herstellen zette `learning_only` weer aan, nu zonder vlag, dus de opruiming van v5.9 deed niets en het EMS stuurde niet meer: Zendure bleef op `smart_charging`, uitleg "Niet naar de accu gestuurd: leermodus".
+
+1. De schakelaar luistert nu naar de coordinator en `async_set_learning_only` meldt de stand meteen, vóór de ronde en de opslag.
+2. `leermodus_sinds` wordt niet bewaard, dus na een herstart kwam de melding 'leermodus staat nog aan' nooit. Bij herstellen op 'aan' neemt hij de begintijd uit de vorige stand over (uiterlijk de herstart daarvoor). De melding toont die in lokale tijd.
+
+Niet veranderd: sturing en reserve. Een stand van vóór deze versie is niet te onderscheiden van een leermodus die de gebruiker zelf aanzette en wordt dus niet opgeruimd: die zet je zelf uit.
+
+Tests: `test_v51812_leermodus_direct.py` (5).
