@@ -262,3 +262,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 04-11 06:51 | L-GS-040 gold scalper adx-regime vastleggen bij veldproeftrades (483/483 onbekend, akkoord)
 04-11 07:51 | ems weather.get_forecasts bij herstart: traceback, retry pas na 30 min (sneller opnieuw, geen traceback)
 04-11 07:51 | L-EMS-063 ems airco-besluit ochtend staat op verwarmen terwijl niet gebruikt (akkoord)
+04-11 08:51 | L-GS-041 gold scalper kostenregel zet op den duur elke opzet uit, keuze a/b/c (akkoord)
