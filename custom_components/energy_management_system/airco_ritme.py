@@ -545,14 +545,15 @@ def _overlap_uren(a_van: datetime, a_tot: datetime, b_van: datetime, b_tot: date
 
 def profiel_kwh(ritme: dict, van: datetime, tot: datetime) -> float:
     """Hoeveel airco-verbruik het gewone verbruiksprofiel al meeneemt in dit
-    venster: per klokuur de mediaan van wat de airco de laatste dagen in
-    dat uur gebruikte."""
+    venster: per klokuur het gemiddelde van wat de airco de laatste dagen in
+    dat uur gebruikte (v5.186.0: was de mediaan; het profiel is sinds v5.74
+    het gemiddelde)."""
     totaal = 0.0
     uur = van.replace(minute=0, second=0, microsecond=0)
     while uur < tot:
         reeks = ritme["uurverbruik"].get(str(uur.hour)) or []
         if reeks:
-            totaal += statistics.median(reeks) * _overlap_uren(uur, uur + timedelta(hours=1), van, tot)
+            totaal += statistics.mean(reeks) * _overlap_uren(uur, uur + timedelta(hours=1), van, tot)
         uur += timedelta(hours=1)
     return totaal
 
@@ -637,7 +638,7 @@ def gebruik_kwh(
     - draait de airco nu, dan telt elk uur tot `loopt_tot` (de vaste
       uit-tijd) als zeker.
 
-    Extra = verwacht min de mediaan (wat het profiel al heeft), per uur, nooit
+    Extra = verwacht min het gemiddelde (wat het profiel al heeft, v5.186.0), per uur, nooit
     negatief. Met `zonder_ochtend` blijven de ochtenduren (04-11) buiten:
     die rekent `nacht_extra_kwh` al als ochtendverwarming.
     """
@@ -672,14 +673,16 @@ def gebruik_kwh(
             uur = volgende
             continue
         verwacht = typisch if kans >= KANS_MINIMAAL else kans * typisch
-        al = statistics.median(reeks) if reeks else 0.0
+        # v5.186.0 (punt 35): het gemiddelde - het verbruiksprofiel is sinds
+        # v5.74 het gemiddelde, dus dat is wat het profiel al meeneemt.
+        al = statistics.mean(reeks) if reeks else 0.0
         bij = max(verwacht - al, 0.0) * deel
         extra += bij
         verwacht_tot += verwacht * deel
         profiel += al * deel
         if bij > 0.001:
             uren.append({
-                "uur": uur.strftime("%H:00"), "kans": round(kans, 2),
+                "uur": uur.strftime("%H:00"), "begin": uur.isoformat(), "kans": round(kans, 2),
                 "kwh": round(bij, 3), "zeker": zeker,
                 "thuis_factor": round(f_thuis, 2), "temp_factor": round(f_temp, 2),
             })

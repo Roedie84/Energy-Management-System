@@ -24,17 +24,19 @@ def _ritme(uurverbruik: dict) -> dict:
 
 
 def test_minder_dan_de_helft_telt_naar_kans():
-    # 2 van 5 avonden 0,4 kWh in het uur van 20:00: mediaan 0, kans 0,4
+    # 2 van 5 avonden 0,4 kWh in het uur van 20:00: kans 0,4.
+    # v5.186.0 (punt 35): het profiel is het gemiddelde (0,16) en neemt die
+    # 0,4 x 0,4 dus al mee - niets extra.
     r = _ritme({20: [0, 0.4, 0, 0.4, 0]})
     uit = ar.gebruik_kwh(r, VAN, TOT)
-    assert uit["al_in_profiel_kwh"] == 0
-    assert abs(uit["extra_kwh"] - 0.16) < 1e-6
+    assert abs(uit["al_in_profiel_kwh"] - 0.16) < 1e-6
+    assert uit["extra_kwh"] == 0
 
 
 def test_vaker_dan_de_helft_telt_volledig():
-    r = _ritme({20: [0, 0.4, 0.4, 0.4, 0.3]})   # mediaan 0,4 zit al in het profiel
+    r = _ritme({20: [0, 0.4, 0.4, 0.4, 0.3]})   # v5.186.0: gemiddelde 0,3 in het profiel
     uit = ar.gebruik_kwh(r, VAN, TOT)
-    assert uit["extra_kwh"] == 0                 # typisch 0,4 - al 0,4
+    assert abs(uit["extra_kwh"] - 0.1) < 1e-6    # typisch 0,4 - al 0,3
     r = _ritme({20: [0, 0.4, 0, 0.4, 0.4, 0]})   # kans 0,5, mediaan 0,2
     assert abs(ar.gebruik_kwh(r, VAN, TOT)["extra_kwh"] - 0.2) < 1e-6
 
@@ -48,14 +50,15 @@ def test_draait_nu_dan_zeker_tot_de_uittijd():
     r = _ritme({19: [0, 0, 0, 0.5], 20: [0, 0, 0, 0], 21: [0, 0, 0, 0], 22: [0, 0, 0, 0]})
     nu = datetime(2026, 10, 11, 19, 30, tzinfo=TZ)
     uit = ar.gebruik_kwh(r, nu, TOT, loopt_nu=True, loopt_tot=nu.replace(hour=22, minute=0))
-    # 19:30-22:00 = 2,5 uur zeker, typisch 0,5 (uur 19) of alle-uren 0,5
-    assert abs(uit["extra_kwh"] - 1.25) < 1e-6
+    # 19:30-22:00 = 2,5 uur zeker, typisch 0,5 (uur 19) of alle-uren 0,5;
+    # v5.186.0: min het gemiddelde in het profiel (uur 19: 0,125 x 0,5 uur)
+    assert abs(uit["extra_kwh"] - (1.25 - 0.0625)) < 1e-3
     assert all(u["zeker"] for u in uit["uren"])
     assert "22:00" not in [u["uur"] for u in uit["uren"]]
 
 
 def test_ochtend_blijft_bij_de_ochtendverwarming():
-    r = _ritme({6: [0, 0.5, 0, 0.5, 0]})
+    r = _ritme({6: [0.5, 0.5, 0, 0.5, 0]})   # v5.186.0: kans 0,6 (bij 0,4 zit het al in het gemiddelde)
     assert ar.gebruik_kwh(r, VAN, TOT)["extra_kwh"] > 0
     assert ar.gebruik_kwh(r, VAN, TOT, zonder_ochtend=True)["extra_kwh"] == 0
 

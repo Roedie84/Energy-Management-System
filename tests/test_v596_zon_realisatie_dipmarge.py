@@ -63,7 +63,8 @@ def test_zonder_opwekmeter_geen_correctie(make_coordinator):
 
 def test_zonschatting_gebruikt_de_voorzichtigste():
     assert '"realisatie": self._zon_realisatie(nu, pv_entries)' in BRON
-    assert "remaining_correction_ratio if remaining_correction_ratio is not None else 1.0" in BRON
+    # v5.186.0 (punt 36): de min-regel geldt nog voor "veilig".
+    assert "delen = [rest if rest is not None else 1.0]" in BRON
 
 
 def test_dip_rekent_met_marge():

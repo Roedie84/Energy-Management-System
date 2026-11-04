@@ -967,9 +967,11 @@ class LegacySturingMixin:
             reserve_kwh, uitsplitsing = cache[1][sleutel]
         else:
             self._reserve_laatste_uitsplitsing = None
-            reserve_kwh = self._bereken_dynamische_reserve_kwh(
-                now, cheap_block_start, bewaar
-            )
+            # v5.186.0 (punt 33): een eigen correctiebudget, ook binnen een plan.
+            with self._eigen_correctiebudget():
+                reserve_kwh = self._bereken_dynamische_reserve_kwh(
+                    now, cheap_block_start, bewaar
+                )
             uitsplitsing = self._reserve_laatste_uitsplitsing
             if sleutel is not None and uitsplitsing is not None:
                 cache[1][sleutel] = (reserve_kwh, uitsplitsing)

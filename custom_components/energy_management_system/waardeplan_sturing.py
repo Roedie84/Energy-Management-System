@@ -357,7 +357,10 @@ class WaardeplanSturingMixin:
         segmenten = self._segmenten_verbruik_zon(van, eind, veilig=False)
         if segmenten is None:
             return None
-        verbruik = sum(v for v, _z in segmenten)
+        # v5.186.0 (punt 34): ook de klimaat-extra's die de reserve meeneemt.
+        verbruik = sum(v for v, _z in segmenten) + self._klimaat_extra_kwh_in(van, eind)
+        if self._pv_gat_in(van, eind):  # v5.186.0 (punt 38): geen zon bekend = gat
+            return None
         zon = self._estimate_pv_kwh_for_period(van, eind, veilig=False)
         inkoop = prijs / PRICE_SCALE_FACTOR
         incl = inkoop
@@ -681,9 +684,9 @@ class WaardeplanSturingMixin:
     def _waardeplan_nu(self, now: datetime, entries) -> dict:
         """Het plan voor dit kwartier: één keer per kwartier rekenen, of
         opnieuw als de accu-inhoud ver van het plan afwijkt."""
-        kwartier = dt_util.as_local(now).replace(
-            minute=(dt_util.as_local(now).minute // 15) * 15, second=0, microsecond=0
-        )
+        # v5.186.0: in UTC - de klok van 02:15 komt bij de wintertijd twee keer.
+        utc = now.astimezone(timezone.utc)
+        kwartier = utc.replace(minute=(utc.minute // 15) * 15, second=0, microsecond=0)
         cache = self._waardeplan_cache
         inhoud = self.beschikbare_energie_kwh()
         if cache is not None and cache[0] == kwartier and cache[1].get("beschikbaar"):

@@ -22,13 +22,15 @@ def _ritme(uur=19, keer_aan=2, dagen=5, temp=None):
 
 
 def test_zonder_factoren_verandert_er_niets():
-    r = _ritme()
+    # v5.186.0 (punt 35): 3 van de 5 dagen - bij 2 van de 5 zit de verwachting
+    # (0,4 x typisch) al helemaal in het gemiddelde van het profiel.
+    r = _ritme(keer_aan=3)
     oud = R.gebruik_kwh(r, NU, NU + timedelta(hours=6))
-    assert oud["uren"] and oud["uren"][0]["kans"] == 0.4
+    assert oud["uren"] and oud["uren"][0]["kans"] == 0.6
 
 
 def test_niemand_thuis_tot_na_dat_uur_geeft_geen_airco():
-    r = _ritme()
+    r = _ritme(keer_aan=3)
     assert R.gebruik_kwh(r, NU, NU + timedelta(hours=6))["extra_kwh"] > 0
     uit = R.gebruik_kwh(r, NU, NU + timedelta(hours=6), thuis_factor=lambda u: 0.0)
     assert uit["extra_kwh"] == 0 and uit["uren"] == []

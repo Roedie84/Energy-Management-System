@@ -27,8 +27,14 @@ STIL_VAKKEN = 6
 MIN_KWH = 0.3
 #: hooguit zoveel kwartieren per profiel (4 uur)
 MAX_KWARTIEREN = 16
-#: zoveel cycli zijn genoeg voor een profiel (de rest is terugval)
-MIN_CYCLI = 1
+#: zoveel cycli zijn genoeg voor een profiel (de rest is terugval).
+#: v5.186.0 (punt 43): 2 - één cyclus (één programma) is geen profiel.
+MIN_CYCLI = 2
+#: v5.186.0 (punt 43): rekken naar de geplande duur tussen deze grenzen (min);
+#: binnen REK_DREMPEL_MIN van de profielduur blijft het profiel zoals het is.
+REK_MIN_MIN = 30.0
+REK_MAX_MIN = 360.0
+REK_DREMPEL_MIN = 15.0
 
 
 def cycli(vijfminuten: list[float]) -> list[list[float]]:
@@ -116,3 +122,36 @@ def rest_fracties(fracties: list[float], verstreken_min: float) -> list[float]:
         t = stuk_eind
     som = sum(rest)
     return [x / som for x in rest] if som > 0 else []
+
+
+def rek(fracties: list[float], duur_min: float | None) -> list[float]:
+    """Het profiel gerekt (of ingekort) tot `duur_min` minuten (v5.186.0, punt 43).
+
+    Het profiel mengt de programma's die de laatste dagen draaiden; Home
+    Connect kent de duur van DIT programma (eco 3 uur, kort 1 uur). De vorm
+    blijft (opwarmen vooraan), de tijdas schaalt mee. Buiten REK_MIN_MIN-
+    REK_MAX_MIN, of als het verschil kleiner is dan REK_DREMPEL_MIN, het
+    profiel zoals het is.
+    """
+    if not fracties or duur_min is None:
+        return fracties
+    lengte = 15.0 * len(fracties)
+    if not (REK_MIN_MIN <= duur_min <= REK_MAX_MIN) or abs(duur_min - lengte) < REK_DREMPEL_MIN:
+        return fracties
+    cum = [0.0]
+    for f in fracties:
+        cum.append(cum[-1] + f)
+
+    def tot_nu(t: float) -> float:
+        if t <= 0:
+            return 0.0
+        if t >= lengte:
+            return cum[-1]
+        j = int(t // 15)
+        return cum[j] + fracties[j] * (t - 15.0 * j) / 15.0
+
+    schaal = lengte / duur_min
+    n = int(-(-duur_min // 15))
+    uit = [tot_nu(min(duur_min, 15.0 * (i + 1)) * schaal) - tot_nu(15.0 * i * schaal) for i in range(n)]
+    som = sum(uit)
+    return [x / som for x in uit] if som > 0 else fracties
