@@ -275,3 +275,4 @@ Regel: <dd-mm HH:MM> | <sleutel>
 04-11 15:52 | H-EMS-18 ems netlaadplan springt binnen 10 min na herstart (live_correctie/lange horizon)
 04-11 18:51 | ems geplande vaatwasser hele cyclus in eerste kwartier (geplande_witgoed_kwh_in_periode, verdelen over start-eind, akkoord)
 04-11 18:51 | updates installeren ems 5.184.3 (hacs) + ha herstarten
+04-11 20:52 | recorder.purge_entities oude rijen gold_scalper_btc_eur_trades (na exclude, 01-11 t/m 04-11)
