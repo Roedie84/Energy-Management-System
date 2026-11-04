@@ -34751,3 +34751,20 @@ Akkoord Ruud 04-11 07:11 (B3), met de eis dat alle informatie zichtbaar blijft (
 - Hoogte (testgegevens): desktop 2322 → 1529 px (−34 %), mobiel 6488 → 4062 px (−37 %).
 
 Tests: `test_v5178_cockpit_compact.py` (structuur + node-render); vier tests op de oude indeling bijgewerkt.
+
+## v5.179.0 — professionele uitstraling cockpit; sensoren direct gevuld na herstart
+
+Gemeld Ruud 04-11 08:44: "nu graag een professionele uitstraling".
+
+**Cockpit (`www/ems-cockpit.js`)**
+- Eén kaartstijl (effen vlak, 1 px rand, radius 12, padding 16); geen gekleurde zijbalken, gloed, verlopen of achtergrond-SVG. Kaartkop: icoon + titel, vaste hoogte.
+- Vaste typeschaal (11/12/13/15/22/30 px, gewicht 400/600, tabelcijfers) en tussenruimtes.
+- Kleur alleen met betekenis: zon amber, net blauw, accu violet, huis neutraal; groen/oranje/rood alleen voor status. Rustiger grafiekkleuren.
+- Eén tegelcomponent (energiestroom, zon/verkopen/reserve, plan tegen meting), één chipstijl, Bediening als gelijke knoppen (aan = vlak + stip).
+- Raster van 12 kolommen met rijen van gelijke hoogte; tablet 2 kolommen, telefoon 1.
+- "Waarom?" staat standaard open; tijdens de eerste 10 minuten na een start "Modulegegevens laden nog".
+
+**Sensoren**
+- `zuinig_schrijven`: de eerste schrijfactie gebeurt bij het toevoegen van de entiteit, vóór de eerste ronde, met lege kenmerken. Een sensor met vaste stand (bijv. Accu-modulegezondheid, stand 0) hield de gevulde kenmerken dan tot 300 s vast. Nu gaat leeg → gevuld (en de eerste 5 minuten na de eerste schrijfactie) direct door, hooguit eens per 25 s. Gold voor 31 sensoren.
+
+Tests: `test_v5179_cockpit_ontwerp.py`, `test_v5173_zuinig_schrijven.py` (+7); drie tests op de oude opmaak herschreven.

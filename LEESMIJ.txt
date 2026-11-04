@@ -1,3 +1,13 @@
+EMS v5.179.0 - professionele uitstraling cockpit, modules direct na herstart
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- De cockpit heeft een rustige, consistente opmaak: een kaartstijl, vaste lettergroottes
+  en tussenruimtes, kleuren alleen met betekenis (zon geel, net blauw, accu paars) en
+  kolommen die op gelijke hoogte eindigen. Alle informatie blijft zichtbaar.
+- Na een herstart staan de accumodules (en andere sensoren met een vaste stand) er
+  meteen, niet pas na ~5 minuten.
+
 EMS v5.178.0 - compacte energiecockpit
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
