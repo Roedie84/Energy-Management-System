@@ -2359,7 +2359,12 @@ class NilmConfirmedDevicesSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
             all_devices.keys(),
             key=lambda eid: all_devices[eid].get("friendly_name") or eid,
         )[:NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT]
-        preview = {eid: all_devices[eid] for eid in preview_ids}
+        # v5.177.0 (A14): zonder de interne dagtellers ("_today_sum" en
+        # dergelijke); die staan in de Store en de diagnostiek.
+        preview = {
+            eid: slank({k: v for k, v in all_devices[eid].items() if not str(k).startswith("_")})
+            for eid in preview_ids
+        }
         truncated = len(all_devices) > len(preview)
 
         anomalies = [
@@ -2752,11 +2757,14 @@ class ClimateForecastSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
             "rolluikstand": self._coordinator.climate_shutter_state,
             "airco_status": self._coordinator.climate_airco_state,
             # v4.9: met de gemeten temperatuur en de afwijking erbij.
-            "traject": self._coordinator._traject_met_metingen(
+            # v5.177.0 (A14): zonder lege velden, kommagetallen afgerond.
+            "traject": slank(zonder_none(self._coordinator._traject_met_metingen(
                 self._coordinator.climate_forecast_trajectory
-            ),
+            ))),
             "kwaliteit": self._coordinator.get_klimaat_projectie_kwaliteit(),
-            "geleerde_cellen": self._coordinator.climate_rate_history,
+            # v5.177.0 (A14): "geleerde_cellen" (4,9 kB) niet meer op de
+            # sensor: de Store bewaart ze (PERSISTED_FIELDS) en de diagnostiek
+            # toont ze. Het herstel hieronder leest ze nog uit een oude toestand.
             # v5.64: wat er over wind geleerd is.
             "wind": self._coordinator.get_klimaat_wind(),
             # v5.66: wat er over de zon geleerd is.
@@ -3286,6 +3294,83 @@ class SavingsThisMonthSensor(ZuinigSchrijven, SensorEntity):
         }
 
 
+# --- v5.177.0 (A14): attributen onder 16 kB ---------------------------------
+#
+# Gemeten 04-11: 456 kB aan attributen over 163 entiteiten; zeven boven de
+# 16 kB (prijsverwachting 44,5, diagnose sturing 32, kwartierplanning 22,7,
+# klimaatprojectie 21, GACS 18,5, NILM 16,8, dashboardbronnen 16,2). Boven de
+# 16 kB slaat de recorder de attributen over, en elke wijziging gaat in zijn
+# geheel naar elke open frontend. De volledige gegevens blijven in de
+# diagnostiek; de sensoren dragen wat de cockpit en het dashboard lezen.
+
+#: Zoveel decimalen houdt een kommagetal in een zwaar attribuut.
+SLANK_DECIMALEN = 3
+
+
+def slank(waarde, decimalen: int = SLANK_DECIMALEN):
+    """Kommagetallen afgerond, recursief door dicts en lijsten (v5.177.0).
+
+    272.95900000000006 -> 272.959; 0.8403180511611329 -> 0.84. Sleutels en
+    de rest blijven zoals ze zijn.
+    """
+    if isinstance(waarde, float):
+        return round(waarde, decimalen)
+    if isinstance(waarde, dict):
+        return {k: slank(v, decimalen) for k, v in waarde.items()}
+    if isinstance(waarde, (list, tuple)):
+        return [slank(v, decimalen) for v in waarde]
+    return waarde
+
+
+def zonder_none(rijen):
+    """Lijst van dicts zonder velden die None zijn (v5.177.0). Een lezer met
+    .get() of `attr || ...` ziet geen verschil."""
+    return [
+        {k: v for k, v in r.items() if v is not None} if isinstance(r, dict) else r
+        for r in rijen or []
+    ]
+
+
+#: v5.177.0 (A14): prijsverwachting - wat de cockpit niet leest (staat in de
+#: diagnostiek): de band per kwartier en per uur, de risicowaarden voor een
+#: plan dat er nog niet is, de basis-terugtoets.
+PRIJSVERWACHTING_NIET_OP_DE_SENSOR = (
+    "band_voor_plan", "per_vooruit_basis", "per_vooruit", "toelichting", "referentie_jeroen_nl",
+)
+#: Zoveel dagen per_dag houden de nauwkeurigheidsblokken (de cockpit toont 14).
+PRIJSVERWACHTING_PER_DAG = 14
+
+
+def prijsverwachting_voor_de_sensor(pv: dict) -> dict:
+    """De prijsverwachting zonder wat alleen in de diagnostiek hoort (v5.177.0)."""
+    uit = {k: v for k, v in (pv or {}).items() if k not in PRIJSVERWACHTING_NIET_OP_DE_SENSOR}
+    kw = uit.get("kwartieren")
+    if isinstance(kw, dict):
+        uit["kwartieren"] = {
+            k: ([None if c is None else round(c, 1) for c in v] if k == "ct" and isinstance(v, list) else v)
+            for k, v in kw.items() if k not in ("p10_ct", "p90_ct")
+        }
+    dagen = uit.get("dagen")
+    if isinstance(dagen, dict):
+        uit["dagen"] = {
+            d: {k: v for k, v in (dag or {}).items() if k not in ("uren", "band")}
+            for d, dag in dagen.items()
+        }
+    live = uit.get("nauwkeurigheid_live")
+    if isinstance(live, dict):
+        uit["nauwkeurigheid_live"] = {
+            k: (
+                {**v, "per_dag": (v.get("per_dag") or [])[-PRIJSVERWACHTING_PER_DAG:]} if k == "d1"
+                else {kk: vv for kk, vv in v.items() if kk != "per_dag"}
+            ) if isinstance(v, dict) else v
+            for k, v in live.items()
+        }
+    bt = uit.get("backtest_21_dagen")
+    if isinstance(bt, dict) and isinstance(bt.get("per_dag"), list):
+        uit["backtest_21_dagen"] = {**bt, "per_dag": bt["per_dag"][-PRIJSVERWACHTING_PER_DAG:]}
+    return slank(uit)
+
+
 class _V5100Sensor(SensorEntity):
     """Gemeenschappelijk voor de drie zelfanalyse-sensoren van v5.100."""
 
@@ -3327,7 +3412,8 @@ class PrijsverwachtingSensor(_V5100Sensor):
 
     @property
     def extra_state_attributes(self):
-        return self._coordinator.get_prijsverwachting()
+        # v5.177.0 (A14): 44,5 kB -> zonder de band en de diagnostiekvelden.
+        return prijsverwachting_voor_de_sensor(self._coordinator.get_prijsverwachting())
 
 
 class ZelfanalyseSensor(_V5100Sensor):
@@ -5473,6 +5559,11 @@ class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
             # dan ook geen fout van de zelfbeoordeling op.
             if sleutels is None or "verbetermogelijkheden" in sleutels:
                 attributen.update(self._coordinator.get_gacs_assessment())
+                # v5.177.0 (A14): de eerste GACS_VERBETER_MAX op de sensor
+                # (de rest in de diagnostiek); de toestand telt ze allemaal.
+                adviezen = attributen.get("verbetermogelijkheden")
+                if sleutels is not None and isinstance(adviezen, list) and len(adviezen) > GACS_VERBETER_MAX:
+                    attributen["verbetermogelijkheden"] = adviezen[:GACS_VERBETER_MAX]
                 self._coordinator.internal_failures.pop("gacs_beoordeling", None)
         except Exception as fout:  # noqa: BLE001
             _LOGGER.exception("Kon de GACS-beoordeling niet berekenen")
@@ -5480,7 +5571,8 @@ class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
             self._coordinator.internal_failures["gacs_beoordeling"] = (
                 f"{type(fout).__name__}: {fout}"
             )
-        return {
+        # v5.177.0 (A14): kommagetallen afgerond (18,5 kB).
+        return slank({
             **attributen,
             # v4.9.7: het totaal en de tien traagste, zodat de volgende
             # keer niet geraden hoeft te worden welk attribuut de tijd kost.
@@ -5496,7 +5588,7 @@ class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
                 "verplichting; dit is een zelfbeoordeling om te zien waar "
                 "een systeem sterk en zwak staat."
             ),
-        }
+        })
 
 
 # v5.62: de zelfbeoordeling droeg ~204 kB aan attributen. Home Assistant
@@ -5544,6 +5636,8 @@ GACS_DASHBOARD_SLEUTELS = frozenset(
         "rekentijd_ms",
     }
 )
+# v5.177.0 (A14): zoveel verbetermogelijkheden op de sensor.
+GACS_VERBETER_MAX = 8
 # Hoeveel dagen de plantoetsing per dag toont, en hoeveel logboekregels.
 GACS_PLANTOETSING_DAGEN = 14
 GACS_LOGBOEK_REGELS = 40
@@ -5952,8 +6046,10 @@ class CockpitSensor(_CoordinatorDiagnosticSensor):
         # (zuinig_schrijven.py). De cockpit wordt toch al bij elke meting
         # opnieuw getekend, dus het tijdstip kost hier geen extra rij.
         laatste = getattr(self._coordinator, "last_successful_update", None)
+        # v5.177.0 (A14): geen "plaat" meer (base64-SVG van ~13 KB, elke
+        # meting naar elke open frontend). Alleen een oude markdown-kaart las
+        # hem; de EMS-cockpit (/ems-cockpit) vervangt die.
         return {
-            "plaat": self._coordinator.get_cockpit_svg(gegevens),
             "reden": gegevens.get("status_regel"),
             "bijgewerkt": laatste.isoformat() if laatste else None,
         }
@@ -6152,9 +6248,12 @@ class DashboardBronnenSensor(_CoordinatorDiagnosticSensor):
             from homeassistant.helpers import entity_registry as er
 
             register = er.async_get(hass)
+            # v5.177.0 (A14): uitgeschakelde entiteiten kan de cockpit niet
+            # tonen; ze maakten het attribuut groter dan 16 kB.
             regels = [
                 (r.unique_id, r.entity_id)
                 for r in er.async_entries_for_config_entry(register, self._entry_id)
+                if not getattr(r, "disabled_by", None)
             ]
         except Exception:  # noqa: BLE001 - het dashboard mag nooit de sensor breken
             return {}

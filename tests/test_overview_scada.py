@@ -476,7 +476,9 @@ def test_only_the_cockpit_is_shown_on_the_visual_page():
     inhoud = [k["content"] for k in pagina["cards"][0]["cards"] if "content" in k]
 
     # v5.19: de cockpitsensor beweegt mee met de metingen.
-    assert any("_cockpit" in c and "plaat" in c for c in inhoud)
+    # v5.177.0 (A14): de plaat zelf staat in de EMS-cockpit.
+    assert any("/ems-cockpit" in c for c in inhoud)
+    assert not any("plaat'')" in c for c in inhoud)
     assert not any("overzichtsecties" in c for c in inhoud)
 
 

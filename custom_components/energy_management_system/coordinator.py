@@ -25917,7 +25917,9 @@ class EnergyManagementSystemCoordinator:
         return {
             "nabeschouwing_7d": nabeschouwing,
             # De laatste 24 (de diagnostiek heeft er 48): attribuut klein houden.
-            "reserve_sprongen": list(self.reserve_sprongen)[-24:],
+            # v5.177.0 (A14): de laatste 12, compact (alleen wat veranderde):
+            # 24 volle sprongen waren 23,8 kB.
+            "reserve_sprongen": [self._sprong_kort(r) for r in list(self.reserve_sprongen)[-12:]],
             "reserve_sprongen_aantal": sum(
                 1 for r in self.reserve_sprongen
                 if not (isinstance(r, dict) and (r.get("na_herstart") or r.get("alleen_behoefte")))
@@ -25944,6 +25946,24 @@ class EnergyManagementSystemCoordinator:
             "spaarplan_eigen_tot_blok_kwh": plan.get("spaarplan_eigen_tot_blok_kwh"),
             "spaarplan_nodig_tot_blok_kwh": plan.get("nodig_tot_blok_kwh"),
         }
+
+    @staticmethod
+    def _sprong_kort(r) -> dict:
+        """Een reservesprong compact voor het attribuut (v5.177.0, A14): de
+        rondetijden weg, van de paren [oud, nieuw] alleen wat veranderde,
+        van de bijdragen alleen wat niet nul is."""
+        if not isinstance(r, dict):
+            return r
+        uit = {}
+        for k, v in r.items():
+            if k in ("ronde_oud", "ronde_nieuw"):
+                continue
+            if isinstance(v, list) and len(v) == 2 and v[0] == v[1]:
+                continue
+            if k == "bijdragen_kwh" and isinstance(v, dict):
+                v = {kk: vv for kk, vv in v.items() if vv}
+            uit[k] = v
+        return uit
 
     @staticmethod
     def _huis_gaat_voor_kpi(verkoop: list, regeloverschot: dict) -> dict:
@@ -27222,7 +27242,8 @@ class EnergyManagementSystemCoordinator:
                 {k: v for k, v in r.items() if k in ("van", "gepland_accu_w", "gemeten_accu_w", "oorzaak", "status")}
                 for r in self._planvolging_kwartieren[-8:]
             ],
-            "dagen": list(self.planvolging_dagen[-14:]),
+            # v5.177.0 (A14): 7 dagen op de sensor (de diagnostiek heeft er 30).
+            "dagen": list(self.planvolging_dagen[-7:]),
         }
 
     def get_laadplan_gewijzigd(self) -> dict:
@@ -27699,10 +27720,25 @@ class EnergyManagementSystemCoordinator:
             )
         except Exception:  # noqa: BLE001 - de tabel mag hier niet op stuklopen
             vermogens = [{} for _ in plan]
+        # v5.177.0 (A14): standaardwaarden weg (dag "", gewijzigd/tekort
+        # False, eerst_voorspeld zonder wijziging): 64 regels x ~75 tekens.
+        # Cockpit en dashboard lezen ze als waar/onwaar of leeg.
         return [
-            {**{veld: regel.get(veld) for veld in velden}, **extra}
+            self._compacte_planregel({**{veld: regel.get(veld) for veld in velden}, **extra})
             for regel, extra in zip(plan, vermogens)
         ]
+
+    @staticmethod
+    def _compacte_planregel(r: dict) -> dict:
+        """Een planregel zonder velden met hun standaardwaarde (v5.177.0, A14)."""
+        if not r.get("dag"):
+            r.pop("dag", None)
+        if not r.get("gewijzigd"):
+            r.pop("gewijzigd", None)
+            r.pop("eerst_voorspeld", None)
+        if not r.get("tekort"):
+            r.pop("tekort", None)
+        return r
 
     def _plan_startvoorraad_kwh(self) -> float | None:
         """De bruikbare voorraad nu, het beginpunt van het kwartierplan (v5.146.0)."""

@@ -594,7 +594,7 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
-      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_cockpit'', ''plaat'') }}'
+      content: 'De visuele plaat staat in de [EMS-cockpit](/ems-cockpit).'
     - type: horizontal-stack
       cards:
       - type: button

@@ -439,17 +439,19 @@ def test_the_dashboard_gets_a_slimmed_down_plan(make_coordinator, hass):
     # Alles wat de tabel rendert, moet erin zitten.
     for veld in (
         "van",
-        "dag",
         "prijs_ct",
         "zon_kwh",
         "modus",
         "soc_procent",
         "cumulatief_eur",
-        "gewijzigd",
-        "eerst_voorspeld",
-        "tekort",
     ):
         assert veld in kort[0]
+    # v5.177.0 (A14): dag, gewijzigd, eerst_voorspeld en tekort alleen als
+    # ze iets zeggen (niet leeg / waar).
+    for r in kort:
+        for veld in ("dag", "gewijzigd", "tekort"):
+            assert veld not in r or r[veld]
+        assert "eerst_voorspeld" not in r or r.get("gewijzigd")
     # En de rest niet - dat is precies waar de winst zit.
     assert "soc_kwh" not in kort[0]
     assert "net_kwh" not in kort[0]

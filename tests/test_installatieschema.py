@@ -175,7 +175,8 @@ def test_de_plaat_staat_alleen_op_de_pagina_visueel():
 
     assert "overzichtsplaat" not in overzicht
     # v5.19: de cockpitsensor, niet het attribuut van de GACS-sensor.
-    assert "_cockpit'', ''plaat''" in visueel
+    # v5.177.0 (A14): verwijst naar de EMS-cockpit, geen plaat-attribuut meer.
+    assert "/ems-cockpit" in visueel and "''plaat''" not in visueel
 
 
 # --- v5.17: de cockpit ---------------------------------------------------

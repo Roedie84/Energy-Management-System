@@ -213,7 +213,8 @@ def test_the_dashboard_reads_those_attributes_unchanged():
     # v5.19: de pagina leest de COCKPITSENSOR, die meebeweegt met de
     # metingen. De zware GACS-sensor werd maar eens per 30 seconden
     # opgehaald, en dan staat de plaat stil.
-    assert "_cockpit" in inhoud and "plaat" in inhoud
+    # v5.177.0 (A14): de pagina verwijst naar de EMS-cockpit.
+    assert "/ems-cockpit" in inhoud
     assert "overzichtsecties" not in inhoud
 
 
