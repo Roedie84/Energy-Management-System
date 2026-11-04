@@ -34926,3 +34926,12 @@ Ruud 04-11 16:47: "waarom nu sparen? Nu ben ik juist aan het koken". Huis 2,2-4,
 - Het plan rekende het huis dekken met het handmatige ontlaadvermogen (1,2 kW, bedoeld voor verkopen). De slimme stand levert tot de grens van de omvormer (`slimme_ontlaadgrens_w`, 2,4 kW). Nu: `ontladen_kw` = die grens, nieuw `Accu.verkoop_kw` = het handmatige vermogen voor een echte verkoop (overschot vanaf de opdrachtgrens).
 
 Tests: `test_v5183_5_koken.py`.
+
+## v5.184.2 — vangnet in het plan
+
+Akkoord Ruud 04-11 16:58. Bij de kookfout van 16:45 bleef er voor de accu-inhoud geen enkele toegestane stap over; de achterwaartse berekening liet dan kosten oneindig en keuze 0 staan, en dat is 'houden' (sparen). Zonder melding.
+
+- `_terugrekenen` rekent per kwartier eerst met alle regels; blijft er voor een inhoud niets over, dan opnieuw zonder de dekregels (volle dekking en `dekken`, v5.183). De stapkosten staan in `_stapkosten`.
+- Planrijen die zo gekozen zijn krijgen `vangnet`; attribuut `vangnet_kwartieren` op het waardeplan; een waarschuwing in de log (eens per kwartier) als het lopende kwartier via het vangnet ging.
+
+Tests: `test_v5184_2_vangnet.py`.

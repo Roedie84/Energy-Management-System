@@ -1,3 +1,11 @@
+EMS v5.184.2 - vangnet in het plan
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Past er in een kwartier geen enkele stap in de regels, dan kiest het plan opnieuw
+  zonder de dekregels in plaats van stil "sparen". Zo'n kwartier staat in de log
+  (waarschuwing) en telt mee in `vangnet_kwartieren` (hoort 0 te zijn).
+
 EMS v5.184.1 - de accu dekt het huis ook bij koken
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

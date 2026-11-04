@@ -423,6 +423,15 @@ class WaardeplanSturingMixin:
         balans = self._waardeplan_balanceren(now, kwartieren, accu)
         accu.vol_na_kwartier = balans.get("kwartier")
         res = self._waardeplan_huis_eerst(kwartieren, accu, waardeplan_mod.plan(kwartieren, accu))
+        # v5.184.2 (vangnet): het lopende kwartier kon alleen zonder de
+        # dekregels; eens per kwartier in de log, zodat het opvalt.
+        if res.beschikbaar and res.kwartieren and res.kwartieren[0].get("vangnet"):
+            sleutel = now.strftime("%Y-%m-%d %H:") + str(now.minute // 15)
+            if getattr(self, "_vangnet_gemeld", None) != sleutel:
+                self._vangnet_gemeld = sleutel
+                _LOGGER.warning(
+                    "Waardeplan: geen stap paste in de regels voor dit kwartier (%s); "
+                    "gekozen zonder de dekregels (vangnet)", res.kwartieren[0].get("actie"))
         if not res.beschikbaar:
             uit["reden"] = res.reden
             return uit
@@ -505,6 +514,9 @@ class WaardeplanSturingMixin:
                 (res.kosten_zonder_accu_eur or 0) - (res.kosten_plan_eur or 0), 2
             ),
             "eindwaarde_eur_per_kwh": res.eindwaarde_eur_per_kwh,
+            # v5.184.2: kwartieren die het plan alleen zonder de dekregels kon
+            # vullen (vangnet); hoort 0 te zijn.
+            "vangnet_kwartieren": sum(1 for r in res.kwartieren if r.get("vangnet")),
             "eindprijs_bron": "prijsverwachting" if accu.eindprijs_eur is not None else "75e percentiel plan",
             "verkoopmarge_eur": accu.verkoopmarge_eur,
             # v5.165.0: de datacorrectie op netladen en de rendementen.

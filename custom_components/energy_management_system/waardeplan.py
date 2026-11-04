@@ -366,7 +366,8 @@ def _stap_toegestaan(accu: Accu, b: float, overschot: float, tekort: float, gren
 
 
 def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=None,
-                  eta_l: float = 1.0, max_op: int = 0, waardes: list | None = None):
+                  eta_l: float = 1.0, max_op: int = 0, waardes: list | None = None,
+                  vangnet: list | None = None):
     """Achterwaarts: per kwartier en inhoud de goedkoopste stap.
 
     `eis` = (kwartier, niveau): na dat kwartier minstens dat niveau.
@@ -400,56 +401,90 @@ def _terugrekenen(kwartieren, accu: Accu, stappen, b_stap, waarde, niveaus, eis=
         # over en het plan moest bewaren (04-11 16:45, koken op 2,2-4,6 kW).
         af_max = max((-float(x) for x in b_stap if x < 0 and -x <= grenzen[2] + 1e-9), default=0.0)
         tl_accu = getattr(k, "teruglever_accu_eur", None)
-        for s, b in zip(stappen, b_stap):
-            if not _stap_toegestaan(accu, float(b), overschot, tekort, grenzen, eta_l):
-                continue
-            doel = np.arange(niveaus) + s
-            geldig = (doel >= 0) & (doel < niveaus)
-            if not geldig.any():
-                continue
-            # v5.160.0: het plan verkoopt niet wat de sturing tegenhoudt.
-            # v5.183.2: in een dekkwartier is een overschot van minder dan een
-            # stap afronding (de slimme stand dekt alleen het huis), geen verkoop.
-            if (k.verkoop_vloer_kwh > 0 and b < 0 and -b > tekort + EPS_KWH
-                    and not (k.dekken and -b - tekort < STAP_KWH)):
-                geldig = geldig & (doel * STAP_KWH >= k.verkoop_vloer_kwh - 1e-9)
-                if not geldig.any():
+        # v5.184.2 (vangnet, akkoord Ruud 04-11 16:58): eerst met alle regels;
+        # blijft er voor een inhoud geen enkele stap over, dan nog eens zonder
+        # de dekregels (volle dekking, dekken). Anders koos het plan daar stil
+        # 'houden' (keuze 0) - zo zag de kookfout van 16:45 eruit.
+        for streng in (True, False):
+            if not streng:
+                open_ = np.isinf(beste) & np.isfinite(waarde).any()
+                if not open_.any():
+                    break
+                beste_los = np.full(niveaus, np.inf)
+                beste_s_los = np.zeros(niveaus, dtype=np.int16)
+            for s, b in zip(stappen, b_stap):
+                kosten = _stapkosten(k, accu, s, b, overschot, tekort, grenzen, eta_l, niveaus, af_max,
+                                     s_min, min_kwh, min_laad, tl_accu, waarde, streng)
+                if kosten is None:
                     continue
-            # v5.183.2: de slimme stand dekt het HELE huistekort (tot het
-            # ontlaadvermogen); een halve dekking kan de accu niet uitvoeren,
-            # behalve als hij daarmee leeg raakt. De stap van 0,1 kWh liet het
-            # plan om en om 0,1 kWh ontladen bij een huis van 0,17 kWh: de
-            # accu ging in werkelijkheid sneller leeg dan het plan dacht.
-            if b < -EPS_KWH and tekort > EPS_KWH and -b < min(tekort, af_max) - 0.5 * STAP_KWH:
-                geldig = geldig & (doel == 0)
-                if not geldig.any():
-                    continue
-            # v5.183.0: dekken - het huis uit de accu zolang er inhoud is.
-            if k.dekken and tekort > EPS_KWH and b >= -EPS_KWH:
-                geldig = geldig & (doel == 0)
-                if not geldig.any():
-                    continue
-            zon_geldig, extra = _zon_regel(k, accu, int(s), float(b), s_min, min_kwh, min_laad)
-            if zon_geldig is not None:
-                geldig = geldig & zon_geldig
-                if not geldig.any():
-                    continue
-            kosten = np.full(niveaus, np.inf)
-            kosten[geldig] = (
-                _kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
-                             k.teruglever_eur, np.full(geldig.sum(), b), accu, tl_accu)
-                + waarde[doel[geldig]]
-                + (extra[geldig] if isinstance(extra, np.ndarray) else extra)
-            )
-            if accu.bewaarkost_eur_per_kwh_uur:
-                # v5.183.0 (punt 2): wat erin blijft, kost een beetje per uur.
-                kosten[geldig] += doel[geldig] * STAP_KWH * accu.bewaarkost_eur_per_kwh_uur * grenzen[0]
-            beter = kosten < beste
-            beste[beter] = kosten[beter]
-            beste_s[beter] = s
+                if streng:
+                    beter = kosten < beste
+                    beste[beter] = kosten[beter]
+                    beste_s[beter] = s
+                else:
+                    beter = kosten < beste_los
+                    beste_los[beter] = kosten[beter]
+                    beste_s_los[beter] = s
+            if not streng:
+                gebruikt = open_ & np.isfinite(beste_los)
+                beste[gebruikt] = beste_los[gebruikt]
+                beste_s[gebruikt] = beste_s_los[gebruikt]
+                if vangnet is not None:
+                    vangnet[t] = gebruikt
         keuze[t] = beste_s
         waarde = beste
     return keuze
+
+
+def _stapkosten(k, accu, s, b, overschot, tekort, grenzen, eta_l, niveaus, af_max,
+                s_min, min_kwh, min_laad, tl_accu, waarde, streng: bool = True):
+    """Kosten per inhoud van stap (s, b) in kwartier k, of None (v5.184.2: uit
+    `_terugrekenen`; `streng` = met de dekregels van v5.183)."""
+    if not _stap_toegestaan(accu, float(b), overschot, tekort, grenzen, eta_l):
+        return None
+    doel = np.arange(niveaus) + s
+    geldig = (doel >= 0) & (doel < niveaus)
+    if not geldig.any():
+        return None
+    # v5.160.0: het plan verkoopt niet wat de sturing tegenhoudt.
+    # v5.183.2: in een dekkwartier is een overschot van minder dan een
+    # stap afronding (de slimme stand dekt alleen het huis), geen verkoop.
+    if (k.verkoop_vloer_kwh > 0 and b < 0 and -b > tekort + EPS_KWH
+            and not (k.dekken and -b - tekort < STAP_KWH)):
+        geldig = geldig & (doel * STAP_KWH >= k.verkoop_vloer_kwh - 1e-9)
+        if not geldig.any():
+            return None
+    # v5.183.2: de slimme stand dekt het HELE huistekort (tot het
+    # ontlaadvermogen); een halve dekking kan de accu niet uitvoeren,
+    # behalve als hij daarmee leeg raakt. De stap van 0,1 kWh liet het
+    # plan om en om 0,1 kWh ontladen bij een huis van 0,17 kWh: de
+    # accu ging in werkelijkheid sneller leeg dan het plan dacht.
+    if streng and b < -EPS_KWH and tekort > EPS_KWH and -b < min(tekort, af_max) - 0.5 * STAP_KWH:
+        geldig = geldig & (doel == 0)
+        if not geldig.any():
+            return None
+    # v5.183.0: dekken - het huis uit de accu zolang er inhoud is.
+    if streng and k.dekken and tekort > EPS_KWH and b >= -EPS_KWH:
+        geldig = geldig & (doel == 0)
+        if not geldig.any():
+            return None
+    zon_geldig, extra = _zon_regel(k, accu, int(s), float(b), s_min, min_kwh, min_laad)
+    if zon_geldig is not None:
+        geldig = geldig & zon_geldig
+        if not geldig.any():
+            return None
+    kosten = np.full(niveaus, np.inf)
+    kosten[geldig] = (
+        _kosten_stap(k.verbruik_kwh, k.zon_kwh, k.inkoop_eur,
+                     k.teruglever_eur, np.full(geldig.sum(), b), accu, tl_accu)
+        + waarde[doel[geldig]]
+        + (extra[geldig] if isinstance(extra, np.ndarray) else extra)
+    )
+    if accu.bewaarkost_eur_per_kwh_uur:
+        # v5.183.0 (punt 2): wat erin blijft, kost een beetje per uur.
+        kosten[geldig] += doel[geldig] * STAP_KWH * accu.bewaarkost_eur_per_kwh_uur * grenzen[0]
+    return kosten
+
 
 
 def eindwaarde(kwartieren, accu: Accu, eta_o: float) -> float:
@@ -536,13 +571,14 @@ def _zon_export(k, accu: Accu, actie: str, s: int, i_voor: int, niveaus: int, et
 
 
 def _vooruit(kwartieren, accu: Accu, keuze, index, b_stap, i: int, niveaus: int,
-             eta_l: float, eta_o: float, waardes) -> tuple[list, float, float, int]:
+             eta_l: float, eta_o: float, waardes, vangnet=None) -> tuple[list, float, float, int]:
     """Vooruit langs de gekozen stappen: de planrijen en de kosten."""
     rijen = []
     kosten_plan = 0.0
     kosten_zonder = 0.0
     for t, k in enumerate(kwartieren):
         s = int(keuze[t, i])
+        via_vangnet = bool(vangnet is not None and vangnet[t] is not None and vangnet[t][i])
         b = float(b_stap[index[s]])
         uren, _op, _af, max_op = _kwartier_grenzen(k, accu, eta_l)
         actie, kwh = actie_van(b, k.verbruik_kwh, k.zon_kwh, accu.min_actie_w / 1000 * uren,
@@ -585,6 +621,8 @@ def _vooruit(kwartieren, accu: Accu, keuze, index, b_stap, i: int, niveaus: int,
             # sturing houdt een verkoop alleen daaronder tegen.
             "verkoop_vloer_kwh": round(k.verkoop_vloer_kwh, 2),
         }
+        if via_vangnet:
+            rij["vangnet"] = True   # v5.184.2: zonder de dekregels gekozen
         if actie == "laden_net":
             rij["waarde_eur_per_kwh"] = _laadwaarde(waardes, t, i, eta_l)
         if accu.zon_opslaan and actie == "zon":
@@ -905,9 +943,11 @@ def _plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
         t = accu.vol_na_kwartier
         eis = (t, min(niveaus - 1, i_start + (t + 1) * max_op))
     waardes: list = [None] * n
-    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus, eis, eta_l, max_op, waardes)
+    vangnet: list = [None] * n
+    keuze = _terugrekenen(kwartieren, accu, stappen, b_stap, waarde, niveaus, eis, eta_l, max_op, waardes,
+                          vangnet)
     rijen, kosten_plan, kosten_zonder, i = _vooruit(
-        kwartieren, accu, keuze, index, b_stap, i, niveaus, eta_l, eta_o, waardes
+        kwartieren, accu, keuze, index, b_stap, i, niveaus, eta_l, eta_o, waardes, vangnet
     )
     # verschil in inhoud tegen de eindwaarde verrekenen (begin en eind)
     kosten_plan -= (i - i_start) * STAP_KWH * eind
