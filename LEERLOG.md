@@ -1049,12 +1049,12 @@ laatste ronde: 04-11 07:40, gemeten t/m 04-11 07:45
 laatste ronde: 04-11 11:40, gemeten t/m 04-11 11:52
 
 ## 04-11 15:40 · tussenronde
-- Draait v5.183.3. Sinds 11:40 acht releases uit de chat (waardeplan: huis eerst, bewaarmarge) en 7 herstarts (12:43, 13:36, 13:54, 14:30, 14:41, 15:20, 15:31). Fouten EMS 0; stuurt.
+- Draait v5.183.3. Sinds 11:40 zeven releases uit de chat (waardeplan: huis eerst, bewaarmarge) en 7 herstarts (12:43, 13:36, 13:54, 14:30, 14:41, 15:20, 15:31). Fouten EMS 0; stuurt.
 - **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, regeloverschot 0,013 kWh, export 0,41 kWh in de zonuren.
 - **Gebouwd v5.183.4 (L-EMS-065, tussenrelease):** v5.183.3 bracht de v5.165.0-fout terug voor huis en zon van het lopende kwartier: 15:41 plan huis 2201 W, gemeten 613 W, en de oorzaak in de planvolging rekende daarmee. Foute data nu, dus niet tot 03:40 gewacht. Suite 7137 groen (6 nieuw). Sturing ongewijzigd.
 - **Fix v5.183.3 werkt verder:** accu + net + zon = huis binnen 2 W op 15:45-19:30. Bewaarmarge v5.183.2: net 0 van 15:45 tot 19:15 in het plan.
 - **L-EMS-064:** leermodus 86 min aan (11:22-12:48), door Ruud uit. Herstel na herstart nog niet opnieuw getest (n=0).
-- **H-EMS-18 sterker:** netlaadplan veranderde na 7 van de 7 herstarts binnen 3 min (12:43 3,8 → 4,7 → 0 kWh; 14:31 0,5 → 2,4 kWh; 15:20 2,9 → 3,0 → 2,4; 15:31 2,4 → 3,0 → 2,4), en daartussen niet. 1× uitgevoerd: 13:39-13:45 manual −2400 W, ~0,17 kWh, maar dat plan was van v5.181.4. Oorzaak nog niet gevonden; `reserve_sprongen` wijst op live_correctie en lange horizon die opnieuw inlopen.
+- **H-EMS-18 sterker:** netlaadplan veranderde na 7 van de 7 herstarts binnen 10 min (12:43 3,8 → 4,7 → 0 kWh; 14:31 0,5 → 2,4 kWh; 15:20 2,9 → 3,0 → 2,4; 15:31 2,4 → 3,0 → 2,4), en daartussen niet. 1× uitgevoerd: 13:39-13:45 manual −2400 W, ~0,17 kWh, maar dat plan was van v5.181.4. Oorzaak nog niet gevonden; `reserve_sprongen` wijst op live_correctie en lange horizon die opnieuw inlopen.
 - Zon t/m 15:00 6,24 kWh (Solcast dag 7,27); dag beter dan de laatste week. Planvolging 57,4 % (n=61), twin 0,498 (0,394): beide zeggen vandaag weinig, door herstarts, leermodus en nieuwe sturing. Eerste volle dag: morgen.
 - Vanavond: accu leeg vanaf ~19:45, net tot 05:00 bij 36-49 ct, MC tot blok 99,4 % (det. 5,44, beschikbaar 3,46). Soort live 'planning'; uitslag dagafsluiting 06-11 (nacht 04→05) en 05-11 (nacht 03→04).
 - Stilstand: **geen echte** (10 wachten, 0 doen). Witgoedadvies even unknown na herstart, daarna 'morgen 04:15'. Airco 'niets', knop uit → rekent.
