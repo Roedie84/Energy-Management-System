@@ -263,3 +263,10 @@ Regel: <dd-mm HH:MM> | <sleutel>
 04-11 07:51 | ems weather.get_forecasts bij herstart: traceback, retry pas na 30 min (sneller opnieuw, geen traceback)
 04-11 07:51 | L-EMS-063 ems airco-besluit ochtend staat op verwarmen terwijl niet gebruikt (akkoord)
 04-11 08:51 | L-GS-041 gold scalper kostenregel zet op den duur elke opzet uit, keuze a/b/c (akkoord)
+04-11 12:56 | p2000 from_json zonder default breekt af op pdok-fout (status 470)
+04-11 12:56 | recorder-exclude eufy lokaal en home_base_p2p (teller-attributen)
+04-11 12:56 | recorder-exclude gold_scalper_btc_eur_trades (eerst leerronde-history checken)
+04-11 12:56 | recorder-exclude tablet sm_x200 netwerk-/app-tellers (5 sensoren)
+04-11 12:56 | label verlichting automation zithoek_lampen_uit_bij_afwezigheid
+04-11 12:56 | dode regel recorder-exclude luchtbevochtiger_1x_sonos_productievermogen
+04-11 12:56 | gold scalper kostenfilter/schaduw vaste slippage i.p.v. gemeten (0,12 ig, 0,08 pepperstone)
