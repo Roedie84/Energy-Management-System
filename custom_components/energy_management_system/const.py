@@ -7610,6 +7610,9 @@ WAARDEPLAN_MIN_KWARTIEREN = 4
 # v5.177.0 (A5): slijtage (ct per kWh uit de accu) als de slijtageberekening
 # niets geeft: 3 x EUR 729 over 8,64 kWh x 6000 cycli = 4,22 ct.
 WAARDEPLAN_SLIJTAGE_TERUGVAL_CT = 4.22
+#: v5.182.0 (akkoord Ruud 04-11 13:45): de accu verkoopt alleen wat het huis
+#: tot het volgende bijvullen niet nodig heeft, en geen lading uit het net.
+WAARDEPLAN_HUIS_EERST = True
 # v5.177.0 (A5): zo lang (minuten) zonder waardeplan wordt een aandachtspunt.
 WAARDEPLAN_WEG_AANDACHT_MINUTEN = 30
 # v5.177.0 (A10): zoveel uur na de horizon telt de prijsverwachting voor de

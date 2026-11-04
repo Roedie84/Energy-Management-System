@@ -40,6 +40,7 @@ from .const import (
     WAARDEPLAN_LIVE_AFWIJKING_KWH,
     WAARDEPLAN_MIN_ACTIE_W,
     WAARDEPLAN_MIN_KWARTIEREN,
+    WAARDEPLAN_HUIS_EERST,
     WAARDEPLAN_MIN_LAAD_W,
     WAARDEPLAN_MIN_VERMOGEN_W,
     WAARDEPLAN_SLIJTAGE_TERUGVAL_CT,
@@ -430,6 +431,8 @@ class WaardeplanSturingMixin:
             verkoopmarge_eur=self._verkoop_min_winst_eur(),
             netladen=True,
             verkopen=True,
+            # v5.182.0 (akkoord Ruud 04-11): woning eerst, alleen overschot verkopen.
+            huis_eerst=WAARDEPLAN_HUIS_EERST,
             # v5.172.0 (punt 2): geen mini-opdrachten (zie waardeplan.actie_van).
             min_actie_w=WAARDEPLAN_MIN_ACTIE_W,
             # v5.177.0 (A12): netladen vanaf 500 W.

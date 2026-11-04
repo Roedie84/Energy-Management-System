@@ -1,3 +1,14 @@
+EMS v5.182.0 - woning eerst: de accu verkoopt alleen echt overschot
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Het plan verkoopt alleen wat het huis tot het volgende bijvullen (netlading of
+  zonoverschot) niet nodig heeft, en nooit lading die uit het net kwam. Netladen om
+  later te verkopen vervalt dus.
+- De verkoopmarge staat weer op 5 ct (instelling).
+- Na een herstart toonde de cockpit een kwartier "slijtage 0,0 ct"; nu de vaste 4,22 ct
+  tot de berekening er is.
+
 EMS v5.181.4 - cockpit: "Bewaren" overal gelijk, lopend kwartier uit de meting, één prijzentab
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

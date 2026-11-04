@@ -34850,3 +34850,15 @@ Melding Ruud 04-11 13:13 (screenshot): de tegel zei "Bewaren voor later", de Voo
 - Prijs en lading (Ruud 13:28): de tabs Vandaag en Morgen zijn samengevoegd tot "Prijzen": alle bekende kwartierprijzen achter elkaar, morgen zodra die bekend zijn. "7 dagen" blijft. Een onthouden keuze "vandaag"/"morgen" valt terug op "Prijzen".
 
 Tests: `test_v5181_4_bewaren.py`; `test_v5181_2_cockpit.py` aangepast.
+
+## v5.182.0 — woning eerst: de accu verkoopt alleen echt overschot
+
+Akkoord Ruud 04-11 13:45 (punten 1 en 2): "liever meer voor de woning".
+
+Live 13:38: netladen vanaf 13:30 voor 37 ct, verkopen 18:45-20:15 voor ~50 ct, daarna 21:00-24:00 het huis op het net terwijl de accu op 40 % bleef staan voor een verkoop de volgende ochtend. Dat was financieel een paar cent per kWh beter (de 2 ct terugleverpremie tijdens de saldering), ongeveer € 0,10-0,20 per dag.
+
+- Nieuw `Accu.huis_eerst` met controle `verkopen_voor_huis` (waardeplan.py). Een verkoop wordt in dat kwartier verboden en het plan opnieuw gerekend (tot 12 rondes) als (a) er sinds de accu voor het laatst leeg stond uit het net is geladen, of (b) de inhoud na de verkoop het huistekort niet dekt tot het volgende bijvullen (netlading of eerste kwartier met zonoverschot). Aan via `WAARDEPLAN_HUIS_EERST`.
+- Instelling `verkoop_min_winst_ct` van 2 naar 5 ct (punt 1, in de opties).
+- `get_accukosten`: zonder slijtage (bij het opstarten) de vaste 4,22 ct en niet een kwartier bewaren; de cockpit toonde na de herstart "slijtage 0,0 ct". Het plan rekende al met de terugval.
+
+Tests: `test_v5182_huis_eerst.py`.

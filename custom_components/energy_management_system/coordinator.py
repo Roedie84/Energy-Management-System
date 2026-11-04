@@ -15608,7 +15608,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
         banden = self.get_rendement_per_band(now)
         gemeten = self._gemeten_voor_accukosten(now)
         try:
-            uit = A.doorreken(self.dagverloop or {}, eta_l, eta_o, (slijtage or 0.0) / 100, now,
+            uit = A.doorreken(self.dagverloop or {}, eta_l, eta_o, (WAARDEPLAN_SLIJTAGE_TERUGVAL_CT if slijtage is None else slijtage) / 100, now,
                               banden=banden, gemeten=gemeten)
         except Exception as fout:  # noqa: BLE001 - nacalculatie mag de sturing nooit raken
             _LOGGER.debug("Accukosten niet doorgerekend", exc_info=True)
@@ -15625,7 +15625,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, FinancienMixin, 
             "aanname: aanschafprijs modules / (capaciteit x cycli); de gemeten "
             "capaciteit kan cyclus- en kalenderslijtage nog niet scheiden"
         )
-        self._accukosten_cache = (sleutel, uit)
+        # v5.182.0: bij het opstarten is de slijtage er nog niet (capaciteit
+        # onbekend); dan niet een heel kwartier "slijtage 0,0 ct" bewaren.
+        if slijtage is not None:
+            self._accukosten_cache = (sleutel, uit)
         return uit
 
     def _gemeten_voor_accukosten(self, now: datetime) -> dict:

@@ -138,6 +138,10 @@ class Accu:
     #: hoort deze ook uit, anders gaat de zon via een mini-verkoop alsnog het
     #: net op (live 04-11 12:00: 0,2 kWh verkocht om 0,32 kWh zon te exporteren).
     verkopen_bij_zon: bool = True
+    #: v5.182.0 (akkoord Ruud 04-11, "liever meer voor de woning"): de accu
+    #: verkoopt alleen wat het huis tot het volgende bijvullen niet nodig
+    #: heeft, en nooit lading die uit het net kwam (zie `verkopen_voor_huis`).
+    huis_eerst: bool = False
 
 
 @dataclass
@@ -640,6 +644,48 @@ def zinloze_verkopen(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu) 
     return uit
 
 
+def verkopen_voor_huis(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu) -> list[int]:
+    """Verkoopkwartieren die tegen de huis-eerst-regel ingaan (v5.182.0).
+
+    Akkoord Ruud 04-11 13:45. Live 13:38: netladen om 13:30 voor 37 ct,
+    verkopen van 18:45 tot 20:15 voor ~50 ct, en daarna 21:00-24:00 het huis
+    op het net terwijl de accu op 40 % bleef staan voor een verkoop de
+    volgende ochtend. Financieel een paar cent per kWh beter (de 2 ct
+    terugleverpremie), maar Ruud wil de lading liever in de woning.
+
+    Een verkoop is verboden als:
+    * er sinds de accu voor het laatst leeg stond uit het net is geladen
+      (die lading is voor het huis gekocht, niet om door te verkopen); of
+    * de inhoud na de verkoop niet het huistekort dekt tot het volgende
+      bijvullen (een netlading, of het eerste kwartier met zonoverschot).
+    """
+    _eta_l, eta_o = rendementen(accu)
+    eta_o = max(eta_o, 0.5)
+    n = len(rijen)
+    uit = []
+    netgeladen = False
+    for t, r in enumerate(rijen):
+        actie = r.get("actie")
+        inhoud = r.get("inhoud_kwh") or 0.0
+        if actie == "verkopen" and -(r.get("accu_kwh") or 0.0) > 1e-9:
+            if netgeladen:
+                uit.append(t)
+            else:
+                tekort = 0.0
+                for u in range(t + 1, n):
+                    k = kwartieren[u]
+                    if rijen[u].get("actie") == "laden_net" or k.zon_kwh - k.verbruik_kwh > EPS_KWH:
+                        break
+                    tekort += max(0.0, k.verbruik_kwh - k.zon_kwh)
+                if inhoud + 1e-9 < tekort / eta_o:
+                    uit.append(t)
+        if actie == "laden_net":
+            netgeladen = True
+        elif inhoud <= EPS_KWH:
+            netgeladen = False
+    return uit
+
+
 def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     """Het goedkoopste accuplan over de gegeven kwartieren.
 
@@ -649,10 +695,15 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     """
     res = _plan(kwartieren, accu)
     verboden: set[int] = set()
-    for _ in range(4):
+    # v5.182.0: met de huis-eerst-regel meer rondes (elke ronde kan een
+    # verkoop naar een ander kwartier schuiven).
+    for _ in range(12 if accu.huis_eerst else 4):
         if not res.beschikbaar:
             break
-        nieuw = set(zinloze_verkopen(res.kwartieren, kwartieren, accu)) - verboden
+        nieuw = set(zinloze_verkopen(res.kwartieren, kwartieren, accu))
+        if accu.huis_eerst:
+            nieuw |= set(verkopen_voor_huis(res.kwartieren, kwartieren, accu))
+        nieuw -= verboden
         if not nieuw:
             break
         verboden |= nieuw
