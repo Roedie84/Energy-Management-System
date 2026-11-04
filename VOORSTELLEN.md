@@ -416,7 +416,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: `diagnose_gezondheid` fout 0 bij module < 15 %; `diagnose_sturing` beschikbaar gelijk aan `waardeplan.inhoud_kwh` (± stap).
 
 ## L-EMS-057 · airco-besluit verwarmt 's nachts na de vaste uit van 22:00 (sturing, alleen met knop aan)
-- Status: **gebouwd v5.175.0** (03-11, analysekaart 15:10): de restmeldingen 08:18 (eerste ronde na de herstart, correctie aan) en 12:11 (module 00996 op 20 %, correctie los) kwamen doordat `last_available_kwh` vóór de moduletoestand werd gezet en de spiegel erna rekende; nu dezelfde correctie aan beide kanten en de meting opnieuw na `_update_battery_module_health`. Eerder: **gebouwd v5.171.0** (03-11, op eigen gezag na Ruud 02-11 22:16). Was: **open** (02-11 23:40; verandert het airco-besluit → Ruud beslist).
+- Status: **geverifieerd** (04-11 07:40, n=1 volle nacht: 22:01-05:16 'niets', ochtendbesluit 05:16 kwam wel). Eerder: **gebouwd v5.175.0** (03-11, analysekaart 15:10): de restmeldingen 08:18 (eerste ronde na de herstart, correctie aan) en 12:11 (module 00996 op 20 %, correctie los) kwamen doordat `last_available_kwh` vóór de moduletoestand werd gezet en de spiegel erna rekende; nu dezelfde correctie aan beide kanten en de meting opnieuw na `_update_battery_module_health`. Eerder: **gebouwd v5.171.0** (03-11, op eigen gezag na Ruud 02-11 22:16). Was: **open** (02-11 23:40; verandert het airco-besluit → Ruud beslist).
 - Onderbouwing (history `airco_besluit` 31-10 t/m 02-11, n=3 nachten + code): `airco_sturing.besluit` heeft geen klok. Zolang de aanwezigheid 'thuis' is en het onder 19 °C is, wordt het 'verwarmen': 31-10 23:25-01:18, 01-11 23:24-01:08, 02-11 02:17-02:33 en 05:57-06:02, 02-11 23:37. Geleerd dagritme: jullie zetten hem aan tussen 12:19-20:40 (werkdag) en 13:50-19:38 (weekend), bedtijd 22:04. Knop uit, dus er is niets uitgevoerd.
 - Voorstel: tussen de vaste uit (22:00) en het begin van het ochtendvenster (04:00) geen 'verwarmen' uit het gewone besluit; handmatig gaat altijd voor, ochtend- en dagritme ongewijzigd.
 - Verwacht effect: 0 nachtstarts met de knop aan, ~1,7 uur × 0,75 kW ≈ 1,3 kWh per nacht minder (schatting, geen meting: met de knop uit draait hij niet).
@@ -457,3 +457,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: delen door de grootste bewaarde capaciteit, of bij een capaciteitswijziging de cycli tot dan vastleggen en daarna doortellen.
 - Verwacht effect: geen sprong bij het weghalen of terugplaatsen van een module.
 - Meten: test met capaciteit 11,52 → 8,64 = cycli gelijk; live: 253,0 keert terug naar ~190.
+
+## L-EMS-063 · airco-besluit verwarmt elke ochtend terwijl jullie hem 's ochtends niet gebruiken (sturing, alleen met knop aan)
+- Status: **open** (04-11 07:40; verandert het airco-besluit → Ruud beslist). Knop staat uit, dus nu geen effect op verbruik of reserve.
+- Onderbouwing (history `airco_besluit` 27-10 t/m 03-11, n=8 ochtenden + dagritme): tussen 04 en 11 uur 8/8 ochtenden 'verwarmen', 176/213/144/134/229/239/121/155 min, gemiddeld 176 min. Dagritme: 0/18 werkdagochtenden en 1/8 weekendochtenden aan; `warm_om` leeg; aan rond 15:58 (werkdag) en 16:30 (weekend). De `verwachting` zegt tegelijk 'niet verwacht' tot 11:15, dus het besluit en de reserve spreken elkaar tegen. Vandaag 07:33: 47 ct, 17,0 °C, doel 20,5.
+- Voorstel: zonder geleerd ochtendmoment (`warm_om` leeg) geen 'verwarmen' uit het gewone besluit tussen 04:00 en het begin van het geleerde dagvenster. Handmatig gaat altijd voor. Alternatief: niets doen, want de airco is goedkoper dan gas en de bewoners zijn wakker.
+- Verwacht effect met de knop aan: ~1,1 kWh per ochtend minder (176 min × 0,37 kW geleerd, schatting, geen meting), ~€ 0,50 bij 45 ct, gas niet meegerekend. Comfort: de woonkamer blijft 's ochtends koud, net als nu.
+- Meten: geen 'verwarmen' tussen 04:00 en het dagvenster in de history; dagritme blijft leren.
