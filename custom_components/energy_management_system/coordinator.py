@@ -21186,10 +21186,20 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 f"over {duur_uren:.1f} uur (afwijking {error_percent:+.1f}%)."
             )
         else:
-            self.last_temp_consumption_note = (
-                f"Nog niet genoeg geschiedenis ({len(self.temp_consumption_history)}/"
-                f"{TEMP_CONSUMPTION_MIN_SAMPLES}) voor een voorspelling deze nacht."
-            )
+            # v5.187.1: "Nog niet genoeg geschiedenis (7/4)" terwijl de reeks vol
+            # stond; de echte reden (bijv. positieve helling onder het gemeten
+            # bereik) staat in get_temp_consumption_bruikbaarheid.
+            bruikbaarheid = self.get_temp_consumption_bruikbaarheid(avg_temp_c)
+            if bruikbaarheid.get("oordeel") == "onvoldoende_metingen":
+                self.last_temp_consumption_note = (
+                    f"Nog niet genoeg geschiedenis ({len(self.temp_consumption_history)}/"
+                    f"{TEMP_CONSUMPTION_MIN_SAMPLES}) voor een voorspelling deze nacht."
+                )
+            else:
+                self.last_temp_consumption_note = (
+                    f"Geen voorspelling bij {avg_temp_c:.1f}°C: "
+                    f"{bruikbaarheid.get('reden')}"
+                )
 
         self.temp_consumption_history.append(
             {
@@ -23846,6 +23856,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             # v5.177.0 (A14): de laatste 12, compact (alleen wat veranderde):
             # 24 volle sprongen waren 23,8 kB.
             "reserve_sprongen": [self._sprong_kort(r) for r in list(self.reserve_sprongen)[-12:]],
+            "laadplan_wijzigingen": self.get_laadplan_wijzigingen(),
             "reserve_sprongen_aantal": sum(
                 1 for r in self.reserve_sprongen
                 if not (isinstance(r, dict) and (r.get("na_herstart") or r.get("alleen_behoefte")))
@@ -24470,14 +24481,29 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             # wijziging te zien is wat er sindsdien veranderde.
             vorig["grondslag"] = grondslag
             return
+        blokken = self._laadblokken_tekst(sorted(nieuw), moment)
+        reden = self._laadplan_reden(vorig.get("grondslag") if vorig else None, grondslag)
+        # v5.187.1 (L-EMS-067): de wijzigingen van de laatste 24 uur blijven bewaard.
+        # Eén "laatste wijziging" liet van vier herstarts er één zien (H-EMS-18).
+        grens = (moment - timedelta(hours=24)).isoformat()
+        historie = [r for r in (vorig.get("historie") or []) if str(r.get("om")) >= grens]
+        historie.append({
+            "om": moment.isoformat(),
+            "om_tekst": f"{dt_util.as_local(moment):%d-%m %H:%M}",
+            "was": vorig.get("blokken"),
+            "blokken": blokken,
+            "reden": reden,
+            "na_herstart": bool(grondslag.get("opstart")) or "opstartfase" in reden,
+        })
         self.laadplan_gewijzigd = {
             "om": moment.isoformat(),
             "om_tekst": f"{dt_util.as_local(moment):%d-%m %H:%M}",
             "kwartieren": [t.isoformat() for t in sorted(nieuw)],
-            "blokken": self._laadblokken_tekst(sorted(nieuw), moment),
+            "blokken": blokken,
             "was": vorig.get("blokken"),
-            "reden": self._laadplan_reden(vorig.get("grondslag") if vorig else None, grondslag),
+            "reden": reden,
             "grondslag": grondslag,
+            "historie": historie[-30:],
         }
         self.schedule_persisted_state_save()
 
@@ -24728,7 +24754,13 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
 
     def get_laadplan_gewijzigd(self) -> dict:
         """Voor het dashboard: wanneer de laadplanning veranderde (v5.88)."""
-        return dict(self.laadplan_gewijzigd or {})
+        uit = dict(self.laadplan_gewijzigd or {})
+        uit.pop("historie", None)  # staat op diagnose_sturing (v5.187.1)
+        return uit
+
+    def get_laadplan_wijzigingen(self) -> list[dict]:
+        """De laadplanwijzigingen van de laatste 24 uur, nieuwste laatst (L-EMS-067)."""
+        return list((self.laadplan_gewijzigd or {}).get("historie") or [])
 
     def _bouw_kwartierplan(self, now: datetime | None = None) -> list[dict]:
 

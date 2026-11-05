@@ -35016,3 +35016,12 @@ Economische audit 05-11 (herspeling 10 dagen: bewaarmarge 2 ct -0,25 EUR, 0 ct -
 - Schakelaar en sensor "Economische schaduw" (attributen < 4 kB, niet in de recorder); dashboardkaart.
 
 Tests: `test_v5187_schaduw_puur.py`, `test_v5187_schaduw_sturing.py` (o.a. 96 kwartieren: 0 dienstaanroepen, productieplannen en schrijfacties identiek met schaduw aan/uit), `test_v5187_schaduw_herspeling.py` (28-10: productie 1,967, niets 1,808, inhoud 1,82 -> 3,09 kWh, gecorrigeerd besparing 0,24 EUR).
+
+## v5.187.1 — laadplanwijzigingen 24 uur terug te zien, eerlijke temperatuurnotitie
+
+Dagcontrole 05-11. Alleen diagnose en rapportage; de sturing is ongewijzigd.
+
+- L-EMS-067: `laadplan_wijzigingen` op `diagnose_sturing`: de wijzigingen van de laatste 24 uur (max. 30) met was, blokken, reden en `na_herstart`. Eén "laatste wijziging" liet van vier herstarts er één zien. Blijft mee over een herstart; de kaart `laadplan_gewijzigd` verandert niet.
+- Temperatuurnotitie: "Nog niet genoeg geschiedenis (7/4)" stond er ook als de reeks vol was en het model om een andere reden niet voorspelde (05-11: positieve helling bij 3,2 °C, onder het gemeten bereik). Nu staat de echte reden er.
+
+Tests: `test_v5187_1_laadplan_historie.py`.

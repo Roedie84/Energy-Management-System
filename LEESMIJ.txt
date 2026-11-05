@@ -1,3 +1,9 @@
+EMS v5.187.1 - laadplanwijzigingen 24 uur terug te zien, eerlijke temperatuurnotitie
+
+- Diagnose sturing toont nu alle laadplanwijzigingen van de laatste 24 uur.
+- Notitie temperatuurmodel noemt de echte reden als er geen voorspelling is.
+- De sturing verandert niet.
+
 EMS v5.187.0 - economische schaduw: bewaarmarge 2 ct en 0 ct rekenen mee, sturen niets
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
