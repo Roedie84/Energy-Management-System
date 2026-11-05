@@ -1,3 +1,10 @@
+EMS v5.187.3 - cockpit: periode bij week en maand
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Cockpit Geld: bij Week en Maand staat nu welke dagen het zijn (bijv. "29 okt - 4 nov",
+  "1-4 nov"). Aan het begin van een maand leek de maand anders kleiner dan de week.
+
 EMS v5.187.2 - kostprijs accu-inhoud op dezelfde grondslag als het plan
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

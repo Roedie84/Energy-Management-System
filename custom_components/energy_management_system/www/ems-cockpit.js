@@ -2480,6 +2480,24 @@ class EmsCockpitCard extends HTMLElement {
     const zv = getal(this._s("zelfvoorziening"));
     const kleur = (v) => (v != null && v >= 0 ? "var(--groen)" : "var(--oranje)");
     // v5.186.0: op hoeveel dagen het saldo werkelijk rust.
+    // v5.187.3: welke dagen een periode beslaat ("29 okt - 4 nov", "1-4 nov").
+    // Gemeld 05-11: week 19,00 en maand 13,75 leek raar; de week liep nog
+    // door in oktober, de maand had pas 4 dagen.
+    const MND = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+    const periodeTekst = (p) => {
+      const d = num(p && p.dagen);
+      if (!p || !p.van || !d) return "";
+      const van = new Date(`${p.van}T12:00:00`);
+      if (isNaN(van)) return "";
+      const tot = new Date(van.getTime() + (d - 1) * 86400000);
+      if (d === 1) return `${van.getDate()} ${MND[van.getMonth()]}`;
+      if (van.getMonth() === tot.getMonth()) return `${van.getDate()}\u2013${tot.getDate()} ${MND[tot.getMonth()]}`;
+      return `${van.getDate()} ${MND[van.getMonth()]} \u2013 ${tot.getDate()} ${MND[tot.getMonth()]}`;
+    };
+    const periodeLabel = (naam, p) => {
+      const t = periodeTekst(p);
+      return t ? `${naam}<i class="bij">${t}</i>` : naam;
+    };
     const dagenMet = (p) => {
       const n = (p.dagen_met_waarde || {}).netto_eur;
       return n != null && p.dagen ? ` - ${n} van ${p.dagen} dagen met een saldo` : "";
@@ -2503,8 +2521,8 @@ class EmsCockpitCard extends HTMLElement {
       `<span title="sinds de start">Besparing totaal <b style="color:${kleur(ball)}">${euroTeken(ball)}</b></span>` +
       // v5.185.0: saldo (afname min teruglevering), dezelfde maat als "Vandaag";
       // zonder saldo de afname. Week en maand zijn de afgesloten dagen.
-      `<span title="${esc(`Saldo van de laatste 7 afgesloten dagen (afname min teruglevering)${dagenMet(week)}`)}">Week <b>${euro(num(week.netto_eur) ?? num(week.kosten_eur))}<i class="bij">${fmt(week.opwek_kwh, 0)} kWh zon</i></b></span>` +
-      `<span title="${esc(`Saldo van de afgesloten dagen deze maand (afname min teruglevering)${dagenMet(maand)}`)}">Maand <b>${euro(num(maand.netto_eur) ?? num(maand.kosten_eur))}<i class="bij">${fmt(maand.opwek_kwh, 0)} kWh zon</i></b></span>` +
+      `<span title="${esc(`Saldo van de laatste 7 afgesloten dagen (afname min teruglevering)${dagenMet(week)}`)}">${periodeLabel("Week", week)} <b>${euro(num(week.netto_eur) ?? num(week.kosten_eur))}<i class="bij">${fmt(week.opwek_kwh, 0)} kWh zon</i></b></span>` +
+      `<span title="${esc(`Saldo van de afgesloten dagen deze maand (afname min teruglevering)${dagenMet(maand)}`)}">${periodeLabel("Maand", maand)} <b>${euro(num(maand.netto_eur) ?? num(maand.kosten_eur))}<i class="bij">${fmt(maand.opwek_kwh, 0)} kWh zon</i></b></span>` +
       `<span>Van het net vandaag <b>${fmt(vandaag.import_kwh, 1)} kWh</b></span>` +
       `<span>Zelfvoorzienend <b>${zv == null ? STREEP : fmt(zv) + "%"}</b></span>` +
       `</div><div>` +

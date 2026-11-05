@@ -35035,3 +35035,7 @@ Gemeld 05-11 09:06: cockpit "in accu 0 ct betaald · EMS 59 ct" voor opgeslagen 
 - Cockpit: uitleg bij "EMS ... ct" bijgewerkt.
 
 Tests: `test_v5187_2_kostprijs_grondslag.py`.
+
+## v5.187.3 — cockpit: periode bij week en maand
+
+Gemeld 05-11 09:46: Week € 19,00 (29 kWh zon) en Maand € 13,75 (15 kWh zon) zag er raar uit. Week = laatste 7 afgesloten dagen (29-10 t/m 04-11), maand = 1 t/m 4 november. `periodeTekst`/`periodeLabel` in `ems-cockpit.js` tonen de dagen uit `van` + `dagen` van de periode.
