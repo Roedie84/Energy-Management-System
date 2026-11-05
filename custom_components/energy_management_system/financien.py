@@ -855,7 +855,8 @@ class FinancienMixin:
         self._last_cost_basis_calc_time = now
         self._last_available_kwh_for_cost_basis = available_kwh
 
-        current_price = self._get_current_price_per_kwh(entries, now)
+        # v5.187.2: inkoopprijs op de grondslag van het plan (+ de korting)
+        current_price, korting = self._kostprijs_prijs(entries, now)
         if current_price is None:
             return
 
@@ -876,7 +877,7 @@ class FinancienMixin:
             pv_kwh, grid_kwh = self._split_charge_pv_vs_grid(
                 ac_in_kwh, elapsed_hours
             )
-            feedin_value = self._get_feedin_value_per_kwh(entries, now)
+            feedin_value = self._kostprijs_terug(entries, now, korting)
             if feedin_value is None:
                 # Geen betrouwbare terugleverwaarde - alles tegen de
                 # inkoopprijs boeken, de conservatieve kant (hogere
@@ -891,7 +892,8 @@ class FinancienMixin:
             self.grid_charge_today_kwh += grid_kwh
             self.forgone_feedin_eur_total += pv_kwh * feedin_value
 
-            self._werk_kasprijs_bij(grid_kwh * current_price, delta_kwh, available_kwh)
+            self._werk_kasprijs_bij(  # v5.187.2: kas = werkelijk betaald
+                grid_kwh * (current_price + korting), delta_kwh, available_kwh)
 
             effective_charge_price = charge_cost_eur / delta_kwh
             if self.battery_cost_basis_eur_per_kwh is None:
@@ -932,7 +934,7 @@ class FinancienMixin:
                 export_kwh, load_kwh = self._split_discharge_export_vs_load(
                     ac_uit_kwh, elapsed_hours
                 )
-                feedin_value = self._get_feedin_value_per_kwh(entries, now)
+                feedin_value = self._kostprijs_terug(entries, now, korting)
                 if feedin_value is None:
                     # Geen betrouwbare terugleverwaarde - alles
                     # waarderen als vermeden inkoop, zonder premie.
@@ -948,6 +950,31 @@ class FinancienMixin:
                 self.total_battery_savings_eur += savings_eur
                 self.total_feedin_premium_eur += feedin_premium_eur
                 self.discharge_export_kwh_total += export_kwh
+
+    def _kostprijs_korting(self, now: datetime) -> float:
+        """Belastingdeel dat de kostprijs niet meetelt (v5.187.2).
+
+        Dezelfde grondslag als het waardeplan: tijdens de saldering met een
+        verwacht jaaroverschot is een kWh de prijs zonder het belastingdeel
+        waard (dat komt via de saldering toch terug). Gemeld 05-11 09:06:
+        opgeslagen zon stond op 59 ct (prijs incl. belasting), op de
+        grondslag van het plan ~44 ct. Na de saldering (vanaf 2027) is de
+        korting vanzelf 0 en geldt voor zon de terugleverwaarde.
+        """
+        return float(self._salderingskorting_eur(now) or 0.0)
+
+    def _kostprijs_prijs(self, entries, now: datetime) -> tuple:
+        """(inkoopprijs min de korting, korting) of (None, 0) (v5.187.2)."""
+        prijs = self._get_current_price_per_kwh(entries, now)
+        if prijs is None:
+            return None, 0.0
+        korting = self._kostprijs_korting(now)
+        return prijs - korting, korting
+
+    def _kostprijs_terug(self, entries, now: datetime, korting: float) -> float | None:
+        """Terugleverwaarde op dezelfde grondslag als de inkoop (v5.187.2)."""
+        waarde = self._get_feedin_value_per_kwh(entries, now)
+        return None if waarde is None else waarde - korting
 
     def _stap_zonder_accustroom(self, delta_kwh: float, now: datetime) -> bool:
         """Is deze voorraadsprong een afrondingsstap zonder accustroom? (v5.155.1)

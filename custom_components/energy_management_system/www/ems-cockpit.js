@@ -1778,7 +1778,7 @@ class EmsCockpitCard extends HTMLElement {
     // v5.147.0: tot de eerste lading een schatting
     const geschat = attr(s, "kasprijs_geschat") === true;
     const uitleg = "Betaald: wat de stroom in de accu werkelijk kostte (net tegen de kwartierprijs, zon gratis, incl. laadverlies). " +
-      "EMS: waar het EMS mee rekent; zon telt daar als gemiste teruglevering zolang salderen geldt.";
+      "EMS: waar het EMS mee rekent, op dezelfde grondslag als het plan: zon telt als gemiste teruglevering; tijdens de saldering met jaaroverschot zonder belastingdeel, vanaf 2027 tegen de terugleverwaarde.";
     const extra = geschat ? " Nog een schatting: na de eerste lading wordt de betaalde prijs echt bijgehouden." : "";
     return `<div class="s rest" title="${uitleg}${extra}">in accu ${geschat ? "\u2248" : ""}${ct(kas)} betaald${PUNT}EMS ${ct(kost)}</div>`;
   }

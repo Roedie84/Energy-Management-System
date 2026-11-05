@@ -1,3 +1,13 @@
+EMS v5.187.2 - kostprijs accu-inhoud op dezelfde grondslag als het plan
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- "EMS ... ct" in de cockpit (kostprijs van de stroom in de accu) en de besparing volgens
+  het kostprijsmodel rekenen tijdens de saldering met jaaroverschot zonder het
+  belastingdeel, net als het plan (opgeslagen zon was 59 ct, nu ~44 ct).
+- Vanaf 01-01-2027 vanzelf zonder saldering: zon telt dan tegen de terugleverwaarde.
+- "betaald" blijft wat je werkelijk betaalde.
+
 EMS v5.187.1 - laadplanwijzigingen 24 uur terug te zien, eerlijke temperatuurnotitie
 
 - Diagnose sturing toont nu alle laadplanwijzigingen van de laatste 24 uur.

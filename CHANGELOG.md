@@ -35025,3 +35025,13 @@ Dagcontrole 05-11. Alleen diagnose en rapportage; de sturing is ongewijzigd.
 - Temperatuurnotitie: "Nog niet genoeg geschiedenis (7/4)" stond er ook als de reeks vol was en het model om een andere reden niet voorspelde (05-11: positieve helling bij 3,2 °C, onder het gemeten bereik). Nu staat de echte reden er.
 
 Tests: `test_v5187_1_laadplan_historie.py`.
+
+## v5.187.2 — kostprijs accu-inhoud op de grondslag van het waardeplan
+
+Gemeld 05-11 09:06: cockpit "in accu 0 ct betaald · EMS 59 ct" voor opgeslagen zon (47,6 ct incl. / laadverlies). Het plan rekent tijdens de saldering met jaaroverschot met de prijs zonder belastingdeel. Ruud 09:20: gelijktrekken, vanaf 01-01-2027 automatisch zonder saldering.
+
+- `_update_battery_cost_basis_and_savings`: inkoopprijs en terugleverwaarde min `_salderingskorting_eur(now)` via `_kostprijs_prijs` / `_kostprijs_terug` (laden én ontladen, zodat de besparing consistent blijft). Na de saldering is de korting 0 en geldt de terugleverwaarde uit `_get_feedin_value_per_kwh` (kaal + premie + zonnebonus).
+- De kasprijs (`_werk_kasprijs_bij`) blijft de werkelijk betaalde prijs incl. belasting.
+- Cockpit: uitleg bij "EMS ... ct" bijgewerkt.
+
+Tests: `test_v5187_2_kostprijs_grondslag.py`.
