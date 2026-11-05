@@ -1,3 +1,15 @@
+EMS v5.187.0 - economische schaduw: bewaarmarge 2 ct en 0 ct rekenen mee, sturen niets
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Naast het echte plan rekenen twee schaduwplannen mee: bewaarmarge 2 ct en 0 ct (nu 5 ct).
+  Ze sturen niets: geen opdrachten naar de accu, de sturing is ongewijzigd.
+- Elke schaduw heeft een eigen virtuele accu die per kwartier wordt afgerekend tegen het
+  gemeten verbruik en de gemeten zon. Per dag telt de voorraad in de accu mee.
+- Nieuwe sensor "Economische schaduw" (besparing van 2 ct t.o.v. productie) en schakelaar
+  om het uit te zetten. Na 14 volle dagen geeft de sensor een advies volgens vaste regels.
+- Dienst economische_schaduw_resync zet de virtuele accu's gelijk aan de echte.
+
 EMS v5.186.0 - grote doorloop: plan, uitvoering, voorspellingen en cijfers (57 punten)
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

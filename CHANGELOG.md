@@ -35005,3 +35005,14 @@ Diepe analyse 04-11 (60 punten, `EMS-verbeterlijst-2026-11-04.md`). Ruud: "Jij b
 - `maand_vorige` voor de maandmelding (44). Dagreset-kostenmeter (45, deels). `besparing_totaal_gecorrigeerd_eur`, 2 decimalen (46, 53). Rij vandaag met saldo (47). Oude sensoren verouderd, dashboardkaarten vervangen (48). `_laatste_dagstand` bewaard, gaten gevuld, vensters op datum (49). Week = 7 dagen (50). Premie alleen in het kostprijsmodel (51). Modulemelding alleen huidige modules (52). Attributen per ronde gecachet (54); kwartierplanning compacter (55, deels). Netladenmarge op de laaddag (56). regime2027 per dag met waarde (57). Cockpitscript `?v=versie-hash` (58). Contractstart gevalideerd, 29 feb (59). `pv_daily_history` weg, € eenheid, CO2 state_class (60). Melding negatieve prijzen alleen komende kwartieren, weinig zon één keer per dag.
 
 Tests: `test_v5186_A_waardeplan.py`, `test_v5186_B_*.py`, `test_v5186_C_*.py`, `test_v5186_D_geld.py` (156 nieuw).
+
+## v5.187.0 — economische schaduw (bewaarmarge 2 ct en 0 ct), productie ongewijzigd
+
+Economische audit 05-11 (herspeling 10 dagen: bewaarmarge 2 ct -0,25 EUR, 0 ct -0,41 EUR per 10 dagen) en review: eerst passief meten, 14 dagen. Ruud: groen licht fase 1 en 2, zonder E4.
+
+- Nieuw `economische_schaduw.py` (puur Python): `VirtueleAccu`, `uitvoeren` (uitvoeringsmodel van de herspeling, gevalideerd 19,09 tegen werkelijk 19,04 EUR), `kosten`, `zonder_accu`, `plan_varianten` (diepe kopie, alleen `bewaarmarge_eur` en `inhoud_kwh` anders), `dagsamenvatting` (met voorraadcorrectie tegen de eindwaarde van het eerste plan van de dag, kosten bij 6 ct slijtage, EMS_BESPARING, EMS_REGRET), `evalueer` (beslisregels na 14 volle dagen), `rollend`, `Schaduwboek`.
+- Nieuw `economische_schaduw_sturing.py` (mixin): plannen na het productieplan in de executor (achtergrondtaak, 1x per kwartier), afrekenen op de kwartiergrens uit de meetlaag, midkwartierregistratie (geweigerde wissel, voordeel tegen eindwaarde en marginale waarde), Store `energy_management_system.economische_schaduw` (30 dagen kwartieren, 90 dagen dagen), dienst `economische_schaduw_resync`, diagnostiek.
+- Haken van één regel in `_async_bereken_waardeplan`, `_midkwartier_vasthouden` en `_meetlaag_kwartier`; fouten alleen in `internal_failures["economische_schaduw"]`.
+- Schakelaar en sensor "Economische schaduw" (attributen < 4 kB, niet in de recorder); dashboardkaart.
+
+Tests: `test_v5187_schaduw_puur.py`, `test_v5187_schaduw_sturing.py` (o.a. 96 kwartieren: 0 dienstaanroepen, productieplannen en schrijfacties identiek met schaduw aan/uit), `test_v5187_schaduw_herspeling.py` (28-10: productie 1,967, niets 1,808, inhoud 1,82 -> 3,09 kWh, gecorrigeerd besparing 0,24 EUR).
