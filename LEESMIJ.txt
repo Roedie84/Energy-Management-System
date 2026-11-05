@@ -1,3 +1,12 @@
+EMS v5.187.4 - zonverwachting vandaag: geen dubbele correctie meer
+
+Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Op een heldere ochtend werd de zon voor de rest van de ochtend te hoog verwacht (05-11
+  10:30: plan 1,54 kW, gemeten 1,20 kW). De recente opbrengst en de geleerde correctie per
+  uur werden vermenigvuldigd; nu worden ze gemengd: vlakbij telt wat de panelen net deden,
+  verder weg de geleerde correctie van dat uur.
+
 EMS v5.187.3 - cockpit: periode bij week en maand
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

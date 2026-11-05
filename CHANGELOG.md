@@ -35039,3 +35039,13 @@ Tests: `test_v5187_2_kostprijs_grondslag.py`.
 ## v5.187.3 — cockpit: periode bij week en maand
 
 Gemeld 05-11 09:46: Week € 19,00 (29 kWh zon) en Maand € 13,75 (15 kWh zon) zag er raar uit. Week = laatste 7 afgesloten dagen (29-10 t/m 04-11), maand = 1 t/m 4 november. `periodeTekst`/`periodeLabel` in `ems-cockpit.js` tonen de dagen uit `van` + `dagen` van de periode.
+
+## v5.187.4 — zon vandaag: recente opbrengst en uurcorrectie mengen
+
+Gemeld 05-11 10:33 (onbewolkt): plan 1,54 kW, gemeten 1,20 kW, Solcast 1,67 kW (uurcorrectie 10:30 = 0,80). `_zon_recent` deelde de meting door Solcast x uurcorrectie; de ochtenduren hebben een lage, ruisige correctie (09:00 0,58), dus recent = 1,3 (max). `_zon_factor_vandaag` vermenigvuldigde dat met de correctie van het doeluur: 1,67 x 0,80 x ~1,15 = 1,54.
+
+- `_zon_recent`: meting / RUWE Solcast (zonder uurcorrectie).
+- `_zon_factor_vandaag` (verwacht): `gewicht x recent + (1 - gewicht) x uurcorrectie`, gewicht dooft uit over ZON_RECENT_VERVAL_UREN. Voor 05-11 10:30: 1,67 x ~0,80 = 1,33 kW.
+- ZON_RECENT_MIN 0,5 -> 0,3 (ratio tegen ruwe Solcast kan op een grijze dag lager).
+
+Tests: `test_v5187_4_zon_mengen.py`; `test_v5186_C_zon.py::test_veilig_houdt_de_min_regel` op het mengen aangepast.

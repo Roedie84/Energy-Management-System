@@ -152,9 +152,10 @@ def test_veilig_houdt_de_min_regel(make_coordinator, monkeypatch):
     c.get_pv_band_calibration = lambda: {"beschikbaar": False}
     a = nu + timedelta(hours=3)
     assert c._estimate_pv_kwh_for_period(a, a + timedelta(hours=1), veilig=True) == pytest.approx(2.0 * 0.7)
-    # verwacht: de correctie met de recente zon, uitdovend (3 en 3,5 uur weg)
+    # verwacht: recente zon en uurcorrectie GEMENGD, uitdovend (3 en 3,5 uur
+    # weg) - v5.187.4: mengen in plaats van vermenigvuldigen
     assert c._estimate_pv_kwh_for_period(a, a + timedelta(hours=1)) == pytest.approx(
-        2.0 * 0.9 * (1 + 0.3 * (0.25 + 0.125) / 2))
+        2.0 * (0.9 + (1.3 - 0.9) * (0.25 + 0.125) / 2))
 
 
 def test_recente_verhouding_begrensd_en_zonder_begrensde_uren(make_coordinator, monkeypatch):

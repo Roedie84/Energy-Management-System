@@ -622,7 +622,7 @@ PV_UURBIAS_MIN_GEMETEN = 0.9
 #: punt 30: onder deze omvormergrens (%) heet de opwek begrensd
 PV_BEGRENSD_ONDER_PROCENT = 95.0
 #: punt 36: de recente zonverhouding (laatste uren) voor "verwacht"
-ZON_RECENT_MIN = 0.5
+ZON_RECENT_MIN = 0.3  # v5.187.4: ratio tegen ruwe Solcast (was 0,5 tegen gecorrigeerd)
 ZON_RECENT_MAX = 1.3
 ZON_RECENT_MIN_KWH = 0.2
 ZON_RECENT_VERVAL_UREN = 4.0

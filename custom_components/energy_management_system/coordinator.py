@@ -22246,9 +22246,17 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             return min(delen)
         recent = vast.get("recent")
         if recent is not None:
+            # v5.187.4: twee schattingen MENGEN in plaats van vermenigvuldigen.
+            # `recent` is nu meting / RUWE Solcast van de laatste uren; vlakbij
+            # telt die, verder weg de geleerde uurcorrectie. Gemeld 05-11 10:33
+            # (onbewolkt): plan 1,54 kW, gemeten 1,20 kW. De ochtenduren hebben
+            # een lage, ruisige uurcorrectie (09:00 0,58); de zon daar lag boven
+            # die gecorrigeerde verwachting, dus recent = 1,3, en dat werd
+            # vermenigvuldigd met de correctie van 10:30 (0,80): 1,67 x 0,80 x
+            # ~1,15. Dezelfde onzekerheid telde zo twee keer.
             afstand = max(0.0, (moment - vast["nu"]).total_seconds() / 3600)
             gewicht = max(0.0, 1.0 - afstand / ZON_RECENT_VERVAL_UREN)
-            return bias * (1.0 + gewicht * (recent - 1.0))
+            return gewicht * recent + (1.0 - gewicht) * bias
         return bias * (rest if rest is not None else 1.0)
 
     def _ruwe_zon_kwh(self, van: datetime, tot: datetime) -> float:
@@ -22263,19 +22271,19 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
 
     def _zon_recent(self, nu: datetime) -> float | None:
         """Zon van het laatste afgesloten uur en het lopende uur, gedeeld door
-        de gecorrigeerde verwachting over dezelfde stukken (v5.186.0, punt 36).
-        Begrensde uren en te korte metingen tellen niet; None onder
-        ZON_RECENT_MIN_KWH verwacht."""
+        de RUWE Solcast over dezelfde stukken (v5.186.0, punt 36; v5.187.4:
+        zonder uurcorrectie, zie `_zon_factor_vandaag`). Begrensde uren en te
+        korte metingen tellen niet; None onder ZON_RECENT_MIN_KWH verwacht."""
         werkelijk = verwacht = 0.0
         for u in (getattr(self, "_pv_recente_uren", None) or [])[-1:]:
             if u.get("geldig") and nu - u["eind"] <= timedelta(hours=2):
                 werkelijk += u["werkelijk_kwh"]
-                verwacht += u["verwacht_kwh"] * self._zon_bias_factor(u["begin"], self.zonbias_percent())
+                verwacht += u["verwacht_kwh"]
         duur = float(getattr(self, "_pv_hour_duration_hours", 0.0) or 0.0)
         if duur >= 0.25 and not getattr(self, "_pv_hour_begrensd", False):
             van = nu - timedelta(hours=duur)
             werkelijk += float(self._pv_hour_energy_kwh or 0.0)
-            verwacht += self._ruwe_zon_kwh(van, nu) * self._zon_bias_factor(van, self.zonbias_percent())
+            verwacht += self._ruwe_zon_kwh(van, nu)
         if verwacht < ZON_RECENT_MIN_KWH:
             return None
         return max(ZON_RECENT_MIN, min(ZON_RECENT_MAX, werkelijk / verwacht))
