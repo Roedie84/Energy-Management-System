@@ -153,6 +153,8 @@ async def async_setup_entry(
         PrijsverwachtingSensor(coordinator, entry.entry_id),
         ZelfanalyseSensor(coordinator, entry.entry_id),
         Repetitie2027Sensor(coordinator, entry.entry_id),
+        # v5.187.0: economische schaduw (C2/C0 naast productie, alleen meten).
+        EconomischeSchaduwSensor(coordinator, entry.entry_id),
         WitgoedadviesSensor(coordinator, entry.entry_id),
         P1RegeldoelSensor(coordinator, entry.entry_id),
         DagarchiefSensor(coordinator, entry.entry_id),
@@ -3504,6 +3506,31 @@ class Repetitie2027Sensor(ZuinigSchrijven, _V5100Sensor):
     @property
     def extra_state_attributes(self):
         return self._coordinator.get_repetitie_2027()
+
+
+class EconomischeSchaduwSensor(ZuinigSchrijven, _V5100Sensor):
+    """Economische schaduw (v5.187.0): wat bewaarmarge 2 ct had gescheeld.
+
+    Staat: besparing van C2 tegenover productie over de volledige dagen tot nu
+    (rollend 14 dagen, EUR, met voorraadcorrectie). Attributen klein (< 4 kB):
+    laatste 14 dagen kort, totalen, evaluatie en status. Het volledige
+    kwartierlog staat in de diagnostiek. Recorder: deze sensor uitsluiten.
+    """
+
+    _attr_name = "Economische schaduw"
+    _attr_icon = "mdi:scale-balance"
+    _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_suggested_display_precision = 2
+    _sleutel = "economische_schaduw"
+
+    @property
+    def native_value(self):
+        return self._coordinator.economische_schaduw_besparing()
+
+    @property
+    def extra_state_attributes(self):
+        return self._coordinator.get_economische_schaduw()
 
 
 class WitgoedadviesSensor(_V5100Sensor):

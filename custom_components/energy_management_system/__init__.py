@@ -165,6 +165,7 @@ EIGEN_SERVICES = (
     SERVICE_VRAAG,
     "confirm_water_source",
     "accumodule_melding",
+    "economische_schaduw_resync",
 )
 
 def migreer_verkoop_min_winst(opties: dict, data: dict | None = None) -> dict | None:
@@ -274,8 +275,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(async_update_options))
     _async_register_nilm_services(hass)
     _async_register_module_service(hass)
+    _async_register_schaduw_service(hass)
 
     return True
+
+
+def _async_register_schaduw_service(hass: HomeAssistant) -> None:
+    """v5.187.0: de virtuele accu's van de economische schaduw terug op de
+    echte inhoud (handmatig; standaard niet automatisch, anders verdwijnt het
+    verschil dat gemeten moet worden)."""
+    if hass.services.has_service(DOMAIN, "economische_schaduw_resync"):
+        return
+
+    async def _handle(call: ServiceCall) -> None:
+        for key, value in hass.data.get(DOMAIN, {}).items():
+            if isinstance(key, str) and key.endswith("_solar_tracker"):
+                continue
+            if hasattr(value, "economische_schaduw_resync"):
+                value.economische_schaduw_resync()
+
+    hass.services.async_register(DOMAIN, "economische_schaduw_resync", _handle, schema=vol.Schema({}))
 
 
 def _async_register_module_service(hass: HomeAssistant) -> None:

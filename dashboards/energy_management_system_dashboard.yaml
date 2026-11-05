@@ -2278,6 +2278,20 @@ views:
         tap_action:
           action: more-info
       - type: custom:mushroom-template-card
+        primary: 'Economische schaduw C2: {% set v = states(''sensor.woonkamer_energy_management_system_economische_schaduw'') %}{{ (''€ '' ~ v ~ '' (14 d)'') if v not in [''unknown'', ''unavailable'', ''none''] else ''nog geen volle dag'' }}'
+        secondary: '{% set e = (state_attr(''sensor.woonkamer_energy_management_system_economische_schaduw'', ''evaluatie'') or {}).get(''c2'') or {} %}{{ state_attr(''sensor.woonkamer_energy_management_system_economische_schaduw'', ''status'') }} · {{ e.get(''advies'', ''-'') }}'
+        icon: mdi:scale-balance
+        icon_color: '{{ ''indigo'' if is_state(''switch.woonkamer_energy_management_system_economische_schaduw'', ''on'') else ''grey'' }}'
+        entity: sensor.woonkamer_energy_management_system_economische_schaduw
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-entity-card
+        entity: switch.woonkamer_energy_management_system_economische_schaduw
+        name: Economische schaduw
+        icon: mdi:scale-balance
+        tap_action:
+          action: toggle
+      - type: custom:mushroom-template-card
         primary: 'Witgoed: {{ states(''sensor.woonkamer_energy_management_system_witgoedadvies'') }}'
         secondary: '{% set a = states.sensor.woonkamer_energy_management_system_witgoedadvies.attributes if states.sensor.woonkamer_energy_management_system_witgoedadvies else {} %}{% if a.get(''gemiddeld_ct'') is not none %}gem. {{ a.gemiddeld_ct }} ct (nu {{ a.nu_starten_ct }} ct){% set s = a.get(''schaduw_2027'') or {} %}{% if a.get(''regime'') == ''salderen'' and s.get(''beste_start_tekst'') %} · 2027: {{ s.beste_start_tekst }} ({{ s.gemiddeld_ct }} ct){% endif %}{% else %}nog geen plan{% endif %}'
         icon: mdi:washing-machine

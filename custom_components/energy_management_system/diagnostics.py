@@ -1122,6 +1122,10 @@ async def async_get_config_entry_diagnostics(
             # v5.114.0: welke bronnen gebufferd worden en welke nu uit de buffer komen
             "bronbuffer": _veilig("bronbuffer", lambda: coordinator._bronbuffer.overzicht()),
             "repetitie_2027": _veilig("get_repetitie_2027", coordinator.get_repetitie_2027),
+            # v5.187.0: economische schaduw - alle kwartierregels en dagregels.
+            "economische_schaduw": _veilig(
+                "get_economische_schaduw_diagnose", coordinator.get_economische_schaduw_diagnose
+            ),
             # v5.121.0: witgoedadvies met de overschotwaarde
             "witgoedadvies": _veilig("get_witgoedadvies", coordinator.get_witgoedadvies),
             # v5.122.0: sluimerverbruik (punt 4) en rendement per band (punt 7)

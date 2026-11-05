@@ -156,3 +156,10 @@ accumodule_melding:
       default: false
       selector:
         boolean:
+
+economische_schaduw_resync:
+  name: Economische schaduw opnieuw gelijkzetten
+  description: >-
+    Zet de virtuele accu's van de economische schaduw (C2 en C0) terug op de
+    echte accu-inhoud. Gebeurt nooit vanzelf: daarna begint de vergelijking
+    met dezelfde inhoud.

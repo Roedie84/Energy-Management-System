@@ -75,6 +75,8 @@ async def async_setup_entry(
             AircoAutomaatSwitch(coordinator, entry_id=entry.entry_id),
             NuLadenSwitch(coordinator, entry_id=entry.entry_id),
             AchterhoeksSwitch(coordinator, entry_id=entry.entry_id),
+            # v5.187.0: de economische schaduw (alleen meten) aan of uit.
+            EconomischeSchaduwSwitch(coordinator, entry_id=entry.entry_id),
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
             BatterijladerOverrideSwitch(coordinator, entry_id=entry.entry_id),
@@ -429,6 +431,47 @@ class AchterhoeksSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         self._coordinator.achterhoeks = False
+        self.async_write_ha_state()
+
+
+class EconomischeSchaduwSwitch(SwitchEntity, RestoreEntity):
+    """Economische schaduw aan/uit (v5.187.0).
+
+    Aan (standaard): naast productie rekenen C2 en C0 elk kwartier mee op een
+    virtuele accu; alleen meten, nooit sturen. Uit: het hele schaduwpad wordt
+    overgeslagen; productie is in beide standen gelijk.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Economische schaduw"
+    _attr_icon = "mdi:scale-balance"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__()
+        self._coordinator = coordinator
+        # v5.187.0: "_aan", de sensor heeft "_economische_schaduw" al.
+        self._attr_unique_id = f"{entry_id}_economische_schaduw_aan"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self._coordinator.economische_schaduw_aan)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.zet_economische_schaduw(last_state.state != "off")
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._coordinator.zet_economische_schaduw(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._coordinator.zet_economische_schaduw(False)
         self.async_write_ha_state()
 
 
