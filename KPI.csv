@@ -1309,3 +1309,22 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-04 19:40,TUSSEN,ems_witgoed_profiel_piek_w,1824,1,"v5.184.4: 05-11 05:00-05:45 huis 1824/1448/1756/652 W (was 5112 W in een kwartier); aandeel 33/25/31/9 pct"
 2026-11-04 19:40,TUSSEN,ems_plan_sprong_na_herstart,1,1,"H-EMS-18: 19:36 wijziging zichtbaar (13:00-13:15 weg); 16:12 16:59 17:20 niet te meten: alleen laatste wijziging bewaard"
 2026-11-04 19:40,TUSSEN,ems_stilstand_functies,0,10,"10 wachten, 0 doen; airco niets, knop uit -> rekent; witgoedadvies unknown 19:36 na herstart, keert terug op kwartier"
+2026-11-05 09:15,DAG,ems_achteraf_gemist_eur,0.32,132,"04-11 00:00..05-11 09:00; werkelijk 4.01 tegen LP-optimum 3.69 (incl. slijtage 4.22 ct, eta 0.914/0.919, 2.4 kW, verkoop 1.2 kW, zelfde prijs in/uit); zonder verkoop 0.22; met 5 ct marge 0.13"
+2026-11-05 09:15,DAG,ems_achteraf_fouten_eur,0.01,1,"04-11 16:45 0.82 kWh net bij 50.6 ct met SoC 40 %, stand houden; opgelost v5.184.1"
+2026-11-05 09:15,DAG,ems_harde_regel_verkoop_onder_reserve,0,96,"04-11 0 kwartieren onder de reserve; verkoopkwartieren leeg; huis_gaat_voor geschonden door regeloverschot 0.159 (grens 0.1); 05-11 0.048 t/m 09:18"
+2026-11-05 09:15,DAG,ems_pv_dag_kwh,6.62,1,"04-11; dagarchief verwacht 6.05 (+9.4 pct); day-ahead tracker 4.82 (+37.3 pct); Solcast 11:40 7.27"
+2026-11-05 09:15,DAG,ems_net_import_kwh,6.96,1,04-11 dagarchief; export 0.61
+2026-11-05 09:15,DAG,ems_accu_laden_kwh,4.52,1,04-11; ontladen 3.83; gem. opbrengst ontladen 48.2 ct
+2026-11-05 09:15,DAG,ems_huisverbruik_kwh,12.28,1,04-11; verwacht 9.35 = +2.93
+2026-11-05 09:15,DAG,ems_verbruik_dag_bias_kwh,1.05,7,29-10..04-11: -0.73/-2.10/+3.92/+0.55/+1.64/+1.15/+2.93; MAE 1.86
+2026-11-05 09:15,DAG,ems_pv_mae_7d_pct,34.4,7,bias -15.4; mediaan -31.8; 5/7 negatief; 04-11 +37.3
+2026-11-05 09:15,DAG,ems_pv_mae_14d_pct,23.0,14,bias -11.7; mediaan -11.15; 10/14 negatief
+2026-11-05 09:15,DAG,ems_pv_mae_30d_pct,20.3,30,bias -14.4; mediaan -9.5; 25/30 negatief
+2026-11-05 09:15,DAG,ems_besparing_eur,-0.1,1,"04-11 dagarchief accu_opbrengst; kosten 2.39 tegen zonder accu 2.58, voorraad -0.29"
+2026-11-05 09:15,DAG,ems_nabeschouwing_realisatie_7d_pct,63.2,7,29-10..04-11 leverde 5.17 / had 8.18; 04-11 -0.38 / 0.26
+2026-11-05 09:15,DAG,ems_planvolging_7d_pct,68.9,7,"29-10..04-11: 53.7/54.2/70.5/93.7/84.5/64.9/60.6; 05-11 tot nu 91.9 (n=37)"
+2026-11-05 09:15,DAG,ems_mc_brier_22u,0.25,4,"per_nacht 30/31-10 03-11 04-11; laatste avond 04-11 kans 78.7, tekort 2.99 kWh: uitslag in dagafsluiting van vannacht"
+2026-11-05 09:15,DAG,ems_digital_twin_kwartierplan_mae_kwh,0.568,60,04-11 19:40 0.598
+2026-11-05 09:15,DAG,ems_tekortnacht_tot_nu_kwh,2.99,1,"nacht 04->05; huis 22-09 3.84 (22-05 1.55; vaatwasser 05:00-05:45 ~1.27 kWh), import 3.93 bij gem. 37.3 ct; telt als tekortdag"
+2026-11-05 09:15,DAG,ems_accu_rendement_pct,84.0,1,"laden 83.4, ontladen 100.7, rondrit 83.9; slijtage 4.22 ct"
+2026-11-05 09:15,DAG,ems_stilstand_functies,0,10,"10 wachten, 0 doen; airco niets, knop uit -> rekent; temperatuurnotitie gaf vals te weinig (7/4)"

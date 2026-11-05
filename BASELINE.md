@@ -129,3 +129,6 @@
 | PV-voorspelling MAE/bias 7 d | 31,5 % / −23,1 % (30 d 19,3 / −15,8) | 28-10..03-11 | 04-11 03:40 |
 | PV-correctie backtest MAE/bias | 17,5 / −8,9 (zonder 21,1 / −17,9) | n=26 dagen | 04-11 03:40 |
 | Verbruik dagtotaal bias 7 d | +0,81 kWh/dag (MAE 1,62) | 28-10..03-11 | 04-11 03:40 |
+| Achteraf gemist (LP-optimum, 33 u) | € 0,32 (zonder verkoop € 0,22; met 5 ct marge € 0,13) | 04-11 00:00..05-11 09:00 | 05-11 09:15 |
+| PV-voorspelling MAE/bias 7 d | 34,4 % / −15,4 % (30 d 20,3 / −14,4) | 29-10..04-11 | 05-11 09:15 |
+| Verbruik dagtotaal bias 7 d | +1,05 kWh/dag (MAE 1,86) | 29-10..04-11 | 05-11 09:15 |

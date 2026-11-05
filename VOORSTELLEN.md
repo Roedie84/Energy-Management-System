@@ -479,13 +479,27 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: na installatie `gepland_huis_w` bij het einde van een kwartier gelijk aan het begin; `onverklaard_w` niet meer hoog bij een plan dat klopt.
 
 ## L-EMS-066 · net van het lopende kwartier te hoog na een berekening midden in het kwartier (meetfout, regressie v5.183.2)
-- Status: **open, zelf te bouwen** (04-11 19:40; dagafsluiting 05-11 03:40, geen tussenrelease: alleen weergave).
+- Status: **geverifieerd** (05-11 09:15): opgelost in v5.186.0 (`_waardeplan_net_kwh` schaalt de accustap). Live rij 09:15: −137 + 368 = 231 W tegen huis 232, net 0. Was: open 04-11 19:40.
 - Onderbouwing (live, n=2): 19:41 accu 683 + net 415 bij huis 680 W, 19:43 683 + 413 bij 682 W; P1 gemeten ~4-80 W. `_accu_ac_slim` zet `accu_kwh` sinds v5.183.2 op de dekking over de rest van het kwartier; `_waardeplan_net_kwh` rekent de accustap nog als heel kwartier. Net ≈ huis × (1 − rij_uren/0,25): 680 × (1 − 0,1/0,25) = 408 W.
 - Bouw: bij een rij met `accu_stap_kwh` de accu mee schalen als het huis-min-zon-deel (of `net_kwh` van de rij zelf gebruiken). Controleer ook `_rij_zon`. Sturing ongewijzigd; raakt plantabel en `cumulatief_eur` van het lopende kwartier.
 - Meten: rij 0 accu + net + zon = huis binnen 20 W, ook midden in een kwartier.
 
 ## L-EMS-067 · laadplanwijzigingen van de laatste 24 uur bewaren (meetbaarheid, H-EMS-18)
-- Status: **open, zelf te bouwen** (04-11 19:40; dagafsluiting 05-11 03:40).
+- Status: **gebouwd v5.187.1** (05-11 09:15), als `laadplan_wijzigingen` op `diagnose_sturing`, met `na_herstart`. Te verifiëren bij de volgende herstart. Was: open 04-11 19:40.
 - Onderbouwing: `laadplan_gewijzigd` bewaart alleen de laatste wijziging en attributen staan sinds v5.76.0 niet in de recorder. Van vier herstarts sinds 15:40 is er één te zien. H-EMS-18 is zo alleen te toetsen als een ronde er toevallig naast staat.
 - Bouw: lijst van max. 30 wijzigingen (om, was, blokken, reden, kort na herstart ja/nee) als attribuut op `diagnose_sturing`. Sturing ongewijzigd.
 - Meten: elke herstart staat erin; H-EMS-18 per herstart te tellen.
+
+## L-EMS-068 · horizon van tekortkans en 'nodig tot blok' is niet het eerste geplande laadmoment (rapportage, raakt mogelijk de reserve)
+- Status: **open, wacht op Ruud** (05-11 09:15). Bug of bewuste keuze niet zeker: de horizon telt mee in de uitleg en mogelijk in de reserve.
+- Onderbouwing: live 05-11 09:18 `horizon_tot` 10:15 (goedkoopste blok) tegen 'blok 11:45 plan' op `diagnose_sturing`. 04-11 21:10: horizon 00:00, waardeplan laadde 05:00; tot 00:00 2,08 kWh, tot 05:00 3,83 kWh.
+- Voorstel: horizon laten eindigen bij het eerste geplande laadkwartier van het waardeplan.
+- Verwacht effect: uitleg en tekortkans over de echte periode; euro's niet te becijferen zonder replay.
+- Meten: `horizon_tot` gelijk aan het eerste laadkwartier; Brier 22:00 voor en na.
+
+## L-EMS-069 · regeloverschot zet de vlag van de harde regel elke ontlaadavond op rood (keuze)
+- Status: **open, wacht op Ruud** (05-11 09:15).
+- Onderbouwing: 03-11 0,228, 04-11 0,159 kWh tegen grens 0,1 (`HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH`); 05-11 0,048 t/m 09:18. 0 kwartieren onder de reserve, geen verkoopbesluit. Het is P1-rimpel tijdens ontladen: per kwartier 5-40 Wh export naast import. Op 04-11 ging 0,20 kWh tussen 15 en 22 uur het net op.
+- Voorstel, kies: (a) grens houden en P1-regeldoel tijdens ontladen onder de reserve ~20 W naar import verschuiven; (b) grens verhogen naar 0,25 kWh per dag; (c) zo laten.
+- Verwacht effect: onder saldering vrijwel € 0; (a) kost enkele Wh extra import per kwartier, (b) laat een echte schending later zien.
+- Meten: `huis_gaat_voor` per dag, export in ontlaadkwartieren.

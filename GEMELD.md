@@ -276,3 +276,6 @@ Regel: <dd-mm HH:MM> | <sleutel>
 04-11 18:51 | ems geplande vaatwasser hele cyclus in eerste kwartier (geplande_witgoed_kwh_in_periode, verdelen over start-eind, akkoord)
 04-11 18:51 | updates installeren ems 5.184.3 (hacs) + ha herstarten
 04-11 20:52 | recorder.purge_entities oude rijen gold_scalper_btc_eur_trades (na exclude, 01-11 t/m 04-11)
+05-11 09:15 | L-EMS-068 ems horizon tekortkans niet het eerste laadkwartier (akkoord nodig)
+05-11 09:15 | L-EMS-069 ems regeloverschot zet harde-regelvlag op rood, keuze a/b/c
+05-11 09:15 | updates installeren ems 5.187.1 (hacs) + ha herstarten
