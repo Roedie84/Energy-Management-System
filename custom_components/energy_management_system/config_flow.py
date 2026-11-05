@@ -132,6 +132,27 @@ from .const import (
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
     CONF_BATTERY_CHARGE_ENERGY_SENSOR,
     CONF_CONTRACT_START_DATE,
+    CONF_GAS_NIEUW_KORTING_JAAR,
+    CONF_GAS_NIEUW_PRIJS_ENTITY,
+    CONF_GAS_NIEUW_TERMIJN_EUR,
+    CONF_GAS_NIEUW_VASTRECHT_MND,
+    CONF_GAS_OVERSTAP_DATUM,
+    CONF_JAAR_AFSCHRIJFDAG,
+    CONF_JAAR_NETBEHEER_GAS_JAAR,
+    CONF_JAAR_NETBEHEER_STROOM_JAAR,
+    CONF_JAAR_TERMIJN_EUR,
+    CONF_JAAR_VASTRECHT_GAS_MND,
+    CONF_JAAR_VASTRECHT_STROOM_MND,
+    CONF_JAAR_VERMINDERING_EB_JAAR,
+    DEFAULT_GAS_NIEUW_KORTING_JAAR,
+    DEFAULT_GAS_NIEUW_VASTRECHT_MND,
+    DEFAULT_JAAR_AFSCHRIJFDAG,
+    DEFAULT_JAAR_NETBEHEER_GAS_JAAR,
+    DEFAULT_JAAR_NETBEHEER_STROOM_JAAR,
+    DEFAULT_JAAR_TERMIJN_EUR,
+    DEFAULT_JAAR_VASTRECHT_GAS_MND,
+    DEFAULT_JAAR_VASTRECHT_STROOM_MND,
+    DEFAULT_JAAR_VERMINDERING_EB_JAAR,
     CONF_COST_ENERGY_SENSOR,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
     CONF_GRID_IMPORT_ENERGY_SENSOR,
@@ -299,6 +320,14 @@ def _validate_input(user_input: dict) -> dict[str, str]:
         except (TypeError, ValueError):
             errors[CONF_CONTRACT_START_DATE] = "invalid_date"
 
+    # v5.188.0: overstapdatum gas (jaarafrekening) controleren.
+    overstap = user_input.get(CONF_GAS_OVERSTAP_DATUM)
+    if overstap:
+        try:
+            date.fromisoformat(str(overstap))
+        except (TypeError, ValueError):
+            errors[CONF_GAS_OVERSTAP_DATUM] = "invalid_date"
+
     kosten = user_input.get(CONF_FEEDIN_COST_EUR_PER_KWH)
     if kosten not in (None, ""):
         try:
@@ -331,6 +360,42 @@ def _validate_input(user_input: dict) -> dict[str, str]:
         user_input[veld] = waarde
 
     return errors
+
+
+def _bedrag(maximum: float, stap: float):
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(min=0, max=maximum, step=stap, mode=selector.NumberSelectorMode.BOX)
+    )
+
+
+def _jaarafrekening_velden(defaults: dict) -> dict:
+    """v5.188.0: termijn, afschrijfdag, vaste kosten en de gasoverstap voor de jaarafrekening."""
+    getallen = (
+        (CONF_JAAR_TERMIJN_EUR, DEFAULT_JAAR_TERMIJN_EUR, 1000, 1),
+        (CONF_JAAR_AFSCHRIJFDAG, DEFAULT_JAAR_AFSCHRIJFDAG, 31, 1),
+        (CONF_JAAR_VASTRECHT_STROOM_MND, DEFAULT_JAAR_VASTRECHT_STROOM_MND, 100, 0.01),
+        (CONF_JAAR_VASTRECHT_GAS_MND, DEFAULT_JAAR_VASTRECHT_GAS_MND, 100, 0.01),
+        (CONF_JAAR_NETBEHEER_STROOM_JAAR, DEFAULT_JAAR_NETBEHEER_STROOM_JAAR, 2000, 0.01),
+        (CONF_JAAR_NETBEHEER_GAS_JAAR, DEFAULT_JAAR_NETBEHEER_GAS_JAAR, 2000, 0.01),
+        (CONF_JAAR_VERMINDERING_EB_JAAR, DEFAULT_JAAR_VERMINDERING_EB_JAAR, 2000, 0.01),
+    )
+    velden = {
+        vol.Optional(sleutel, default=defaults.get(sleutel, standaard)): _bedrag(maximum, stap)
+        for sleutel, standaard, maximum, stap in getallen
+    }
+    velden[vol.Optional(CONF_GAS_OVERSTAP_DATUM, default=_as_text(defaults.get(CONF_GAS_OVERSTAP_DATUM)))] = (
+        selector.TextSelector()
+    )
+    velden[_optioneel(CONF_GAS_NIEUW_PRIJS_ENTITY, defaults)] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain=["sensor", "input_number"])
+    )
+    for sleutel, standaard in (
+        (CONF_GAS_NIEUW_VASTRECHT_MND, DEFAULT_GAS_NIEUW_VASTRECHT_MND),
+        (CONF_GAS_NIEUW_KORTING_JAAR, DEFAULT_GAS_NIEUW_KORTING_JAAR),
+    ):
+        velden[vol.Optional(sleutel, default=defaults.get(sleutel, standaard))] = _bedrag(2000, 0.01)
+    velden[_optioneel(CONF_GAS_NIEUW_TERMIJN_EUR, defaults)] = _bedrag(1000, 1)
+    return velden
 
 
 def _schema(defaults: dict | None = None) -> vol.Schema:
@@ -381,6 +446,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE
                 ),
             ): selector.TextSelector(),
+            **_jaarafrekening_velden(defaults),
             vol.Optional(
                 CONF_FEEDIN_PRICE_ATTRIBUTE,
                 default=defaults.get(

@@ -2824,11 +2824,181 @@ class EmsDashboardStrategy extends HTMLTemplateElement {
   }
 }
 
+/* v5.188.0 (Ruud 05-11): tabblad Jaarafrekening - betaald tegenover werkelijk,
+   stand nu, verwachte jaarafrekening, opbouw, maandreeks en advies. Leest
+   sensor ..._jaarafrekening (staat = verwacht saldo, + = terug). */
+const JAAR_KAART = "ems-jaarafrekening-card";
+const JE = (v, d = 0) => (v == null || isNaN(v)) ? "\u2013" : "\u20ac\u00a0" + Number(Math.abs(v)).toLocaleString("nl-NL", { minimumFractionDigits: d, maximumFractionDigits: d });
+const JS_ = (v) => (v == null || isNaN(v)) ? "" : (v < 0 ? "\u2212\u00a0" : "");
+const JD = (iso) => { if (!iso) return ""; const d = new Date(iso + "T12:00:00"); return d.toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" }); };
+const JD2 = (iso) => { if (!iso) return ""; const d = new Date(iso + "T12:00:00"); return d.toLocaleDateString("nl-NL", { day: "numeric", month: "short" }); };
+const JESC = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const JAAR_CSS = `
+:host { display:block; }
+.card { background:#111827; border:1px solid #232b3a; border-radius:16px; padding:18px 20px; color:#e6e8ec; font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; }
+.hd { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.hd h2 { font-size:15px; font-weight:600; margin:0; }
+.hd h2 ha-icon { color:#d6a64f; --mdc-icon-size:18px; margin-right:6px; vertical-align:-3px; }
+.hd .r { font-size:12px; color:#9aa3b2; }
+.prog { height:5px; background:#1b2231; border-radius:3px; margin:8px 0 16px; overflow:hidden; }
+.prog i { display:block; height:100%; background:linear-gradient(90deg,#d6a64f,#e8c47e); }
+.hero { display:grid; grid-template-columns:1.3fr 1fr 1fr 1fr; gap:10px; }
+.k { background:#0f1521; border:1px solid #232b3a; border-radius:12px; padding:12px 14px; }
+.k .l { font-size:11px; color:#9aa3b2; text-transform:uppercase; letter-spacing:.08em; }
+.k .v { font-size:24px; font-weight:650; margin-top:4px; font-variant-numeric:tabular-nums; }
+.k .s { font-size:11.5px; color:#6b7383; margin-top:3px; }
+.k.big { border-color:rgba(79,180,138,.45); background:linear-gradient(160deg,rgba(79,180,138,.12),#0f1521 60%); }
+.k.big.min { border-color:rgba(224,101,108,.45); background:linear-gradient(160deg,rgba(224,101,108,.12),#0f1521 60%); }
+.k.big .v { font-size:30px; }
+.groen { color:#4fb48a; } .rood { color:#e0656c; }
+.cols { display:grid; grid-template-columns:1fr 1.25fr; gap:14px; margin-top:14px; }
+h3 { font-size:12px; color:#9aa3b2; text-transform:uppercase; letter-spacing:.1em; margin:2px 0 8px; font-weight:600; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+td { padding:5px 0; border-bottom:1px dashed #1f2635; } td.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+td .m { color:#6b7383; font-size:11.5px; }
+tr.t td { border-bottom:none; border-top:1px solid #2b3446; font-weight:650; padding-top:8px; }
+.adv { margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.a { border:1px solid #232b3a; border-radius:12px; padding:10px 12px; font-size:12.5px; line-height:1.5; color:#9aa3b2; display:flex; gap:10px; }
+.a ha-icon { color:#d6a64f; --mdc-icon-size:20px; flex:none; } .a b { color:#e6e8ec; }
+.lg { display:flex; gap:14px; font-size:11px; color:#9aa3b2; margin-top:6px; flex-wrap:wrap; }
+.lg span::before { content:""; display:inline-block; width:14px; height:3px; border-radius:2px; margin-right:5px; vertical-align:middle; background:var(--c); }
+.note { font-size:10.5px; color:#6b7383; margin-top:10px; line-height:1.5; }
+.leeg { color:#9aa3b2; font-size:13px; }
+@media (max-width:760px) { .hero { grid-template-columns:1fr 1fr; } .cols, .adv { grid-template-columns:1fr; } }
+`;
+
+class EmsJaarafrekeningCard extends HTMLElement {
+  setConfig(config) { this._config = config || {}; }
+  getCardSize() { return 9; }
+  set hass(hass) {
+    this._hass = hass;
+    const id = (this._config && this._config.entity) ||
+      Object.keys(hass.states).find((e) => e.startsWith("sensor.") && e.endsWith("energy_management_system_jaarafrekening"));
+    const st = id ? hass.states[id] : null;
+    const sleutel = st ? st.last_updated : "geen";
+    if (sleutel === this._laatst) return;
+    this._laatst = sleutel;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.shadowRoot.innerHTML = `<style>${JAAR_CSS}</style><div class="card">${this._inhoud(st)}</div>`;
+  }
+
+  _inhoud(st) {
+    const a = st ? st.attributes || {} : {};
+    if (!st || a.verwacht_saldo_eur == null) {
+      return `<div class="hd"><h2><ha-icon icon="mdi:file-document-check-outline"></ha-icon>Jaarafrekening</h2></div>` +
+        `<div class="leeg">Nog geen berekening (${JESC(a.status || "sensor niet gevonden")}). De eerste komt binnen een uur na het opstarten.</div>`;
+    }
+    return this._kop(a) + this._hero(a) + `<div class="cols"><div>${this._opbouw(a)}</div><div>${this._grafiek(a)}</div></div>` +
+      this._advies(a) + this._noot(a);
+  }
+
+  _kop(a) {
+    const aandeel = Math.max(0, Math.min(1, Number(a.dag_aandeel) || 0));
+    return `<div class="hd"><h2><ha-icon icon="mdi:file-document-check-outline"></ha-icon>Jaarafrekening \u00b7 contractjaar ${JD(a.contractjaar_begin)} \u2013 ${JD(a.contractjaar_eind)}</h2>` +
+      `<span class="r">maand ${a.maand_nr} van 12</span></div><div class="prog"><i style="width:${(aandeel * 100).toFixed(1)}%"></i></div>`;
+  }
+
+  _hero(a) {
+    const saldo = Number(a.verwacht_saldo_eur), stand = Number(a.stand_eur);
+    const terug = saldo >= 0;
+    const laag = Number(a.band_laag_eur), hoog = Number(a.band_hoog_eur);
+    const band = `bandbreedte ${JS_(laag)}${JE(laag)} \u2013 ${JS_(hoog)}${JE(hoog)} ${terug ? "terug" : ""}`;
+    const volgende = a.volgende_afschrijving ? ` \u00b7 volgende \u00b1 ${JD2(a.volgende_afschrijving)}` : "";
+    return `<div class="hero">` +
+      `<div class="k big${terug ? "" : " min"}"><div class="l">Verwacht bij jaarafrekening</div><div class="v ${terug ? "groen" : "rood"}">${JE(saldo)} ${terug ? "terug" : "bijbetalen"}</div><div class="s">${band}</div></div>` +
+      `<div class="k"><div class="l">Betaald</div><div class="v">${JE(a.betaald_eur)}</div><div class="s">${a.termijnen_betaald} \u00d7 ${JE(a.termijn_eur)}${volgende}</div></div>` +
+      `<div class="k"><div class="l">Werkelijk tot nu</div><div class="v">${JS_(a.werkelijk_eur)}${JE(a.werkelijk_eur)}</div><div class="s">stroom + gas + vast \u2212 korting</div></div>` +
+      `<div class="k"><div class="l">Stand nu</div><div class="v ${stand >= 0 ? "groen" : "rood"}">${JE(stand)} ${stand >= 0 ? "tegoed" : "tekort"}</div><div class="s">als je vandaag zou afrekenen</div></div>` +
+      `</div>`;
+  }
+
+  _opbouw(a) {
+    const o = a.opbouw || {};
+    const rij = (naam, sub, v, neg) => `<tr><td>${naam}<div class="m">${sub}</div></td><td class="n${neg ? " groen" : ""}">${neg ? "\u2212\u00a0" : ""}${JE(v)}</td></tr>`;
+    const kwh = (v) => Number(v || 0).toLocaleString("nl-NL", { maximumFractionDigits: 0 });
+    const gem = (e, k) => (Number(k) > 0 ? ` \u00b7 gem. ${JE(Number(e) / Number(k), 2)}` : "");
+    const totaal = (o.afname_eur || 0) - (o.terug_eur || 0) + (o.gas_eur || 0) + (o.vast_eur || 0) - (o.eb_eur || 0);
+    return `<h3>Opbouw tot nu (${JD2(a.contractjaar_begin)} \u2013 gisteren)</h3><table>` +
+      rij("Stroom afname", `${kwh(o.afname_kwh)} kWh${gem(o.afname_eur, o.afname_kwh)}`, o.afname_eur, false) +
+      rij("Teruglevering", `${kwh(o.terug_kwh)} kWh \u00b7 met saldering`, o.terug_eur, true) +
+      rij("Gas", `${Number(o.gas_m3 || 0).toLocaleString("nl-NL", { maximumFractionDigits: 0 })} m\u00b3${gem(o.gas_eur, o.gas_m3)}`, o.gas_eur, false) +
+      rij("Vaste kosten", "levering + netbeheer, naar rato", o.vast_eur, false) +
+      rij("Vermindering energiebelasting", `${JE((a.aannames || {}).vermindering_eb_jaar, 2)} per jaar, naar rato`, o.eb_eur, true) +
+      `<tr class="t"><td>Totaal</td><td class="n">${JS_(totaal)}${JE(totaal)}</td></tr></table>`;
+  }
+
+  _grafiek(a) {
+    const m = Array.isArray(a.maanden) ? a.maanden : [];
+    if (!m.length) return "";
+    const W = 470, H = 200, L = 46, R = 460, T = 18, B = 170;
+    const top = Math.max(100, ...m.map((r) => Math.max(r.betaald_cum, r.kosten_cum))) * 1.1;
+    const bodem = Math.min(0, ...m.map((r) => r.kosten_cum));
+    const x = (i) => L + 11 + i * ((R - L - 22) / 11);
+    const y = (v) => B - ((v - bodem) / (top - bodem)) * (B - T);
+    const lijn = (veld, echt, kleur, dik) => {
+      const vast = m.map((r, i) => [i, r]).filter(([, r]) => r[echt]);
+      const n = vast.length;
+      const p = (lst) => lst.map(([i, r]) => `${x(i).toFixed(1)},${y(r[veld]).toFixed(1)}`).join(" ");
+      let s = n ? `<polyline fill="none" stroke="${kleur}" stroke-width="${dik}" points="${p(vast)}"/>` : "";
+      const rest = m.map((r, i) => [i, r]).slice(Math.max(0, n - 1));
+      if (rest.length > 1) s += `<polyline fill="none" stroke="${kleur}" stroke-width="${dik}" stroke-dasharray="5 5" opacity=".75" points="${p(rest)}"/>`;
+      return s;
+    };
+    const stap = Math.pow(10, Math.floor(Math.log10(top / 3)));
+    const grid = [];
+    for (let v = Math.ceil(bodem / stap) * stap; v <= top; v += stap * (top / stap > 8 ? 2 : 1)) {
+      grid.push(`<line x1="${L}" y1="${y(v).toFixed(1)}" x2="${R}" y2="${y(v).toFixed(1)}" stroke="#1f2635"/>` +
+        `<text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" fill="#6b7383" font-size="10" text-anchor="end">${v < 0 ? "\u2212" : ""}\u20ac ${Math.abs(v)}</text>`);
+    }
+    const labels = m.map((r, i) => `<text x="${x(i).toFixed(1)}" y="${H - 10}" fill="#6b7383" font-size="10" text-anchor="middle">${JESC(r.maand)}</text>`).join("");
+    const eind = m[m.length - 1];
+    const saldo = eind.betaald_cum - eind.kosten_cum;
+    const pijl = `<line x1="${x(11).toFixed(1)}" y1="${y(eind.betaald_cum).toFixed(1)}" x2="${x(11).toFixed(1)}" y2="${y(eind.kosten_cum).toFixed(1)}" stroke="${saldo >= 0 ? "#4fb48a" : "#e0656c"}" stroke-dasharray="2 2"/>` +
+      `<text x="${(x(11) - 6).toFixed(1)}" y="${((y(eind.betaald_cum) + y(eind.kosten_cum)) / 2).toFixed(1)}" fill="${saldo >= 0 ? "#4fb48a" : "#e0656c"}" font-size="10.5" text-anchor="end">${JE(saldo)} ${saldo >= 0 ? "terug" : "bij"}</text>`;
+    return `<h3>Cumulatief per maand</h3><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${grid.join("")}${labels}` +
+      lijn("betaald_cum", "betaald_echt", "#d6a64f", 2.2) + lijn("kosten_cum", "kosten_echt", "#4fb48a", 2.6) + pijl + `</svg>` +
+      `<div class="lg"><span style="--c:#d6a64f">betaald (termijnen)</span><span style="--c:#4fb48a">kosten</span><span style="--c:#6b7383">gestippeld = verwacht</span></div>`;
+  }
+
+  _advies(a) {
+    const uit = [];
+    const adv = a.advies || {};
+    if (adv.advies_termijn_eur != null) {
+      const t = Number(adv.advies_termijn_eur), nu = Number(a.termijn_eur);
+      const gas = a.gas_overstap ? ` Gas gaat op ${JD2(a.gas_overstap)} over; daarna betaal je hier alleen nog stroom.` : "";
+      const tekst = t < nu
+        ? `<b>Termijn kan naar \u00b1 ${JE(t)}.</b> Dan kom je bij de afrekening rond \u20ac\u00a00 uit (nog ${adv.resterende_termijnen} termijnen).`
+        : t > nu ? `<b>Termijn beter naar \u00b1 ${JE(t)}.</b> Anders volgt een bijbetaling (nog ${adv.resterende_termijnen} termijnen).`
+          : `<b>Termijn klopt.</b> Met ${JE(nu)} kom je rond \u20ac\u00a00 uit.`;
+      const sald = a.saldering_eind ? ` Na ${JD2(a.saldering_eind)} stopt de saldering; dat zit al in de verwachting.` : "";
+      uit.push(`<div class="a"><ha-icon icon="mdi:calendar-sync-outline"></ha-icon><div>${tekst}${gas}${sald}</div></div>`);
+    }
+    const g = a.gas_nieuw;
+    if (g) {
+      const verschil = g.verschil_per_maand_eur;
+      const kop = g.termijn_eur != null
+        ? (verschil > 5 ? `<b>Gas nieuwe leverancier: ${JE(g.termijn_eur)} per maand lijkt ruim.</b>` : verschil < -5 ? `<b>Gas nieuwe leverancier: ${JE(g.termijn_eur)} per maand lijkt krap.</b>` : `<b>Gas nieuwe leverancier: ${JE(g.termijn_eur)} per maand klopt.</b>`)
+        : `<b>Gas nieuwe leverancier: verwacht ${JE(g.per_maand_eur)} per maand.</b>`;
+      uit.push(`<div class="a"><ha-icon icon="mdi:fire"></ha-icon><div>${kop} Verwacht \u00b1 ${JE(g.per_maand_eur)} per maand (${Number(g.m3_per_jaar).toLocaleString("nl-NL", { maximumFractionDigits: 0 })} m\u00b3 per jaar \u00d7 ${JE(g.prijs_m3, 2)} + vast + netbeheer \u2212 korting).</div></div>`);
+    }
+    return uit.length ? `<div class="adv">${uit.join("")}</div>` : "";
+  }
+
+  _noot(a) {
+    const s = a.aannames || {};
+    const mist = a.vorig_jaar_ontbreekt_dagen ? ` Van ${a.vorig_jaar_ontbreekt_dagen} resterende dagen ontbreekt het vorige jaar; die tellen als nul.` : "";
+    return `<div class="note">Werkelijk = dagkosten van de leverancier (met saldering) + vaste kosten naar rato. De rest van het contractjaar is geschat met dezelfde dagen een jaar eerder. ` +
+      `Vaste kosten: vastrecht ${JE(s.vastrecht_stroom_mnd, 2)} + ${JE(s.vastrecht_gas_mnd, 2)} per maand, netbeheer ${JE(s.netbeheer_stroom_jaar)} + ${JE(s.netbeheer_gas_jaar)} per jaar (aan te passen in de EMS-instellingen zodra de jaarafrekening er is).${mist}</div>`;
+  }
+}
+
 const registreer = (naam, klasse) => {
   if (!customElements.get(naam)) customElements.define(naam, klasse);
 };
 
 registreer(KAART, EmsCockpitCard);
+registreer(JAAR_KAART, EmsJaarafrekeningCard);
 registreer("ll-strategy-view-ems", EmsViewStrategy);
 registreer("ll-strategy-dashboard-ems", EmsDashboardStrategy);
 
@@ -2838,6 +3008,15 @@ if (!window.customCards.some((k) => k.type === KAART)) {
     type: KAART,
     name: "EMS energiecockpit",
     description: "Alles van het Energy Management System op een pagina: accu, planning, verkoop, zon, apparaten, geld en de knoppen.",
+    preview: false,
+  });
+}
+
+if (!window.customCards.some((k) => k.type === JAAR_KAART)) {
+  window.customCards.push({
+    type: JAAR_KAART,
+    name: "EMS jaarafrekening",
+    description: "Betaald tegenover werkelijk, stand nu en de verwachte jaarafrekening van het contractjaar.",
     preview: false,
   });
 }

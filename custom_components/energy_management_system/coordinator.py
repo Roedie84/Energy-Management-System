@@ -93,6 +93,7 @@ from .financien import FinancienMixin
 from .coordinator_hulp import (PriceEntry, _nl, accu_is_leeg, demp_soc_stap, effectieve_ondergrens)  # noqa: F401 - re-export
 from .waardeplan_sturing import WaardeplanSturingMixin
 from .economische_schaduw_sturing import EconomischeSchaduwMixin
+from .jaarafrekening_sturing import JaarafrekeningMixin
 from .const import (
     ACCU_MEETREEKS_DAGEN,
     MAX_PLAUSIBLE_DISCHARGE_SEGMENT_PERCENT,
@@ -1235,7 +1236,7 @@ def _tel_rangorde(paren: list[tuple[float, float]]) -> tuple[int, int]:
     return eens, totaal
 
 
-class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchaduwMixin, FinancienMixin, AccuToestandMixin, UitlegMixin, LegacySturingMixin, KlimaatMixin, NilmMixin):
+class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchaduwMixin, JaarafrekeningMixin, FinancienMixin, AccuToestandMixin, UitlegMixin, LegacySturingMixin, KlimaatMixin, NilmMixin):
     """Runs the control loop that decides the Zendure operation mode."""
 
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
@@ -44769,6 +44770,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             laag.kwartiergrens(now)
         # v5.187.0: daarna het vorige kwartier van de economische schaduw afrekenen.
         self._economische_schaduw_kwartier(now, laag)
+        # v5.188.0: eens per uur de jaarafrekening verversen (achtergrond, alleen lezen).
+        self._bewaak_stap("jaarafrekening_start", lambda: self._jaarafrekening_kwartier(now))
 
     def _meetlaag_object(self):
         laag = getattr(self, "_meetlaag", None)

@@ -2292,6 +2292,14 @@ views:
         tap_action:
           action: toggle
       - type: custom:mushroom-template-card
+        primary: 'Jaarafrekening: {% set v = states(''sensor.woonkamer_energy_management_system_jaarafrekening'') | float(none) %}{{ (''€ '' ~ (v | abs | round(0) | int) ~ ('' terug'' if v >= 0 else '' bijbetalen'')) if v is not none else ''nog niet berekend'' }}'
+        secondary: 'Stand nu € {{ state_attr(''sensor.woonkamer_energy_management_system_jaarafrekening'', ''stand_eur'') }} · betaald € {{ state_attr(''sensor.woonkamer_energy_management_system_jaarafrekening'', ''betaald_eur'') }}'
+        icon: mdi:file-document-check-outline
+        icon_color: green
+        entity: sensor.woonkamer_energy_management_system_jaarafrekening
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
         primary: 'Witgoed: {{ states(''sensor.woonkamer_energy_management_system_witgoedadvies'') }}'
         secondary: '{% set a = states.sensor.woonkamer_energy_management_system_witgoedadvies.attributes if states.sensor.woonkamer_energy_management_system_witgoedadvies else {} %}{% if a.get(''gemiddeld_ct'') is not none %}gem. {{ a.gemiddeld_ct }} ct (nu {{ a.nu_starten_ct }} ct){% set s = a.get(''schaduw_2027'') or {} %}{% if a.get(''regime'') == ''salderen'' and s.get(''beste_start_tekst'') %} · 2027: {{ s.beste_start_tekst }} ({{ s.gemiddeld_ct }} ct){% endif %}{% else %}nog geen plan{% endif %}'
         icon: mdi:washing-machine

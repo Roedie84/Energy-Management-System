@@ -155,6 +155,7 @@ async def async_setup_entry(
         Repetitie2027Sensor(coordinator, entry.entry_id),
         # v5.187.0: economische schaduw (C2/C0 naast productie, alleen meten).
         EconomischeSchaduwSensor(coordinator, entry.entry_id),
+        JaarafrekeningSensor(coordinator, entry.entry_id),
         WitgoedadviesSensor(coordinator, entry.entry_id),
         P1RegeldoelSensor(coordinator, entry.entry_id),
         DagarchiefSensor(coordinator, entry.entry_id),
@@ -3531,6 +3532,31 @@ class EconomischeSchaduwSensor(ZuinigSchrijven, _V5100Sensor):
     @property
     def extra_state_attributes(self):
         return self._coordinator.get_economische_schaduw()
+
+
+class JaarafrekeningSensor(ZuinigSchrijven, _V5100Sensor):
+    """Jaarafrekening (v5.188.0): wat de afrekening van het contractjaar wordt.
+
+    Staat: het verwachte saldo bij de jaarafrekening (EUR, + = terug, - =
+    bijbetalen). Attributen: betaald, werkelijk, stand nu, opbouw, twaalf
+    maanden cumulatief, termijnadvies en de verwachting voor de nieuwe
+    gasleverancier (< 6 kB). Eens per uur uit de langetermijnstatistiek.
+    """
+
+    _attr_name = "Jaarafrekening"
+    _attr_icon = "mdi:file-document-check-outline"
+    _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_suggested_display_precision = 0
+    _sleutel = "jaarafrekening"
+
+    @property
+    def native_value(self):
+        return self._coordinator.jaarafrekening_saldo()
+
+    @property
+    def extra_state_attributes(self):
+        return self._coordinator.get_jaarafrekening()
 
 
 class WitgoedadviesSensor(_V5100Sensor):

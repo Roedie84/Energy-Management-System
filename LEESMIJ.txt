@@ -1,3 +1,21 @@
+EMS v5.188.0 - nieuw tabblad Jaarafrekening in de Energiecockpit
+
+Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Nieuwe sensor "Jaarafrekening": wat de jaarafrekening van het contractjaar wordt (+ = terug).
+  Betaald (termijnen na de afschrijving rond de 25e), werkelijke kosten tot gisteren (stroom
+  met saldering, gas, vaste kosten, min de vermindering energiebelasting), stand nu, de
+  verwachte afrekening met bandbreedte, twaalf maanden cumulatief en een termijnadvies.
+- De rest van het contractjaar wordt geschat met dezelfde dagen een jaar eerder. Na het
+  einde van de saldering (31-12-2026) levert teruglevering het tarief min de energie-
+  belasting op; dat zit al in de verwachting.
+- Gas naar een andere leverancier vanaf een datum (instelling): daarna telt het gas niet
+  meer bij deze afrekening, en de kaart toont wat de nieuwe leverancier per maand kost.
+- Instellingen (EMS > Configureren): termijnbedrag, afschrijfdag, vastrecht, netbeheer,
+  vermindering energiebelasting, overstapdatum gas en de gegevens van de nieuwe leverancier.
+  De vaste kosten zijn een schatting 2026; pas ze aan zodra de jaarafrekening er is.
+- Kaart "EMS jaarafrekening" (custom:ems-jaarafrekening-card), voor een eigen tabblad.
+
 EMS v5.187.4 - zonverwachting vandaag: geen dubbele correctie meer
 
 Installeren: via HACS bijwerken, Home Assistant herstarten en de browser verversen.

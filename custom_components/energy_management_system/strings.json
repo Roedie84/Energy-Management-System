@@ -124,7 +124,19 @@
           "teruglever_eur_vandaag_excl_sensor_entity": "Feed-in revenue today in euro, excl. VAT (optional)",
           "gas_m3_vandaag_sensor_entity": "Gas usage today in m3 (optional)",
           "gas_eur_vandaag_sensor_entity": "Gas cost today in euro, incl. VAT (optional)",
-          "gas_eur_vandaag_excl_sensor_entity": "Gas cost today in euro, excl. VAT (optional)"
+          "gas_eur_vandaag_excl_sensor_entity": "Gas cost today in euro, excl. VAT (optional)",
+          "jaar_termijn_eur": "Annual bill: monthly instalment (EUR)",
+          "jaar_afschrijfdag": "Annual bill: day of the direct debit (1-31)",
+          "jaar_vastrecht_stroom_eur_mnd": "Annual bill: fixed supply costs electricity per month (EUR, incl. VAT)",
+          "jaar_vastrecht_gas_eur_mnd": "Annual bill: fixed supply costs gas per month (EUR, incl. VAT)",
+          "jaar_netbeheer_stroom_eur_jaar": "Annual bill: grid costs electricity per year (EUR, incl. VAT)",
+          "jaar_netbeheer_gas_eur_jaar": "Annual bill: grid costs gas per year (EUR, incl. VAT)",
+          "jaar_vermindering_eb_eur_jaar": "Annual bill: energy tax reduction per year (EUR, incl. VAT)",
+          "gas_overstap_datum": "Gas moves to another supplier from (optional, YYYY-MM-DD)",
+          "gas_nieuw_prijs_entity": "New gas supplier: price per m³ (sensor or input_number)",
+          "gas_nieuw_vastrecht_eur_mnd": "New gas supplier: fixed supply costs per month (EUR)",
+          "gas_nieuw_korting_eur_jaar": "New gas supplier: discount per year (EUR)",
+          "gas_nieuw_termijn_eur": "New gas supplier: monthly instalment (EUR, optional)"
         }
       }
     },
@@ -262,7 +274,19 @@
           "teruglever_eur_vandaag_excl_sensor_entity": "Feed-in revenue today in euro, excl. VAT (optional)",
           "gas_m3_vandaag_sensor_entity": "Gas usage today in m3 (optional)",
           "gas_eur_vandaag_sensor_entity": "Gas cost today in euro, incl. VAT (optional)",
-          "gas_eur_vandaag_excl_sensor_entity": "Gas cost today in euro, excl. VAT (optional)"
+          "gas_eur_vandaag_excl_sensor_entity": "Gas cost today in euro, excl. VAT (optional)",
+          "jaar_termijn_eur": "Annual bill: monthly instalment (EUR)",
+          "jaar_afschrijfdag": "Annual bill: day of the direct debit (1-31)",
+          "jaar_vastrecht_stroom_eur_mnd": "Annual bill: fixed supply costs electricity per month (EUR, incl. VAT)",
+          "jaar_vastrecht_gas_eur_mnd": "Annual bill: fixed supply costs gas per month (EUR, incl. VAT)",
+          "jaar_netbeheer_stroom_eur_jaar": "Annual bill: grid costs electricity per year (EUR, incl. VAT)",
+          "jaar_netbeheer_gas_eur_jaar": "Annual bill: grid costs gas per year (EUR, incl. VAT)",
+          "jaar_vermindering_eb_eur_jaar": "Annual bill: energy tax reduction per year (EUR, incl. VAT)",
+          "gas_overstap_datum": "Gas moves to another supplier from (optional, YYYY-MM-DD)",
+          "gas_nieuw_prijs_entity": "New gas supplier: price per m³ (sensor or input_number)",
+          "gas_nieuw_vastrecht_eur_mnd": "New gas supplier: fixed supply costs per month (EUR)",
+          "gas_nieuw_korting_eur_jaar": "New gas supplier: discount per year (EUR)",
+          "gas_nieuw_termijn_eur": "New gas supplier: monthly instalment (EUR, optional)"
         }
       }
     },

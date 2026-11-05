@@ -124,7 +124,19 @@
           "teruglever_eur_vandaag_excl_sensor_entity": "Opbrengst teruglevering vandaag in euro, excl. btw (optioneel)",
           "gas_m3_vandaag_sensor_entity": "Gasverbruik vandaag in m3 (optioneel)",
           "gas_eur_vandaag_sensor_entity": "Gaskosten vandaag in euro, incl. btw (optioneel)",
-          "gas_eur_vandaag_excl_sensor_entity": "Gaskosten vandaag in euro, excl. btw (optioneel)"
+          "gas_eur_vandaag_excl_sensor_entity": "Gaskosten vandaag in euro, excl. btw (optioneel)",
+          "jaar_termijn_eur": "Jaarafrekening: termijnbedrag per maand (EUR)",
+          "jaar_afschrijfdag": "Jaarafrekening: dag van de afschrijving (1-31)",
+          "jaar_vastrecht_stroom_eur_mnd": "Jaarafrekening: vaste leveringskosten stroom per maand (EUR, incl. btw)",
+          "jaar_vastrecht_gas_eur_mnd": "Jaarafrekening: vaste leveringskosten gas per maand (EUR, incl. btw)",
+          "jaar_netbeheer_stroom_eur_jaar": "Jaarafrekening: netbeheerkosten stroom per jaar (EUR, incl. btw)",
+          "jaar_netbeheer_gas_eur_jaar": "Jaarafrekening: netbeheerkosten gas per jaar (EUR, incl. btw)",
+          "jaar_vermindering_eb_eur_jaar": "Jaarafrekening: vermindering energiebelasting per jaar (EUR, incl. btw)",
+          "gas_overstap_datum": "Gas naar een andere leverancier vanaf (optioneel, JJJJ-MM-DD)",
+          "gas_nieuw_prijs_entity": "Nieuwe gasleverancier: prijs per m³ (sensor of input_number)",
+          "gas_nieuw_vastrecht_eur_mnd": "Nieuwe gasleverancier: vaste leveringskosten per maand (EUR)",
+          "gas_nieuw_korting_eur_jaar": "Nieuwe gasleverancier: korting per jaar (EUR)",
+          "gas_nieuw_termijn_eur": "Nieuwe gasleverancier: termijnbedrag per maand (EUR, optioneel)"
         }
       }
     },
@@ -262,7 +274,19 @@
           "teruglever_eur_vandaag_excl_sensor_entity": "Opbrengst teruglevering vandaag in euro, excl. btw (optioneel)",
           "gas_m3_vandaag_sensor_entity": "Gasverbruik vandaag in m3 (optioneel)",
           "gas_eur_vandaag_sensor_entity": "Gaskosten vandaag in euro, incl. btw (optioneel)",
-          "gas_eur_vandaag_excl_sensor_entity": "Gaskosten vandaag in euro, excl. btw (optioneel)"
+          "gas_eur_vandaag_excl_sensor_entity": "Gaskosten vandaag in euro, excl. btw (optioneel)",
+          "jaar_termijn_eur": "Jaarafrekening: termijnbedrag per maand (EUR)",
+          "jaar_afschrijfdag": "Jaarafrekening: dag van de afschrijving (1-31)",
+          "jaar_vastrecht_stroom_eur_mnd": "Jaarafrekening: vaste leveringskosten stroom per maand (EUR, incl. btw)",
+          "jaar_vastrecht_gas_eur_mnd": "Jaarafrekening: vaste leveringskosten gas per maand (EUR, incl. btw)",
+          "jaar_netbeheer_stroom_eur_jaar": "Jaarafrekening: netbeheerkosten stroom per jaar (EUR, incl. btw)",
+          "jaar_netbeheer_gas_eur_jaar": "Jaarafrekening: netbeheerkosten gas per jaar (EUR, incl. btw)",
+          "jaar_vermindering_eb_eur_jaar": "Jaarafrekening: vermindering energiebelasting per jaar (EUR, incl. btw)",
+          "gas_overstap_datum": "Gas naar een andere leverancier vanaf (optioneel, JJJJ-MM-DD)",
+          "gas_nieuw_prijs_entity": "Nieuwe gasleverancier: prijs per m³ (sensor of input_number)",
+          "gas_nieuw_vastrecht_eur_mnd": "Nieuwe gasleverancier: vaste leveringskosten per maand (EUR)",
+          "gas_nieuw_korting_eur_jaar": "Nieuwe gasleverancier: korting per jaar (EUR)",
+          "gas_nieuw_termijn_eur": "Nieuwe gasleverancier: termijnbedrag per maand (EUR, optioneel)"
         }
       }
     },

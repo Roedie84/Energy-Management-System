@@ -35049,3 +35049,15 @@ Gemeld 05-11 10:33 (onbewolkt): plan 1,54 kW, gemeten 1,20 kW, Solcast 1,67 kW (
 - ZON_RECENT_MIN 0,5 -> 0,3 (ratio tegen ruwe Solcast kan op een grijze dag lager).
 
 Tests: `test_v5187_4_zon_mengen.py`; `test_v5186_C_zon.py::test_veilig_houdt_de_min_regel` op het mengen aangepast.
+
+## v5.188.0 — jaarafrekening (tabblad in de Energiecockpit)
+
+Gevraagd 05-11 (Ruud): "Ik betaal Zonneplan nu maandelijks 70 euro, hoeveel ik nog over heb t.o.v. verwachte jaarrekening." Contractjaar vanaf 1 april, afschrijving rond de 25e, gas tot 22-11 bij Zonneplan en daarna 60 euro per maand bij een andere leverancier.
+
+- `jaarafrekening.py` (zuiver): contractjaar, afschrijfdatums, werkelijk tot gisteren (dagkosten afname/teruglevering/gas van de leverancier + vastrecht en netbeheer naar rato − vermindering EB), schatting rest met dezelfde dag een jaar eerder (na `salderen_end_date`: teruglevering − kWh x EB 0,11085 incl. btw; gas na de overstapdatum = 0), bandbreedte 25 % van het variabele deel, maandreeks, termijnadvies (op 5 euro naar boven) en de verwachting bij de nieuwe gasleverancier (m³ laatste 365 dagen).
+- `jaarafrekening_sturing.py`: eens per uur op een kwartiergrens (achtergrondtaak) de dagtotalen ("change", periode dag) uit de langetermijnstatistiek van de bestaande bronnen (inkoop/teruglever/gas EUR vandaag, gas m³ vandaag, P1-import/-export kWh), contractjaar plus het jaar ervoor. Stuurt niets; fout -> internal_failures["jaarafrekening"].
+- Sensor `Jaarafrekening` (staat = verwacht saldo, attributen < 6 kB), diagnostiek `jaarafrekening`.
+- Nieuwe opties (standaard: Zonneplan vastrecht 6,25/6,25 per maand, netbeheer Liander 2026 478/267 per jaar, vermindering EB 628,96, termijn 70, afschrijfdag 25): overstapdatum gas, prijsentiteit, vastrecht, korting en termijn van de nieuwe gasleverancier.
+- Cockpit: `custom:ems-jaarafrekening-card` in `ems-cockpit.js` (zelfde resource), opmaak als de cockpit.
+
+Tests: `test_v5188_jaarafrekening.py`.

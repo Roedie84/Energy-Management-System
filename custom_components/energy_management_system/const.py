@@ -8326,3 +8326,35 @@ ONDERGRENS_WAARNEMINGEN_BEWAARD = 10
 ACCU_SLUIMER_GRENS_W = 50.0
 #: Zoveel afgesloten dagen in de vergelijking van de besparingscijfers.
 BESPARING_VERGELIJK_DAGEN = 7
+
+# --- v5.188.0: jaarafrekening (Ruud 05-11-2026) ------------------------
+# "Ik betaal Zonneplan nu maandelijks 70 euro, hoeveel ik nog over heb t.o.v.
+# verwachte jaarrekening etc." Contractjaar via CONF_CONTRACT_START_DATE; de
+# termijn wordt rond de 25e afgeschreven. Vaste kosten zijn een schatting 2026
+# (Zonneplan vastrecht 6,25 per product per maand, netbeheer Liander 478/267
+# per jaar, vermindering energiebelasting 628,96); aan te passen zodra de
+# jaarafrekening er is. Gas gaat op 22-11-2026 naar een andere leverancier met
+# een vaste prijs (input_number.gasprijs_vast_contract).
+CONF_JAAR_TERMIJN_EUR = "jaar_termijn_eur"
+CONF_JAAR_AFSCHRIJFDAG = "jaar_afschrijfdag"
+CONF_JAAR_VASTRECHT_STROOM_MND = "jaar_vastrecht_stroom_eur_mnd"
+CONF_JAAR_VASTRECHT_GAS_MND = "jaar_vastrecht_gas_eur_mnd"
+CONF_JAAR_NETBEHEER_STROOM_JAAR = "jaar_netbeheer_stroom_eur_jaar"
+CONF_JAAR_NETBEHEER_GAS_JAAR = "jaar_netbeheer_gas_eur_jaar"
+CONF_JAAR_VERMINDERING_EB_JAAR = "jaar_vermindering_eb_eur_jaar"
+CONF_GAS_OVERSTAP_DATUM = "gas_overstap_datum"
+CONF_GAS_NIEUW_PRIJS_ENTITY = "gas_nieuw_prijs_entity"
+CONF_GAS_NIEUW_VASTRECHT_MND = "gas_nieuw_vastrecht_eur_mnd"
+CONF_GAS_NIEUW_KORTING_JAAR = "gas_nieuw_korting_eur_jaar"
+CONF_GAS_NIEUW_TERMIJN_EUR = "gas_nieuw_termijn_eur"
+DEFAULT_JAAR_TERMIJN_EUR = 70.0
+DEFAULT_JAAR_AFSCHRIJFDAG = 25
+DEFAULT_JAAR_VASTRECHT_STROOM_MND = 6.25
+DEFAULT_JAAR_VASTRECHT_GAS_MND = 6.25
+DEFAULT_JAAR_NETBEHEER_STROOM_JAAR = 478.0
+DEFAULT_JAAR_NETBEHEER_GAS_JAAR = 267.0
+DEFAULT_JAAR_VERMINDERING_EB_JAAR = 628.96
+DEFAULT_GAS_NIEUW_VASTRECHT_MND = 8.33
+DEFAULT_GAS_NIEUW_KORTING_JAAR = 210.0
+#: Zo vaak worden de dagtotalen opnieuw uit de langetermijnstatistiek gelezen.
+JAARAFREKENING_VERVERS_S = 3600
