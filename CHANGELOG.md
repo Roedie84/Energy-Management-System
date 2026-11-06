@@ -35061,3 +35061,12 @@ Gevraagd 05-11 (Ruud): "Ik betaal Zonneplan nu maandelijks 70 euro, hoeveel ik n
 - Cockpit: `custom:ems-jaarafrekening-card` in `ems-cockpit.js` (zelfde resource), opmaak als de cockpit.
 
 Tests: `test_v5188_jaarafrekening.py`.
+
+## v5.189.0 — tekortkans over het nachtvenster (L-EMS-068) en vlag 'huis gaat voor' per kwartier (L-EMS-069)
+
+Dagcontrole 05-11 legde twee keuzes voor; Ruud 06-11: "Jij moet voor mij de beste keuze maken zodat het een perfect EMS wordt." Alleen meten en rapporteren; de sturing is ongewijzigd.
+
+- L-EMS-068: de tekortkans rekent tot het goedkope blok. Ligt dat de dag erna na 12:00, dan telde de kans van 22:00 ook de ochtend mee, terwijl de tekortnacht om 09:00 afloopt; die avonden vielen buiten de Brier (01-11 en 02-11). Nu ook de kans over het venster van de tekortnacht (`_monte_carlo_nachttrajecten`: dezelfde trajecten tot het eerstvolgende 09:00, of het blok als dat eerder komt). Kenmerken `tekortkans_nacht_pct` en `tekortkans_nacht_tot`; de stand van 22:00 bewaart `kans_nacht_pct` en de kalibratie telt die altijd mee (`nachten_venster_tot_9u`). De stand van de sensor blijft de kans tot het blok (wat de reserve afweegt).
+- L-EMS-069: de vlag telde de dagsom van het regeloverschot (> 0,1 kWh). 04-11 (0,159) en 05-11 (0,211) stonden op geschonden door P1-rimpel boven de reserve. Nu per kwartier: schending is een kwartier met >= `HUIS_GAAT_VOOR_LEK_KWARTIER_KWH` (0,05 kWh, gemiddeld 200 W: een lek, geen rimpel) of export uit de accu zonder verkoopbesluit onder de verkoopreserve (vanaf 25 Wh). Nieuw per dag: `lek_kwartieren`, `overschot_onder_reserve_kwartieren`, `rimpel_kwh`, `regel`. Verkoop onder de reserve blijft altijd een schending.
+
+Tests: `test_v5189_tekortkans_en_harde_regel.py`.

@@ -1088,6 +1088,16 @@ VASTE_NACHT_TOT_UUR = 7
 # v5.159.0: regeloverschot (export uit de accu zonder verkoopbesluit) boven
 # deze hoeveelheid per dag telt als schending van 'huis gaat voor'.
 HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH = 0.1
+# v5.189.0 (L-EMS-069, keuze Claude in opdracht van Ruud 06-11): de vlag
+# kijkt per kwartier in plaats van naar de dagsom. P1-rimpel (de accu loopt
+# een paar seconden na als een last wegvalt) geeft veel kleine stukjes van
+# 5-40 Wh die over een dag optellen tot 0,1-0,2 kWh - geen schending van
+# 'huis gaat voor'. Een schending is: (1) een kwartier met minstens
+# HUIS_GAAT_VOOR_LEK_KWARTIER_KWH export uit de accu zonder verkoopbesluit
+# (gemiddeld 200 W: structureel lek, geen rimpel), of (2) export uit de accu
+# zonder verkoopbesluit terwijl de accu onder de verkoopreserve zat (vanaf
+# EXPORT_VERKOOP_MIN_KWH). De dagsom blijft zichtbaar als rimpel.
+HUIS_GAAT_VOOR_LEK_KWARTIER_KWH = 0.05
 
 # Hoeveel graden de gemeten punten uit elkaar moeten liggen voordat een
 # helling iets betekent (v3.39.0).

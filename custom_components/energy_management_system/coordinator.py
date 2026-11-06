@@ -734,6 +734,7 @@ from .const import (
     VASTE_NACHT_VAN_UUR,
     VASTE_NACHT_TOT_UUR,
     HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH,
+    HUIS_GAAT_VOOR_LEK_KWARTIER_KWH,
     CONF_BATTERY_MAX_SOC_NUMBER,
     CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
     CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
@@ -23831,6 +23832,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         )
         verkoop: list = []
         regeloverschot: dict = {}
+        # v5.189.0 (L-EMS-069): per kwartier, met de marge op dat moment.
+        overschot_kwartieren: dict = {}
         for dag in sorted(self.dagverloop or {})[-2:]:
             for regel in self.dagverloop.get(dag) or []:
                 if not isinstance(regel, dict):
@@ -23840,6 +23843,13 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                     if not regel.get("verkocht"):
                         if regel.get("regeloverschot_kwh"):
                             regeloverschot[dag] = regeloverschot.get(dag, 0.0) + float(regel["regeloverschot_kwh"])
+                            marge = regel.get("marge_bij_export_min_kwh")
+                            if marge is None:
+                                marge = regel.get("marge_kwh")
+                            overschot_kwartieren.setdefault(dag, []).append(
+                                {"tijd": regel.get("tijd"), "kwh": float(regel["regeloverschot_kwh"]),
+                                 "marge_kwh": marge if isinstance(marge, (int, float)) else None}
+                            )
                         continue
                 elif regel.get("marge_bij_export_min_kwh") is None:
                     continue
@@ -23887,7 +23897,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             # 01-11 een schending (0,38 kWh export uit de accu zonder
             # verkoopvrijgave), de leerronde 0x, omdat alleen verkoop onder
             # de reserve telde. Nu: verkoop onder de reserve EN regeloverschot.
-            "huis_gaat_voor": self._huis_gaat_voor_kpi(verkoop, regeloverschot),
+            "huis_gaat_voor": self._huis_gaat_voor_kpi(verkoop, regeloverschot, overschot_kwartieren),
             "spaarplan_behoefte_bron": plan.get("behoefte_bron"),
             "spaarplan_eigen_tot_blok_kwh": plan.get("spaarplan_eigen_tot_blok_kwh"),
             "spaarplan_nodig_tot_blok_kwh": plan.get("nodig_tot_blok_kwh"),
@@ -23912,24 +23922,56 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         return uit
 
     @staticmethod
-    def _huis_gaat_voor_kpi(verkoop: list, regeloverschot: dict) -> dict:
+    def _huis_gaat_voor_kpi(
+        verkoop: list, regeloverschot: dict, per_kwartier: dict | None = None
+    ) -> dict:
         """Per dag: verkoopkwartieren onder de reserve en het regeloverschot
         (v5.159.0). `geschonden` als er onder de reserve verkocht is of meer
-        dan HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH regeloverschot was."""
+        dan HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH regeloverschot was.
+
+        v5.189.0 (L-EMS-069): met `per_kwartier` ({dag: [{kwh, marge_kwh}]})
+        telt het regeloverschot per kwartier. Schending: een kwartier met
+        minstens HUIS_GAAT_VOOR_LEK_KWARTIER_KWH (structureel lek), of export
+        uit de accu zonder verkoopbesluit terwijl de accu onder de
+        verkoopreserve zat (vanaf EXPORT_VERKOOP_MIN_KWH). Kleine stukjes P1-
+        rimpel boven de reserve tellen alleen als `rimpel_kwh`. 04-11 (0,159)
+        en 05-11 (0,211) stonden zo op geschonden zonder dat er iets onder de
+        reserve wegging. Zonder `per_kwartier` de oude dagsomregel.
+        """
         dagen: dict = {}
+        leeg = lambda: {"onder_reserve_kwartieren": 0, "regeloverschot_kwh": 0.0}  # noqa: E731
         for r in verkoop:
-            d = dagen.setdefault(r.get("dag"), {"onder_reserve_kwartieren": 0, "regeloverschot_kwh": 0.0})
+            d = dagen.setdefault(r.get("dag"), leeg())
             marge = r.get("marge_bij_export_min_kwh")
             if marge is not None and marge < 0:
                 d["onder_reserve_kwartieren"] += 1
         for dag, kwh in regeloverschot.items():
-            d = dagen.setdefault(dag, {"onder_reserve_kwartieren": 0, "regeloverschot_kwh": 0.0})
+            d = dagen.setdefault(dag, leeg())
             d["regeloverschot_kwh"] = round(float(kwh), 3)
-        for d in dagen.values():
-            d["geschonden"] = bool(
-                d["onder_reserve_kwartieren"]
-                or d["regeloverschot_kwh"] > HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH
-            )
+        if per_kwartier is None:
+            for d in dagen.values():
+                d["geschonden"] = bool(
+                    d["onder_reserve_kwartieren"]
+                    or d["regeloverschot_kwh"] > HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH
+                )
+            return dict(sorted(dagen.items()))
+        for dag, d in dagen.items():
+            lek = onder = 0
+            rimpel = 0.0
+            for k in per_kwartier.get(dag) or []:
+                kwh = float(k.get("kwh") or 0.0)
+                marge = k.get("marge_kwh")
+                if kwh >= HUIS_GAAT_VOOR_LEK_KWARTIER_KWH:
+                    lek += 1
+                elif isinstance(marge, (int, float)) and marge < 0 and kwh >= EXPORT_VERKOOP_MIN_KWH:
+                    onder += 1
+                else:
+                    rimpel += kwh
+            d["lek_kwartieren"] = lek
+            d["overschot_onder_reserve_kwartieren"] = onder
+            d["rimpel_kwh"] = round(rimpel, 3)
+            d["geschonden"] = bool(d["onder_reserve_kwartieren"] or lek or onder)
+            d["regel"] = "per kwartier (L-EMS-069)"
         return dict(sorted(dagen.items()))
 
     def _plan_verkoopruimte(
@@ -37527,7 +37569,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         self.monte_carlo_deterministisch_kwh = self.monte_carlo_lange_extra_kwh = None
         self.monte_carlo_shortfall_probability_percent = None
         # v5.47: tot het blok (de stand) en inclusief lange horizon apart.
-        self.monte_carlo_kans_incl_lange_horizon_pct = None
+        # v5.189.0 (L-EMS-068): ook de kans over het venster van de tekortnacht.
+        self.monte_carlo_kans_incl_lange_horizon_pct = self.monte_carlo_kans_nacht_pct = None
+        self.monte_carlo_nacht_tot = None
         self.monte_carlo_mediaan_tot_blok_kwh = None
         self.monte_carlo_p90_tot_blok_kwh = None
         self.monte_carlo_deterministisch_tot_blok_kwh = None
@@ -37597,6 +37641,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             segments, centrum, vakantie_factor, 0.0
         )
         tot_blok.sort()
+        nacht = self._monte_carlo_nachttrajecten(
+            start, segments, centrum, vakantie_factor, tot_blok
+        )
         deepest_deficits = [d + lange_extra for d in tot_blok]
         n = len(deepest_deficits)
         self.monte_carlo_mediaan_tot_blok_kwh = round(tot_blok[n // 2], 3)
@@ -37633,6 +37680,10 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             self.monte_carlo_kans_incl_lange_horizon_pct = round(
                 100 * sum(1 for d in deepest_deficits if d > grens) / n, 1
             )
+            # v5.189.0 (L-EMS-068): hetzelfde venster als de tekortnacht.
+            self.monte_carlo_kans_nacht_pct = round(
+                100 * sum(1 for d in nacht if d > grens) / len(nacht), 1
+            ) if nacht else 0.0
             # v5.141.0 (L-EMS-041): loopt het goedkope blok al om 22:00, dan
             # begint de simulatie aan het blokeinde (v5.93.0). Die avond werd
             # stil overgeslagen; nu bewaard met een eigen basis, zodat de
@@ -37655,6 +37706,31 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             "verhouding. Stuurt nooit een commando en past de werkelijke "
             "reserve-marge niet aan."
         )
+
+    def _monte_carlo_nachttrajecten(
+        self, start: datetime, segments: list, centrum: list,
+        vakantie_factor: float, tot_blok: list,
+    ) -> list:
+        """De trajecten over het venster van de tekortnacht (v5.189.0,
+        L-EMS-068, keuze Claude in opdracht van Ruud 06-11).
+
+        De stand rekent tot het goedkope blok; ligt dat de dag erna om 13:00,
+        dan telde de kans van 22:00 ook de ochtend na 09:00 mee, terwijl een
+        tekortnacht om 09:00 afloopt. Zulke avonden vielen buiten de Brier
+        (01-11, 02-11: 2 van de 7). Hier: dezelfde trajecten, afgekapt op het
+        eerstvolgende 09:00 na de start (of het blok als dat eerder komt).
+        Ligt het hele venster vóór 09:00, dan is het de lijst `tot_blok`.
+        """
+        eind = self._monte_carlo_terugval_horizon(start)
+        self.monte_carlo_nacht_tot = min(eind, segments[-1][2]) if segments else eind
+        k = sum(1 for _uur, _frac, seg_eind in segments if seg_eind <= eind)
+        if k >= len(segments):
+            return list(tot_blok)
+        if k <= 0:
+            return []
+        uit = self._monte_carlo_trajecten(segments[:k], centrum[:k], vakantie_factor, 0.0)
+        uit.sort()
+        return uit
 
     def _leg_mc_22u_vast(
         self, now: datetime, beschikbaar_kwh: float | None,
@@ -37686,6 +37762,13 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             "basis": basis,
             "kans_incl_lange_horizon_pct": getattr(
                 self, "monte_carlo_kans_incl_lange_horizon_pct", None
+            ),
+            # v5.189.0 (L-EMS-068): de kans tot 09:00 - telt in de Brier.
+            "kans_nacht_pct": getattr(self, "monte_carlo_kans_nacht_pct", None),
+            "nacht_tot": (
+                self.monte_carlo_nacht_tot.isoformat()
+                if isinstance(getattr(self, "monte_carlo_nacht_tot", None), datetime)
+                else None
             ),
             "lange_horizon_extra_kwh": self.monte_carlo_lange_extra_kwh,
             "deterministisch_kwh": self.monte_carlo_deterministisch_kwh,
@@ -37760,6 +37843,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         andere: list = []
         in_blok: list = []
         oude_basis = 0
+        nacht_venster = 0
         for r in self.reserve_daily_records or []:
             stand = r.get("mc_22u") if isinstance(r, dict) else None
             if not isinstance(stand, dict) or stand.get("kans_pct") is None:
@@ -37781,6 +37865,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 oude_basis += 1
                 continue
             uitkomst = 1 if r.get("shortfall") else 0
+            # v5.189.0 (L-EMS-068): de kans tot 09:00 meet precies de nacht
+            # en telt dus altijd; oudere standen zoals voorheen.
+            if stand.get("kans_nacht_pct") is not None:
+                paren.append((r.get("date"), float(stand["kans_nacht_pct"]) / 100, uitkomst))
+                nacht_venster += 1
+                continue
             paar = (r.get("date"), float(stand["kans_pct"]) / 100, uitkomst)
             # v5.119.0 (L-EMS-029): andere horizon apart.
             avond = self._avond_voor(r.get("date"))
@@ -37810,6 +37900,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                     "kans_pct": stand.get("kans_pct"),
                     "basis": stand.get("basis"),
                     "kans_incl_lange_horizon_pct": stand.get("kans_incl_lange_horizon_pct"),
+                    "kans_nacht_pct": stand.get("kans_nacht_pct"),
                     "beschikbaar_kwh": stand.get("beschikbaar_kwh"),
                 }
         return {
@@ -37817,7 +37908,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             "brier": brier,
             "laatste_avond": laatste,
             "avonden_bewaard": len(avonden),
-            "basis": "kans tot het goedkope blok om 22:00 tegen de tekortnacht",
+            "basis": (
+                "kans om 22:00 over het venster van de tekortnacht (tot 09:00, "
+                "of het blok als dat eerder komt) tegen de tekortnacht; oudere "
+                "avonden: kans tot het goedkope blok"
+            ),
+            "nachten_venster_tot_9u": nacht_venster,
             "nachten_oude_basis_uitgesloten": oude_basis,
             "per_nacht": [self._nacht_paar(p) for p in paren],
             # v5.119.0 (L-EMS-029): avonden met het blok na 12:00 de dag erna.
@@ -37855,6 +37951,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
     monte_carlo_lange_extra_kwh: float | None = None
     # v5.47: de splitsing rond het blok (L-EMS-006), idem.
     monte_carlo_kans_incl_lange_horizon_pct: float | None = None
+    # v5.189.0 (L-EMS-068), idem.
+    monte_carlo_kans_nacht_pct: float | None = None
+    monte_carlo_nacht_tot: datetime | None = None
     monte_carlo_mediaan_tot_blok_kwh: float | None = None
     monte_carlo_p90_tot_blok_kwh: float | None = None
     monte_carlo_deterministisch_tot_blok_kwh: float | None = None

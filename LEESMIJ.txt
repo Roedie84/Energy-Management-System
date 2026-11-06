@@ -1,3 +1,11 @@
+EMS v5.189.0 - tekortkans over de nacht en eerlijke vlag 'huis gaat voor'
+
+Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen.
+
+- Tekortkans (Monte Carlo): nieuw kenmerk tekortkans_nacht_pct over hetzelfde venster als de tekortnacht (tot 09:00). De kalibratie (Brier) van 22:00 gebruikt dat getal, zodat elke nacht meetelt.
+- Vlag 'huis gaat voor' per kwartier: P1-rimpel (kleine stukjes export bij een wegvallende last, boven de reserve) is geen schending meer. Schending = een kwartier met >= 0,05 kWh export uit de accu zonder verkoopbesluit, of export onder de verkoopreserve. De rimpel blijft zichtbaar (rimpel_kwh).
+- Sturing ongewijzigd.
+
 EMS v5.188.0 - nieuw tabblad Jaarafrekening in de Energiecockpit
 
 Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen.

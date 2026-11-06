@@ -2134,6 +2134,15 @@ class MonteCarloAdvisorySensor(ZuinigSchrijven, SensorEntity):
             "tekortkans_incl_lange_horizon_pct": getattr(
                 self._coordinator, "monte_carlo_kans_incl_lange_horizon_pct", None
             ),
+            # v5.189.0 (L-EMS-068): het venster van de tekortnacht (tot 09:00).
+            "tekortkans_nacht_pct": getattr(
+                self._coordinator, "monte_carlo_kans_nacht_pct", None
+            ),
+            "tekortkans_nacht_tot": (
+                self._coordinator.monte_carlo_nacht_tot.isoformat()
+                if isinstance(getattr(self._coordinator, "monte_carlo_nacht_tot", None), datetime)
+                else None
+            ),
             "mediaan_diepste_tekort_tot_blok_kwh": getattr(
                 self._coordinator, "monte_carlo_mediaan_tot_blok_kwh", None
             ),
