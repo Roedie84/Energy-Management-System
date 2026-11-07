@@ -516,3 +516,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: system_log 3.178× 'State Geen voorspelling bij 2.3°C: ... is longer than 255' (06-11 08:20 - 07-11 09:30), toestand unknown.
 - Bouw: toestand via `kort_op_zinsgrens`; volledige tekst in `temperatuur_regressie_note`.
 - Meten: geen fout meer in de log; toestand niet unknown.
+
+## L-EMS-072 · panelen bedekt door sneeuw/ijs herkennen (wens Ruud 07-11)
+- Status: **gebouwd v5.190.0** (akkoord Ruud 07-11 10:04). Wacht op installatie.
+- Aanleiding: 07-11 rijp op de panelen (camera zolder). 09-10 u 622 W tegen 753-811 W op heldere dagen (~0,15 kWh, < € 0,10). Camera afgewezen (raam, reflectie, schemer); herkenning op de heldere-hemel-ijklijn.
+- Bouw: vorst (≤ 0,5 °C, 36 u geldig) + bewolking ≤ 40 % + < 35 % van de ijklijn, 60 min = bedekt; vrij bij ≥ 60 % 15 min; verval 72 u. Zonschatting dan gemeten verhouding (≤ 0,35); uren/dagen niet geleerd. Rijp van 07-11 haalt de drempel niet.
+- Verwacht effect: bij sneeuw enkele euro's per periode (geen zon verwachten die niet komt); geen te sombere correctie na de dooi.
+- Meten: `panelen_bedekt` op Zonvoorspelling ijking; aantal valse meldingen (bedekt terwijl de camera schone panelen toont).
