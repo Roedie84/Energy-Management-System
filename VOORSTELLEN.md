@@ -523,3 +523,11 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: vorst (≤ 0,5 °C, 36 u geldig) + bewolking ≤ 40 % + < 35 % van de ijklijn, 60 min = bedekt; vrij bij ≥ 60 % 15 min; verval 72 u. Zonschatting dan gemeten verhouding (≤ 0,35); uren/dagen niet geleerd. Rijp van 07-11 haalt de drempel niet.
 - Verwacht effect: bij sneeuw enkele euro's per periode (geen zon verwachten die niet komt); geen te sombere correctie na de dooi.
 - Meten: `panelen_bedekt` op Zonvoorspelling ijking; aantal valse meldingen (bedekt terwijl de camera schone panelen toont).
+
+## L-EMS-073 · laadplan vervroegen bij koude accu (wens Ruud 07-11)
+- Status: **gebouwd v5.191.0** (akkoord Ruud 07-11 10:33). Wacht op installatie.
+- Aanleiding: AB3000-modules verwarmen zich bij vorst eerst; het plan rekende met vol laadvermogen. 28-10..07-11: verwarming nooit aan, koudste cel 7 °C.
+- Bouw: koud = koudste module ≤ 1 °C of heat_state aan; plan 12 u met laadfactor (50 %, na 4 metingen de mediaan van geladen/opdracht); opdracht in deelkwartier / factor.
+- Verwacht effect: bij vorst een volle(re) accu voor het dure blok; niet te becijferen voor er gemeten is.
+- Meten: `koude_laden` op Accu modulegezondheid (metingen, verwarmingen, laadfactor); SoC aan het begin van het dure blok bij koude nachten.
+- Let op: module 00996 is vervangen door 02093 (Ruud 07-11).
