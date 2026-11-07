@@ -1,3 +1,10 @@
+EMS v5.192.0 - airco kiest het goedkoopste moment om op te warmen
+
+Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen. Bevat ook v5.189.0 tot en met v5.191.0.
+
+- Met de knop Airco automaat aan begint het opwarmen tot 2 uur eerder als dat goedkoper is, inclusief de kosten van het langer warm houden. Scheelt het minder dan 2 ct, dan zoals voorheen.
+- Niemand thuis: de airco gaat niet aan.
+
 EMS v5.191.0 - laadplan rekent met de opwarmtijd van een koude accu
 
 Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen. Bevat ook v5.189.0 tot en met v5.190.0.

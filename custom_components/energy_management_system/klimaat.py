@@ -49,6 +49,8 @@ from .const import (
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_AIRCO_POWER_SENSOR,
     CONF_AIRCO_RAAM_ENTITIES,
+    CONF_AIRCO_COP_BIJ_7C,
+    CONF_AIRCO_COP_PER_GRAAD,
     CONF_AIRCO_UIT_OM,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
     CONF_KNMI_WEATHER_ENTITY,
@@ -59,6 +61,7 @@ from .const import (
     CONF_OPENWEATHERMAP_WEATHER_ENTITY,
     CONF_PV_POWER_SENSOR,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
+    DEFAULT_AIRCO_COP_PER_GRAAD,
     DEFAULT_AIRCO_UIT_OM,
     DOMAIN,
     LIVING_ROOM_TEMP_BUCKET_SIZE_C,
@@ -2237,6 +2240,47 @@ class KlimaatMixin:
             return False
         return loopt and loopt_tot is not None and loopt_tot > now
 
+    def _airco_kost_per_uur(self, now: datetime, ritme: dict):
+        """Wat een uur verwarmen op vol vermogen vanaf een minuut van vandaag
+        kost (v5.192.0, L-EMS-074): kwartierprijs x vermogen, gecorrigeerd voor
+        het rendement bij de voorspelde buitentemperatuur (t.o.v. nu). None als
+        er geen prijs is; dan blijft het opwarmmoment zoals het was."""
+        from .slimme_bronnen import cop_bij
+
+        vermogen = airco_ritme.verwarmvermogen_kw(ritme) or 1.0
+        cop_opties = dict(
+            cop_bij_7c=self.instelling(CONF_AIRCO_COP_BIJ_7C, None),
+            cop_per_graad=self.instelling(CONF_AIRCO_COP_PER_GRAAD, DEFAULT_AIRCO_COP_PER_GRAAD),
+        )
+        try:
+            buiten_nu = self._get_live_outdoor_temp_c(now)
+        except Exception:  # noqa: BLE001
+            buiten_nu = None
+        cop_nu = cop_bij(buiten_nu, **cop_opties)
+        middernacht = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        cache: dict = {}
+
+        def kost(minuut: int):
+            if minuut in cache:
+                return cache[minuut]
+            moment = middernacht + timedelta(minutes=minuut)
+            try:
+                prijs = self.huidige_prijs_eur_per_kwh(moment)
+            except Exception:  # noqa: BLE001
+                prijs = None
+            if prijs is None:
+                cache[minuut] = None
+                return None
+            try:
+                buiten = self._voorspelde_buitentemp_c(moment, moment + timedelta(minutes=15))
+            except Exception:  # noqa: BLE001
+                buiten = None
+            cop = cop_bij(buiten if buiten is not None else buiten_nu, **cop_opties)
+            cache[minuut] = float(prijs) * vermogen * (cop_nu / cop if cop else 1.0)
+            return cache[minuut]
+
+        return kost
+
     def _airco_ritme_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
         """Het dagritme naast het gewone besluit (v5.65) - zie `airco_ritme`.
 
@@ -2263,6 +2307,7 @@ class KlimaatMixin:
             advies=(self.get_verwarmingsadvies() or {}).get("advies"),
             airco_stand=stand,
             bedtijd_vast=airco_ritme.minuten_uit_klok(self.instelling(CONF_AIRCO_UIT_OM, DEFAULT_AIRCO_UIT_OM)),
+            kost_per_uur=self._airco_kost_per_uur(now, ritme),
         )
         if vraag is None:
             # v5.101: overdag en 's avonds - zie `airco_ritme.besluit_dag`
@@ -2275,6 +2320,7 @@ class KlimaatMixin:
                 aanwezigheid=self.presence_state,
                 advies=(self.get_verwarmingsadvies() or {}).get("advies"),
                 airco_stand=stand,
+                kost_per_uur=self._airco_kost_per_uur(now, ritme),
             )
         if vraag is None:
             return uit

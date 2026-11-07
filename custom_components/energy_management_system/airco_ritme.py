@@ -270,6 +270,82 @@ def voorloop_uren(verwacht_c, doel_c: float, tempo_c_per_uur) -> float:
     return min(max(tekort / tempo_c_per_uur, VOORLOOP_MIN_UUR), VOORLOOP_MAX_UUR)
 
 
+# --- v5.192.0 (L-EMS-074): het opwarmmoment op prijs ------------------------
+# Gevraagd 07-11: "houdt de airco-sturing ook rekening met prijzen, stel het
+# kan goedkoper". Het opwarmen begon altijd net op tijd voor het geleerde
+# moment, ook als een kwartier eerder veel goedkoper was. Nu: binnen
+# PRIJS_VROEG_MAX_MIN voor dat moment het begin met de laagste kosten, waarbij
+# het eerder opwarmen het vasthouden tot het geleerde moment kost (op
+# HOUD_DEEL van het vermogen). Alleen als het minstens PRIJS_MIN_VOORDEEL_EUR
+# scheelt; anders zoals voorheen.
+PRIJS_VROEG_MAX_MIN = 120
+PRIJS_STAP_MIN = 15
+PRIJS_MIN_VOORDEEL_EUR = 0.02
+HOUD_DEEL = 0.5
+
+
+def prijsstart(basis_start: int, voorloop_uren: float, kost_per_uur, nu_min: int | None = None):
+    """(start in minuten, toelichting of None).
+
+    `kost_per_uur(minuut)`: wat een uur verwarmen op vol vermogen vanaf die
+    minuut van vandaag kost (stroomprijs x vermogen / COP-verhouding), of None.
+    Kandidaten in stappen van een kwartier, niet in het verleden (`nu_min`).
+    """
+    if kost_per_uur is None:
+        return basis_start, None
+    duur = max(int(round(voorloop_uren * 60)), PRIJS_STAP_MIN)
+    eind_warm = basis_start + duur
+
+    def kosten(start: int):
+        """Per stuk tussen kwartiergrenzen: de prijs geldt per kwartier."""
+        totaal = 0.0
+        warm_tot = start + duur
+        m = start
+        while m < eind_warm:
+            grens = m - m % PRIJS_STAP_MIN + PRIJS_STAP_MIN
+            tot = min(grens, eind_warm, warm_tot) if m < warm_tot else min(grens, eind_warm)
+            k = kost_per_uur(m - m % PRIJS_STAP_MIN)
+            if k is None:
+                return None
+            totaal += k * (tot - m) / 60 * (1.0 if m < warm_tot else HOUD_DEEL)
+            m = tot
+        return totaal
+
+    basis = kosten(basis_start)
+    if basis is None:
+        return basis_start, None
+    beste, beste_kost = basis_start, basis
+    eerste = basis_start - PRIJS_VROEG_MAX_MIN
+    kandidaten = set()
+    if nu_min is not None and eerste <= nu_min < basis_start:
+        kandidaten.add(nu_min)          # nu beginnen kan altijd
+    if nu_min is not None:
+        eerste = max(eerste, nu_min)
+    # De prijs springt op de kwartiergrens: daar beginnen is wat telt.
+    q = eerste + (-eerste) % PRIJS_STAP_MIN
+    while q < basis_start:
+        kandidaten.add(q)
+        q += PRIJS_STAP_MIN
+    for start in sorted(kandidaten, reverse=True):
+        k = kosten(start)
+        if k is not None and k < beste_kost - 1e-9:
+            beste, beste_kost = start, k
+    if beste == basis_start or basis - beste_kost < PRIJS_MIN_VOORDEEL_EUR:
+        return basis_start, None
+    return beste, {
+        "start": beste, "basis_start": basis_start,
+        "kosten_eur": round(beste_kost, 3), "basis_kosten_eur": round(basis, 3),
+        "voordeel_eur": round(basis - beste_kost, 3),
+    }
+
+
+def _prijstekst(info) -> str:
+    if not info:
+        return ""
+    return (f" Eerder begonnen ({klok(info['start'])} i.p.v. {klok(info['basis_start'])}): "
+            f"goedkoper, {round(info['voordeel_eur'] * 100)} ct minder.")
+
+
 def besluit(
     ritme: dict,
     *,
@@ -281,6 +357,7 @@ def besluit(
     advies: str | None,
     airco_stand: str | None,
     bedtijd_vast: int | None = None,
+    kost_per_uur=None,
 ) -> dict | None:
     """Wat het ritme nu vraagt - of None als het niets te zeggen heeft.
 
@@ -347,17 +424,18 @@ def besluit(
     if verwacht >= doel - MARGE_C and woonkamer_c >= doel - MARGE_C:
         return None
     voorloop = voorloop_uren(verwacht, doel, tempo_c_per_uur)
-    start = leer["warm_om"] - round(voorloop * 60)
     m = minuut(nu)
+    start, prijs = prijsstart(leer["warm_om"] - round(voorloop * 60), voorloop, kost_per_uur, m)
     if not (start <= m < leer["warm_om"] + NA_WARM_OM_MIN):
         return None
     return {
         "actie": "verwarmen",
         "doel_c": doel,
+        "prijsstart": prijs,
         "tekst": (
             f"Ochtend: verwarmen tot {doel:.1f} °C zodat het om {klok(leer['warm_om'])} "
             f"warm is (verwacht dan {verwacht:.1f} °C, {round(voorloop * 60)} min "
-            "opwarmen)."
+            "opwarmen)." + _prijstekst(prijs)
         ),
         "reden": (
             f"{soort}: jullie willen het rond {klok(leer['warm_om'])} {doel:.1f} °C "
@@ -892,8 +970,10 @@ def besluit_dag(
     aanwezigheid: str | None,
     advies: str | None,
     airco_stand: str | None,
+    kost_per_uur=None,
 ) -> dict | None:
-    """Overdag/'s avonds: op tijd warm voor het geleerde moment (v5.101)."""
+    """Overdag/'s avonds: op tijd warm voor het geleerde moment (v5.101).
+    v5.192.0: het opwarmmoment op prijs (`prijsstart`)."""
     if not is_dag(nu) or aanwezigheid in (None, "weg", "slaapt"):
         return None
     soort = dagsoort(nu)
@@ -912,18 +992,19 @@ def besluit_dag(
     if verwacht >= doel - MARGE_C and woonkamer_c >= doel - MARGE_C:
         return None
     voorloop = voorloop_uren(verwacht, doel, tempo_c_per_uur)
-    start = leer["aan_om"] - round(voorloop * 60)
     m = minuut(nu)
+    start, prijs = prijsstart(leer["aan_om"] - round(voorloop * 60), voorloop, kost_per_uur, m)
     if not (start <= m < min(leer["aan_om"] + NA_AAN_DAG_MIN, DAG_TOT)):
         return None
     return {
         "actie": "verwarmen",
         "doel_c": doel,
         "dag": True,
+        "prijsstart": prijs,
         "tekst": (
             f"Verwarmen tot {doel:.1f} °C: jullie zetten hem op een {soort} rond "
             f"{klok(leer['aan_om'])} aan (verwacht dan {verwacht:.1f} °C, "
-            f"{round(voorloop * 60)} min opwarmen)."
+            f"{round(voorloop * 60)} min opwarmen)." + _prijstekst(prijs)
         ),
         "reden": (
             f"{soort}: meestal aan rond {klok(leer['aan_om'])} op {doel:.1f} °C "

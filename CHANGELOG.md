@@ -35103,3 +35103,14 @@ Gevraagd 07-11: de AB3000-modules verwarmen zich bij zeer koud weer eerst en lad
 - De afgelopen 10 dagen ging de verwarming nooit aan (koudste cel 7 °C); de standaard van 50 % is een aanname tot er gemeten is.
 
 Tests: `test_v5191_koude_accu.py` (9).
+
+## v5.192.0 — airco: opwarmmoment op prijs (L-EMS-074)
+
+Gevraagd 07-11: houdt de airco-sturing rekening met prijzen? Het opwarmen begon altijd net op tijd voor het geleerde moment (ochtend en overdag), ook als eerder goedkoper was. Akkoord Ruud 07-11 11:08.
+
+- `airco_ritme.prijsstart`: binnen 2 uur vóór de gewone start het begin met de laagste kosten. Kosten = opwarmen op vol vermogen + het langer warm houden tot het geleerde moment (op de helft van het vermogen), per stuk tussen kwartiergrenzen. Kandidaten: elke kwartiergrens en nu; nooit in het verleden. Alleen bij minstens 2 ct voordeel, anders zoals voorheen.
+- Kosten per uur uit de kwartierprijs x het geleerde verwarmvermogen, gecorrigeerd voor het rendement bij de voorspelde buitentemperatuur (`_airco_kost_per_uur`).
+- Gemeten op 07-11 (41 ct tot 14:45, daarna 54 ct): eerder beginnen loont dan NIET, het warm houden in de dure uren kost meer. Het loont als de piek midden in het opwarmen begint of de prijs ervoor veel lager ligt.
+- Aanwezigheid ongewijzigd: niemand thuis (bijv. een dag weg) = niet aan, ook niet bij een goedkoop kwartier. Alleen met de knop Airco automaat aan.
+
+Tests: `test_v5192_airco_prijsstart.py` (8).
