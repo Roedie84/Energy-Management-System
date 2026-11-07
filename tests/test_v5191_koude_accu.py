@@ -115,3 +115,9 @@ def test_ronde_meet_en_plan_krijgt_de_factor(make_coordinator, hass):
     c._koude_laadfactor_toepassen(T0, ks)
     assert all(k.laad_factor == K.KOUD_FACTOR_STANDAARD for k in ks)
     assert c.get_koude_laden_overzicht()["koud"] is True
+
+
+def test_toelichting_noemt_het_deel_bij_koude():
+    """v5.192.1: warm toonde de toelichting '100 % van het laadvermogen'."""
+    assert "50 %" in K.samenvatting(None, 8.0, False)["toelichting"]
+    assert K.samenvatting(None, 8.0, False)["laadfactor"] == 1.0

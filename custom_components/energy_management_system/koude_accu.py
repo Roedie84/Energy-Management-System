@@ -150,6 +150,8 @@ def pas_toe(kwartieren: list, nu: datetime, f: float) -> int:
 def samenvatting(toestand: dict | None, koudste_c: float | None, verwarmt: bool) -> dict:
     t = toestand or leeg()
     f = factor(t, koudste_c, verwarmt)
+    # v5.192.1: de toelichting noemt het deel dat BIJ koude geldt (was 100 % als het warm was).
+    bij_koude = geleerde_factor(t) or KOUD_FACTOR_STANDAARD
     episodes = t.get("episodes") or []
     return {
         "koud": is_koud(koudste_c, verwarmt),
@@ -164,7 +166,7 @@ def samenvatting(toestand: dict | None, koudste_c: float | None, verwarmt: bool)
         "grens_c": KOUD_LADEN_C,
         "toelichting": (
             f"Is de koudste cel {KOUD_LADEN_C:g} °C of kouder (of verwarmt een module), dan "
-            f"rekent het laadplan de komende {KOUD_HORIZON_UREN} uur met {round(f * 100)} % van "
+            f"rekent het laadplan de komende {KOUD_HORIZON_UREN} uur met {round(bij_koude * 100)} % van "
             "het laadvermogen en begint het zo eerder. Gemeten per kwartier dat het plan dan "
             f"uit het net laadt; vanaf {KOUD_MIN_METINGEN} metingen telt het geleerde deel."
         ),

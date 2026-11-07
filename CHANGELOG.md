@@ -35114,3 +35114,9 @@ Gevraagd 07-11: houdt de airco-sturing rekening met prijzen? Het opwarmen begon 
 - Aanwezigheid ongewijzigd: niemand thuis (bijv. een dag weg) = niet aan, ook niet bij een goedkoop kwartier. Alleen met de knop Airco automaat aan.
 
 Tests: `test_v5192_airco_prijsstart.py` (8).
+
+## v5.192.1 — toelichting laden bij koude
+
+- `koude_laden.toelichting` noemde bij warme cellen "100 % van het laadvermogen"; nu het deel dat bij koude geldt (50 % of het geleerde). Live gecontroleerd na de herstart van 07-11 11:20: economische schaduw telt weer (open_dag 07-11, status loopt), 'Model- en parameternauwkeurigheid' heeft weer een toestand, geen fouten.
+
+Tests: `test_v5191_koude_accu.py` (+1).
