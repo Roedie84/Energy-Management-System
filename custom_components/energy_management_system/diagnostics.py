@@ -1147,6 +1147,10 @@ async def async_get_config_entry_diagnostics(
             "helderheid_ijking": _veilig(
                 "get_helderheid_ijking", coordinator.get_helderheid_ijking
             ),
+            # v5.190.0 (L-EMS-072): sneeuw/ijs op de panelen.
+            "panelen_bedekt": _veilig(
+                "get_panelen_bedekt_overzicht", coordinator.get_panelen_bedekt_overzicht
+            ),
             "low_solar_margin": _veilig("get_low_solar_margin", coordinator.get_low_solar_margin),
             "pv_installation_profile": _veilig("get_pv_installation_profile", coordinator.get_pv_installation_profile),
             "pv_peak_azimuth_history": coordinator.pv_peak_azimuth_history,

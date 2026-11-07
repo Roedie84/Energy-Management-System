@@ -126,6 +126,9 @@ class SolarForecastAccuracyTracker:
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
         self.hass = hass
         self.config = config
+        # v5.190.0 (L-EMS-072): de coordinator meldt dagen met bedekte panelen
+        # (sneeuw/ijs); die zeggen niets over Solcast en tellen niet mee.
+        self.dag_uitsluiten = None
 
         # The forecast captured on the previous day, predicting the date below.
         self.pending_predicted_kwh: float | None = None
@@ -797,7 +800,20 @@ class SolarForecastAccuracyTracker:
                         self.pending_predicted_kwh >= ROLLOVER_MIN_FORECAST_KWH
                         and actual <= ROLLOVER_MAX_ACTUAL_KWH
                     )
-                    if (
+                    bedekt = False
+                    uitsluiten = self.dag_uitsluiten
+                    if callable(uitsluiten):
+                        try:
+                            bedekt = bool(uitsluiten(today))
+                        except Exception:  # noqa: BLE001 - mag het leren nooit breken
+                            bedekt = False
+                    if bedekt:
+                        _LOGGER.info(
+                            "Zonafwijking van %s (%.1f%%) niet geleerd: panelen waren "
+                            "vermoedelijk bedekt (sneeuw/ijs)",
+                            today, self.last_deviation_percent,
+                        )
+                    elif (
                         abs(self.last_deviation_percent)
                         <= MAX_REASONABLE_DEVIATION_PERCENT
                         and not rollover

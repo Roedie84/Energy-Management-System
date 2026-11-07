@@ -5626,6 +5626,7 @@ class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
             ("weerbronnen", self._coordinator.get_weather_source_overview),
             ("haalt_de_accu_het", self._coordinator.haalt_de_accu_het_zin),
             ("helderheid_ijking", self._coordinator.get_helderheid_ijking),
+            ("panelen_bedekt", self._coordinator.get_panelen_bedekt_overzicht),  # v5.190.0
             ("zon_uitstelplan", lambda: self._coordinator.last_solar_defer_plan),
             ("kwartierplanning", self._coordinator.get_quarter_plan_compact),
             ("laadplan_gewijzigd", self._coordinator.get_laadplan_gewijzigd),
@@ -6048,7 +6049,7 @@ DASHBOARD_PAGINA_SENSOREN = (
         "zonvoorspelling_ijking",
         "Zonvoorspelling ijking",
         "mdi:weather-sunny-alert",
-        ("helderheid_ijking", "zonband_ijking", "zonspreiding", "pv_correctie", "pv_voorspelkwaliteit"),
+        ("helderheid_ijking", "panelen_bedekt", "zonband_ijking", "zonspreiding", "pv_correctie", "pv_voorspelkwaliteit"),
         None,
     ),
 )

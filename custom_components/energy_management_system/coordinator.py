@@ -86,6 +86,7 @@ from .const import (  # v5.186.0 (spoor C)
 )
 from .klimaat import rolluikstand_procent, rolluiklabel  # noqa: F401 - re-export
 from .klimaat import KlimaatMixin
+from . import panelen_bedekt as panelen_bedekt_mod
 from .legacy_sturing import LegacySturingMixin
 from .uitleg import UitlegMixin
 from .accutoestand import AccuToestandMixin
@@ -6505,6 +6506,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         # de export niet te zien of zestig metingen één dag of tien dagen
         # beslaan.
         self.helderheid_dagen: dict[str, list[str]] = {}
+        # v5.190.0 (L-EMS-072): sneeuw/ijs op de panelen, zie panelen_bedekt.py.
+        self.panelen_bedekt: dict = panelen_bedekt_mod.leeg()
 
     def _lees_pv_vermogen_w(self) -> float | None:
         """Het huidige paneelvermogen, of None."""
@@ -6663,6 +6666,68 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             int(len(gesorteerd) * HELDERHEID_IJKLIJN_PERCENTIEL),
         )
         return gesorteerd[index]
+
+    # --- Panelen bedekt (v5.190.0, L-EMS-072) ------------------------
+    #
+    # Gevraagd 07-11 na rijp op de panelen: het EMS moet zelf zien of de
+    # panelen schoon zijn. Niet met de camera, maar met de ijklijn hierboven:
+    # vorst + heldere lucht + ver onder de ijklijn = sneeuw/ijs.
+
+    def _update_panelen_bedekt(self, now: datetime) -> None:
+        """Eén ronde van de herkenning; stuurt zelf niets."""
+        try:
+            temp = self._get_live_outdoor_temp_c(now)
+        except Exception:  # noqa: BLE001 - zonder temperatuur geen vorst
+            temp = None
+        try:
+            bewolking = self._weather_cloud_cover_percent()
+        except Exception:  # noqa: BLE001
+            bewolking = None
+        helderheid = self.gemeten_helderheid()
+        recent = self._zon_recent_ruw(now)
+        oud = self.panelen_bedekt if isinstance(self.panelen_bedekt, dict) else None
+        nieuw = panelen_bedekt_mod.stap(oud, now, helderheid, bewolking, temp, recent)
+        if bool((oud or {}).get("bedekt")) != bool(nieuw.get("bedekt")):
+            _LOGGER.info(
+                "Panelen %s (helderheid %s, bewolking %s %%, buiten %s °C)",
+                "vermoedelijk bedekt door sneeuw/ijs" if nieuw.get("bedekt") else "weer vrij",
+                helderheid, bewolking, temp,
+            )
+            self.schedule_persisted_state_save()
+        self.panelen_bedekt = nieuw
+
+    def _zon_recent_ruw(self, nu: datetime) -> float | None:
+        """Als `_zon_recent`, maar zonder de ondergrens ZON_RECENT_MIN: onder
+        sneeuw is de verhouding 0,0-0,1 en de ondergrens van 0,3 zou dat
+        verbergen (v5.190.0)."""
+        werkelijk = verwacht = 0.0
+        for u in (getattr(self, "_pv_recente_uren", None) or [])[-1:]:
+            if u.get("meetbaar", u.get("geldig")) and nu - u["eind"] <= timedelta(hours=2):
+                werkelijk += u["werkelijk_kwh"]
+                verwacht += u["verwacht_kwh"]
+        duur = float(getattr(self, "_pv_hour_duration_hours", 0.0) or 0.0)
+        if duur >= 0.25 and not getattr(self, "_pv_hour_begrensd", False):
+            werkelijk += float(getattr(self, "_pv_hour_energy_kwh", 0.0) or 0.0)
+            verwacht += self._ruwe_zon_kwh(nu - timedelta(hours=duur), nu)
+        if verwacht < ZON_RECENT_MIN_KWH:
+            return None
+        return max(0.0, werkelijk / verwacht)
+
+    def panelen_bedekt_factor(self) -> float | None:
+        """De factor op de zonvoorspelling zolang bedekt, anders None."""
+        return panelen_bedekt_mod.factor(getattr(self, "panelen_bedekt", None))
+
+    def zon_dag_niet_leren(self, dag) -> bool:
+        """Voor de dagcorrectie (SolarForecastAccuracyTracker): een dag met
+        bedekte panelen zegt niets over Solcast (v5.190.0)."""
+        return panelen_bedekt_mod.dag_bedekt(getattr(self, "panelen_bedekt", None), dag)
+
+    def get_panelen_bedekt_overzicht(self) -> dict:
+        """Voor de sensor Zonvoorspelling ijking (v5.190.0)."""
+        return panelen_bedekt_mod.samenvatting(getattr(self, "panelen_bedekt", None))
+
+    def _panelen_bedekt_aandachtspunt(self) -> str | None:
+        return panelen_bedekt_mod.melding(getattr(self, "panelen_bedekt", None))
 
     def weerbron_rangorde_score(self, bron: str) -> float | None:
         """Hoe vaak ordent deze bron twee momenten goed? (v3.94.0)
@@ -21920,6 +21985,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                     corrected_kw = (
                         raw_kw * bias_ratio if bias_ratio is not None else raw_kw
                     )
+                bedekt = self.panelen_bedekt_factor()  # v5.190.0 (L-EMS-072)
+                if bedekt is not None:
+                    corrected_kw = raw_kw * bedekt
                 return max(0.0, corrected_kw * 1000)
         return None
 
@@ -22020,6 +22088,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             "realisatie": self._zon_realisatie(nu, pv_entries),
             # v5.186.0 (punt 36): de laatste uren tegen de gecorrigeerde verwachting.
             "recent": self._zon_recent(nu),
+            # v5.190.0 (L-EMS-072): sneeuw/ijs - de gemeten verhouding i.p.v. Solcast.
+            "bedekt": self.panelen_bedekt_factor(),
         }
         self._pv_vast_cache = (sleutel, vast)
         return vast
@@ -22158,7 +22228,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             # De live teller gaat over wat er van vandaag NOG komt. Een
             # uur van vandaag dat al voorbij is, zit niet in die teller
             # en hoort de verhouding dus niet te krijgen.
-            if entry_start.date() == today and entry_end > nu:
+            if vast.get("bedekt") is not None and entry_end > nu:
+                # v5.190.0 (L-EMS-072): panelen onder sneeuw/ijs. Solcast weet
+                # daar niets van; tot ze weer leveren telt de gemeten verhouding.
+                segment_kwh *= vast["bedekt"]
+            elif entry_start.date() == today and entry_end > nu:
                 segment_kwh *= self._zon_factor_vandaag(
                     vast, entry_start, daily_bias_percent, veilig and positie is not None and entry_start in band
                 )
@@ -22779,7 +22853,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         grens = self._read_sensor_float(entity) if entity else None
         return grens is not None and grens < PV_BEGRENSD_ONDER_PROCENT
 
-    def _noteer_recent_pv_uur(self, now: datetime, actual_kwh: float, geldig: bool) -> None:
+    def _noteer_recent_pv_uur(
+        self, now: datetime, actual_kwh: float, geldig: bool, meetbaar: bool | None = None
+    ) -> None:
         """Het afgesloten zonuur voor `_zon_recent` (v5.186.0, punt 36)."""
         eind = now.replace(minute=0, second=0, microsecond=0)
         duur = min(1.0, float(self._pv_hour_duration_hours or 0.0))
@@ -22788,6 +22864,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         reeks.append({
             "begin": begin, "eind": eind, "werkelijk_kwh": actual_kwh,
             "verwacht_kwh": self._ruwe_zon_kwh(begin, eind), "geldig": geldig,
+            # v5.190.0: meetbaar (gemeten, niet begrensd) ook als het niet geleerd
+            # wordt omdat de panelen bedekt waren - de herkenning heeft het nodig.
+            "meetbaar": geldig if meetbaar is None else meetbaar,
         })
         self._pv_recente_uren = reeks[-3:]
 
@@ -22798,11 +22877,17 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             # panelen begrensd waren. Na een herstart om 12:40 werd 20 minuten
             # opwek tegen de voorspelling van het hele uur gelegd (0,33).
             gemeten = min(1.0, self._pv_hour_duration_hours)
-            bruikbaar = gemeten >= PV_UURBIAS_MIN_GEMETEN and not getattr(
+            meetbaar = gemeten >= PV_UURBIAS_MIN_GEMETEN and not getattr(
                 self, "_pv_hour_begrensd", False
             )
+            # v5.190.0 (L-EMS-072): een uur met (vermoedelijk) bedekte panelen
+            # zegt niets over Solcast - niet leren, wel meten.
+            bedekt = panelen_bedekt_mod.uur_bedekt(
+                getattr(self, "panelen_bedekt", None), now - timedelta(minutes=30)
+            )
+            bruikbaar = meetbaar and not bedekt
             try:
-                self._noteer_recent_pv_uur(now, actual_kwh, bruikbaar)
+                self._noteer_recent_pv_uur(now, actual_kwh, bruikbaar, meetbaar)
             except Exception:  # noqa: BLE001 - mag het leren nooit breken
                 _LOGGER.debug("Recent zonuur niet vastgelegd", exc_info=True)
             # The hour that just completed is the previous local hour,
@@ -39463,6 +39548,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 uit.append(punt)
             if punt := self._pv_gat_aandachtspunt():  # v5.186.0 (punt 38)
                 uit.append(punt)
+            if punt := self._panelen_bedekt_aandachtspunt():  # v5.190.0 (L-EMS-072)
+                uit.append(punt)
         except Exception:  # noqa: BLE001 - een aandachtspunt mag niets breken
             pass
         # v5.3: een geweerde weerbron hoorde hier, niet als telefoonmelding.
@@ -42490,6 +42577,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             ("dagrapport", lambda: self._update_daily_report(now)),
             ("pv-geometrie", lambda: self._update_pv_geometry_learning(now)),
             ("helderheid-ijklijn", lambda: self._update_helderheid_ijklijn(now)),
+            ("panelen-bedekt", lambda: self._update_panelen_bedekt(now)),
             ("powercalc-proef", lambda: self._update_powercalc_proef(now)),
             ("meldingen", lambda: self._evaluate_new_notifications(now)),
             # v5.31: schaduw - leert, stuurt niets.

@@ -35079,3 +35079,15 @@ Dagcontrole 07-11 (correcties, sturing ongewijzigd).
 - `sensor..._model_en_parameternauwkeurigheid`: de notitie van v5.187.1 ("Geen voorspelling bij 2.3°C: ...") is langer dan 255 tekens; HA gaf 'unknown' en logde de fout 3.178 keer (06-11 08:20 - 07-11). De toestand wordt nu op een zinsgrens ingekort; de volledige tekst blijft in `temperatuur_regressie_note`.
 
 Tests: `test_v5189_1_schaduw_synchroon_pad.py` (5; 4 falen op de oude code).
+
+## v5.190.0 — panelen bedekt door sneeuw of ijs (L-EMS-072)
+
+Gevraagd 07-11 (rijp op de panelen, gezien op de camera zolder): kan het EMS zelf zien of de panelen schoon zijn? Niet met de camera (raam, reflecties, schemer), maar met de eigen heldere-hemel-ijklijn (akkoord Ruud 07-11 10:04).
+
+- Nieuw `panelen_bedekt.py`. Kandidaat: vorst (buiten ≤ 0,5 °C, geldt 36 uur), heldere lucht (bewolking ≤ 40 %) en de panelen < 35 % van de ijklijn. Een uur achter elkaar = vermoedelijk bedekt. Vrij zodra ze 15 min boven 60 % leveren; zonder bevestiging vervalt het na 72 uur. Toestand bewaard over herstarts (`panelen_bedekt`).
+- Zolang bedekt rekent de zonschatting (vandaag én later) met de gemeten verhouding tegen de ruwe Solcast (`_zon_recent_ruw`, zonder de ondergrens 0,3; begrensd op 0,35, zonder meting 0,1). Ook het verwachte vermogen nu.
+- Bedekte (en kandidaat-)uren leren niet in de uurcorrectie; bedekte dagen niet in de dagcorrectie (`SolarForecastAccuracyTracker.dag_uitsluiten`). Anders wordt de voorspelling na de dooi dagenlang te somber. Het uur blijft wel `meetbaar` voor de herkenning.
+- Aandachtspunt "Zonnepanelen vermoedelijk bedekt (sneeuw/ijs)"; details in `panelen_bedekt` op de sensor Zonvoorspelling ijking.
+- Rijp die binnen het uur wegdooit telt niet (07-11 09-10 u: ~0,8 van de ijklijn).
+
+Tests: `test_v5190_panelen_bedekt.py` (15).

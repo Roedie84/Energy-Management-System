@@ -1,3 +1,12 @@
+EMS v5.190.0 - herkent sneeuw of ijs op de zonnepanelen
+
+Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen. Bevat ook v5.189.0 en v5.189.1.
+
+- Vriest het, is de lucht helder en leveren de panelen een uur lang minder dan 35 % van wat ze bij deze zonnestand normaal doen, dan meldt het EMS "Zonnepanelen vermoedelijk bedekt".
+- Zolang dat zo is rekent het EMS met wat de panelen echt leveren in plaats van met Solcast, ook voor morgen. Zodra ze weer leveren, gaat het terug.
+- Die uren en dagen tellen niet mee in het leren van de zoncorrectie.
+- Rijp die snel wegdooit telt niet mee.
+
 EMS v5.189.1 - economische schaduw rekent weer mee; geen foutmeldingen meer over de temperatuurnotitie
 
 Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen. Bevat ook v5.189.0.

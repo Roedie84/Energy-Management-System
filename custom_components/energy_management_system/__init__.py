@@ -215,6 +215,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator._wacht_op_eerste_ronde = True  # v5.99.8: zware sensoren wachten
     solar_tracker = SolarForecastAccuracyTracker(hass, config)
     coordinator.solar_tracker = solar_tracker
+    solar_tracker.dag_uitsluiten = coordinator.zon_dag_niet_leren  # v5.190.0 (L-EMS-072)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator

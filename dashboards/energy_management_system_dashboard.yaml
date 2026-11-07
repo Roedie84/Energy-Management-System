@@ -1159,6 +1159,18 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-template-card
+      primary: '{% set b = state_attr(''sensor.woonkamer_energy_management_system_zonvoorspelling_ijking'', ''panelen_bedekt'') or {} %}{{ ''Panelen vermoedelijk bedekt (sneeuw/ijs)'' if b.get(''bedekt'') else ''Panelen vrij'' }}'
+      secondary: '{% set b = state_attr(''sensor.woonkamer_energy_management_system_zonvoorspelling_ijking'', ''panelen_bedekt'') or {} %}{% if b.get(''bedekt'') %}Sinds {{ (b.sinds or '''')[11:16] }} · rekent met {{ ((b.factor or 0) * 100) | round }} % van Solcast{% else %}Herkent sneeuw en ijs aan vorst, heldere lucht en lage opbrengst{% endif %}'
+      multiline_secondary: true
+      icon: mdi:snowflake-alert
+      icon_color: '{% set b = state_attr(''sensor.woonkamer_energy_management_system_zonvoorspelling_ijking'', ''panelen_bedekt'') or {} %}{{ ''blue'' if b.get(''bedekt'') else ''grey'' }}'
+      entity: sensor.woonkamer_energy_management_system_zonvoorspelling_ijking
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
     - type: markdown
       title: Hoe onzeker is vandaag?
       content: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_zonvoorspelling_ijking'', ''zonspreiding'') or {} %}{% if not z.get(''beschikbaar'') %}{{ z.get(''reden'', ''Nog niet bepaald.'') }}{% else %}Verwacht **{{ z.verwacht_kwh }} kWh**, bandbreedte {{ z.p10_kwh }} tot {{ z.p90_kwh }} kWh ({{ (z.relatieve_breedte * 100) | round }}%).

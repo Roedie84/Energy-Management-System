@@ -4034,6 +4034,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "helderheid_ijklijn": {"type": "plain"},
     "weerbron_helderheid_paren": {"type": "plain"},
     "helderheid_dagen": {"type": "plain"},
+    # v5.190.0 (L-EMS-072): panelen bedekt door sneeuw/ijs - toestand en niet-geleerde uren/dagen.
+    "panelen_bedekt": {"type": "plain"},
     "reserve_daily_records": {"type": "plain"},
     # v5.72 (L-EMS-014): gemeten sprongen als een module bijna leeg is.
     "module_leeg_sprongen": {"type": "plain"},
