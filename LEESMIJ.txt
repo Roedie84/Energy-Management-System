@@ -1,3 +1,11 @@
+EMS v5.189.1 - economische schaduw rekent weer mee; geen foutmeldingen meer over de temperatuurnotitie
+
+Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen. Bevat ook v5.189.0.
+
+- Economische schaduw (bewaarmarge 2 ct / 0 ct): stond sinds 05-11 stil (0 dagen geteld). Nu elk kwartier; de 14 dagen tellen vanaf de installatie.
+- Sensor 'Model- en parameternauwkeurigheid' toonde 'unknown' en vulde de log (tekst te lang). Nu ingekort; de hele tekst staat in het attribuut.
+- Sturing ongewijzigd.
+
 EMS v5.189.0 - tekortkans over de nacht en eerlijke vlag 'huis gaat voor'
 
 Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen.

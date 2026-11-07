@@ -449,7 +449,12 @@ class WaardeplanSturingMixin:
         voor = self._waardeplan_invoer(now, entries)
         if "uitkomst" in voor:
             return voor["uitkomst"]
-        return self._waardeplan_afronden(now, voor, waardeplan_mod.plan(voor["kwartieren"], voor["accu"]))
+        res = waardeplan_mod.plan(voor["kwartieren"], voor["accu"])
+        # v5.189.1: ook hier de schaduwhaak. In de ronde vraagt `_secundaire_laag`
+        # het plan vaak eerst synchroon op; dat vulde de cache en de schaduw
+        # (alleen in het async pad) plande dan nooit (live 05-11 18:30 - 07-11).
+        self._economische_schaduw_na_plan(now, voor, res)
+        return self._waardeplan_afronden(now, voor, res)
 
     async def _async_bereken_waardeplan(self, now: datetime, entries) -> dict:
         """`bereken_waardeplan` met het rekenwerk buiten de event loop (v5.186.0, punt 20).

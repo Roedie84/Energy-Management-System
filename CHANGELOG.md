@@ -35070,3 +35070,12 @@ Dagcontrole 05-11 legde twee keuzes voor; Ruud 06-11: "Jij moet voor mij de best
 - L-EMS-069: de vlag telde de dagsom van het regeloverschot (> 0,1 kWh). 04-11 (0,159) en 05-11 (0,211) stonden op geschonden door P1-rimpel boven de reserve. Nu per kwartier: schending is een kwartier met >= `HUIS_GAAT_VOOR_LEK_KWARTIER_KWH` (0,05 kWh, gemiddeld 200 W: een lek, geen rimpel) of export uit de accu zonder verkoopbesluit onder de verkoopreserve (vanaf 25 Wh). Nieuw per dag: `lek_kwartieren`, `overschot_onder_reserve_kwartieren`, `rimpel_kwh`, `regel`. Verkoop onder de reserve blijft altijd een schending.
 
 Tests: `test_v5189_tekortkans_en_harde_regel.py`.
+
+## v5.189.1 — economische schaduw plant weer elk kwartier; temperatuurnotitie past in de toestand
+
+Dagcontrole 07-11 (correcties, sturing ongewijzigd).
+
+- Economische schaduw zat vast: `open_dag` bleef op 05-11 met 8 kwartieren, 0 dagregels, virtueel 0,9/0,9 kWh; de sensor schreef sinds 05-11 18:30 niet meer. Oorzaak: de schaduwhaak zat alleen in `_async_bereken_waardeplan`. In de ronde vraagt `_secundaire_laag` -> `_waardeplan_gaat_sturen` het plan eerst synchroon op (`bereken_waardeplan`); dat vult de cache en het async pad krijgt dan het gecachte plan, dus de schaduw plande (bijna) nooit en de 14-daagse evaluatie kwam niet op gang. Nu ook de haak in `bereken_waardeplan`; nog steeds één schaduwplan per kwartier (`_schaduw_gepland`). De evaluatie begint opnieuw te tellen vanaf de installatie.
+- `sensor..._model_en_parameternauwkeurigheid`: de notitie van v5.187.1 ("Geen voorspelling bij 2.3°C: ...") is langer dan 255 tekens; HA gaf 'unknown' en logde de fout 3.178 keer (06-11 08:20 - 07-11). De toestand wordt nu op een zinsgrens ingekort; de volledige tekst blijft in `temperatuur_regressie_note`.
+
+Tests: `test_v5189_1_schaduw_synchroon_pad.py` (5; 4 falen op de oude code).

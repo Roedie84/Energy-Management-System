@@ -4198,7 +4198,10 @@ class ModelTrendInsightSensor(SensorEntity, RestoreEntity):
 
     @property
     def native_value(self) -> str:
-        return self._coordinator.last_temp_consumption_note or "onbekend"
+        # v5.189.1: de notitie van v5.187.1 ("Geen voorspelling bij ..°C: ...")
+        # is langer dan 255 tekens; HA gaf dan 'unknown' en logde 3.178 keer
+        # een fout (06-11 08:20 - 07-11). Volledige tekst in het attribuut.
+        return kort_op_zinsgrens(self._coordinator.last_temp_consumption_note or "onbekend")
 
     @property
     def extra_state_attributes(self) -> dict:
