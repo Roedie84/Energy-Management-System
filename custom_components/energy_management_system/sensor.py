@@ -5253,6 +5253,8 @@ class BatteryModuleHealthSensor(ZuinigSchrijven, SensorEntity):
             # v5.172.0: de werkelijke bodem (punt 4) en de SoC-demper (punt 1).
             "effectieve_ondergrens": _veilig_dict(self._coordinator.get_ondergrens),
             "soc_demper": _veilig_dict(self._coordinator.get_soc_demper),
+            # v5.191.0 (L-EMS-073): laden bij koude cellen (eerst verwarmen).
+            "koude_laden": _veilig_dict(self._coordinator.get_koude_laden_overzicht),
             "note": (
                 "Elke module wordt vergeleken met het gemiddelde van de "
                 "ANDERE modules op hetzelfde moment. Omdat ze onder "

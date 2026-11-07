@@ -35091,3 +35091,15 @@ Gevraagd 07-11 (rijp op de panelen, gezien op de camera zolder): kan het EMS zel
 - Rijp die binnen het uur wegdooit telt niet (07-11 09-10 u: ~0,8 van de ijklijn).
 
 Tests: `test_v5190_panelen_bedekt.py` (15).
+
+## v5.191.0 — laadplan vervroegen bij koude accu (L-EMS-073)
+
+Gevraagd 07-11: de AB3000-modules verwarmen zich bij zeer koud weer eerst en laden dan pas. Akkoord Ruud 07-11 10:33: het laadplan vervroegen bij ~0 °C.
+
+- Nieuw `koude_accu.py`. Koud = koudste module ≤ 1 °C of een module verwarmt (`binary_sensor.<module>_heat_state`, naast `sensor.<module>_max_temp`).
+- Zolang het koud is rekent het waardeplan de komende 12 uur met een deel van het laadvermogen (`Kwartier.laad_factor`): eerst 50 %, na 4 gemeten koude laadkwartieren de mediaan van wat er echt in ging. Het plan laadt daardoor eerder of langer. De opdracht in een gedeeltelijk laadkwartier wordt naar verhouding groter (tot het ingestelde vermogen).
+- Meten: per kwartier waarin het plan uit het net laadt bij koude cellen de verhouding geladen/opdracht; verwarmingsperiodes (begin, duur, temperatuur). Bewaard over herstarts (`koude_laden`).
+- Attribuut `koude_laden` op de sensor Accu modulegezondheid.
+- De afgelopen 10 dagen ging de verwarming nooit aan (koudste cel 7 °C); de standaard van 50 % is een aanname tot er gemeten is.
+
+Tests: `test_v5191_koude_accu.py` (9).

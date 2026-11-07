@@ -1,3 +1,10 @@
+EMS v5.191.0 - laadplan rekent met de opwarmtijd van een koude accu
+
+Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen. Bevat ook v5.189.0 tot en met v5.190.0.
+
+- Zakt de koudste accumodule naar 1 °C of lager, of verwarmt een module zich, dan rekent het laadplan met minder laadvermogen en begint het eerder met laden.
+- Het EMS meet hoeveel er bij kou echt de accu in gaat en leert dat na een paar keer.
+
 EMS v5.190.0 - herkent sneeuw of ijs op de zonnepanelen
 
 Installeren: via de Marketplace bijwerken, Home Assistant herstarten en de browser verversen. Bevat ook v5.189.0 en v5.189.1.

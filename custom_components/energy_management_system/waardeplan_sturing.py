@@ -504,6 +504,10 @@ class WaardeplanSturingMixin:
         if not kwartieren:
             uit["reden"] = "geen verbruiksverwachting of prijzen vooruit"
             return {"uitkomst": uit}
+        try:
+            self._koude_laadfactor_toepassen(now, kwartieren)  # v5.191.0 (L-EMS-073)
+        except Exception:  # noqa: BLE001 - mag het plan nooit breken
+            _LOGGER.debug("Koude laadfactor niet toegepast", exc_info=True)
         accu = self._waardeplan_accu(now, beschikbaar, bruikbaar, rendement, kwartieren)
         balans = self._waardeplan_balanceren(now, kwartieren, accu)
         accu.vol_na_kwartier = balans.get("kwartier")
@@ -862,7 +866,10 @@ class WaardeplanSturingMixin:
             return ingesteld
         # v5.177.0 (A4): energie gedeeld door de duur van de rij (het lopende
         # kwartier is korter dan 0,25 uur), niet x 4000.
-        return min(ingesteld, float(rij.get("accu_kwh") or 0.0) * self._per_uur_w(rij))
+        # v5.191.0 (L-EMS-073): bij koude cellen gaat maar een deel van de
+        # opdracht de accu in; de opdracht is dan groter (tot het ingestelde).
+        lf = float(rij.get("laad_factor") or 1.0)
+        return min(ingesteld, float(rij.get("accu_kwh") or 0.0) * self._per_uur_w(rij) / max(lf, 0.2))
 
     @staticmethod
     def _per_uur_w(rij: dict) -> float:

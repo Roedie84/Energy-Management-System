@@ -87,6 +87,7 @@ from .const import (  # v5.186.0 (spoor C)
 from .klimaat import rolluikstand_procent, rolluiklabel  # noqa: F401 - re-export
 from .klimaat import KlimaatMixin
 from . import panelen_bedekt as panelen_bedekt_mod
+from . import koude_accu as koude_accu_mod
 from .legacy_sturing import LegacySturingMixin
 from .uitleg import UitlegMixin
 from .accutoestand import AccuToestandMixin
@@ -6508,6 +6509,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         self.helderheid_dagen: dict[str, list[str]] = {}
         # v5.190.0 (L-EMS-072): sneeuw/ijs op de panelen, zie panelen_bedekt.py.
         self.panelen_bedekt: dict = panelen_bedekt_mod.leeg()
+        # v5.191.0 (L-EMS-073): laden bij koude cellen, zie koude_accu.py.
+        self.koude_laden: dict = koude_accu_mod.leeg()
 
     def _lees_pv_vermogen_w(self) -> float | None:
         """Het huidige paneelvermogen, of None."""
@@ -6728,6 +6731,57 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
 
     def _panelen_bedekt_aandachtspunt(self) -> str | None:
         return panelen_bedekt_mod.melding(getattr(self, "panelen_bedekt", None))
+
+    # --- Laden bij koude cellen (v5.191.0, L-EMS-073) -----------------
+
+    def _koude_cellen(self) -> tuple[float | None, bool]:
+        """(koudste moduletemperatuur, verwarmt er een module).
+
+        De verwarming staat als `binary_sensor.<module>_heat_state` naast de
+        temperatuursensor `sensor.<module>_max_temp` (Zendure-integratie).
+        """
+        temps = [
+            m.get("temperatuur_c") for m in (self._read_battery_modules() or [])
+            if m.get("temperatuur_c") is not None
+        ]
+        verwarmt = False
+        for entity in self.config.get(CONF_BATTERY_MODULE_TEMPERATURE_SENSORS) or []:
+            if not isinstance(entity, str) or not entity.endswith("_max_temp"):
+                continue
+            heat = "binary_sensor." + entity.split(".", 1)[1][: -len("_max_temp")] + "_heat_state"
+            staat = self.hass.states.get(heat)
+            if staat is not None and staat.state == "on":
+                verwarmt = True
+        return (min(temps) if temps else None), verwarmt
+
+    def _update_koude_laden(self, now: datetime) -> None:
+        """Meet per kwartier wat er bij koude cellen echt geladen wordt."""
+        koudste, verwarmt = self._koude_cellen()
+        gevraagd = 0.0
+        rijen = getattr(self, "_waardeplan_rijen", None) or []
+        if rijen and rijen[0].get("actie") == "laden_net":
+            try:
+                gevraagd = float(self._waardeplan_laadvermogen_w(rijen[0]))
+            except Exception:  # noqa: BLE001
+                gevraagd = 0.0
+        try:
+            gemeten = self._read_corrected_battery_power()
+        except Exception:  # noqa: BLE001
+            gemeten = None
+        geladen = max(0.0, -float(gemeten)) if gemeten is not None else 0.0
+        oud = self.koude_laden if isinstance(self.koude_laden, dict) else None
+        self.koude_laden = koude_accu_mod.stap(oud, now, koudste, verwarmt, gevraagd, geladen)
+        self._koude_nu = (koudste, verwarmt)
+
+    def _koude_laadfactor_toepassen(self, now: datetime, kwartieren: list) -> None:
+        """Zet de laadfactor op de kwartieren van het waardeplan (v5.191.0)."""
+        koudste, verwarmt = getattr(self, "_koude_nu", None) or self._koude_cellen()
+        f = koude_accu_mod.factor(getattr(self, "koude_laden", None), koudste, verwarmt)
+        koude_accu_mod.pas_toe(kwartieren, now, f)
+
+    def get_koude_laden_overzicht(self) -> dict:
+        koudste, verwarmt = getattr(self, "_koude_nu", None) or (None, False)
+        return koude_accu_mod.samenvatting(getattr(self, "koude_laden", None), koudste, verwarmt)
 
     def weerbron_rangorde_score(self, bron: str) -> float | None:
         """Hoe vaak ordent deze bron twee momenten goed? (v3.94.0)
@@ -42578,6 +42632,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             ("pv-geometrie", lambda: self._update_pv_geometry_learning(now)),
             ("helderheid-ijklijn", lambda: self._update_helderheid_ijklijn(now)),
             ("panelen-bedekt", lambda: self._update_panelen_bedekt(now)),
+            ("koude-laden", lambda: self._update_koude_laden(now)),
             ("powercalc-proef", lambda: self._update_powercalc_proef(now)),
             ("meldingen", lambda: self._evaluate_new_notifications(now)),
             # v5.31: schaduw - leert, stuurt niets.

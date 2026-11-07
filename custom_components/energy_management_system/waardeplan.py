@@ -108,6 +108,9 @@ class Kwartier:
     #: v5.186.0 (punt 9): hier niet uit het net laden - de zon vult de accu
     #: daarna toch tot vol en levert dan terug.
     geen_netladen: bool = False
+    #: v5.191.0 (L-EMS-073): deel van het laadvermogen dat hier echt de accu in
+    #: gaat. Onder ~0 °C verwarmen de modules zich eerst (zie koude_accu.py).
+    laad_factor: float = 1.0
 
 
 @dataclass
@@ -440,11 +443,13 @@ class _Kw:
         uren = self.uren = getattr(k, "uren", 0.25) or 0.25
         overschot = self.overschot = max(k.zon_kwh - k.verbruik_kwh, 0.0)
         tekort = self.tekort = max(k.verbruik_kwh - k.zon_kwh, 0.0)
-        self.op_slim = (accu.laden_slim_kw or accu.laden_kw) * uren
+        # v5.191.0 (L-EMS-073): koude cellen laden trager (eerst verwarmen).
+        lf = max(0.0, min(1.0, float(getattr(k, "laad_factor", 1.0) or 0.0)))
+        self.op_slim = (accu.laden_slim_kw or accu.laden_kw) * uren * lf
         self.af_slim = accu.ontladen_kw * uren
         huis_ac = min(tekort, self.af_slim)
         self.eta_h = max(0.5, ontlaadrendement(huis_ac / uren * 1000, accu, eta_o))
-        self.max_op = int(accu.laden_kw * uren * eta_l / STAP_KWH + 1e-9)
+        self.max_op = int(accu.laden_kw * uren * lf * eta_l / STAP_KWH + 1e-9)
         self.tl_accu = getattr(k, "teruglever_accu_eur", None)
         self.eis = None
         #: v5.186.0 (punt 9): ruimte die de zon na dit kwartier nog vult (zie `_zonruimte`).
@@ -724,6 +729,8 @@ def _vooruit(kws: list, accu: Accu, keuze, raster, waardes, c: float, cap: float
             # v5.186.0: ook in een kwartier met een verboden verkoop de echte vloer.
             "verkoop_vloer_kwh": round(k.verkoop_vloer_kwh, 2),
         }
+        if getattr(k, "laad_factor", 1.0) < 1.0:
+            rij["laad_factor"] = round(k.laad_factor, 3)   # v5.191.0 (L-EMS-073)
         # v5.186.0 (punt 3): de marginale waarde van de inhoud na dit kwartier
         # (EUR per kWh inhoud) - de maat voor bewaren en verkopen achteraf.
         lam = _marginaal(waarde, raster, c2)
