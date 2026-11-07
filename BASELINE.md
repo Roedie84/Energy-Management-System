@@ -132,3 +132,6 @@
 | Achteraf gemist (LP-optimum, 33 u) | € 0,32 (zonder verkoop € 0,22; met 5 ct marge € 0,13) | 04-11 00:00..05-11 09:00 | 05-11 09:15 |
 | PV-voorspelling MAE/bias 7 d | 34,4 % / −15,4 % (30 d 20,3 / −14,4) | 29-10..04-11 | 05-11 09:15 |
 | Verbruik dagtotaal bias 7 d | +1,05 kWh/dag (MAE 1,86) | 29-10..04-11 | 05-11 09:15 |
+| Achteraf gemist (LP-optimum, 33 u) | € 0,54 (zonder verkoop € 0,33; 0 FOUT) | 06-11 00:00..07-11 09:00 | 07-11 09:15 |
+| PV-voorspelling MAE/bias 7 d (Solcast 00:00) | 31,3 % / −12,2 % | 31-10..06-11 | 07-11 09:15 |
+| Nachtverbruik 22-09 | 2,32 kWh | nacht 06→07 | 07-11 09:15 |

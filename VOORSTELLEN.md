@@ -491,15 +491,28 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten: elke herstart staat erin; H-EMS-18 per herstart te tellen.
 
 ## L-EMS-068 · horizon van tekortkans en 'nodig tot blok' is niet het eerste geplande laadmoment (rapportage, raakt mogelijk de reserve)
-- Status: **open, wacht op Ruud** (05-11 09:15). Bug of bewuste keuze niet zeker: de horizon telt mee in de uitleg en mogelijk in de reserve.
+- Status: **gebouwd v5.189.0** (06-11, keuze Claude in opdracht van Ruud: alleen meten, `tekortkans_nacht_pct`). Wacht op installatie (07-11 nog v5.188.0). Was: open 05-11 09:15.
 - Onderbouwing: live 05-11 09:18 `horizon_tot` 10:15 (goedkoopste blok) tegen 'blok 11:45 plan' op `diagnose_sturing`. 04-11 21:10: horizon 00:00, waardeplan laadde 05:00; tot 00:00 2,08 kWh, tot 05:00 3,83 kWh.
 - Voorstel: horizon laten eindigen bij het eerste geplande laadkwartier van het waardeplan.
 - Verwacht effect: uitleg en tekortkans over de echte periode; euro's niet te becijferen zonder replay.
 - Meten: `horizon_tot` gelijk aan het eerste laadkwartier; Brier 22:00 voor en na.
 
 ## L-EMS-069 · regeloverschot zet de vlag van de harde regel elke ontlaadavond op rood (keuze)
-- Status: **open, wacht op Ruud** (05-11 09:15).
+- Status: **gebouwd v5.189.0** (06-11, keuze Claude: vlag per kwartier, lek ≥ 0,05 kWh/kwartier). Wacht op installatie; 06-11 nog 'geschonden' met 0,119 kWh op de oude dagsom. Was: open 05-11 09:15.
 - Onderbouwing: 03-11 0,228, 04-11 0,159 kWh tegen grens 0,1 (`HUIS_GAAT_VOOR_REGELOVERSCHOT_KWH`); 05-11 0,048 t/m 09:18. 0 kwartieren onder de reserve, geen verkoopbesluit. Het is P1-rimpel tijdens ontladen: per kwartier 5-40 Wh export naast import. Op 04-11 ging 0,20 kWh tussen 15 en 22 uur het net op.
 - Voorstel, kies: (a) grens houden en P1-regeldoel tijdens ontladen onder de reserve ~20 W naar import verschuiven; (b) grens verhogen naar 0,25 kWh per dag; (c) zo laten.
 - Verwacht effect: onder saldering vrijwel € 0; (a) kost enkele Wh extra import per kwartier, (b) laat een echte schending later zien.
 - Meten: `huis_gaat_voor` per dag, export in ontlaadkwartieren.
+
+## L-EMS-070 · economische schaduw plant alleen via het async planpad (bug, zit vast)
+- Status: **gebouwd v5.189.1** (07-11 09:15; suite groen, test `test_v5189_1_schaduw_synchroon_pad.py`, 4 falen op de oude code). Wacht op installatie.
+- Onderbouwing (live 07-11 09:30): `open_dag` 05-11 met 8 kwartieren, `dagen` leeg, virtueel 0,9/0,9 kWh, sensor laatst geschreven 05-11 18:30 (andere zuinige sensoren wel). In de ronde roept `_secundaire_laag` → `_waardeplan_gaat_sturen` → `_waardeplan_nu` het plan synchroon op; de cache is dan gevuld en `_async_waardeplan_nu` (met de schaduwhaak) rekent niet meer. Herhaald: synchroon eerst → 0 rijen in 12 kwartieren.
+- Bouw: haak ook in `bereken_waardeplan`; `_schaduw_gepland` houdt het op één schaduwplan per kwartier. Sturing ongewijzigd.
+- Verwacht effect: elke dag een dagregel; evaluatie C2/C0 na 14 volledige dagen vanaf installatie.
+- Meten: `open_dag.kwartieren` loopt op, `dagen` +1 per dag, `kwartieren_ok` ≥ 90 %.
+
+## L-EMS-071 · toestand 'Model- en parameternauwkeurigheid' > 255 tekens (bug, regressie v5.187.1)
+- Status: **gebouwd v5.189.1** (07-11 09:15). Wacht op installatie.
+- Onderbouwing: system_log 3.178× 'State Geen voorspelling bij 2.3°C: ... is longer than 255' (06-11 08:20 - 07-11 09:30), toestand unknown.
+- Bouw: toestand via `kort_op_zinsgrens`; volledige tekst in `temperatuur_regressie_note`.
+- Meten: geen fout meer in de log; toestand niet unknown.

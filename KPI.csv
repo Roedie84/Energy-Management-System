@@ -1328,3 +1328,18 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-05 09:15,DAG,ems_tekortnacht_tot_nu_kwh,2.99,1,"nacht 04->05; huis 22-09 3.84 (22-05 1.55; vaatwasser 05:00-05:45 ~1.27 kWh), import 3.93 bij gem. 37.3 ct; telt als tekortdag"
 2026-11-05 09:15,DAG,ems_accu_rendement_pct,84.0,1,"laden 83.4, ontladen 100.7, rondrit 83.9; slijtage 4.22 ct"
 2026-11-05 09:15,DAG,ems_stilstand_functies,0,10,"10 wachten, 0 doen; airco niets, knop uit -> rekent; temperatuurnotitie gaf vals te weinig (7/4)"
+2026-11-07 09:15,DAG,ems_pv_kwh,7.33,1,06-11 solaredge statistics; Solcast 00:00 9.26 = -20.9%
+2026-11-07 09:15,DAG,ems_net_import_kwh,6.37,1,06-11 P1 statistics; export 0.30
+2026-11-07 09:15,DAG,ems_accu_laden_kwh,6.06,1,06-11 HomeWizard accumeter; ontladen 5.21
+2026-11-07 09:15,DAG,ems_huisverbruik_kwh,12.55,1,06-11 balans P1+PV+accu
+2026-11-07 09:15,DAG,ems_nacht_verbruik_kwh,2.32,1,nacht 06->07 22-09; import 2.75 gem 43.3 ct (accu leeg 21:45)
+2026-11-07 09:15,DAG,ems_achteraf_gemist_eur,0.54,132,06-11 00:00-07-11 09:00 werkelijk 3.70 / LP 3.16; zonder verkoop 3.36 (0.33); 0 FOUT
+2026-11-07 09:15,DAG,ems_pv_mae_7d_pct,31.3,7,31-10..06-11 Solcast 00:00; bias -12.2; 5/7 te hoog
+2026-11-07 09:15,DAG,ems_verkoop_onder_reserve,0,96,06-11 verkoopkwartieren leeg
+2026-11-07 09:15,DAG,ems_regeloverschot_kwh,0.119,1,06-11 oude dagsom-vlag geschonden; v5.189.0 niet geinstalleerd
+2026-11-07 09:15,DAG,ems_reserve_behoefte_afwijking_pct,43,1,"06-11 18:22 behoefte zonder lange horizon 7.8 kWh, werkelijk 18:15-09:00 5.44"
+2026-11-07 09:15,DAG,ems_mc_kans_22u_pct,100,1,nacht 06->07; tekort kwam (accu leeg 21:45)
+2026-11-07 09:15,DAG,ems_tekortdagen_7d,4,7,reserve_shortfall_days
+2026-11-07 09:15,DAG,ems_laadplan_wijzigingen_24u,23,1,0 na herstart; 20 live correctie
+2026-11-07 09:15,DAG,ems_schaduw_dagen,0,1,vast sinds 05-11 18:30; v5.189.1
+2026-11-07 09:15,DAG,ems_stilstand_functies,1,11,economische schaduw vast; 10 wachten 0 doen

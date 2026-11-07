@@ -1095,3 +1095,16 @@ laatste ronde: 04-11 19:40, gemeten t/m 04-11 19:47
 - Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart; 08:30 'opstartfase'). H-EMS-14 geparkeerd.
 
 laatste ronde: 05-11 09:15, gemeten t/m 05-11 09:18
+
+## 07-11 09:15 · dagcontrole (06-11 en nacht tot 07-11 09:00; de ronde van 06-11 schreef niets in het leerlog)
+- Draait **v5.188.0**; v5.189.0 (06-11, L-EMS-068/069) staat klaar maar was in de Marketplace niet zichtbaar (update-entiteit zag 5.188.0). Geen herstart sinds 05-11 18:26. Fouten EMS: **3.178× 'state > 255 tekens'** op model_en_parameternauwkeurigheid (sinds 06-11 08:20, sensor unknown) → v5.189.1. Zonneplan-kostensensoren 00:00 even onbeschikbaar (cache, geen invloed).
+- **Terugkijken 132 kwartieren:** werkelijk € 3,70, LP-optimum € 3,16 → **gemist € 0,54**; zonder accuverkoop € 3,36 (**€ 0,33**). **0 FOUT.** € 0,20 = verkopen in de avond en 's nachts het net op (regel 'woning eerst', bewust). € 0,33 = 's nachts 3,4 kWh extra laden bij 39-40 ct en de zon van 09-11 u (41-51 ct) terugleveren i.p.v. opslaan; afweging bewaarmarge 5 ct + onzekerheid 0,2 ct/u (schaduw meet dit) en zon −20,9 % (Solcast 9,26 / gemeten 7,33): PECH. 07-11 08:00-08:15 0,57 kWh netlading bij 44,7 ct buiten het plan bij SoC 7 % (omvormer herstelt ondergrens; < € 0,01).
+- Beslissingen: laden 05:15-05:30 (38,6/39,1 ct) en 12:45-13:00 (39,7/40,1) goed; huis 06:15-08:15 (44-54 ct) en 15:00-21:30 (47-57 ct) goed; houden 13:15-14:15 bij 40-42 ct met import 0,65 kWh goed (avond 50-57 ct). Leeg 21:45 → nacht import 2,75 kWh gem. 43,3 ct; laden loonde niet (39 ct/0,84 + 4,2 = 51 ct).
+- Harde regel: **0× verkoop, 0 kwartieren onder de reserve.** Vlag 06-11 'geschonden' door regeloverschot 0,119 kWh (oude dagsom; v5.189.0 telt per kwartier). Netimport duurder dan later ontladen: 1× 18:00 0,09 kWh (piek boven 2,4 kW), ~€ 0,00.
+- **Zit vast → v5.189.1:** economische schaduw sinds 05-11 18:30 stil (open_dag 05-11, 8 kwartieren, 0 dagen, virtueel 0,9/0,9). Oorzaak: haak alleen in het async planpad; `_secundaire_laag` vult de cache synchroon. Herhaald in test (0 rijen → 11). De 14 dagen beginnen opnieuw bij installatie.
+- PV 06-11 7,33 kWh (Solcast 00:00 9,26, **−20,9 %**); 7 d (31-10..06-11) MAE **31,3 %**, bias **−12,2 %** (5/7 te hoog). Verbruik 06-11 12,55 kWh; nacht 22-09 **2,32 kWh**. Reserve-behoefte 18:22 zonder lange horizon 7,8 kWh tegen werkelijk 5,44 (18:15-09:00): +43 %, kostte niets (accu leeg om 21:45). MC 22:00 100 %, tekortnacht kwam → Brier-bijdrage 0. Tekortdagen 7 d: 4.
+- Laadplan 24 u: 23 wijzigingen, 0 na herstart, 20× 'live correctie'. 00:00 'zonverwachting 9,2 → 1,9 kWh', 00:15 terug: **H-EMS-19** (nieuw) zon-vandaag rekent om middernacht met de oude rest-teller; geen schade (blokken 09:45+).
+- Stilstand verder: 10 wachten, 0 doen; airco 'niets', knop uit → rekent. Advies 7/8 klaar (08:30 'module klaar'). Niet gemeten: verbruiksvoorspelling per uur en SoC-voorspelling (niet in de recorder), NILM-herkenning per apparaat.
+- Hypotheses: H-EMS-2 (PV te hoog, bevestigd), H-EMS-15 (tekortsoort 'bijladen loonde' 3 nachten op rij), H-EMS-19 (middernacht-zon). H-EMS-18 geparkeerd (geen herstarts).
+
+laatste ronde: 07-11 09:15, gemeten t/m 07-11 09:00
