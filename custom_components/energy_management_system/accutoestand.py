@@ -13,6 +13,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     BALANCEER_VOL_PERCENT,
     BATTERY_MODULE_CELL_DELTA_MATERIEEL_V,
+    BATTERY_MODULE_TEMPERATURE_MATERIEEL_C,
     BATTERY_MODULE_CUSUM_SLACK_C,
     BATTERY_MODULE_CUSUM_SLACK_PERCENT,
     BATTERY_MODULE_CUSUM_SLACK_V,
@@ -1602,13 +1603,24 @@ class AccuToestandMixin:
             for veld, waarde in (staat.get("cusum") or {}).items()
             if waarde.get("drift")
         ]
-        if "cel_delta_afwijking_v" not in velden:
+        if "cel_delta_afwijking_v" not in velden and "temperatuur_afwijking_c" not in velden:
             return velden
         if live is None:
             live = next(
                 (m for m in (self.battery_module_live or []) if str(m.get("module")) == str(nummer)),
                 None,
             )
+        # v5.192.2: temperatuur alleen als de afwijking er echt toe doet (plek in
+        # de stapel, bij de omvormer, geeft een vaste ~1 °C).
+        if "temperatuur_afwijking_c" in velden:
+            afw = (live or {}).get("temperatuur_afwijking_c")
+            if afw is None:
+                reeks = (staat.get("geschiedenis") or {}).get("temperatuur_afwijking_c") or []
+                afw = max(reeks[-3:], key=abs) if reeks else None
+            if afw is not None and abs(afw) < BATTERY_MODULE_TEMPERATURE_MATERIEEL_C:
+                velden.remove("temperatuur_afwijking_c")
+        if "cel_delta_afwijking_v" not in velden:
+            return velden
         delta = (live or {}).get("cel_delta_v")
         if delta is None:
             reeks = (staat.get("geschiedenis") or {}).get("cel_delta_v") or []

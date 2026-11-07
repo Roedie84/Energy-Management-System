@@ -1,3 +1,9 @@
+EMS v5.192.2 - geen valse melding meer over een warmere accumodule
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Een accumodule die door haar plek ~1 °C warmer is, staat niet meer als "loopt uit de pas" in de cockpit. Pas vanaf 3 °C verschil volgt een melding.
+
 EMS v5.192.1 - kleine tekstcorrectie (laden bij koude accu)
 
 Installeren: via de Marketplace bijwerken; herstarten mag bij de volgende gelegenheid.

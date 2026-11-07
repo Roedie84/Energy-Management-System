@@ -3646,6 +3646,10 @@ BATTERY_MODULE_CELL_DELTA_SERIOUS_V = 0.20
 # v5.36: onder dit verschil telt een celdelta-drift niet als "uit de pas".
 # 10-30 mV balanceert een BMS gewoon weg; de helft van de aandachtsgrens.
 BATTERY_MODULE_CELL_DELTA_MATERIEEL_V = 0.05
+# v5.192.2: een temperatuurdrift telt pas als de module minstens zoveel van de
+# andere afwijkt. 07-11: module 1 (01029) zit structureel ~1 °C warmer (plek bij
+# de omvormer) en stond daardoor als "loopt uit de pas" in de cockpit.
+BATTERY_MODULE_TEMPERATURE_MATERIEEL_C = 3.0
 
 # --- Waar die drempels wél en niet gelden (v1.64.0) ------------------
 # Gemeld: "Accumodule 1: celspanningsverschil 0.190 V - hoger dan

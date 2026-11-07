@@ -37,7 +37,9 @@ def test_melding_per_module_uit(make_coordinator):
     """v5.68.2: "Melding mag zeker aanblijven alleen niet voor het genoemde
     nummer"."""
     c = make_coordinator({})
-    c._read_battery_modules = lambda: _modules("AB3000 00996")
+    mods = _modules("AB3000 00996")
+    mods[1]["temperatuur_c"] = 26.0     # v5.192.2: temperatuur telt pas vanaf 3 °C verschil
+    c._read_battery_modules = lambda: mods
     c._update_battery_module_health(NU)
     for staat in c.battery_module_health.values():
         staat["cusum"] = {"temperatuur_afwijking_c": {"drift": True}}

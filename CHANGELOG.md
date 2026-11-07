@@ -35120,3 +35120,10 @@ Tests: `test_v5192_airco_prijsstart.py` (8).
 - `koude_laden.toelichting` noemde bij warme cellen "100 % van het laadvermogen"; nu het deel dat bij koude geldt (50 % of het geleerde). Live gecontroleerd na de herstart van 07-11 11:20: economische schaduw telt weer (open_dag 07-11, status loopt), 'Model- en parameternauwkeurigheid' heeft weer een toestand, geen fouten.
 
 Tests: `test_v5191_koude_accu.py` (+1).
+
+## v5.192.2 — temperatuurverschil tussen modules pas vanaf 3 °C een melding
+
+- Gemeld 07-11: cockpit "Accumodule 1 loopt aanhoudend uit de pas (temperatuur_afwijking_c)", ook module 3. Gemeten 23-10..07-11: module 1 (01029) daggemiddeld 0,5-1,7 °C warmer dan 00917/02093 (plek bij de omvormer); celdelta 0,01 V en SoC binnen 1,5 % bij alle drie. Geen gezondheidsprobleem.
+- `_module_drift_velden`: een temperatuurdrift telt pas bij een afwijking van minstens `BATTERY_MODULE_TEMPERATURE_MATERIEEL_C` (3 °C), net als de celdelta (v5.36). De CUSUM blijft meten.
+
+Tests: `test_v5192_2_module_temperatuur.py` (4).

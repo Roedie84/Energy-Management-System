@@ -361,6 +361,8 @@ def test_drift_becomes_an_attention_point(make_coordinator, hass):
         "waarschuwingen": [],
     }
     _gezonde_situatie(hass)
+    # v5.192.2: een temperatuurdrift telt pas vanaf 3 °C verschil met de andere.
+    _zet(hass, 2, 3.34, 3.33, 32.0, 48, 700)
     coordinator._update_battery_module_health(DAY0)
 
     punten = coordinator.get_diagnostic_summary()["aandachtspunten"]
