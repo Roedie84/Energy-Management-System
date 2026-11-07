@@ -531,3 +531,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Verwacht effect: bij vorst een volle(re) accu voor het dure blok; niet te becijferen voor er gemeten is.
 - Meten: `koude_laden` op Accu modulegezondheid (metingen, verwarmingen, laadfactor); SoC aan het begin van het dure blok bij koude nachten.
 - Let op: module 00996 is vervangen door 02093 (Ruud 07-11).
+
+## L-EMS-074 · airco: opwarmmoment op prijs (wens Ruud 07-11)
+- Status: **gebouwd v5.192.0** (akkoord Ruud 07-11 11:08). Wacht op installatie; werkt alleen met de knop Airco automaat aan.
+- Aanleiding: opwarmen begon altijd net op tijd voor het geleerde moment. Bestaand: airco tegen gas (COP), buffer ±0,5 °C op prijs, verwarmen op zonoverschot.
+- Bouw: binnen 2 u voor de gewone start het goedkoopste begin (opwarmen + vasthouden op half vermogen, per kwartierstuk, COP bij voorspelde buitentemperatuur); ≥ 2 ct voordeel.
+- Bevinding: 07-11 (41 ct → 54 ct om 14:45) loont eerder beginnen niet (vasthouden kost meer). Verwacht effect klein (< € 1-2/mnd); loont bij een piek midden in het opwarmen.
+- Meten: `prijsstart` in het airco-besluit (start, basis, voordeel).
