@@ -1,3 +1,10 @@
+EMS v5.193.0 - geen valse 'tekortnacht' meer als bijladen niet loonde
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Nachten waarin de accu leeg raakte terwijl extra laden duurder was dan het opleverde, heten nu 'economisch' in plaats van 'bijladen loonde'. De LET OP op de cockpit verdwijnt en de reservemarge gaat omlaag.
+- De nachten naar 4 t/m 7 november worden na de herstart opnieuw bekeken.
+
 EMS v5.192.2 - geen valse melding meer over een warmere accumodule
 
 Installeren: via de Marketplace bijwerken en herstarten.

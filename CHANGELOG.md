@@ -35127,3 +35127,14 @@ Tests: `test_v5191_koude_accu.py` (+1).
 - `_module_drift_velden`: een temperatuurdrift telt pas bij een afwijking van minstens `BATTERY_MODULE_TEMPERATURE_MATERIEEL_C` (3 °C), net als de celdelta (v5.36). De CUSUM blijft meten.
 
 Tests: `test_v5192_2_module_temperatuur.py` (4).
+
+## v5.193.0 — tekortnachten onder het waardeplan eerlijk ingedeeld (L-EMS-075)
+
+Dagcontrole 08-11: de nachten naar 4 t/m 7 november stonden als "bijladen loonde, maar de accu werd niet vol". Die reden kwam uit het oude laadbesluit; het waardeplan laadde de kwartieren die loonden. Nacht naar 8-11: een extra kWh was 33,6 ct waard en kostte minstens 39,7 ct. Gevolg: LET OP op de cockpit en 5 tekortdagen in de reservemarge (+45 %). Akkoord Ruud 08-11 09:26.
+
+- Herleiding (`_deel_nacht_in_met_reden`): laadde het plan, dan telt of een EXTRA kWh had geloond: het goedkoopste kwartier waarin niet al geladen werd, tegen tekortprijs x rendement - slijtage. Kostte die meer: economisch. Anders blijft het "niet te bepalen" (nooit planning bij gebrek aan bewijs).
+- Live (`_deel_afgelopen_nacht_in`): met reden "bijladen loonde" eerst deze toets.
+- Bewaarde nachten met die reden één keer opnieuw (`_toets_laadnachten_op_economie`, vlag `economietoets`), ook elk uur zolang er een openstaat. Alleen naar economisch.
+- Economische nachten tellen niet mee in de veiligheidsmarge (v5.70); de reserve zakt dus mee.
+
+Tests: `test_v5193_laadnachten_economisch.py` (5).

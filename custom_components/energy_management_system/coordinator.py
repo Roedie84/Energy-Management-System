@@ -671,6 +671,7 @@ from .const import (
     TEKORTSOORT_CAPACITEIT,
     TEKORTSOORT_PLANNING,
     TEKORTSOORT_ECONOMISCH,
+    TEKORT_REDEN_LOONDE,
     TEKORTSOORT_ONBEKEND,
     TEKORTSOORT_VERKOCHT_MET_WINST,
     TEKORT_RESERVETOETS,
@@ -32025,6 +32026,14 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         if not onvolledig:
             self._tekort_soort_vandaag = soort
             self._tekort_reden_vandaag = self._tekort_reden(soort)
+            # v5.193.0 (L-EMS-075): "bijladen loonde" komt uit het oude
+            # laadbesluit; onder het waardeplan laadde het plan wat loonde.
+            # Dan rekent de herleiding of een extra kWh nog loonde.
+            if self._tekort_reden_vandaag == TEKORT_REDEN_LOONDE:
+                h_soort, h_reden = self._herleid_laadnacht(begin.date())
+                if h_soort == TEKORTSOORT_ECONOMISCH:
+                    self._tekort_soort_vandaag = h_soort
+                    self._tekort_reden_vandaag = h_reden
             # v5.55: live planning door verkopen? De live volging kent de
             # verkoop- en tekortprijs niet; het dagverloop wel. Loonde de
             # verkoop, dan is het "verkocht met winst" (zie
@@ -32215,7 +32224,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         if self._laadbesluit_stand == "zon":
             return "de zon zou de accu vullen en deed dat niet"
         if self._laadbesluit_stand == "loont":
-            return "bijladen loonde, maar de accu werd niet vol"
+            return TEKORT_REDEN_LOONDE
         return "niet vol geworden"
 
     def _tekort_soort(
@@ -32549,10 +32558,23 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 "rendement en slijtage)"
             )
         # v5.162.1: ook het waardeplan laadt uit het net, onder een eigen reden.
-        if any(
-            str(r.get("reden") or "").startswith(("grid_charging", "waardeplan_laden"))
-            for r in rijen
-        ):
+        laadt = ("grid_charging", "waardeplan_laden")
+        if any(str(r.get("reden") or "").startswith(laadt) for r in rijen):
+            # v5.193.0 (L-EMS-075): het plan laadde de kwartieren die loonden.
+            # Telt alleen of een EXTRA kWh had geloond: het goedkoopste
+            # kwartier waarin niet al geladen werd, tegen de waarde van het
+            # tekort. Kostte die meer: economisch. Anders niet te bepalen.
+            vrij = [
+                r.get("prijs_ct") for r in voor
+                if r.get("prijs_ct") is not None and r["soc"] < vol_grens
+                and not str(r.get("reden") or "").startswith(laadt)
+            ]
+            if vrij and min(vrij) >= waarde:
+                return TEKORTSOORT_ECONOMISCH, (
+                    f"het plan laadde wat loonde; een extra kWh kostte minstens "
+                    f"{_nl(min(vrij))} ct en was {_nl(waarde)} ct waard (tekort tegen "
+                    f"{_nl(tekortprijs)} ct, na rendement en slijtage)"
+                )
             return None, None
         return TEKORTSOORT_PLANNING, (
             f"laden tegen {_nl(goedkoopst)} ct had geloond tegen het tekort van "
@@ -32607,8 +32629,52 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             else:
                 record.pop("tekort_soort", None)
         ingedeeld += self._toets_planningsnachten_op_winst()
+        ingedeeld += self._toets_laadnachten_op_economie()
         ingedeeld += self._toets_winstnachten_op_reserve()
         return ingedeeld
+
+    def _herleid_laadnacht(self, begin_dag) -> tuple[str | None, str | None]:
+        """De herleiding van één nacht (v5.193.0, L-EMS-075)."""
+        vol_grens, rendement, slijtage_ct, verschuiving_w = self._herleid_parameters()
+        return self._deel_nacht_in_met_reden(
+            self._venster_rijen(begin_dag), vol_grens, rendement, slijtage_ct, verschuiving_w,
+            **self._reserve_omrekening(),
+        )
+
+    def _toets_laadnachten_op_economie(self) -> int:
+        """Bewaarde nachten met "bijladen loonde, maar de accu werd niet vol"
+        één keer opnieuw bekijken (v5.193.0, L-EMS-075).
+
+        Dagcontrole 08-11: de nachten naar 4 t/m 7 november stonden zo, terwijl
+        het waardeplan laadde wat loonde (nacht naar 8-11: een extra kWh was
+        33,6 ct waard en kostte minstens 39,7 ct). Ze hielden de cockpit op
+        LET OP en telden als tekortdag in de reservemarge. Alleen naar
+        economisch; niet te bepalen of loonde wel: blijft wat het was.
+        """
+        if not isinstance(self.dagverloop or {}, dict):
+            return 0
+        omgezet = 0
+        for record in self.reserve_daily_records or []:
+            if (
+                not isinstance(record, dict)
+                or not record.get("shortfall")
+                or record.get("tekort_soort") != TEKORTSOORT_PLANNING
+                or record.get("tekort_reden") != TEKORT_REDEN_LOONDE
+                or record.get("economietoets") == "v5.193"
+            ):
+                continue
+            try:
+                dag = date.fromisoformat(str(record.get("date")))
+            except ValueError:
+                continue
+            soort, reden = self._herleid_laadnacht(dag - timedelta(days=1))
+            if soort is None and not self._venster_rijen(dag - timedelta(days=1)):
+                continue        # dagverloop (nog) niet daar: later opnieuw
+            record["economietoets"] = "v5.193"
+            if soort == TEKORTSOORT_ECONOMISCH:
+                record.update(tekort_soort=soort, tekort_reden=reden)
+                omgezet += 1
+        return omgezet
 
     def _toets_planningsnachten_op_winst(self) -> int:
         """Bewaarde planningsnachten één keer opnieuw bekijken (v5.55).
@@ -32746,6 +32812,14 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         # (L-EMS-010) - los van de twee hierboven, zodat ze niet wachten.
         if any(self._wacht_op_reservetoets(r) for r in (self.reserve_daily_records or [])):
             self._toets_winstnachten_op_reserve()
+        # v5.193.0 (L-EMS-075): nachten met "bijladen loonde" onder het waardeplan.
+        if any(
+            isinstance(r, dict) and r.get("shortfall")
+            and r.get("tekort_reden") == TEKORT_REDEN_LOONDE
+            and r.get("economietoets") != "v5.193"
+            for r in (self.reserve_daily_records or [])
+        ):
+            self._toets_laadnachten_op_economie()
 
     def _nodig_tot_en_na_blok_kwh(self) -> tuple[float | None, float]:
         """Het diepste tekort zonder marge, gesplitst rond het blok (v5.47).

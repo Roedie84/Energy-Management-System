@@ -5959,6 +5959,9 @@ TEKORTSOORT_PLANNING = "planning"
 # was goed, maar het tekort dat volgde telde als planning. Economisch: niet
 # vol, netladen afgewezen op de marge, en het zonoverschot ging de accu in.
 TEKORTSOORT_ECONOMISCH = "economisch"
+# v5.193.0 (L-EMS-075): de reden die het oude laadbesluit gaf; onder het waardeplan
+# opnieuw getoetst op een extra kWh.
+TEKORT_REDEN_LOONDE = "bijladen loonde, maar de accu werd niet vol"
 # Nachten van vóór v5.40 die niet uit het dagverloop te herleiden zijn.
 TEKORTSOORT_ONBEKEND = "onbekend"
 # v5.55: een vierde soort. Gevonden bij de doorlichting van 8 oktober: in de
