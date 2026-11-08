@@ -35167,3 +35167,11 @@ Gemeld 08-11 11:30: tijdens de kalibratie bleef de planning op het plan van vó�
 - `_kalibratie_planning` in de kalibratieronde: alleen voor de weergave (tabel, cockpit, Vooruitblik); het plan gaat niet in de kwartiercache, zodat de sturing na de kalibratie vers rekent.
 
 Tests: `test_v5194_2_kalibratie_planning.py` (3).
+
+## v5.194.3 — temperatuur van een module tegen zijn eigen normaal
+
+Gemeld 08-11 13:45: de cockpit meldde module 1 (AB3000 01029, +4,5 °C) en module 3 (AB3000 02093, -3 °C) als "uit de pas" op temperatuur. Ruud: logisch, module 1 zit direct onder de omvormer.
+
+- `_module_drift_velden`: de temperatuurafwijking telt pas als de dagmediaan van de laatste dagen minstens `BATTERY_MODULE_TEMPERATURE_MATERIEEL_C` (3 °C) afwijkt van de eigen referentie van de module (de CUSUM-referentie), niet meer het moment tegenover nul. Een vaste plek in de stapel is zo geen drift; een module die warmer wordt dan hij gewend is wel. Zonder geschiedenis: het moment, zoals voorheen.
+
+Tests: `test_v5194_3_module_eigen_normaal.py` (3).

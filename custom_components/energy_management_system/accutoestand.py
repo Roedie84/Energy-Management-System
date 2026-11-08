@@ -1613,12 +1613,19 @@ class AccuToestandMixin:
             )
         # v5.192.2: temperatuur alleen als de afwijking er echt toe doet (plek in
         # de stapel, bij de omvormer, geeft een vaste ~1 °C).
+        # v5.194.3 (Ruud 08-11: "logisch, er zit er 1 direct onder de
+        # omvormer"): een vaste plek-afwijking is geen drift. Telt alleen als
+        # de module de laatste dagen (dagmediaan, niet het moment: onder
+        # belasting warmt de omvormer extra) minstens de drempel warmer of
+        # kouder is dan zijn EIGEN normaal (de CUSUM-referentie).
         if "temperatuur_afwijking_c" in velden:
-            afw = (live or {}).get("temperatuur_afwijking_c")
-            if afw is None:
-                reeks = (staat.get("geschiedenis") or {}).get("temperatuur_afwijking_c") or []
-                afw = max(reeks[-3:], key=abs) if reeks else None
-            if afw is not None and abs(afw) < BATTERY_MODULE_TEMPERATURE_MATERIEEL_C:
+            reeks = (staat.get("geschiedenis") or {}).get("temperatuur_afwijking_c") or []
+            ref = ((staat.get("cusum") or {}).get("temperatuur_afwijking_c") or {}).get("referentie")
+            if reeks:
+                afw = max(reeks[-3:], key=lambda v: abs(v - (ref or 0.0)))
+            else:
+                afw = (live or {}).get("temperatuur_afwijking_c")
+            if afw is not None and abs(afw - (ref or 0.0)) < BATTERY_MODULE_TEMPERATURE_MATERIEEL_C:
                 velden.remove("temperatuur_afwijking_c")
         if "cel_delta_afwijking_v" not in velden:
             return velden

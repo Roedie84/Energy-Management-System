@@ -1,3 +1,9 @@
+EMS v5.194.3 - accumodule onder de omvormer niet meer 'uit de pas'
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Een module die door zijn plek altijd warmer of kouder is, geldt niet meer als uit de pas. Alleen als hij warmer of kouder wordt dan hij zelf gewend is.
+
 EMS v5.194.2 - planning loopt mee tijdens de kalibratie
 
 Installeren: via de Marketplace bijwerken en herstarten.
