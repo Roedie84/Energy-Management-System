@@ -67,6 +67,7 @@ from . import witgoedplanning
 from . import witgoedprofiel
 from . import waterkosten
 from . import waardeplan as waardeplan_mod
+from . import kalibratie_plan as kalibratie_plan_mod
 from . import salderingspositie as salderingspositie_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .nilm_glue import NilmMixin
@@ -3205,6 +3206,33 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         await self._async_apply_manual(-self.handmatig_laadvermogen_w())
         self.kalibratie_fase = "laden"
         return True
+
+    async def _kalibratie_planning(self, now: datetime, entries) -> None:
+        """De planning tijdens de kalibratie (v5.194.2, zie kalibratie_plan.py).
+
+        Alleen voor de weergave: de kalibratieronde stuurt. Het plan gaat niet
+        in de kwartiercache, zodat de sturing na de kalibratie vers rekent.
+        """
+        try:
+            voor = self._waardeplan_invoer(now, entries)
+            if "uitkomst" in voor:
+                return
+            vol = (dt_util.parse_datetime(str(self.kalibratie_vol_sinds))
+                   if self.kalibratie_vol_sinds else None)
+            houd_tot = vol + timedelta(minutes=KALIBRATIE_HOUD_MIN) if vol is not None else None
+            args = (voor["kwartieren"], voor["accu"], houd_tot, KALIBRATIE_HOUD_MIN)
+            uitvoeren = getattr(getattr(self, "hass", None), "async_add_executor_job", None)
+            if uitvoeren is None:
+                res = kalibratie_plan_mod.plan(*args)
+            else:
+                res = await uitvoeren(kalibratie_plan_mod.plan, *args)
+            plan = self._waardeplan_afronden(now, voor, res)
+            plan["kalibratie"] = True
+            self.last_waardeplan = plan
+            self._waardeplan_cache = None
+            self._kwartierplan_cache = None
+        except Exception:  # noqa: BLE001 - de weergave mag de kalibratie nooit breken
+            _LOGGER.debug("Planning tijdens de kalibratie niet te berekenen", exc_info=True)
 
     async def async_set_force_manual(self, value: bool) -> None:
         # v5.186.0 (B27): sinds wanneer, voor de herinnering.
@@ -43013,7 +43041,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             # houdt hem KALIBRATIE_HOUD_MIN bovenin en zet de stand daarna uit.
             self.last_reason = "kalibratie"
             self.last_simulated_action = None
-            await self._kalibratie_ronde(now)
+            if await self._kalibratie_ronde(now):
+                await self._kalibratie_planning(now, entries)
             # Klaar of niet: deze ronde stuurt verder niets; is de stand nu
             # uit, dan neemt de volgende ronde (60 s) de gewone sturing over.
             # v3.29.0: en de kostentelling ligt ook stil.

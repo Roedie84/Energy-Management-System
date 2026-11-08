@@ -35158,3 +35158,12 @@ Gemeld 08-11: tijdens het scrollen op de mobiel sprong de energiecockpit telkens
 - Bij het opnieuw tekenen houdt elk paneel twee beelden lang zijn hoogte vast, zodat de pagina niet even korter wordt.
 
 Tests: `test_v5194_1_cockpit_scrollplek.py` (2).
+
+## v5.194.2 — de planning werkt bij tijdens de kalibratie
+
+Gemeld 08-11 11:30: tijdens de kalibratie bleef de planning op het plan van vóór de kalibratie staan (accu 10 %, sparen), terwijl de accu op 2,4 kW vol laadde. De kalibratieronde stuurt buiten het waardeplan om en rekende geen plan meer.
+
+- `kalibratie_plan.py`: de eerste kwartieren laden op het handmatige laadvermogen tot vol, daarna `KALIBRATIE_HOUD_MIN` vasthouden (het huis uit het net), zoals `_kalibratie_ronde` doet; vanaf het einde rekent het gewone waardeplan verder met een volle accu. Rijen met `kalibratie: true`.
+- `_kalibratie_planning` in de kalibratieronde: alleen voor de weergave (tabel, cockpit, Vooruitblik); het plan gaat niet in de kwartiercache, zodat de sturing na de kalibratie vers rekent.
+
+Tests: `test_v5194_2_kalibratie_planning.py` (3).

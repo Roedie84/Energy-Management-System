@@ -1,3 +1,9 @@
+EMS v5.194.2 - planning loopt mee tijdens de kalibratie
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Tijdens de kalibratie toont de planning nu het volladen, het uur vasthouden en daarna het gewone plan vanaf een volle accu.
+
 EMS v5.194.1 - cockpit springt niet meer naar boven
 
 Installeren: via de Marketplace bijwerken en herstarten.
