@@ -1079,6 +1079,59 @@ const volgScroll = () => {
 };
 const scrolltNog = () => SCROLL.aan || Date.now() < SCROLL.tot;
 
+/* ---- scrollplek vasthouden (v5.194.1) ----
+   Gemeld 08-11: op de mobiel sprong de cockpit tijdens het scrollen telkens
+   terug naar boven. Een sprong naar boven zonder dat er gebladerd of een
+   andere pagina gekozen is (zelfde adres, geen tik buiten de kaart) zetten we
+   terug. Duimscrollen gaat in kleine stappen; alleen een sprong in een keer
+   van ver omlaag naar (bijna) 0 telt. Het actieve tabblad opnieuw aantikken
+   (HA scrolt dan bewust naar boven) blijft werken: dat is een tik buiten de
+   kaart. */
+const PLEK = { y: 0, pad: "", buitenTik: 0, kaarten: new Set(), klaar: false, hersteld: 0 };
+const SPRONG_VANAF_PX = 300;
+const SPRONG_BOVEN_PX = 8;
+const BUITEN_TIK_MS = 1500;
+const isSprongNaarBoven = (vorige, nu, padGelijk, sindsBuitenTik) =>
+  padGelijk && vorige >= SPRONG_VANAF_PX && nu <= SPRONG_BOVEN_PX && sindsBuitenTik > BUITEN_TIK_MS;
+const herstelPlek = (y, pogingen = 20) => {
+  // De pagina kan even korter zijn (opnieuw opgebouwd); dan een paar beelden wachten
+  const doe = (n) => {
+    const max = (document.documentElement.scrollHeight || 0) - (window.innerHeight || 0);
+    if (max >= y - 2 || n <= 0) {
+      window.scrollTo({ top: Math.min(y, Math.max(0, max)), behavior: "auto" });
+      PLEK.y = window.scrollY;
+      return;
+    }
+    requestAnimationFrame(() => doe(n - 1));
+  };
+  requestAnimationFrame(() => doe(pogingen));
+};
+const volgPlek = () => {
+  if (PLEK.klaar || typeof window === "undefined") return;
+  PLEK.klaar = true;
+  PLEK.y = window.scrollY || 0;
+  PLEK.pad = location.pathname;
+  window.addEventListener("pointerdown", (ev) => {
+    const pad = ev.composedPath ? ev.composedPath() : [];
+    if (![...PLEK.kaarten].some((k) => pad.includes(k))) PLEK.buitenTik = Date.now();
+  }, { passive: true, capture: true });
+  window.addEventListener("scroll", () => {
+    const nu = window.scrollY || 0;
+    const padGelijk = location.pathname === PLEK.pad;
+    const zichtbaar = [...PLEK.kaarten].some((k) => k.isConnected);
+    if (zichtbaar && isSprongNaarBoven(PLEK.y, nu, padGelijk, Date.now() - PLEK.buitenTik)) {
+      PLEK.hersteld += 1;
+      console.info("EMS cockpit: sprong naar boven teruggezet", PLEK.y);
+      herstelPlek(PLEK.y);
+      return;
+    }
+    PLEK.y = nu;
+    PLEK.pad = location.pathname;
+  }, { passive: true });
+  window.addEventListener("location-changed", () => { PLEK.pad = location.pathname; PLEK.y = window.scrollY || 0; });
+  window.addEventListener("popstate", () => { PLEK.pad = location.pathname; });
+};
+
 class EmsCockpitCard extends HTMLElement {
   constructor() {
     super();
@@ -1172,6 +1225,7 @@ class EmsCockpitCard extends HTMLElement {
   }
 
   connectedCallback() {
+    PLEK.kaarten.add(this);
     if (!this._tik) {
       // Klok, "over x min", de tijdlijn en de nu-lijn lopen ook zonder nieuwe states door
       this._tik = setInterval(() => {
@@ -1182,6 +1236,7 @@ class EmsCockpitCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    PLEK.kaarten.delete(this);
     if (this._tik) {
       clearInterval(this._tik);
       this._tik = null;
@@ -1194,6 +1249,7 @@ class EmsCockpitCard extends HTMLElement {
     this._gebouwd = true;
     this._html = {};
     volgScroll();
+    volgPlek();
     this.shadowRoot.innerHTML =
       `<style>${STIJL}</style>` +
       `<div class="root"><div class="wrap">` +
@@ -1312,6 +1368,7 @@ class EmsCockpitCard extends HTMLElement {
     }
     const vuil = [...this._vuil];
     this._vuil.clear();
+    const vastgehouden = [];
     for (const paneel of vuil) {
       const el = this._el[paneel];
       if (!el) continue;
@@ -1323,6 +1380,13 @@ class EmsCockpitCard extends HTMLElement {
         // opgebouwd)
         if (this._html[paneel] === html) continue;
         this._html[paneel] = html;
+        // v5.194.1: de hoogte even vasthouden, zodat de pagina tijdens het
+        // vervangen niet korter wordt (dat zette de scrollplek terug)
+        const hoogte = el.offsetHeight;
+        if (hoogte > 0 && html !== null) {
+          el.style.minHeight = `${hoogte}px`;
+          vastgehouden.push(el);
+        }
         if (html === null) {
           el.hidden = true;
           el.innerHTML = "";
@@ -1333,6 +1397,11 @@ class EmsCockpitCard extends HTMLElement {
       } catch (err) {
         console.warn("EMS cockpit: paneel", paneel, "kon niet getekend worden", err);
       }
+    }
+    if (vastgehouden.length) {
+      const los = () => { for (const el of vastgehouden) el.style.minHeight = ""; };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(los));
+      else setTimeout(los, 0);
     }
   }
 

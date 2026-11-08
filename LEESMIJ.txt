@@ -1,3 +1,9 @@
+EMS v5.194.1 - cockpit springt niet meer naar boven
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Scrollen in de energiecockpit op de mobiel: de pagina springt niet meer terug naar boven.
+
 EMS v5.194.0 - kalibratie gaat vanzelf
 
 Installeren: via de Marketplace bijwerken en herstarten.

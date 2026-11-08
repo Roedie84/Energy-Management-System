@@ -35149,3 +35149,12 @@ Gevraagd 08-11: "als ik kalibratie aanzet moet het EMS alles fixen". In de kalib
 - Netlading, piekmeting, tekortdetectie en verbruiksleer tellen tijdens de kalibratie nog steeds niet mee.
 
 Tests: `test_v5194_kalibratie_automatisch.py` (4).
+
+## v5.194.1 — cockpit springt op de mobiel niet meer naar boven
+
+Gemeld 08-11: tijdens het scrollen op de mobiel sprong de energiecockpit telkens terug naar boven.
+
+- Een sprong in één keer van ver omlaag (≥ 300 px) naar boven, op hetzelfde adres en zonder tik buiten de kaart in de 1,5 s ervoor, zet de kaart terug naar de vorige plek (`isSprongNaarBoven`, `volgPlek`). Zelf naar boven scrollen, een ander tabblad en het actieve tabblad opnieuw aantikken (HA scrolt dan bewust naar boven) blijven werken. In de console staat dan "sprong naar boven teruggezet".
+- Bij het opnieuw tekenen houdt elk paneel twee beelden lang zijn hoogte vast, zodat de pagina niet even korter wordt.
+
+Tests: `test_v5194_1_cockpit_scrollplek.py` (2).
