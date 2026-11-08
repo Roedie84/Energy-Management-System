@@ -35138,3 +35138,14 @@ Dagcontrole 08-11: de nachten naar 4 t/m 7 november stonden als "bijladen loonde
 - Economische nachten tellen niet mee in de veiligheidsmarge (v5.70); de reserve zakt dus mee.
 
 Tests: `test_v5193_laadnachten_economisch.py` (5).
+
+## v5.194.0 — kalibratie aan: het EMS regelt alles
+
+Gevraagd 08-11: "als ik kalibratie aanzet moet het EMS alles fixen". In de kalibratiestand stuurde het EMS niets; de accu moest met de hand geladen worden (08-11 bleef hij daardoor op 10 % staan).
+
+- `_kalibratie_ronde`: laden op het handmatige laadvermogen tot `KALIBRATIE_VOL_PERCENT` (99 %), dan `KALIBRATIE_HOUD_MIN` (60 min) bovenin houden (blijven laden; de BMS knijpt af en balanceert), dan de stand uit en een melding "Kalibratie afgerond"; de volgende ronde stuurt het EMS weer gewoon.
+- Niet vol na `KALIBRATIE_MAX_UREN` (8 u): stand uit met een melding.
+- `kalibratie_vol_sinds` blijft over een herstart bewaard. Melding "accu is vol" en de uitleg zeggen nu wat het EMS doet (niet meer "zet de stand uit en de ondergrens in de app terug").
+- Netlading, piekmeting, tekortdetectie en verbruiksleer tellen tijdens de kalibratie nog steeds niet mee.
+
+Tests: `test_v5194_kalibratie_automatisch.py` (4).

@@ -1,3 +1,9 @@
+EMS v5.194.0 - kalibratie gaat vanzelf
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Zet je de schakelaar Kalibratie aan, dan laadt het EMS de accu zelf vol, houdt hem een uur op 100 % om de cellen te balanceren en zet de kalibratie daarna zelf uit. Je krijgt een melding als hij klaar is.
+
 EMS v5.193.0 - geen valse 'tekortnacht' meer als bijladen niet loonde
 
 Installeren: via de Marketplace bijwerken en herstarten.

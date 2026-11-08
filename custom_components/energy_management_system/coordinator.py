@@ -401,6 +401,8 @@ from .const import (
     CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
     KALIBRATIE_VOL_PERCENT,
+    KALIBRATIE_HOUD_MIN,
+    KALIBRATIE_MAX_UREN,
     KALIBRATIE_MIN_SCHAALDEEL,
     VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN,
     CONF_SOLAR_FORECAST_SENSOR,
@@ -1261,6 +1263,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         # handmatige overname, maar de KOELING blijft wél schakelen -
         # bij 2000 W is dat bescherming, geen optimalisatie.
         self.kalibratie: bool = False
+        # v5.194.0: sinds wanneer de accu vol is tijdens de kalibratie.
+        self.kalibratie_vol_sinds: str | None = None
+        self.kalibratie_fase: str | None = None
         # v3.98.0: `kalibratie_sinds` erbij, in dezelfde regel - `__init__`
         # staat op de ratel van v3.35.0.
         self.kalibratie_momentopname, self.kalibratie_sinds = None, None
@@ -3139,10 +3144,67 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         if value and not self.kalibratie:
             self.kalibratie_momentopname = None
             self.kalibratie_sinds = (now or dt_util.now()).isoformat()
+            self.kalibratie_vol_sinds = None
         elif not value:
             self.kalibratie_sinds = None
+            self.kalibratie_vol_sinds = None
         self.kalibratie = value
         await self._handmatig_gezet()
+
+    async def _kalibratie_ronde(self, now: datetime) -> bool:
+        """Eén ronde van de kalibratie (v5.194.0). True zolang hij loopt.
+
+        Laden op het handmatige laadvermogen tot KALIBRATIE_VOL_PERCENT, dan
+        KALIBRATIE_HOUD_MIN vasthouden (blijven laden: de BMS knijpt bovenin
+        zelf af en balanceert), dan de stand uit en een melding. Niet vol na
+        KALIBRATIE_MAX_UREN: ook uit, met een melding dat er iets niet klopt.
+        """
+        soc = self._read_sensor_float(self.config.get(CONF_SOC_SENSOR))
+        sinds = dt_util.parse_datetime(str(self.kalibratie_sinds or "")) if self.kalibratie_sinds else None
+        if sinds is None:
+            self.kalibratie_sinds = now.isoformat()
+            sinds = now
+        if soc is not None and soc >= KALIBRATIE_VOL_PERCENT:
+            vol = dt_util.parse_datetime(str(self.kalibratie_vol_sinds or "")) if self.kalibratie_vol_sinds else None
+            if vol is None:
+                self.kalibratie_vol_sinds = now.isoformat()
+                self.schedule_persisted_state_save()
+                vol = now
+            if now - vol >= timedelta(minutes=KALIBRATIE_HOUD_MIN):
+                await self.async_set_kalibratie(False, now)
+                self.kalibratie_fase = "klaar"
+                self._dispatch_notification(
+                    notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                    title="🔋 Kalibratie afgerond",
+                    message=(
+                        f"De accu stond {KALIBRATIE_HOUD_MIN} min op {soc:.0f}% om te "
+                        "balanceren. De kalibratiestand is uit en het EMS stuurt weer."
+                    ),
+                    notification_id="ems_kalibratie_klaar",
+                    kind="kalibratie_vol",
+                )
+                return False
+            await self._async_apply_manual(-self.handmatig_laadvermogen_w())
+            self.kalibratie_fase = "vasthouden"
+            return True
+        if now - sinds >= timedelta(hours=KALIBRATIE_MAX_UREN):
+            await self.async_set_kalibratie(False, now)
+            self.kalibratie_fase = "afgebroken"
+            self._dispatch_notification(
+                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                title="🔋 Kalibratie afgebroken",
+                message=(
+                    f"Na {KALIBRATIE_MAX_UREN} uur laden staat de accu op "
+                    f"{'?' if soc is None else f'{soc:.0f}'}% en niet vol. De kalibratiestand "
+                    "is uit en het EMS stuurt weer. Kijk in de Zendure-app of er iets mis is."
+                ),
+                notification_id="ems_kalibratie_klaar",
+                kind="kalibratie_vol",
+            )
+            return False
+        await self._async_apply_manual(-self.handmatig_laadvermogen_w())
+        self.kalibratie_fase = "laden"
+        return True
 
     async def async_set_force_manual(self, value: bool) -> None:
         # v5.186.0 (B27): sinds wanneer, voor de herinnering.
@@ -42945,12 +43007,15 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         )
 
         if self.kalibratie:
-            # v3.27.0: kalibratie loopt buiten de sturing om. De
-            # gebruiker zet zelf 2000 W en een ondergrens van 5% in de
-            # Zendure-app; elke schrijfactie van hier zou daar
-            # doorheen fietsen.
+            # v3.27.0: kalibratie liep buiten de sturing om (de gebruiker
+            # laadde met de hand). v5.194.0 (Ruud 08-11: "als ik kalibratie
+            # aanzet moet het EMS alles fixen"): het EMS laadt zelf tot vol,
+            # houdt hem KALIBRATIE_HOUD_MIN bovenin en zet de stand daarna uit.
             self.last_reason = "kalibratie"
             self.last_simulated_action = None
+            await self._kalibratie_ronde(now)
+            # Klaar of niet: deze ronde stuurt verder niets; is de stand nu
+            # uit, dan neemt de volgende ronde (60 s) de gewone sturing over.
             # v3.29.0: en de kostentelling ligt ook stil.
             #
             # Gevonden bij de doorlichting van 19 augustus: netlading,

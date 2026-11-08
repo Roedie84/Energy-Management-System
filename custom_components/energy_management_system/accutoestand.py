@@ -55,6 +55,7 @@ from .const import (
     DEFAULT_MIN_SOC_PERCENT,
     KALIBRATIE_MIN_SCHAALDEEL,
     KALIBRATIE_VOL_PERCENT,
+    KALIBRATIE_HOUD_MIN,
     MODULE_LEEG_CEL_V,
     MODULE_LEEG_HERSTEL_PROCENT,
     MODULE_LEEG_HERSTEL_V,
@@ -1092,9 +1093,9 @@ class AccuToestandMixin:
             notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
             title="🔋 Kalibratie klaar - accu is vol",
             message=(
-                f"De accu staat op {soc_percent:.0f}%. Zet de "
-                f"kalibratiestand uit en zet de ondergrens in de "
-                f"Zendure-app terug.\n\n"
+                f"De accu staat op {soc_percent:.0f}%. Het EMS houdt hem nog "
+                f"{KALIBRATIE_HOUD_MIN} min bovenin om te balanceren en zet daarna "
+                f"zelf de kalibratiestand uit.\n\n"
                 f"Celspreiding bovenin: {spreiding}."
             ),
             notification_id="ems_kalibratie_vol",

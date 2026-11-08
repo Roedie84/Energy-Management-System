@@ -525,12 +525,17 @@ class UitlegMixin:
         values yourself.
         """
         if getattr(self, "kalibratie", False) or self.last_reason == "kalibratie":
+            # v5.194.0: het EMS laadt zelf tot vol en houdt hem dan bovenin.
+            fase = (
+                "De accu staat vol en wordt bovenin gehouden om te balanceren; "
+                "daarna zet het EMS de kalibratie zelf uit."
+                if getattr(self, "kalibratie_fase", None) == "vasthouden"
+                else "Het EMS laadt de accu op het handmatige laadvermogen tot vol."
+            )
             return (
-                "De kalibratiestand staat aan: de accu wordt met de hand "
-                "geladen en de integratie stuurt niets. De koeling loopt "
-                "wél door - bij 2000 W is dat bescherming. Netlading, "
-                "piekmeting, tekortdetectie en verbruiksleer tellen deze "
-                "periode niet mee."
+                f"De kalibratiestand staat aan. {fase} De koeling loopt wél "
+                "door. Netlading, piekmeting, tekortdetectie en verbruiksleer "
+                "tellen deze periode niet mee."
             )
 
         if self.force_manual:

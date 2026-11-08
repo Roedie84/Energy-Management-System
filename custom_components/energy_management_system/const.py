@@ -3854,6 +3854,12 @@ WEERBRON_INSTELLINGEN = frozenset(
 # De BMS balanceert bovenin. Precies 100% halen sommige pakketten nooit,
 # en wachten op een getal dat niet komt levert geen meting op.
 KALIBRATIE_VOL_PERCENT = 99.0
+# v5.194.0: "als ik kalibratie aanzet moet het EMS alles fixen" (Ruud 08-11).
+# Het EMS laadt zelf op het handmatige laadvermogen tot vol, houdt de accu zo
+# lang bovenin voor het balanceren en neemt daarna de sturing terug.
+KALIBRATIE_HOUD_MIN = 60
+# Niet vol na zo lang laden: stoppen en melden (iets klopt niet).
+KALIBRATIE_MAX_UREN = 8
 
 # Minimaal deel van de schaal dat een kalibratie moet doorlopen voordat
 # de gemeten capaciteit iets betekent (v3.29.0). Van 60 naar 100 procent
@@ -3907,6 +3913,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "kalibratie_momentopname": {"type": "plain"},
     "kalibratie_sinds": {"type": "plain"},
     "kalibratie_meting": {"type": "plain"},
+    # v5.194.0: sinds wanneer de accu vol is tijdens een kalibratie (balanceren).
+    "kalibratie_vol_sinds": {"type": "plain"},
     "_pv_energy_meter_day_start": {"type": "plain"},
     "_pv_energy_meter_last": {"type": "plain"},
     "_pv_energy_meter_entity": {"type": "plain"},

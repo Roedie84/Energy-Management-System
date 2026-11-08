@@ -172,7 +172,8 @@ def test_cooling_keeps_switching_during_a_calibration():
 
 
 def test_the_battery_is_left_alone():
-    """De hele bedoeling: EMS schrijft niets naar de accu."""
+    """v5.194.0: de gewone sturing blijft eruit; alleen `_kalibratie_ronde`
+    schrijft (laden tot vol, zie test_v5194_kalibratie_automatisch.py)."""
     import inspect
 
     bron = inspect.getsource(C)
