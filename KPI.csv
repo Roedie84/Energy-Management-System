@@ -1343,3 +1343,14 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-07 09:15,DAG,ems_laadplan_wijzigingen_24u,23,1,0 na herstart; 20 live correctie
 2026-11-07 09:15,DAG,ems_schaduw_dagen,0,1,vast sinds 05-11 18:30; v5.189.1
 2026-11-07 09:15,DAG,ems_stilstand_functies,1,11,economische schaduw vast; 10 wachten 0 doen
+2026-11-08 09:15,DAG,ems_pv_kwh,5.67,1,07-11 solaredge statistics (herleid 08-11 09:25 uit de recorder)
+2026-11-08 09:15,DAG,ems_net_import_kwh,6.43,1,07-11 P1 statistics; export 0.27
+2026-11-08 09:15,DAG,ems_accu_laden_kwh,4.89,1,07-11 HomeWizard accumeter; ontladen 3.97 (dag-rondrit 81.1)
+2026-11-08 09:15,DAG,ems_huisverbruik_kwh,10.90,1,07-11 balans P1+PV+accu
+2026-11-08 09:15,DAG,ems_nacht_verbruik_kwh,2.40,1,nacht 07->08 22-09; import 2.33 (accu leeg vanaf 19:00)
+2026-11-08 09:15,DAG,ems_achteraf_gemist_eur,0.13,,07-11 00:00-08-11 09:00; 0 FOUT 0 PECH (dagcontrole 08-11 09:20)
+2026-11-08 09:15,DAG,ems_pv_bias_40d_pct,-12.9,40,"MAE 17.5, mediaan 10.1 (zonvoorspelling_ijking)"
+2026-11-08 09:15,DAG,ems_verkoop_onder_reserve,0,96,07-11
+2026-11-08 09:15,DAG,ems_tekortdagen_7d,4,7,"nachten naar 4-7 nov 'bijladen loonde' -> L-EMS-075 (indelingsfout)"
+2026-11-08 09:15,DAG,ems_schaduw_dagen,1,1,"07-11 51/51 kwartieren; C2 -0.035, C0 -0.031 t.o.v. productie"
+2026-11-08 09:15,DAG,ems_stilstand_functies,0,11,module-temperatuurmelding weg (v5.192.2)

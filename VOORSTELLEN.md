@@ -538,3 +538,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: binnen 2 u voor de gewone start het goedkoopste begin (opwarmen + vasthouden op half vermogen, per kwartierstuk, COP bij voorspelde buitentemperatuur); ≥ 2 ct voordeel.
 - Bevinding: 07-11 (41 ct → 54 ct om 14:45) loont eerder beginnen niet (vasthouden kost meer). Verwacht effect klein (< € 1-2/mnd); loont bij een piek midden in het opwarmen.
 - Meten: `prijsstart` in het airco-besluit (start, basis, voordeel).
+
+## L-EMS-075 · tekortnachten ingedeeld als 'bijladen loonde' terwijl het niet loonde (rapportage, raakt de reserve)
+- Status: **open, wacht op Ruud** (dagcontrole 08-11 09:20).
+- Onderbouwing: 4 nachten op rij (naar 4 t/m 7 nov) staan als 'bijladen loonde, maar de accu werd niet vol'. Het waardeplan laadde alleen de kwartieren die loonden. Nacht naar 08-11 herrekend: extra kWh 33,6 ct waard, kosten ≥ 39,7 ct → economisch. Gevolg: LET OP op de cockpit en 5 tekortdagen in de reservemarge (+45 %, reserve 7,8 kWh ≈ bijna de hele accu).
+- Voorstel: 's nachts dezelfde rekenregel als de herleiding (waarde van een extra kWh tegen laadkosten met rendement en slijtage), zodat zulke nachten 'economisch' heten en niet als tekortdag tellen.
+- Verwacht effect: geen valse LET OP; lagere reservemarge. Euro's nu klein (< € 0,05/dag onder saldering), na 2027 meer.
+- Meten: tekortdagen 7 d, aandeel 'economisch', reserve-behoefte tegen werkelijke nachtbehoefte.

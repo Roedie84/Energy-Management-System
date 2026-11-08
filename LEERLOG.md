@@ -1108,3 +1108,15 @@ laatste ronde: 05-11 09:15, gemeten t/m 05-11 09:18
 - Hypotheses: H-EMS-2 (PV te hoog, bevestigd), H-EMS-15 (tekortsoort 'bijladen loonde' 3 nachten op rij), H-EMS-19 (middernacht-zon). H-EMS-18 geparkeerd (geen herstarts).
 
 laatste ronde: 07-11 09:15, gemeten t/m 07-11 09:00
+
+## 08-11 09:15 · dagcontrole (07-11 en nacht tot 08-11 09:00)
+- Draait **v5.192.2** (v5.189.1 t/m v5.192.2 op 07-11 geïnstalleerd, herstart 11:20). 0 fouten, 0 storingen. De geplande sessie kon niet naar GitHub schrijven; dit blok is op 08-11 09:25 opnieuw uit de recorder herleid (getallen hieronder zelf gemeten, gemist-bedrag en oordeel uit de dagkaart van 09:20).
+- **Terugkijken:** gemist **€ 0,13**, **0 FOUT, 0 PECH**. 0× verkoop onder de reserve. Laden 08-15 u 4,89 kWh (zon 5,67 kWh, nauwelijks netlading), ontladen 15-20 u 3,97 kWh; accu leeg vanaf ~19:00, nacht van het net (2,33 kWh).
+- 07-11: huis 10,90 kWh, nacht 22-09 2,40 kWh. Rondrit dag 81 %.
+- **Economische schaduw loopt:** 07-11 de eerste volle dag (51/51 kwartieren sinds de herstart). C2 −€ 0,035 en C0 −€ 0,031 tegen productie: de lagere bewaarmarge zou die dag iets duurder zijn geweest. Evaluatie na 14 dagen (~21-11).
+- **Indelingsfout tekortnachten → L-EMS-075 (wacht op akkoord):** 4 nachten op rij (naar 4-7 nov) als 'bijladen loonde, accu niet vol'. Herrekend voor de nacht naar 08-11: een extra kWh was 33,6 ct waard en kostte ≥ 39,7 ct → economisch, niet 'loonde'. Gevolg: LET OP op de cockpit en 5 tekortdagen in de reservemarge (+45 %, reserve 7,8 kWh).
+- Module-temperatuur: de valse 'uit de pas'-melding (module 1 ~1 °C warmer) is weg sinds v5.192.2.
+- PV 40 d: bias −12,9 %, MAE 17,5 % (mediaan 10,1 %). Koude accu: koudste cel 8 °C, geen verwarming. Panelen niet bedekt (geen vorst).
+- Hypotheses: H-EMS-2 (PV te hoog, loopt), H-EMS-15 → L-EMS-075, H-EMS-19 (middernacht-zon).
+
+laatste ronde: 08-11 09:15 (herleid 09:25), gemeten t/m 08-11 09:00
