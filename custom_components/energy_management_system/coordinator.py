@@ -85,6 +85,8 @@ from .const import (  # v5.186.0 (spoor C)
     ZON_NU_MIN,
     ZON_NU_MAX,
     ZON_NU_VERVAL_UREN,
+    VERBRUIK_NU_MIN,
+    VERBRUIK_NU_VERVAL_UREN,
     ZON_RECENT_MIN,
     ZON_RECENT_MIN_KWH,
     ZON_RECENT_VERVAL_UREN,
@@ -21031,6 +21033,29 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             )
         return capped_ratio
 
+    def _verbruik_nu_omlaag(self) -> float | None:
+        """Hoeveel minder het huis nu verbruikt dan geleerd (v5.197.0).
+
+        De mediaan van de recente metingen gedeeld door het geleerde uur
+        (zonder gemeten witgoed), begrensd op VERBRUIK_NU_MIN. None als het
+        huis niet minder verbruikt, er te weinig metingen zijn of er een
+        zwaar apparaat loopt. Alleen voor het plan (veilig=False): de reserve
+        blijft alleen naar boven bijsturen.
+        """
+        metingen = list(getattr(self, "_recent_consumption_readings_kw", None) or [])
+        if len(metingen) < 2 or self.last_heavy_load_source:
+            return None
+        nu = dt_util.now()
+        geleerd = self._profiel_zonder_witgoed_kw(nu.hour, nu)
+        if not geleerd or geleerd <= 0:
+            return None
+        rij = sorted(metingen)
+        mid = len(rij) // 2
+        live = rij[mid] if len(rij) % 2 else (rij[mid - 1] + rij[mid]) / 2
+        if live >= geleerd:
+            return None
+        return max(VERBRUIK_NU_MIN, live / geleerd)
+
     def _read_corrected_consumption_power(self) -> float | None:
         """Household consumption estimate (W), corrected for the battery
         and (optionally) solar production masking the true load on the
@@ -22718,6 +22743,9 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
 
         segmenten = []
         verschuiving_kw = self.regelverschuiving_kw()
+        # v5.197.0: minder verbruik dan geleerd telt voor het plan, niet voor de reserve.
+        omlaag = None if veilig else self._verbruik_nu_omlaag()
+        nu_moment = dt_util.now()
         cursor = start
         while cursor < end:
             hour_end = cursor.replace(minute=0, second=0, microsecond=0) + timedelta(
@@ -22731,6 +22759,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 return None
 
             basis_kwh = self._vacation_adjusted_kwh(avg_kw * fraction_hours)
+            if omlaag is not None:
+                midden = cursor + (segment_end - cursor) / 2
+                afstand = max(0.0, (midden - nu_moment).total_seconds() / 3600)
+                gewicht = max(0.0, 1.0 - afstand / VERBRUIK_NU_VERVAL_UREN)
+                basis_kwh *= 1.0 - gewicht * (1.0 - omlaag)
             # v1.68.0: ook hier uitdempen. De wandeling naar het diepste
             # tekort loopt tot het goedkope blok - vannacht was dat
             # zeventien uur - en die hele periode werd met de kookpiek

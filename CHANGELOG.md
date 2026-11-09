@@ -35206,3 +35206,14 @@ Gemeld 09-11 10:48: de zon brak rond 10:15 door; gemeten 1,55 kW tegen Solcast ~
 Met de cijfers van 09-11 10:48 rekent het plan voor 11:00 met ~1,4 kW in plaats van 0,88 kW.
 
 Tests: `test_v5196_zon_nu.py` (5).
+
+## v5.197.0 — het plan volgt ook een lager verbruik dan geleerd
+
+Gemeld 09-11 11:04 (cockpit "Plan vandaag"): accu gepland 747 W laden, gemeten 1,39 kW, verklaard als "huis verbruikt minder dan verwacht". Ruud: "zelfde geldt dus eigenlijk voor de accu". De live verbruikscorrectie stuurde alleen omhoog (een lager verbruik gaf factor 1,0).
+
+- `_verbruik_nu_omlaag`: de mediaan van de recente verbruiksmetingen gedeeld door het geleerde uur (zonder gemeten witgoed), begrensd op `VERBRUIK_NU_MIN` (0,5); niet bij een lopend zwaar apparaat.
+- `_segmenten_verbruik_zon(veilig=False)` (waardeplan, zonoverschot): het basisverbruik van het eerstvolgende uur gaat daarmee omlaag, lineair uitdovend over `VERBRUIK_NU_VERVAL_UREN` (1 u). De reserve (`veilig=True`) blijft alleen omhoog bijsturen.
+
+Samen met v5.196.0 (zon) volgt de verwachte accustroom zo het afgelopen halfuur.
+
+Tests: `test_v5197_verbruik_nu.py` (4).

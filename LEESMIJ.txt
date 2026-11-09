@@ -1,3 +1,9 @@
+EMS v5.197.0 - plan volgt ook een lager verbruik
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Verbruikt het huis nu minder dan gewoonlijk, dan rekent de planning het komende uur daarmee. Daardoor klopt het geplande laden van de accu beter met wat er echt gebeurt. De reserve blijft voorzichtig.
+
 EMS v5.196.0 - zonverwachting reageert sneller
 
 Installeren: via de Marketplace bijwerken en herstarten.

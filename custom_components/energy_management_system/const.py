@@ -632,6 +632,11 @@ ZON_NU_MIN_KWH = 0.05
 ZON_NU_MIN = 0.3
 ZON_NU_MAX = 1.6
 ZON_NU_VERVAL_UREN = 1.0
+# v5.197.0 (Ruud 09-11 11:04, "zelfde geldt voor de accu"): verbruikt het huis nu
+# minder dan geleerd, dan rekent het plan (niet de reserve) het eerstvolgende uur
+# daarmee, uitdovend. Omhoog gold al (de live correctie).
+VERBRUIK_NU_MIN = 0.5
+VERBRUIK_NU_VERVAL_UREN = 1.0
 ZON_RECENT_MIN_KWH = 0.2
 ZON_RECENT_VERVAL_UREN = 4.0
 #: klein: de Solcast-verhouding rest van vandaag, begrensd
