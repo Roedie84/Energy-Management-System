@@ -35217,3 +35217,15 @@ Gemeld 09-11 11:04 (cockpit "Plan vandaag"): accu gepland 747 W laden, gemeten 1
 Samen met v5.196.0 (zon) volgt de verwachte accustroom zo het afgelopen halfuur.
 
 Tests: `test_v5197_verbruik_nu.py` (4).
+
+## v5.197.1 — economietoets van tekortnachten krijgt een herkansing (H-EMS-20)
+
+Dagcontrole 09-11 en vraag Ruud: de nachten naar 4 t/m 7 november bleven "bijladen loonde, maar de accu werd niet vol" en hielden de systeemstatus op "Aandacht gewenst" (4 tekortdagen). v5.193.0 (L-EMS-075) had ze moeten toetsen, en stempelde ze ook (`economietoets: v5.193`), maar zette er geen om.
+
+Oorzaak: de toets liep vlak na het opstarten, toen slijtage of rendement nog ontbrak; dan geeft de herleiding (None, None) en de nacht werd toch afgestempeld - er kwam nooit een tweede poging. Replay op het echte dagverloop (diagnostics 09-11) met de echte parameters (rendement 84,7 %, slijtage 4,22 ct): 5, 6 en 7 november economisch ("laden loonde nergens", goedkoopst 35,1-39,7 ct, een kWh waard 28,6-32,6 ct); 4 november blijft planning, maar om een andere reden: 0,6 kWh verkocht onder de reserve (gem. 48,4 ct).
+
+- Zonder rendement of slijtage geen stempel; de volgende ronde probeert het opnieuw.
+- Nieuwe stempel `ECONOMIETOETS_VERSIE` (v5.197.1): de nachten met de oude stempel worden één keer opnieuw getoetst.
+- Blijft een nacht planning om een andere reden, dan krijgt hij die reden.
+
+Tests: `test_v5197_1_economietoets_herkansing.py` (3).

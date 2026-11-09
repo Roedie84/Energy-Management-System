@@ -8,7 +8,7 @@ tekortdag. Akkoord Ruud 08-11 09:26.
 """
 from datetime import datetime, timedelta
 
-from custom_components.energy_management_system.const import TEKORT_REDEN_LOONDE
+from custom_components.energy_management_system.const import ECONOMIETOETS_VERSIE, TEKORT_REDEN_LOONDE
 from tests.test_v541_tekort_economisch import _c
 
 
@@ -55,7 +55,7 @@ def test_extra_kwh_had_geloond_blijft_staan(make_coordinator, hass):
     _records(c, _verloop({20, 21, 22}, prijs_vrij=15.0))
     assert c._toets_laadnachten_op_economie() == 0
     r = c.reserve_daily_records[0]
-    assert r["tekort_soort"] == "planning" and r["economietoets"] == "v5.193"
+    assert r["tekort_soort"] == "planning" and r["economietoets"] == ECONOMIETOETS_VERSIE
 
 
 def test_een_keer_per_nacht(make_coordinator, hass):

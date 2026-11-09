@@ -683,6 +683,7 @@ from .const import (
     TEKORTSOORT_PLANNING,
     TEKORTSOORT_ECONOMISCH,
     TEKORT_REDEN_LOONDE,
+    ECONOMIETOETS_VERSIE,
     TEKORTSOORT_ONBEKEND,
     TEKORTSOORT_VERKOCHT_MET_WINST,
     TEKORT_RESERVETOETS,
@@ -32845,6 +32846,15 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         """
         if not isinstance(self.dagverloop or {}, dict):
             return 0
+        # v5.197.1 (H-EMS-20): zonder rendement of slijtage (vlak na het
+        # opstarten) kan de toets niets zeggen; dan NIET afstempelen maar later
+        # opnieuw. v5.193.0 stempelde ook dan, en de nachten naar 4-7 november
+        # bleven zo voorgoed 'bijladen loonde' (replay 09-11 met de echte
+        # parameters: 5, 6 en 7 nov economisch; 4 nov planning om een
+        # verkoop onder de reserve).
+        _vol, rendement, slijtage_ct, _versch = self._herleid_parameters()
+        if rendement is None or slijtage_ct is None:
+            return 0
         omgezet = 0
         for record in self.reserve_daily_records or []:
             if (
@@ -32852,7 +32862,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 or not record.get("shortfall")
                 or record.get("tekort_soort") != TEKORTSOORT_PLANNING
                 or record.get("tekort_reden") != TEKORT_REDEN_LOONDE
-                or record.get("economietoets") == "v5.193"
+                or record.get("economietoets") == ECONOMIETOETS_VERSIE
             ):
                 continue
             try:
@@ -32862,10 +32872,13 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             soort, reden = self._herleid_laadnacht(dag - timedelta(days=1))
             if soort is None and not self._venster_rijen(dag - timedelta(days=1)):
                 continue        # dagverloop (nog) niet daar: later opnieuw
-            record["economietoets"] = "v5.193"
+            record["economietoets"] = ECONOMIETOETS_VERSIE
             if soort == TEKORTSOORT_ECONOMISCH:
                 record.update(tekort_soort=soort, tekort_reden=reden)
                 omgezet += 1
+            elif soort == TEKORTSOORT_PLANNING and reden:
+                # v5.197.1: blijft planning, maar met de reden die er echt bij hoort
+                record["tekort_reden"] = reden
         return omgezet
 
     def _toets_planningsnachten_op_winst(self) -> int:
@@ -33008,7 +33021,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         if any(
             isinstance(r, dict) and r.get("shortfall")
             and r.get("tekort_reden") == TEKORT_REDEN_LOONDE
-            and r.get("economietoets") != "v5.193"
+            and r.get("economietoets") != ECONOMIETOETS_VERSIE
             for r in (self.reserve_daily_records or [])
         ):
             self._toets_laadnachten_op_economie()

@@ -5983,6 +5983,8 @@ TEKORTSOORT_ECONOMISCH = "economisch"
 # v5.193.0 (L-EMS-075): de reden die het oude laadbesluit gaf; onder het waardeplan
 # opnieuw getoetst op een extra kWh.
 TEKORT_REDEN_LOONDE = "bijladen loonde, maar de accu werd niet vol"
+# v5.197.1 (H-EMS-20): stempel van de economietoets; een nieuwe versie toetst opnieuw.
+ECONOMIETOETS_VERSIE = "v5.197.1"
 # Nachten van vóór v5.40 die niet uit het dagverloop te herleiden zijn.
 TEKORTSOORT_ONBEKEND = "onbekend"
 # v5.55: een vierde soort. Gevonden bij de doorlichting van 8 oktober: in de

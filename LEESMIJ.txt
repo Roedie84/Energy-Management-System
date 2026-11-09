@@ -1,3 +1,9 @@
+EMS v5.197.1 - oude tekortnachten opnieuw beoordeeld
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De nachten naar 5, 6 en 7 november tellen niet meer als tekortdag: bijladen loonde die nachten niet. De nacht naar 4 november blijft staan, nu met de echte reden.
+
 EMS v5.197.0 - plan volgt ook een lager verbruik
 
 Installeren: via de Marketplace bijwerken en herstarten.
