@@ -1120,3 +1120,19 @@ laatste ronde: 07-11 09:15, gemeten t/m 07-11 09:00
 - Hypotheses: H-EMS-2 (PV te hoog, loopt), H-EMS-15 → L-EMS-075, H-EMS-19 (middernacht-zon).
 
 laatste ronde: 08-11 09:15 (herleid 09:25), gemeten t/m 08-11 09:00
+
+## 09-11 07:40 · dagcontrole (08-11 06:45 t/m 09-11 07:30; ronde draait nu om ~06:45)
+- Draait **v5.194.3**; v5.195.0 om 07:26 door Ruud geïnstalleerd, herstart nog niet. Herstart 09-11 05:23. 0 fouten sinds de herstart.
+- **STORING → v5.195.1:** EMS 08-11 16:02 tot 09-11 05:23 vastgelopen (13,4 u, status 'Mogelijk vastgelopen' vanaf 16:16, uitleg bleef op kalibratie). Oorzaak: `_kalibratie_ronde` → `async_set_kalibratie(False)` → `_handmatig_gezet` → `async_update` wacht op `self._lock` dat de ronde zelf houdt (deadlock). Melding 'Kalibratie afgerond' kwam nooit. Ruud zette 16:28 de Zendure zelf op smart.
+- Push vanuit de geplande sessie geweigerd (repo niet in de bronnen); v5.195.1 en dit blok 09-11 ~07:50 vanuit de chat op GitHub gezet.
+- **Terugkijken 16:00-07:30 (62 kw):** werkelijk € 1,65, LP € 1,34 → **gemist € 0,32**. **1 FOUT** (vastloper): 16:00-16:30 0,27 kWh net bij 46,8 ct met volle accu (~€ 0,12); rest € 0,20 = smart dekte de nacht (39-45 ct) en om 05:30-06:15 opnieuw 2,5 kWh bij gem. 42 ct; LP hield 3,65 kWh vast voor 46-52 ct en vandaag. Kalibratie 10:38-16:02 (8 kWh bij 38-39 ct): keuze Ruud. 06:30-07:30 import bij 51-55 ct met 3,46 kWh vastgehouden voor 79-88 ct vanavond: goed.
+- **Kalibratiedag 08-11 economisch (vraag Ruud):** hele venster 08-11 06:45 - 09-11 07:30 werkelijk € 7,85, LP vrij € 7,46 → € 0,38, waarvan € 0,05 de kalibratie (9,29 kWh geladen bij gem. 38,9 ct; LP-goedkoopst 38,0-38,9; uur vasthouden 15:00-16:00 1,0 kWh net bij ~44 ct) en € 0,32 de vastloper erna. Het LP laadt die dag zelf ook 8,4 kWh bij ~38,5 ct en ontlaadt 3,6 kWh bij gem. 51,5 ct: kalibreren op deze dag kostte vrijwel niets.
+- **Nacht 07→08 compleet:** huis 22-09 ≈ 2,40 kWh, net 2,33 kWh, accu leeg sinds 07-11 ~19:00, niets geladen. EMS-reden 'goedkoopst 39,7 ct, tekort betaald 45,1 ct, waard 33,8 ct na rendement en slijtage' → economisch, geen fout (nachtprijzen voor 07:00 niet meer in de prijssensor; reden uit het EMS-record). Ochtend 06:45-10:38 accu 10 %, net ~1,9 kWh bij 39-40 ct: geen fout.
+- Harde regel: 0 verkoopbesluiten; vlag 09-11 niet geschonden. Rimpel-export 0,28 kWh in Zendure-smart (EMS stil).
+- Laadrendement gemeten bij de kalibratie: 9,30 kWh AC → 7,78 kWh (SoC 10→100 %) = **83,6 %**.
+- PV 08-11 1,85 kWh tegen Solcast 00:00 3,38 (**−45 %**). H-EMS-2 blijft.
+- Tekortdagen 6/7: nachten naar 4-7 nov staan nog als 'planning, bijladen loonde'; de economietoets van v5.193.0 zette ze niet om (alleen 08-11 is economisch). Niet kunnen toetsen of dat terecht is (records niet uit HA te lezen zonder volledige diagnostics) → **H-EMS-20**.
+- Economische schaduw: 3 dagregels, 0 volledig (herstart 07-11, kalibratie + vastloper 08-11) → evaluatie schuift op. Stilstand: 8 wachten, 0 doen.
+- Niet gemeten: PV/verbruik per uur, SoC-voorspelling, MC-Brier (nacht nog niet af), NILM.
+
+laatste ronde: 09-11 07:40, gemeten t/m 09-11 07:30

@@ -545,3 +545,9 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: 's nachts dezelfde rekenregel als de herleiding (waarde van een extra kWh tegen laadkosten met rendement en slijtage), zodat zulke nachten 'economisch' heten en niet als tekortdag tellen.
 - Verwacht effect: geen valse LET OP; lagere reservemarge. Euro's nu klein (< € 0,05/dag onder saldering), na 2027 meer.
 - Meten: tekortdagen 7 d, aandeel 'economisch', reserve-behoefte tegen werkelijke nachtbehoefte.
+
+## L-EMS-076 · kalibratie die zichzelf uitzet laat het EMS vastlopen (bug, acuut, regressie v5.194.0)
+- Status: **gebouwd v5.195.1** (09-11; suite 7484 groen, test `test_v5195_1_kalibratie_geen_deadlock.py`, 4 falen op de oude code). Gebouwd door de dagcontrole, vanuit de chat gepusht (geplande sessie heeft geen schrijfrechten).
+- Onderbouwing: kalibratie uit 08-11 16:02:22 zonder gebruiker (EMS); last_successful_update bleef 16:01; status 'Mogelijk vastgelopen' 16:16 - 05:23; uitleg, gacs en reserve-sensoren schreven niets meer, de 30-s waterlus wel.
+- Bouw: `_kalibratie_zelf_uit` zet alleen de velden en plant de opslag als losse taak; geen `async_update` vanuit de ronde.
+- Meten: na de volgende kalibratie geen 'Mogelijk vastgelopen', melding 'Kalibratie afgerond' in meldingen_historie.

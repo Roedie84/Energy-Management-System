@@ -135,3 +135,5 @@
 | Achteraf gemist (LP-optimum, 33 u) | € 0,54 (zonder verkoop € 0,33; 0 FOUT) | 06-11 00:00..07-11 09:00 | 07-11 09:15 |
 | PV-voorspelling MAE/bias 7 d (Solcast 00:00) | 31,3 % / −12,2 % | 31-10..06-11 | 07-11 09:15 |
 | Nachtverbruik 22-09 | 2,32 kWh | nacht 06→07 | 07-11 09:15 |
+| Achteraf gemist (LP-optimum, 62 kw) | € 0,32 (1 FOUT vastloper ~€ 0,12) | 08-11 16:00..09-11 07:30 | 09-11 07:40 |
+| Laadrendement (kalibratie, AC → SoC) | 83,6 % | 08-11 10:45-15:00 | 09-11 07:40 |

@@ -1354,3 +1354,16 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-08 09:15,DAG,ems_tekortdagen_7d,4,7,"nachten naar 4-7 nov 'bijladen loonde' -> L-EMS-075 (indelingsfout)"
 2026-11-08 09:15,DAG,ems_schaduw_dagen,1,1,"07-11 51/51 kwartieren; C2 -0.035, C0 -0.031 t.o.v. productie"
 2026-11-08 09:15,DAG,ems_stilstand_functies,0,11,module-temperatuurmelding weg (v5.192.2)
+2026-11-09 07:40,DAG,ems_pv_kwh,1.85,1,08-11 solaredge statistics; Solcast 00:00 3.38 = -45%; 2e voorspelling 4.06
+2026-11-09 07:40,DAG,ems_accu_laden_kwh,9.30,1,08-11 vanaf 06:45 HomeWizard accumeter (kalibratie 10:45-15:00); ontladen 5.35
+2026-11-09 07:40,DAG,ems_net_import_kwh,16.36,1,08-11 vanaf 06:45 P1 statistics; export 0.22
+2026-11-09 07:40,DAG,ems_huisverbruik_kwh,14.05,1,08-11 06:45-24:00 balans P1+PV+accu
+2026-11-09 07:40,DAG,ems_laadrendement_pct,83.6,1,kalibratie 08-11: 9.30 kWh AC in -> SoC 10->100% (7.78 kWh van 8.64)
+2026-11-09 07:40,DAG,ems_nacht_verbruik_kwh,2.29,1,nacht 08->09 22:00-07:30 (voorlopig); accu dekte alles in smart; import 3.01 waarvan 2.50 laden 05:15-06:30
+2026-11-09 07:40,DAG,ems_achteraf_gemist_eur,0.32,62,08-11 16:00-09-11 07:30 werkelijk 1.65 / LP 1.34; 1 FOUT (vastloper) 0 PECH; kalibratie 10:38-16:02 keuze Ruud
+2026-11-09 07:40,DAG,ems_vastloper_uren,13.4,1,coordinator 08-11 16:02 - 09-11 05:23 deadlock kalibratie_ronde -> v5.195.1
+2026-11-09 07:40,DAG,ems_verkoop_onder_reserve,0,62,0 verkoopbesluiten; 0.28 kWh rimpel-export in Zendure smart (handmatig, EMS stil)
+2026-11-09 07:40,DAG,ems_tekortdagen_7d,6,7,"4 planning (nachten naar 4-7 nov, oude reden 'bijladen loonde'), 2 economisch"
+2026-11-09 07:40,DAG,ems_schaduw_dagen,0,3,"3 dagregels (05,07,08-11), 0 volledig: herstarts, kalibratie, vastloper"
+2026-11-09 07:40,DAG,ems_stilstand_functies,0,8,"8 wachten, 0 doen; airco 'niets', knop uit -> rekent"
+2026-11-09 07:40,DAG,ems_kalibratie_kosten_eur,0.05,37,08-11 06:45-16:00 werkelijk 6.19 vs LP met eis vol om 16:00 6.14; hele venster tot 09-11 07:30 gemist 0.38
