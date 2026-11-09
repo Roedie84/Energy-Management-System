@@ -35258,3 +35258,13 @@ Ruud 09-11 13:22 ("zon laden midden in de nacht?"): in "Prijs en lading" stond o
 - Het plan onthoudt tot wanneer de prijzen liepen (`prijzen_tot`); komen er prijzen bij, dan rekent de volgende ronde (60 s) meteen opnieuw. Geteld als herplanning `nieuwe_prijzen`.
 
 Tests: `test_v5198_2_nieuwe_prijzen.py` (2).
+
+## v5.199.0 — langer weg: uit of 18 °C vasthouden, wat goedkoper is
+
+Ruud 09-11: "bij langere afwezigheid de temperatuur wat lager zetten tot terugkomst?" - akkoord op: het EMS rekent het uit.
+
+- Als niemand thuis is en de airco na de kort-weg-tijd uit zou gaan, vergelijkt `airco_sturing.weg_keuze` eenmalig per afwezigheid: **uit** (afkoelen volgens 0,042 °C/u per °C verschil met buiten, bij thuiskomst opwarmen tegen de prijs van dat moment) tegen **vasthouden op 18 °C** (bijverwarmen tegen de gemiddelde prijs tijdens de afwezigheid, minder opwarmen bij thuiskomst). Vasthouden alleen als dat minstens 2 ct goedkoper is.
+- De thuiskomst komt uit het weekprofiel van de aanwezigheid (eerste halfuur met >= 50 % thuis). Geen patroon, geen prijs of gas goedkoper: gewoon uit, zoals het was.
+- Bij vasthouden zet het EMS de airco op 18 °C (geen uit/aan); terug thuis weer naar de gewone temperatuur. De vaste uittijd, handmatige bediening, het open raam en de half-uur-regel gaan voor.
+
+Tests: `test_v5199_airco_weg_vasthouden.py` (10).

@@ -532,3 +532,81 @@ def verwarm_op_zonoverschot(
             f"woonkamer {woonkamer_c:.1f} °C (onder {onder_c:.0f} °C)."
         ),
     ), True
+
+
+# --- v5.199.0: bij langere afwezigheid uit of vasthouden op 18 °C ----------
+#
+# Ruud 09-11: "bij langere afwezigheid de temperatuur wat lager zetten tot
+# terugkomst?" - akkoord op: het EMS rekent uit wat goedkoper is. Uit laat het
+# huis verder afkoelen (minder warmteverlies, maar meer opwarmen bij
+# thuiskomst, tegen de prijs van dat moment); vasthouden op 18 °C verwarmt een
+# beetje tijdens de afwezigheid (tegen de prijzen van dan) en minder bij
+# thuiskomst. De keuze wordt één keer per afwezigheid gemaakt; de
+# half-uur-regel tegen kort schakelen blijft gelden.
+
+#: De temperatuur waarop het EMS het huis vasthoudt als dat goedkoper is.
+AIRCO_WEG_VAST_C = 18.0
+#: Afkoeling van de woonkamer per uur per °C verschil met buiten (gemeten
+#: 08/09-11: 21 -> 16,5 °C in een nacht).
+AIRCO_WEG_AFKOEL_PER_UUR = 0.042
+#: Vasthouden moet minstens zoveel goedkoper zijn (EUR) om te kiezen.
+AIRCO_WEG_MIN_VOORDEEL_EUR = 0.02
+
+
+def weg_keuze(
+    *,
+    binnen_c: float | None,
+    buiten_c: float | None,
+    doel_c: float | None,
+    tempo_c_per_uur: float | None,
+    uren_weg: float | None,
+    kost_vast: float | None,
+    kost_terug: float | None,
+    vast_c: float = AIRCO_WEG_VAST_C,
+    afkoel_per_uur: float = AIRCO_WEG_AFKOEL_PER_UUR,
+) -> dict:
+    """Uit of vasthouden op `vast_c` tot de verwachte thuiskomst.
+
+    `kost_vast` / `kost_terug`: wat een uur verwarmen op vol vermogen kost
+    (EUR) tijdens de afwezigheid (gemiddeld) en bij thuiskomst. Ontbreekt er
+    iets, dan "uit" (zoals het altijd ging)."""
+    def _uit(reden: str) -> dict:
+        return {"keuze": "uit", "reden": reden, "kosten_uit_eur": None, "kosten_vast_eur": None}
+
+    if None in (binnen_c, buiten_c, doel_c, tempo_c_per_uur, uren_weg, kost_vast, kost_terug):
+        return _uit("te weinig gegevens om te vergelijken")
+    if tempo_c_per_uur <= 0 or uren_weg <= 0:
+        return _uit("te weinig gegevens om te vergelijken")
+    if doel_c <= vast_c + 0.25 or buiten_c >= vast_c:
+        return _uit(f"vasthouden op {vast_c:.0f} °C heeft hier geen zin")
+    k = afkoel_per_uur
+    # Uit: afkoelen naar buiten toe, bij thuiskomst opwarmen.
+    eind_uit = buiten_c + (binnen_c - buiten_c) * math.exp(-k * uren_weg)
+    kosten_uit = max(0.0, doel_c - eind_uit) / tempo_c_per_uur * kost_terug
+    # Vasthouden: eerst afkoelen tot vast_c, dan het verlies bijverwarmen.
+    if binnen_c > vast_c:
+        tot_vast = math.log((binnen_c - buiten_c) / (vast_c - buiten_c)) / k
+    else:
+        tot_vast = 0.0
+    uren_vast = max(0.0, uren_weg - tot_vast)
+    bijverwarmen = uren_vast * k * (vast_c - buiten_c) / tempo_c_per_uur
+    if binnen_c < vast_c:
+        bijverwarmen += (vast_c - binnen_c) / tempo_c_per_uur
+    eind_vast = max(vast_c, eind_uit)
+    kosten_vast = bijverwarmen * kost_vast + max(0.0, doel_c - eind_vast) / tempo_c_per_uur * kost_terug
+    uit = {
+        "kosten_uit_eur": round(kosten_uit, 3),
+        "kosten_vast_eur": round(kosten_vast, 3),
+        "eind_uit_c": round(eind_uit, 1),
+    }
+    if uren_vast <= 0:
+        return dict(uit, keuze="uit", reden=f"het huis koelt niet af tot {vast_c:.0f} °C voor jullie terug zijn")
+    if kosten_vast + AIRCO_WEG_MIN_VOORDEEL_EUR <= kosten_uit:
+        return dict(uit, keuze="vast", reden=(
+            f"vasthouden op {vast_c:.0f} °C is goedkoper "
+            f"(€ {kosten_vast:.2f} tegen € {kosten_uit:.2f} voor uit)"
+        ))
+    return dict(uit, keuze="uit", reden=(
+        f"uit is goedkoper (€ {kosten_uit:.2f} tegen € {kosten_vast:.2f} voor "
+        f"vasthouden op {vast_c:.0f} °C)"
+    ))

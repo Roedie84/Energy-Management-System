@@ -1814,6 +1814,7 @@ class KlimaatMixin:
         )
         uit = self._airco_ritme_ronde(now, uit, stand)
         uit = self._airco_kort_weg_ronde(now, uit)
+        uit = self._airco_weg_ronde(now, uit, stand, doel_nu)
         uit = self._airco_thuiskomst_ronde(now, uit, stand)
         uit = self._airco_zon_ronde(now, self._airco_buffer_ronde(now, uit, stand), stand)
         # v5.195.0: niet kort schakelen (vóór de raamregel: een open raam gaat voor)
@@ -2397,6 +2398,105 @@ class KlimaatMixin:
         redenen = list(uit.get("redenen") or []) + [vraag["reden"]]
         return dict(uit, actie="niets", tekst=vraag["tekst"], redenen=redenen,
                     redenen_tekst=" · ".join(redenen))
+
+    _airco_weg_keuze: dict | None = None
+    _airco_weg_vast: bool = False
+
+    def _verwachte_thuiskomst(self, now: datetime) -> datetime | None:
+        """v5.199.0: het eerste halfuur (binnen 24 uur) waarop jullie op die
+        dag meestal (>= 50 %) thuis zijn, of None zonder geleerd patroon."""
+        profiel = self.presence_week_profile or {}
+        stap = now.replace(minute=0 if now.minute < 30 else 30, second=0, microsecond=0)
+        for _ in range(48):
+            stap += timedelta(minutes=30)
+            aan, totaal = profiel.get(
+                f"{stap.weekday()}-{stap.hour:02d}{'30' if stap.minute >= 30 else '00'}"
+            ) or [0, 0]
+            if totaal >= PRESENCE_MIN_OBSERVATIONS and aan / totaal >= 0.5:
+                return stap
+        return None
+
+    def _airco_weg_ronde(self, now: datetime, uit: dict, stand: str | None, doel_nu) -> dict:
+        """Langer weg: uit, of vasthouden op 18 °C als dat goedkoper is
+        (v5.199.0) - zie `airco_sturing.weg_keuze`. Eén keer per
+        afwezigheid besloten; bij thuiskomst weer naar de gewone temperatuur.
+        De vaste uittijd en handmatige bediening gaan voor."""
+        vast_c = airco_sturing.AIRCO_WEG_VAST_C
+        if self.presence_state != "weg":
+            self._airco_weg_keuze = None
+            if not self._airco_weg_vast:
+                return uit
+            self._airco_weg_vast = False
+            doel = uit.get("doel_c")
+            if (
+                uit.get("actie") == "niets" and stand == "heat" and self.airco_door_ems
+                and self._airco_handmatig_bij is None and doel is not None
+                and doel_nu is not None and float(doel_nu) < float(doel) - 0.05
+            ):
+                redenen = list(uit.get("redenen") or []) + [f"terug: van {vast_c:.0f} °C naar {doel:.1f} °C"]
+                return dict(uit, actie="verwarmen", doel_c=doel, redenen=redenen,
+                            redenen_tekst=" · ".join(redenen),
+                            tekst=f"Welkom thuis: van {vast_c:.0f} °C weer naar {doel:.1f} °C.")
+            return uit
+        if uit.get("altijd") or self._airco_handmatig_bij is not None:
+            self._airco_weg_vast = False
+            return uit
+        if self._airco_weg_vast:
+            # Vasthouden loopt: niet uitzetten zolang hij op 18 °C staat.
+            if stand == "heat" and self.airco_door_ems and uit.get("actie") == "uit":
+                redenen = list(uit.get("redenen") or []) + [f"vasthouden op {vast_c:.0f} °C tot thuiskomst"]
+                return dict(uit, actie="niets", redenen=redenen, redenen_tekst=" · ".join(redenen),
+                            tekst=f"Niemand thuis: houdt {vast_c:.0f} °C vast tot jullie terug zijn.")
+            if stand != "heat":
+                self._airco_weg_vast = False
+            return uit
+        if uit.get("actie") != "uit":
+            return uit
+        if self._airco_weg_keuze is None:
+            self._airco_weg_keuze = self._airco_weg_bereken(now, uit)
+        keuze = self._airco_weg_keuze
+        redenen = list(uit.get("redenen") or []) + [keuze["reden"]]
+        if keuze["keuze"] != "vast":
+            return dict(uit, redenen=redenen, redenen_tekst=" · ".join(redenen))
+        self._airco_weg_vast = True
+        return dict(uit, actie="verwarmen", doel_c=vast_c, redenen=redenen,
+                    redenen_tekst=" · ".join(redenen), weg_keuze=keuze,
+                    tekst=f"Niemand thuis: {vast_c:.0f} °C vasthouden tot jullie terug zijn ({keuze['reden']}).")
+
+    def _airco_weg_bereken(self, now: datetime, uit: dict) -> dict:
+        try:
+            if (self.get_verwarmingsadvies() or {}).get("advies") != "airco":
+                return {"keuze": "uit", "reden": "gas is nu goedkoper dan de airco"}
+            terug = self._verwachte_thuiskomst(now)
+            if terug is None:
+                return {"keuze": "uit", "reden": "nog niet geleerd wanneer jullie thuiskomen"}
+            kost = self._airco_kost_per_uur(now, self._airco_ritme())
+            middernacht = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            def minuut(moment: datetime) -> int:
+                return int((moment - middernacht).total_seconds() // 60)
+
+            onderweg = []
+            stap = now
+            while stap < terug:
+                onderweg.append(kost(minuut(stap)))
+                stap += timedelta(minutes=15)
+            kost_vast = (
+                sum(onderweg) / len(onderweg) if onderweg and None not in onderweg else None
+            )
+            keuze = airco_sturing.weg_keuze(
+                binnen_c=self.living_room_current_temp_c,
+                buiten_c=self._airco_buiten_nu(now),
+                doel_c=uit.get("doel_c"),
+                tempo_c_per_uur=self._airco_tempo_nu(),
+                uren_weg=(terug - now).total_seconds() / 3600,
+                kost_vast=kost_vast,
+                kost_terug=kost(minuut(terug)),
+            )
+            keuze["terug_om"] = terug.isoformat()
+            return keuze
+        except Exception:  # noqa: BLE001 - bij twijfel gewoon uit
+            return {"keuze": "uit", "reden": "vergelijken lukte niet"}
 
     def _airco_thuiskomst_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
         """Warm bij thuiskomst (v5.66) - zie `airco_ritme.thuiskomst`."""

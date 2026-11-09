@@ -1,3 +1,9 @@
+EMS v5.199.0 - langer weg: uit of 18 °C, wat goedkoper is
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Is niemand thuis, dan rekent het EMS één keer uit wat goedkoper is: de airco uit, of het huis op 18 °C houden tot jullie meestal thuiskomen. Bij thuiskomst gaat hij weer naar de gewone temperatuur.
+
 EMS v5.198.2 - nieuwe prijzen meteen in het plan
 
 Installeren: via de Marketplace bijwerken en herstarten.
