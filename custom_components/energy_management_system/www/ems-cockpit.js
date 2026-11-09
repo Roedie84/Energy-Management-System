@@ -2415,83 +2415,80 @@ class EmsCockpitCard extends HTMLElement {
     const regel = (ic, naam, sub, waarde, kleur = "") =>
       `<div class="regel"${kleur ? ` style="--rk:${kleur}"` : ""}><div class="ric">${icoon(ic)}</div>` +
       `<div><div class="rn">${esc(naam)}</div>${sub ? `<div class="rs">${sub}</div>` : ""}</div><div class="rw">${waarde}</div></div>`;
-    const status = (s) => {
-      const p = apparaatVermogen(s, this._hass.states);
-      return [apparaatTekst(s) + (p != null ? `${PUNT}${vermogenTekst(p)}` : ""), apparaatKleur(s)];
-    };
     const uit = [];
-    const fiets = this._s("fietsen");
-    if (fiets) {
-      const [t, k] = status(fiets);
-      uit.push(regel("fiets", "Fietsladers", "", esc(t), k));
-    }
-    const stof = this._s("stofzuiger");
-    if (stof) {
-      const [t, k] = status(stof);
-      uit.push(regel("stof", "Steelstofzuiger", "", esc(t), k));
-    }
-    const lader = this._s("lader");
-    if (lader) {
-      const [t, k] = status(lader);
-      uit.push(regel("accu", "Batterijlader keuken", "", esc(t), k));
-    }
-    for (const [sleutel, ic, naam] of [["vaatwasser", "vaat", "Vaatwasser"], ["wasmachine", "was", "Wasmachine"]]) {
+    // v5.202.2 (Ruud 09-11: "Ook in 1 tegel?"): fietsladers, stofzuiger,
+    // batterijlader, vaatwasser en wasmachine in een tegel "Apparaten",
+    // een regel per apparaat in zijn eigen kleur; waarde = wat ze samen nu
+    // trekken.
+    const apparaten = [];
+    let samenW = null;
+    for (const [sleutel, naam] of [["fietsen", "Fietsladers"], ["stofzuiger", "Steelstofzuiger"],
+      ["lader", "Batterijlader keuken"], ["vaatwasser", "Vaatwasser"], ["wasmachine", "Wasmachine"]]) {
       const s = this._s(sleutel);
       if (!s) continue;
-      const voortgang = num(attr(s, "geschatte_voortgang_procent"));
-      const [t, k] = status(s);
-      // v5.139.0: de planning (start, klaar, programma) als onderregel
-      const plan = this._s(`${sleutel}Plan`);
-      const planTekst = plan && !ONBRUIKBAAR.includes(String(plan.state).toLowerCase()) && attr(plan, "status") !== "niets" ? plan.state : "";
-      const sub = planTekst || (voortgang != null && voortgang > 0 && voortgang < 100 ? `${fmt(voortgang)}% klaar` : "");
-      uit.push(regel(ic, naam, esc(sub), esc(t), attr(plan, "status") === "gepland" ? "var(--blauw)" : k));
+      const p = apparaatVermogen(s, this._hass.states);
+      if (p != null) samenW = (samenW || 0) + p;
+      let t = apparaatTekst(s) + (p != null ? `${PUNT}${vermogenTekst(p)}` : "");
+      let k = apparaatKleur(s);
+      if (sleutel === "vaatwasser" || sleutel === "wasmachine") {
+        // v5.139.0: de planning (start, klaar, programma)
+        const voortgang = num(attr(s, "geschatte_voortgang_procent"));
+        const plan = this._s(`${sleutel}Plan`);
+        const planTekst = plan && !ONBRUIKBAAR.includes(String(plan.state).toLowerCase()) && attr(plan, "status") !== "niets" ? plan.state : "";
+        const extra = planTekst || (voortgang != null && voortgang > 0 && voortgang < 100 ? `${fmt(voortgang)}% klaar` : "");
+        if (extra) t += `${PUNT}${extra}`;
+        if (attr(plan, "status") === "gepland") k = "var(--blauw)";
+      }
+      apparaten.push(`${esc(naam)}: <span style="color:${k || "inherit"}">${esc(t)}</span>`);
     }
+    if (apparaten.length) {
+      uit.push(regel("stekker", "Apparaten", apparaten.join("<br>"),
+        samenW != null && samenW > 0 ? watt(samenW) : "", ""));
+    }
+    // v5.202.2 (Ruud 09-11: "Nu 4 airco gerelateerde tegels, kan dit niet
+    // in 1?"): Airco, Airco-patroon, Airco nu en Klimaat in een tegel.
+    // Waarde: het vermogen nu (anders de binnentemperatuur); regels:
+    // temperaturen en warmteadvies, compressor, verwachting, patroon.
     const besluit = this._s("aircoBesluit");
     const klimaat = this._s("klimaat");
+    const aw = this._s("airco_w");
+    const awW = getal(aw);
     const binnen = getal(this._s("temp_binnen"));
     const buiten = getal(this._s("temp_buiten"));
-    if (besluit || klimaat) {
+    if (besluit || klimaat || awW != null) {
+      const regels = [];
       const advies = attr(klimaat, "verwarmingsadvies") || {};
-      const sub = advies.advies
-        ? `Warmte nu: ${advies.advies === "airco" ? "airco" : "cv"} goedkoopst${num(advies.airco_eur_per_kwh_warmte) != null ? ` (${ct(advies.airco_eur_per_kwh_warmte)} tegen ${ct(advies.gas_eur_per_kwh_warmte)} ct/kWh warmte)` : ""}`
-        : esc(attr(besluit, "tekst") || "");
-      // v5.93.0: gaat de airco naar verwachting aan tot het volgende blok,
-      // en hoeveel rekent de reserve daarvoor mee?
+      const temps = binnen != null
+        ? `${fmt(binnen, 1)}${GRAAD} binnen${buiten != null ? ` / ${fmt(buiten, 1)}${GRAAD} buiten` : ""}`
+        : "";
+      const warmte = advies.advies
+        ? `${advies.advies === "airco" ? "airco" : "cv"} goedkoopst${num(advies.airco_eur_per_kwh_warmte) != null ? ` (${ct(advies.airco_eur_per_kwh_warmte)} tegen ${ct(advies.gas_eur_per_kwh_warmte)} ct/kWh warmte)` : ""}`
+        : (attr(besluit, "tekst") || "");
+      const r1 = [temps, warmte].filter(Boolean).join(PUNT);
+      if (r1) regels.push(esc(r1));
+      const hz = num(attr(aw, "frequentie_hz"));
+      if (hz != null) {
+        const wph = num(attr(aw, "w_per_hz"));
+        regels.push(esc((hz > 0 ? `compressor ${fmt(hz)} Hz` : "compressor stil") +
+          (wph != null ? `${PUNT}${fmt(wph, 1)} W/Hz ${attr(aw, "omrekening_geleerd") ? "geleerd" : "startwaarde"}` : "")));
+      }
+      // v5.93.0: verwachting tot het volgende blok en wat de reserve meetelt
       const vw = attr(besluit, "verwachting") || {};
       if (vw.beschikbaar) {
         const res = num(vw.in_reserve_kwh);
-        uit.push(
-          regel("airco", "Airco",
-            // v5.93.1: tot wanneer, en waar de verwachting op rust
-            `tot ${esc(vw.tot_tekst || "")}${vw.basis && vw.basis.tekst ? `${PUNT}${esc(vw.basis.tekst)}` : ""}` +
-              (vw.knop_automaat === false ? `${PUNT}knop automaat uit` : ""),
-            res != null && res > 0 ? `${fmt(res, 2)}<small>kWh</small> <span class="leeg">in reserve</span>` : vw.verwacht ? "verwacht" : "niet verwacht",
-            vw.verwacht ? "var(--oranje)" : "")
-        );
+        regels.push(esc(`verwacht tot ${vw.tot_tekst || ""}` +
+          (vw.basis && vw.basis.tekst ? `${PUNT}${vw.basis.tekst}` : "") +
+          (res != null && res > 0 ? `${PUNT}${fmt(res, 2)} kWh in reserve` : vw.verwacht ? "" : `${PUNT}niet verwacht`) +
+          (vw.knop_automaat === false ? `${PUNT}knop automaat uit` : "")));
       }
-      // v5.101: het geleerde patroon - wanneer jullie de airco aanzetten
+      // v5.101: het geleerde patroon
       const ritme = attr(besluit, "dagritme") || {};
-      if (ritme.patroon_tekst) {
-        uit.push(regel("airco", "Airco-patroon", esc(ritme.patroon_tekst), "", ""));
-      }
-      // v5.202.1: het airco-vermogen (berekend uit de compressorfrequentie,
-      // of de ingestelde sensor) - airco_w werd geladen maar nergens getoond.
-      const aw = this._s("airco_w");
-      const awW = getal(aw);
-      if (awW != null) {
-        const hz = num(attr(aw, "frequentie_hz"));
-        const wph = num(attr(aw, "w_per_hz"));
-        const awSub = hz != null
-          ? `${hz > 0 ? `compressor ${fmt(hz)} Hz` : "compressor stil"}` +
-            (wph != null ? `${PUNT}${fmt(wph, 1)} W/Hz ${attr(aw, "omrekening_geleerd") ? "geleerd" : "startwaarde"}` : "")
-          : "";
-        uit.push(regel("airco", "Airco nu", esc(awSub), watt(awW), awW > 0 ? "var(--oranje)" : ""));
-      }
-      uit.push(
-        regel("airco", "Klimaat", sub,
-          `${binnen != null ? fmt(binnen, 1) + GRAAD : STREEP}${buiten != null ? ` <span class="leeg">/ ${fmt(buiten, 1)}${GRAAD}</span>` : ""}`,
-          "var(--cyaan)")
-      );
+      if (ritme.patroon_tekst) regels.push(esc(ritme.patroon_tekst));
+      const waarde = awW != null
+        ? watt(awW)
+        : `${binnen != null ? fmt(binnen, 1) + GRAAD : STREEP}`;
+      uit.push(regel("airco", "Airco", regels.join("<br>"), waarde,
+        awW != null && awW > 0 ? "var(--oranje)" : "var(--cyaan)"));
     }
     // v5.135.0: het continu-verbruik, en hoeveel daarvan een eigen meting heeft
     const vk = attr(this._s("sluip"), "verklaring") || {};

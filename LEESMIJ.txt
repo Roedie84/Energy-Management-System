@@ -1,3 +1,9 @@
+EMS v5.202.2 - minder tegels in de cockpit
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Paneel Huis: alles over de airco staat in één tegel, en de apparaten (fietsladers, stofzuiger, batterijlader, vaatwasser, wasmachine) ook.
+
 EMS v5.202.1 - airco-vermogen in de cockpit
 
 Installeren: via de Marketplace bijwerken en herstarten.

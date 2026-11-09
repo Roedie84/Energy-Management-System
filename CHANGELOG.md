@@ -35307,3 +35307,12 @@ Tests: `test_v5202_airco_vermogen_sensor.py` (3).
 Ruud 09-11 15:43: "Ik zie de waarde nergens?" De sensor bestond (264 W), maar de cockpit laadde `airco_w` al sinds v5.181.1 zonder het ergens te tonen. Nu in het paneel Huis een regel "Airco nu": het vermogen, de compressorfrequentie en de omrekening (geleerd of startwaarde).
 
 Tests: `test_v5202_airco_vermogen_sensor.py` (+1).
+
+## v5.202.2 — paneel Huis: twee tegels in plaats van negen
+
+Ruud 09-11: "Nu 4 airco gerelateerde tegels, kan dit niet in 1?" en "Ook in 1 tegel?" (de apparaten).
+
+- Eén tegel "Airco": waarde = het vermogen nu (anders de binnentemperatuur); regels: binnen/buiten en het warmteadvies, de compressor, de verwachting tot het blok (met basis en reserve), het geleerde patroon. Vervangt Airco, Airco-patroon, Airco nu en Klimaat.
+- Eén tegel "Apparaten": per apparaat een regel in zijn eigen kleur (fietsladers, steelstofzuiger, batterijlader, vaatwasser, wasmachine, met de planning); waarde = wat ze samen nu trekken.
+
+Tests: `test_v5202_airco_vermogen_sensor.py` (render in Node).
