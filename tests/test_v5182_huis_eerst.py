@@ -90,10 +90,12 @@ def test_regel_zelf():
 
 
 def test_sturing_zet_hem_aan():
+    """v5.198.0 (Ruud 09-11: economisch het voordeligst): de regel is uit;
+    de koppeling blijft, zodat hij met één vlag terug kan."""
     from custom_components.energy_management_system.const import WAARDEPLAN_HUIS_EERST
     from pathlib import Path
     import custom_components.energy_management_system as pkg
-    assert WAARDEPLAN_HUIS_EERST is True
+    assert WAARDEPLAN_HUIS_EERST is False
     code = (Path(pkg.__file__).parent / "waardeplan_sturing.py").read_text(encoding="utf-8")
     assert "huis_eerst=WAARDEPLAN_HUIS_EERST" in code
 

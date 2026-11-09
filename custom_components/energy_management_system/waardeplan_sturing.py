@@ -47,6 +47,7 @@ from .const import (
     WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR,
     WAARDEPLAN_BEWAARMARGE_EUR,
     WAARDEPLAN_HUIS_EERST,
+    WAARDEPLAN_VERKOOPVLOER_RESERVE,
     WAARDEPLAN_MIN_LAAD_W,
     WAARDEPLAN_MIN_VERMOGEN_W,
     WAARDEPLAN_SLIJTAGE_TERUGVAL_CT,
@@ -397,7 +398,11 @@ class WaardeplanSturingMixin:
             teruglever_accu = OW.terugleverwaarde_accu_2027(kaal[begin], feedin_cost)
         else:
             return None
-        vloer = self._planning_verkoopreserve_kwh(begin, reserve_cache, entries, incl)
+        # v5.198.0 (Ruud 09-11): zonder huisreserve als verkoopvloer.
+        vloer = (
+            self._planning_verkoopreserve_kwh(begin, reserve_cache, entries, incl)
+            if WAARDEPLAN_VERKOOPVLOER_RESERVE else 0.0
+        )
         return waardeplan_mod.Kwartier(
             begin, max(0.0, verbruik), max(0.0, zon or 0.0), inkoop, teruglever, max(0.0, vloer or 0.0),
             uren=(eind - van).total_seconds() / 3600,
@@ -578,7 +583,7 @@ class WaardeplanSturingMixin:
             verkoopmarge_eur=self._verkoop_min_winst_eur(),
             netladen=True,
             verkopen=True,
-            # v5.182.0 (akkoord Ruud 04-11): woning eerst, alleen overschot verkopen.
+            # v5.182.0 (akkoord Ruud 04-11): woning eerst; v5.198.0 uit (Ruud 09-11: economisch).
             huis_eerst=WAARDEPLAN_HUIS_EERST,
             # v5.183.0 (akkoord Ruud 04-11 14:04): bewaarmarge en onzekerheid vooruit.
             bewaarmarge_eur=WAARDEPLAN_BEWAARMARGE_EUR,

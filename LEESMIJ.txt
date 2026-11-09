@@ -1,3 +1,10 @@
+EMS v5.198.0 - zo weinig mogelijk betalen
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het EMS kiest nu altijd wat over de hele dag het goedkoopst uitkomt. De regels 'liever meer voor de woning' en 'het huis gaat voor' zijn uit: de accu mag ook verkopen wat het huis later nodig heeft, als terugkopen dan goedkoper is.
+- De verkoopmarge staat op 2 ct.
+
 EMS v5.197.1 - oude tekortnachten opnieuw beoordeeld
 
 Installeren: via de Marketplace bijwerken en herstarten.

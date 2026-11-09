@@ -7693,7 +7693,15 @@ WAARDEPLAN_MIN_KWARTIEREN = 4
 WAARDEPLAN_SLIJTAGE_TERUGVAL_CT = 4.22
 #: v5.182.0 (akkoord Ruud 04-11 13:45): de accu verkoopt alleen wat het huis
 #: tot het volgende bijvullen niet nodig heeft, en geen lading uit het net.
-WAARDEPLAN_HUIS_EERST = True
+#: v5.198.0 (Ruud 09-11 11:41: "je moet doen wat economisch voor mij het
+#: voordeligste is" - alles akkoord, ook "het huis gaat voor" loslaten): uit.
+#: Het plan rekent het huis gewoon mee; verkopen, netladen en zon terugleveren
+#: alleen als dat over de hele horizon goedkoper uitkomt.
+WAARDEPLAN_HUIS_EERST = False
+#: v5.198.0: de verkoopvloer volgt de huisreserve tot het goedkope blok niet
+#: meer; het plan mag verkopen tot de ondergrens als het later goedkoper
+#: terugkoopt (Ruud 09-11, punt 4). False = vloer 0 boven de ondergrens.
+WAARDEPLAN_VERKOOPVLOER_RESERVE = False
 #: v5.183.0 (akkoord Ruud 04-11 14:04, punt 1): bewaren terwijl het huis op het
 #: net draait alleen bij minstens 5 ct/kWh voordeel later.
 WAARDEPLAN_BEWAARMARGE_EUR = 0.05

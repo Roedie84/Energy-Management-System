@@ -35229,3 +35229,14 @@ Oorzaak: de toets liep vlak na het opstarten, toen slijtage of rendement nog ont
 - Blijft een nacht planning om een andere reden, dan krijgt hij die reden.
 
 Tests: `test_v5197_1_economietoets_herkansing.py` (3).
+
+## v5.198.0 — economisch het voordeligst: woning-eerst en huisreserve uit
+
+Ruud 09-11 11:40: "Je moet doen wat economisch voor mij het voordeligste is, ik wil zo weinig mogelijk betalen." 11:41: alles akkoord, ook "het huis gaat voor" loslaten, "let wel op dat het economisch de beste keuze moet zijn".
+
+- `WAARDEPLAN_HUIS_EERST` uit (was v5.182.0, "liever meer voor de woning"): geen verbod meer op het verkopen van netlading, op zon terugleveren met ruimte in de accu, of op netladen vóór een zonoverloop. Het plan rekent het huis gewoon mee en kiest over de hele horizon de goedkoopste route.
+- `WAARDEPLAN_VERKOOPVLOER_RESERVE` uit: de huisreserve tot het goedkope blok is geen verkoopvloer meer. Het plan mag verkopen tot de ondergrens als het later goedkoper terugkoopt (rendement, slijtage en de verkoopmarge tellen mee). De ondergrens van de accu blijft.
+- Verkoopmarge (optie `verkoop_min_winst_ct`) 5 → 2 ct, in HA gezet (punt 1).
+- Ongewijzigd: de bewaarmarge (5 ct) tot de evaluatie van de economische schaduw; de zinloze-verkooptoets; de terugvalsturing.
+
+Tests: `test_v5198_economisch.py` (2); `test_v5182_huis_eerst.py` en `test_v5160_verkoopvloer.py` aangepast.

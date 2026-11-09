@@ -41,7 +41,10 @@ def test_alleen_wat_boven_de_vloer_zit_gaat_het_net_op():
     assert all(r["inhoud_kwh"] >= 1.0 - 1e-6 for r in verkocht)
 
 
-def test_coordinator_geeft_de_reserve_mee(make_coordinator, hass):
+def test_coordinator_geeft_de_reserve_mee(make_coordinator, hass, monkeypatch):
+    # v5.198.0: standaard uit (Ruud 09-11); met de vlag aan zoals voorheen.
+    import custom_components.energy_management_system.waardeplan_sturing as ws
+    monkeypatch.setattr(ws, "WAARDEPLAN_VERKOOPVLOER_RESERVE", True)
     c = make_coordinator({})
     c._segmenten_verbruik_zon = lambda *a, **k: [(0.2, 0.0)]
     c._estimate_pv_kwh_for_period = lambda *a, **k: 0.0
