@@ -91,6 +91,47 @@ def _vast_per_dag(inst: Instellingen, dag: date) -> tuple[float, float]:
     return stroom + gas, inst.vermindering_eb_jaar / 365.0
 
 
+def vaste_kosten_dag(inst: Instellingen, dag: date) -> dict:
+    """v5.203.0: de vaste kosten van één dag, per drager (EUR).
+
+    Ruud 09-11: "Waarom tellen vaste kosten niet mee? Ik moet toch een
+    totaal plaatje hebben voor zowel tablet en cockpit voor gas en elektra."
+    Stroom: vastrecht + netbeheer min de vermindering energiebelasting (die
+    staat op de stroomrekening). Gas: vastrecht + netbeheer; vanaf de
+    overstap het vastrecht van de nieuwe leverancier min zijn korting.
+    """
+    stroom_vast = (inst.vastrecht_stroom_mnd * 12 + inst.netbeheer_stroom_jaar) / 365.0
+    eb = inst.vermindering_eb_jaar / 365.0
+    if inst.gas_overstap is not None and dag >= inst.gas_overstap:
+        gas = (inst.gas_nieuw_vastrecht_mnd * 12 + inst.netbeheer_gas_jaar - inst.gas_nieuw_korting_jaar) / 365.0
+    else:
+        gas = (inst.vastrecht_gas_mnd * 12 + inst.netbeheer_gas_jaar) / 365.0
+    return {
+        "stroom_vastrecht_netbeheer_eur": stroom_vast,
+        "eb_vermindering_eur": eb,
+        "stroom_eur": stroom_vast - eb,
+        "gas_eur": gas,
+    }
+
+
+def kosten_vandaag(*, afname_eur, terug_eur, gas_eur, vast: dict) -> dict:
+    """v5.203.0: stroom, gas en totaal van vandaag, variabel + vast (EUR).
+    Een ontbrekende variabele waarde maakt dat deel (en het totaal) None."""
+    stroom_var = None if afname_eur is None else afname_eur - (terug_eur or 0.0)
+    stroom = None if stroom_var is None else stroom_var + vast["stroom_eur"]
+    gas = None if gas_eur is None else gas_eur + vast["gas_eur"]
+    totaal = None if stroom is None or gas is None else stroom + gas
+    r = lambda v: None if v is None else round(v, 2)  # noqa: E731
+    return {
+        "stroom_eur": r(stroom), "gas_eur": r(gas), "totaal_eur": r(totaal),
+        "stroom_variabel_eur": r(stroom_var), "stroom_vast_eur": r(vast["stroom_eur"]),
+        "stroom_vastrecht_netbeheer_eur": r(vast["stroom_vastrecht_netbeheer_eur"]),
+        "eb_vermindering_eur": r(vast["eb_vermindering_eur"]),
+        "gas_variabel_eur": r(gas_eur), "gas_vast_eur": r(vast["gas_eur"]),
+        "afname_eur": r(afname_eur), "teruglevering_eur": r(terug_eur),
+    }
+
+
 def _dagkosten(w: dict, dag: date, inst: Instellingen, schatting: bool) -> dict:
     """De variabele kosten van één dag; bij een schatting met de regels van die dag."""
     afname = float(w.get("afname_eur") or 0.0)

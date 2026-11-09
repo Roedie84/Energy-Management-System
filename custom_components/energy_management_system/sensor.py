@@ -209,6 +209,10 @@ async def async_setup_entry(
         AircoBesluitSensor(coordinator, entry.entry_id),
         # v5.202.0: het airco-vermogen uit de compressorfrequentie
         AircoVermogenSensor(coordinator, entry.entry_id),
+        # v5.203.0: kosten vandaag inclusief de vaste kosten
+        StroomkostenVandaagSensor(coordinator, entry.entry_id),
+        GaskostenVandaagSensor(coordinator, entry.entry_id),
+        EnergiekostenVandaagSensor(coordinator, entry.entry_id),
         RolluikIsolatieSensor(coordinator, entry.entry_id),
         MeetlogSensor(coordinator, entry.entry_id),
         DiagnoseGezondheidSensor(coordinator, entry.entry_id),
@@ -6160,6 +6164,63 @@ class AircoVermogenSensor(SensorEntity):
         uit = dict(self._coordinator.get_airco_vermogen())
         uit.pop("vermogen_w", None)
         return uit
+
+
+class _KostenVandaagSensor(SensorEntity):
+    """Stroom, gas of totaal van vandaag INCLUSIEF vaste kosten (v5.203.0).
+
+    Ruud 09-11: "Waarom tellen vaste kosten niet mee? Ik moet toch een totaal
+    plaatje hebben voor zowel tablet en cockpit voor gas en elektra."
+    Variabel uit de dagbedragen van de leverancier, vast (vastrecht,
+    netbeheer, min de vermindering energiebelasting) uit de instellingen van
+    de jaarafrekening, voor de hele dag.
+    """
+
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_suggested_display_precision = 2
+    # de basisklasse wordt zelf niet aangemaakt (zie de drie hieronder)
+    _soort = "totaal"
+    _sleutel = "kosten_vandaag_basis"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_{self._sleutel}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.get_kosten_vandaag().get(f"{self._soort}_eur")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return dict(self._coordinator.get_kosten_vandaag())
+
+
+class StroomkostenVandaagSensor(_KostenVandaagSensor):
+    _attr_name = "Stroomkosten vandaag (incl. vast)"
+    _attr_icon = "mdi:flash"
+    _soort = "stroom"
+    _sleutel = "kosten_vandaag_stroom"
+
+
+class GaskostenVandaagSensor(_KostenVandaagSensor):
+    _attr_name = "Gaskosten vandaag (incl. vast)"
+    _attr_icon = "mdi:fire"
+    _soort = "gas"
+    _sleutel = "kosten_vandaag_gas"
+
+
+class EnergiekostenVandaagSensor(_KostenVandaagSensor):
+    _attr_name = "Energiekosten vandaag (incl. vast)"
+    _attr_icon = "mdi:sigma"
+    _soort = "totaal"
+    _sleutel = "kosten_vandaag_totaal"
 
 
 class RolluikIsolatieSensor(_CoordinatorDiagnosticSensor):

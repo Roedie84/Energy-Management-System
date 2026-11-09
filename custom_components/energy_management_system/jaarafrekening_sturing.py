@@ -16,6 +16,7 @@ from . import jaarafrekening as ja
 from .const import (
     CONF_CONTRACT_START_DATE,
     CONF_GAS_EUR_VANDAAG_SENSOR,
+    CONF_GAS_METER_TOTAL_SENSOR,
     CONF_GAS_M3_VANDAAG_SENSOR,
     CONF_GAS_NIEUW_KORTING_JAAR,
     CONF_GAS_NIEUW_PRIJS_ENTITY,
@@ -111,6 +112,47 @@ class JaarafrekeningMixin:
 
     def jaarafrekening_saldo(self):
         return (self._jaarafrekening or {}).get("verwacht_saldo_eur")
+
+    _gasmeter_dagstart: tuple | None = None
+
+    def get_kosten_vandaag(self) -> dict:
+        """v5.203.0: stroom en gas van vandaag inclusief de vaste kosten -
+        zie `ja.kosten_vandaag`. De vaste kosten tellen voor de hele dag.
+        Na de gasoverstap: m3 vandaag (gasmeter sinds middernacht) x de
+        prijs van de nieuwe leverancier."""
+        try:
+            nu = dt_util.now()
+            vandaag = dt_util.as_local(nu).date()
+            inst = self._jaarafrekening_instellingen()
+            c = self.config
+            afname = self._read_sensor_float(c.get(CONF_INKOOP_EUR_VANDAAG_SENSOR))
+            terug = self._read_sensor_float(c.get(CONF_TERUGLEVER_EUR_VANDAAG_SENSOR))
+            gas = self._read_sensor_float(c.get(CONF_GAS_EUR_VANDAAG_SENSOR))
+            m3 = self._read_sensor_float(c.get(CONF_GAS_M3_VANDAAG_SENSOR))
+            bron_gas = "Zonneplan"
+            if inst.gas_overstap is not None and vandaag >= inst.gas_overstap:
+                bron_gas = "nieuwe leverancier"
+                m3 = self._gas_m3_vandaag_meter(vandaag)
+                gas = (m3 * inst.gas_nieuw_prijs_m3
+                       if m3 is not None and inst.gas_nieuw_prijs_m3 is not None else None)
+            uit = ja.kosten_vandaag(afname_eur=afname, terug_eur=terug, gas_eur=gas,
+                                    vast=ja.vaste_kosten_dag(inst, vandaag))
+            uit.update(gas_m3=None if m3 is None else round(m3, 3), gas_bron=bron_gas,
+                       vast_hele_dag=True)
+            return uit
+        except Exception as err:  # noqa: BLE001 - een overzicht mag nooit breken
+            return {"stroom_eur": None, "gas_eur": None, "totaal_eur": None, "fout": str(err)}
+
+    def _gas_m3_vandaag_meter(self, vandaag: date) -> float | None:
+        """m3 sinds middernacht uit de gasmeterstand (na de overstap)."""
+        stand = self._read_sensor_float(self.config.get(CONF_GAS_METER_TOTAL_SENSOR))
+        if stand is None:
+            return None
+        start = self._gasmeter_dagstart
+        if start is None or start[0] != vandaag:
+            # na een herstart midden op de dag is het begin onbekend: vanaf nu
+            self._gasmeter_dagstart = start = (vandaag, stand)
+        return max(0.0, stand - start[1])
 
     def _jaarafrekening_instellingen(self) -> ja.Instellingen:
         c = self.config

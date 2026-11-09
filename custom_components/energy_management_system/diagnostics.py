@@ -1527,6 +1527,8 @@ async def async_get_config_entry_diagnostics(
             # v5.202.0: het airco-vermogen uit de compressorfrequentie en het
             # bijgeleerde model (meetvensters, opwarmen, warm houden)
             "airco_vermogen": _veilig("get_airco_vermogen", coordinator.get_airco_vermogen),
+            # v5.203.0: kosten vandaag inclusief vaste kosten
+            "kosten_vandaag": _veilig("get_kosten_vandaag", coordinator.get_kosten_vandaag),
             "airco_frequentie_model": (getattr(coordinator, "airco_ritme", None) or {}).get("frequentie"),
             "climate_live_outdoor_temp_c": coordinator.climate_live_outdoor_temp_c,
             "total_feedin_premium_eur": round(

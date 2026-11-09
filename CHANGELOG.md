@@ -35316,3 +35316,14 @@ Ruud 09-11: "Nu 4 airco gerelateerde tegels, kan dit niet in 1?" en "Ook in 1 te
 - Eén tegel "Apparaten": per apparaat een regel in zijn eigen kleur (fietsladers, steelstofzuiger, batterijlader, vaatwasser, wasmachine, met de planning); waarde = wat ze samen nu trekken.
 
 Tests: `test_v5202_airco_vermogen_sensor.py` (render in Node).
+
+## v5.203.0 — kosten vandaag inclusief vaste kosten
+
+Ruud 09-11: "Waarom tellen vaste kosten niet mee? Ik moet toch een totaal plaatje hebben voor zowel tablet en cockpit voor gas en elektra."
+
+- `jaarafrekening.vaste_kosten_dag`: per dag stroom = vastrecht + netbeheer min de vermindering energiebelasting (met de huidige instellingen -€0,21/dag: de EB-korting is groter), gas = vastrecht + netbeheer (€0,94/dag); vanaf de gasoverstap het vastrecht van de nieuwe leverancier + netbeheer min zijn korting (€0,43/dag). Dezelfde instellingen als de jaarafrekening.
+- Drie sensoren: "Stroomkosten vandaag (incl. vast)", "Gaskosten vandaag (incl. vast)", "Energiekosten vandaag (incl. vast)", met de opbouw (variabel, vast, EB-vermindering, afname, teruglevering) als attributen. Variabel uit de dagbedragen van de leverancier; na de gasoverstap m3 vanaf de gasmeter x de nieuwe gasprijs. Vaste kosten tellen voor de hele dag.
+- Cockpit, paneel Geld: "Totaal vandaag" met stroom en gas incl. vast; de oude regel heet nu "Stroom variabel".
+- Diagnose: `kosten_vandaag`.
+
+Tests: `test_v5203_kosten_incl_vast.py` (4).

@@ -1744,6 +1744,14 @@ views:
       tap_action:
         action: more-info
     - type: custom:mushroom-template-card
+      entity: sensor.woonkamer_energy_management_system_energiekosten_vandaag_incl_vast
+      primary: Energiekosten vandaag (incl. vast)
+      secondary: 'Stroom € {{ states(''sensor.woonkamer_energy_management_system_stroomkosten_vandaag_incl_vast'') }} · gas € {{ states(''sensor.woonkamer_energy_management_system_gaskosten_vandaag_incl_vast'') }} · totaal € {{ states(''sensor.woonkamer_energy_management_system_energiekosten_vandaag_incl_vast'') }}'
+      multiline_secondary: true
+      icon: mdi:sigma
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
       entity: sensor.woonkamer_energy_management_system_airco_vermogen_berekend
       primary: Airco vermogen (berekend)
       secondary: '{% set e = ''sensor.woonkamer_energy_management_system_airco_vermogen_berekend'' %}{{ states(e) }} W bij {{ state_attr(e, ''frequentie_hz'') }} Hz · {{ state_attr(e, ''w_per_hz'') }} W/Hz {{ ''(geleerd)'' if state_attr(e, ''omrekening_geleerd'') else ''(startwaarde)'' }} · opwarmen {{ state_attr(e, ''opwarm_kw'') or ''-'' }} kW · warm houden {{ state_attr(e, ''warm_houden_w_per_graad'') or ''-'' }} W/°C'

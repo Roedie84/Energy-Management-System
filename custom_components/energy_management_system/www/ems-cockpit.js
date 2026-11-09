@@ -104,6 +104,8 @@ const EIGEN = {
   dagarchief: "dagarchief",
   // v5.105.0: is er iemand thuis (bovenin de cockpit)
   aanwezig: "aanwezigheid",
+  // v5.203.0: kosten vandaag inclusief de vaste kosten
+  kostenTotaal: "kosten_vandaag_totaal",
   // knoppen
   nuLaden: "nu_laden",
   handLaden: "handmatig_laden",
@@ -1011,7 +1013,7 @@ const AFHANKELIJK = {
     "uitleg", "modus", "schema", "plan", "accuprijs", "cockpit"],
   // v5.181.1 (punt 7): de planvolging komt elke ronde van de cockpitsensor.
   planvandaag: ["plan", "schema", "soc", "besparing", "uitleg", "cockpit", "accu_vermogen", "pv", "net", "modus"],
-  geld: ["besparing", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief", "rendement", "gacs"],
+  geld: ["kostenTotaal", "besparing", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief", "rendement", "gacs"],
   planning: ["plan", "schema", "uitleg", "blok", "soc", "prijsverwachting"],
   verkoop: ["gacs", "plan", "mc", "tekort", "uitleg", "blok", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk",
     "pvNauw", "bewolking", "pv"],
@@ -2554,6 +2556,7 @@ class EmsCockpitCard extends HTMLElement {
     const vandaag = per.vandaag || {};
     const kosten = num(attr(bes, "werkelijke_kosten_vandaag_eur"));
     const zonder = num(attr(bes, "tegenfeitelijke_kosten_vandaag_eur"));
+    const kt = this._s("kostenTotaal");
     const bmaand = num(attr(bes, "besparing_deze_maand_eur"));
     // v5.186.0: het totaal op dezelfde (gecorrigeerde) maat als "deze maand".
     const ball = num(attr(bes, "besparing_totaal_gecorrigeerd_eur")) ?? num(attr(bes, "besparing_all_time_eur"));
@@ -2603,7 +2606,11 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="tegel">` +
       paneelKop("euro", "Geld", "", "detail-besparing") +
       `<div class="geld-grid"><div class="rijen geld-r">` +
-      `<span data-info="besparing" title="Stroomkosten vandaag tot nu">Vandaag <b>${euro(kosten)}${zonder != null ? `<i class="bij">zonder accu ${euro(zonder)}</i>` : ""}</b></span>` +
+      // v5.203.0 (Ruud 09-11: "een totaal plaatje voor gas en elektra"):
+      // stroom en gas van vandaag inclusief vastrecht, netbeheer en de
+      // vermindering energiebelasting (vaste kosten voor de hele dag).
+      (kt ? `<span title="${esc(`Stroom ${euro(num(attr(kt, "stroom_variabel_eur")))} + vast ${euro(num(attr(kt, "stroom_vast_eur")))}; gas ${euro(num(attr(kt, "gas_variabel_eur")))} + vast ${euro(num(attr(kt, "gas_vast_eur")))}. Vast: vastrecht en netbeheer min de vermindering energiebelasting, voor de hele dag.`)}">Totaal vandaag <b>${euro(getal(kt))}<i class="bij">stroom ${euro(num(attr(kt, "stroom_eur")))}${PUNT}gas ${euro(num(attr(kt, "gas_eur")))}${PUNT}incl. vast</i></b></span>` : "") +
+      `<span data-info="besparing" title="Stroomkosten vandaag tot nu (zonder vaste kosten)">Stroom variabel <b>${euro(kosten)}${zonder != null ? `<i class="bij">zonder accu ${euro(zonder)}</i>` : ""}</b></span>` +
       // v5.105.2: de besparing vergelijkt met een huis ZONDER accu
       `<span title="${esc("t.o.v. zonder accu")}">Besparing deze maand <b style="color:${kleur(bmaand)}">${euroTeken(bmaand)}</b></span>` +
       `<span title="sinds de start">Besparing totaal <b style="color:${kleur(ball)}">${euroTeken(ball)}</b></span>` +
