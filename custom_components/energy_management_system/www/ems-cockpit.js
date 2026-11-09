@@ -2474,6 +2474,19 @@ class EmsCockpitCard extends HTMLElement {
       if (ritme.patroon_tekst) {
         uit.push(regel("airco", "Airco-patroon", esc(ritme.patroon_tekst), "", ""));
       }
+      // v5.202.1: het airco-vermogen (berekend uit de compressorfrequentie,
+      // of de ingestelde sensor) - airco_w werd geladen maar nergens getoond.
+      const aw = this._s("airco_w");
+      const awW = getal(aw);
+      if (awW != null) {
+        const hz = num(attr(aw, "frequentie_hz"));
+        const wph = num(attr(aw, "w_per_hz"));
+        const awSub = hz != null
+          ? `${hz > 0 ? `compressor ${fmt(hz)} Hz` : "compressor stil"}` +
+            (wph != null ? `${PUNT}${fmt(wph, 1)} W/Hz ${attr(aw, "omrekening_geleerd") ? "geleerd" : "startwaarde"}` : "")
+          : "";
+        uit.push(regel("airco", "Airco nu", esc(awSub), watt(awW), awW > 0 ? "var(--oranje)" : ""));
+      }
       uit.push(
         regel("airco", "Klimaat", sub,
           `${binnen != null ? fmt(binnen, 1) + GRAAD : STREEP}${buiten != null ? ` <span class="leeg">/ ${fmt(buiten, 1)}${GRAAD}</span>` : ""}`,

@@ -34,3 +34,9 @@ def test_cockpit_en_diagnose():
     bron = (PAKKET / "sensor.py").read_text()
     assert 'bronnen["airco_w"] = eigen["airco_vermogen"]' in bron
     assert '"airco_vermogen": _veilig("get_airco_vermogen"' in (PAKKET / "diagnostics.py").read_text()
+
+
+def test_cockpit_toont_airco_nu():
+    """v5.202.1: airco_w werd geladen maar nergens getoond."""
+    js = (PAKKET / "www" / "ems-cockpit.js").read_text()
+    assert 'this._s("airco_w")' in js and '"Airco nu"' in js

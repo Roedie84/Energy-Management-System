@@ -35301,3 +35301,9 @@ Ruud 09-11: "Waar zie ik nu het berekende airco vermogen?" - nergens; v5.200.0 r
 3. Diagnose: `airco_vermogen` (afgeschermd) en `airco_frequentie_model` (de meetvensters en metingen).
 
 Tests: `test_v5202_airco_vermogen_sensor.py` (3).
+
+## v5.202.1 — "Airco nu" in de cockpit
+
+Ruud 09-11 15:43: "Ik zie de waarde nergens?" De sensor bestond (264 W), maar de cockpit laadde `airco_w` al sinds v5.181.1 zonder het ergens te tonen. Nu in het paneel Huis een regel "Airco nu": het vermogen, de compressorfrequentie en de omrekening (geleerd of startwaarde).
+
+Tests: `test_v5202_airco_vermogen_sensor.py` (+1).

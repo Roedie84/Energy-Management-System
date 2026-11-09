@@ -1,3 +1,9 @@
+EMS v5.202.1 - airco-vermogen in de cockpit
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- In de cockpit, paneel Huis, staat nu de regel 'Airco nu' met het vermogen en de compressorfrequentie.
+
 EMS v5.202.0 - airco-vermogen zichtbaar
 
 Installeren: via de Marketplace bijwerken en herstarten.
