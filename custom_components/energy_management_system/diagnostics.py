@@ -1524,6 +1524,10 @@ async def async_get_config_entry_diagnostics(
             "last_backyard_spike_filtered_note": coordinator.last_backyard_spike_filtered_note,
             "climate_shutter_state": coordinator.climate_shutter_state,
             "climate_airco_state": coordinator.climate_airco_state,
+            # v5.202.0: het airco-vermogen uit de compressorfrequentie en het
+            # bijgeleerde model (meetvensters, opwarmen, warm houden)
+            "airco_vermogen": _veilig("get_airco_vermogen", coordinator.get_airco_vermogen),
+            "airco_frequentie_model": (getattr(coordinator, "airco_ritme", None) or {}).get("frequentie"),
             "climate_live_outdoor_temp_c": coordinator.climate_live_outdoor_temp_c,
             "total_feedin_premium_eur": round(
                 coordinator.total_feedin_premium_eur, 4

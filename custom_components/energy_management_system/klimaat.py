@@ -2038,6 +2038,45 @@ class KlimaatMixin:
             return {}
         return gevonden
 
+    def get_airco_vermogen(self) -> dict:
+        """v5.202.0: het berekende airco-vermogen en wat erachter zit, voor
+        de sensor "Airco vermogen (berekend)", de cockpit en de diagnose."""
+        try:
+            model = (self.airco_ritme or {}).get("frequentie") or {}
+            hz = self._airco_bron_waarde("frequentie")
+            ingesteld = self.config.get(CONF_AIRCO_POWER_SENSOR)
+            a, b, geleerd = airco_frequentie.coefficienten(model)
+            houd = airco_frequentie.houd_w_per_graad(model)
+            opwarm = airco_frequentie.opwarm_kw(model)
+            loop = self._airco_freq_loop
+            return {
+                "vermogen_w": round(self._airco_vermogen_w(), 0) if self._airco_vermogen_w() is not None else None,
+                "bron": (
+                    "ingestelde sensor" if ingesteld
+                    else "compressorfrequentie" if hz is not None
+                    else "Daikin-schatting" if self._airco_vermogen_w() is not None
+                    else "geen"
+                ),
+                "frequentie_hz": hz,
+                "w_per_hz": round(a, 1),
+                "basis_w": round(b, 0),
+                "omrekening_geleerd": geleerd,
+                "meetvensters": len(model.get("vensters") or []),
+                "meetvensters_nodig": airco_frequentie.VENSTERS_MIN,
+                "opwarm_kw": round(opwarm, 2) if opwarm is not None else None,
+                "opwarm_metingen": len(model.get("opwarm_w") or []),
+                "warm_houden_w_per_graad": round(houd, 1) if houd is not None else None,
+                "warm_houden_metingen": len(model.get("houd_w_per_graad") or []),
+                "teller_vandaag_kwh": self._airco_bron_waarde("teller"),
+                "geteld_sinds_start_kwh": (
+                    round(airco_frequentie.stand_kwh(loop), 2)
+                    if loop is not None and airco_frequentie.stand_kwh(loop) is not None else None
+                ),
+                "bronnen": dict(self._airco_bronnen or {}),
+            }
+        except Exception as err:  # noqa: BLE001 - een overzicht mag nooit breken
+            return {"vermogen_w": None, "fout": str(err)}
+
     _airco_freq_loop: dict | None = None
     _airco_freq_vorige: tuple | None = None
 

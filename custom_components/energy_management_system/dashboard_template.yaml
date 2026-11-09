@@ -1744,6 +1744,14 @@ views:
       tap_action:
         action: more-info
     - type: custom:mushroom-template-card
+      entity: sensor.woonkamer_energy_management_system_airco_vermogen_berekend
+      primary: Airco vermogen (berekend)
+      secondary: '{% set e = ''sensor.woonkamer_energy_management_system_airco_vermogen_berekend'' %}{{ states(e) }} W bij {{ state_attr(e, ''frequentie_hz'') }} Hz · {{ state_attr(e, ''w_per_hz'') }} W/Hz {{ ''(geleerd)'' if state_attr(e, ''omrekening_geleerd'') else ''(startwaarde)'' }} · opwarmen {{ state_attr(e, ''opwarm_kw'') or ''-'' }} kW · warm houden {{ state_attr(e, ''warm_houden_w_per_graad'') or ''-'' }} W/°C'
+      multiline_secondary: true
+      icon: mdi:flash
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
       entity: sensor.woonkamer_energy_management_system_rolluik_isolatie
       primary: Rolluik isolatie
       secondary: '{{ states(''sensor.woonkamer_energy_management_system_rolluik_isolatie'') }}: {{ state_attr(''sensor.woonkamer_energy_management_system_rolluik_isolatie'', ''reden'') }}'

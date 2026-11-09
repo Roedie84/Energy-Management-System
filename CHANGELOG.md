@@ -35291,3 +35291,13 @@ Ruud 09-11 15:00: "binary_sensor.ultimatesensor_occupancy detecteert waarschijnl
 - Buiten de code (akkoord Ruud): de zoldercamera (`binary_sensor.zolder_beweging`) uit de aanwezigheidssensoren van het EMS, en in de helper "Iemand thuis" telt de radar alleen nog als een andere sensor in het laatste half uur bewoog, na de laatste deur.
 
 Tests: `test_v5201_hond_na_deur.py` (4).
+
+## v5.202.0 — het berekende airco-vermogen zichtbaar
+
+Ruud 09-11: "Waar zie ik nu het berekende airco vermogen?" - nergens; v5.200.0 rekende er alleen intern mee. Alle drie de punten akkoord:
+
+1. Nieuwe sensor "Airco vermogen (berekend)" (W, measurement, `<entry>_airco_vermogen`), met als attributen: bron, frequentie, W per Hz en basis, of de omrekening al geleerd is (meetvensters x van 8), opwarmvermogen, warm-houdverbruik per graad, de teller vandaag en de gevonden bronentiteiten. Ook als kaart onder "Airco besluit" in het dashboardsjabloon.
+2. Cockpit: zonder ingestelde airco-vermogenssensor leest de airco-tegel deze sensor (`bronnen.airco_w`).
+3. Diagnose: `airco_vermogen` (afgeschermd) en `airco_frequentie_model` (de meetvensters en metingen).
+
+Tests: `test_v5202_airco_vermogen_sensor.py` (3).

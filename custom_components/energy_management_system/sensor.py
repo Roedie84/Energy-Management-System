@@ -207,6 +207,8 @@ async def async_setup_entry(
         # v5.71: welke entiteiten het cockpitdashboard leest.
         DashboardBronnenSensor(coordinator, entry.entry_id),
         AircoBesluitSensor(coordinator, entry.entry_id),
+        # v5.202.0: het airco-vermogen uit de compressorfrequentie
+        AircoVermogenSensor(coordinator, entry.entry_id),
         RolluikIsolatieSensor(coordinator, entry.entry_id),
         MeetlogSensor(coordinator, entry.entry_id),
         DiagnoseGezondheidSensor(coordinator, entry.entry_id),
@@ -6124,6 +6126,42 @@ class AircoBesluitSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
         return uit
 
 
+class AircoVermogenSensor(SensorEntity):
+    """Het berekende vermogen van de woonkamer-airco (v5.202.0).
+
+    Gevraagd 09-11: "Waar zie ik nu het berekende airco vermogen?" Uit de
+    compressorfrequentie, met de omrekening die het EMS uit de energieteller
+    bijleert (zie airco_frequentie.py). Attributen: de omrekening, of die al
+    geleerd is, het opwarmvermogen en het warm-houdverbruik per graad.
+    """
+
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    _attr_has_entity_name = True
+    _attr_name = "Airco vermogen (berekend)"
+    _attr_icon = "mdi:air-conditioner"
+    _attr_native_unit_of_measurement = "W"
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = "measurement"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_airco_vermogen"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.get_airco_vermogen().get("vermogen_w")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        uit = dict(self._coordinator.get_airco_vermogen())
+        uit.pop("vermogen_w", None)
+        return uit
+
+
 class RolluikIsolatieSensor(_CoordinatorDiagnosticSensor):
     """Rolluiken eerder dicht tegen koude wind? (v5.66)
 
@@ -6437,10 +6475,16 @@ class DashboardBronnenSensor(_CoordinatorDiagnosticSensor):
     def extra_state_attributes(self) -> dict:
         from .cockpit_bronnen import externe_bronnen
 
+        bronnen = externe_bronnen(self._coordinator.config or {})
+        eigen = self._eigen()
+        # v5.202.0: zonder ingestelde airco-vermogenssensor het berekende
+        # vermogen (compressorfrequentie) in de airco-tegel.
+        if "airco_w" not in bronnen and eigen.get("airco_vermogen"):
+            bronnen["airco_w"] = eigen["airco_vermogen"]
         return {
             "ems_cockpit": 1,
-            "bronnen": externe_bronnen(self._coordinator.config or {}),
-            "eigen": self._eigen(),
+            "bronnen": bronnen,
+            "eigen": eigen,
         }
 
 
