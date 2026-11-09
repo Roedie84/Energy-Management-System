@@ -623,7 +623,15 @@ PV_UURBIAS_MIN_GEMETEN = 0.9
 PV_BEGRENSD_ONDER_PROCENT = 95.0
 #: punt 36: de recente zonverhouding (laatste uren) voor "verwacht"
 ZON_RECENT_MIN = 0.3  # v5.187.4: ratio tegen ruwe Solcast (was 0,5 tegen gecorrigeerd)
-ZON_RECENT_MAX = 1.3
+ZON_RECENT_MAX = 1.6  # v5.196.0 (akkoord Ruud 09-11): was 1,3; een doorbraak haalde 1,6x Solcast
+# v5.196.0 (akkoord Ruud 09-11 10:50): het afgelopen halfuur voor het eerstvolgende uur
+# (09-11: zon brak om 10:15 door, 1,55 kW gemeten, plan 0,88 kW door het donkere uur 09-10).
+ZON_NU_MINUTEN = 30
+ZON_NU_MIN_DEKKING_MIN = 20
+ZON_NU_MIN_KWH = 0.05
+ZON_NU_MIN = 0.3
+ZON_NU_MAX = 1.6
+ZON_NU_VERVAL_UREN = 1.0
 ZON_RECENT_MIN_KWH = 0.2
 ZON_RECENT_VERVAL_UREN = 4.0
 #: klein: de Solcast-verhouding rest van vandaag, begrensd

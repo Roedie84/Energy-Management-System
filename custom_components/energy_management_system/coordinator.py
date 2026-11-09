@@ -79,6 +79,12 @@ from .const import (  # v5.186.0 (spoor C)
     WITGOED_FRACTIE_MAX,
     WITGOED_ZWAAR_W,
     ZON_RECENT_MAX,
+    ZON_NU_MINUTEN,
+    ZON_NU_MIN_DEKKING_MIN,
+    ZON_NU_MIN_KWH,
+    ZON_NU_MIN,
+    ZON_NU_MAX,
+    ZON_NU_VERVAL_UREN,
     ZON_RECENT_MIN,
     ZON_RECENT_MIN_KWH,
     ZON_RECENT_VERVAL_UREN,
@@ -22253,6 +22259,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             "realisatie": self._zon_realisatie(nu, pv_entries),
             # v5.186.0 (punt 36): de laatste uren tegen de gecorrigeerde verwachting.
             "recent": self._zon_recent(nu),
+            # v5.196.0: het afgelopen halfuur tegen de ruwe Solcast (eerstvolgende uur).
+            "nu_factor": self._zon_nu(nu),
             # v5.190.0 (L-EMS-072): sneeuw/ijs - de gemeten verhouding i.p.v. Solcast.
             "bedekt": self.panelen_bedekt_factor(),
         }
@@ -22485,6 +22493,19 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             if not met_band:
                 delen.append(bias)
             return min(delen)
+        basis = self._zon_factor_basis(vast, moment, bias, rest)
+        nu_factor = vast.get("nu_factor")
+        if nu_factor is None:
+            return basis
+        # v5.196.0 (akkoord Ruud 09-11): het afgelopen halfuur telt voor het
+        # eerstvolgende uur, uitdovend naar de gewone factor.
+        afstand = max(0.0, (moment - vast["nu"]).total_seconds() / 3600)
+        gewicht = max(0.0, 1.0 - afstand / ZON_NU_VERVAL_UREN)
+        return gewicht * nu_factor + (1.0 - gewicht) * basis
+
+    def _zon_factor_basis(self, vast: dict, moment: datetime, bias: float, rest) -> float:
+        """De factor uit het laatste uur en de geleerde correctie (v5.187.4;
+        v5.196.0 uit `_zon_factor_vandaag` gehaald)."""
         recent = vast.get("recent")
         if recent is not None:
             # v5.187.4: twee schattingen MENGEN in plaats van vermenigvuldigen.
@@ -22499,6 +22520,33 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             gewicht = max(0.0, 1.0 - afstand / ZON_RECENT_VERVAL_UREN)
             return gewicht * recent + (1.0 - gewicht) * bias
         return bias * (rest if rest is not None else 1.0)
+
+    def _zon_nu(self, nu: datetime) -> float | None:
+        """Zon van het afgelopen halfuur gedeeld door de ruwe Solcast over
+        hetzelfde stuk (v5.196.0, akkoord Ruud 09-11). None bij te weinig
+        meting, te weinig verwachte zon of begrensde panelen."""
+        van = nu - timedelta(minutes=ZON_NU_MINUTEN)
+        reeks = [m for m in (getattr(self, "_pv_nu_metingen", None) or []) if van <= m[0] <= nu]
+        if len(reeks) < 2 or any(m[2] for m in reeks):
+            return None
+        if (reeks[-1][0] - reeks[0][0]).total_seconds() / 60 < ZON_NU_MIN_DEKKING_MIN:
+            return None
+        werkelijk = 0.0
+        for (t0, w0, _), (t1, w1, _) in zip(reeks, reeks[1:]):
+            werkelijk += (w0 + w1) / 2000 * (t1 - t0).total_seconds() / 3600
+        verwacht = self._ruwe_zon_kwh(reeks[0][0], reeks[-1][0])
+        if verwacht < ZON_NU_MIN_KWH:
+            return None
+        return max(ZON_NU_MIN, min(ZON_NU_MAX, werkelijk / verwacht))
+
+    def _noteer_pv_nu(self, now: datetime, pv_power_w, begrensd: bool) -> None:
+        """Ruwe PV-metingen van het afgelopen halfuur (v5.196.0)."""
+        if pv_power_w is None:
+            return
+        grens = now - timedelta(minutes=ZON_NU_MINUTEN + 5)
+        reeks = [m for m in (getattr(self, "_pv_nu_metingen", None) or []) if m[0] >= grens]
+        reeks.append((now, float(pv_power_w), bool(begrensd)))
+        self._pv_nu_metingen = reeks
 
     def _ruwe_zon_kwh(self, van: datetime, tot: datetime) -> float:
         """Solcast zonder correctie over [van, tot) (v5.186.0)."""
@@ -22954,6 +23002,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         # 0 %, of vanaf 2027 de grens voor nul teruglevering) zegt niets over
         # Solcast. Eén begrensde meting maakt het hele uur onbruikbaar.
         begrensd = self._pv_begrensd_nu()
+        self._noteer_pv_nu(now, pv_power_w, begrensd)  # v5.196.0
 
         if current_hour != self._pv_current_tracked_hour:
             # Split the elapsed interval exactly at the hour boundary (see

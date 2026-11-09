@@ -35194,3 +35194,15 @@ Oorzaak: `_kalibratie_ronde` riep `async_set_kalibratie(False)` aan. Die roept v
 - `_kalibratie_zelf_uit`: zet alleen de velden (stand, sinds, vol_sinds) en plant de directe opslag als losse taak buiten het slot. De ronde draait af; de volgende ronde stuurt gewoon.
 
 Tests: `test_v5195_1_kalibratie_geen_deadlock.py` (4; alle 4 falen op de oude code).
+
+## v5.196.0 — zonverwachting reageert sneller op een omslag
+
+Gemeld 09-11 10:48: de zon brak rond 10:15 door; gemeten 1,55 kW tegen Solcast ~0,96 kW, maar het plan rekende met 0,88 kW. De bijsturing keek naar het laatste volle uur plus het lopende uur (09-10 was donker: 0,33 kWh tegen 0,58 kWh), en de verhouding was begrensd op 1,3. Akkoord Ruud 09-11 10:50.
+
+- `_zon_nu`: de opwek van het afgelopen halfuur (`ZON_NU_MINUTEN`, minstens 20 min gemeten, geen begrensde panelen) gedeeld door de ruwe Solcast over hetzelfde stuk, begrensd 0,3-1,6.
+- `_zon_factor_vandaag`: die verhouding telt voor het eerstvolgende uur en dooft lineair uit over `ZON_NU_VERVAL_UREN` (1 u) naar de bestaande factor (laatste uren + geleerde correctie). De voorzichtige variant ("veilig", reserve) blijft ongewijzigd.
+- `ZON_RECENT_MAX` 1,3 → 1,6.
+
+Met de cijfers van 09-11 10:48 rekent het plan voor 11:00 met ~1,4 kW in plaats van 0,88 kW.
+
+Tests: `test_v5196_zon_nu.py` (5).

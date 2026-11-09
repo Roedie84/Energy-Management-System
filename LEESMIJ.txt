@@ -1,3 +1,9 @@
+EMS v5.196.0 - zonverwachting reageert sneller
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Breekt de zon ineens door (of trekt het dicht), dan volgt de verwachting voor het komende uur nu het afgelopen halfuur, in plaats van een uur of twee achter te lopen.
+
 EMS v5.195.1 - EMS loopt niet meer vast als de kalibratie klaar is
 
 Installeren: via de Marketplace bijwerken en herstarten.
