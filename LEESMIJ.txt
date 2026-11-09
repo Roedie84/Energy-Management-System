@@ -1,3 +1,9 @@
+EMS v5.198.2 - nieuwe prijzen meteen in het plan
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Komen de prijzen van morgen binnen, dan rekent het EMS binnen een minuut een nieuw plan, in plaats van pas bij het volgende kwartier. Het rare 'zon laden' om middernacht verdwijnt daarmee.
+
 EMS v5.198.1 - zontegels kloppen weer
 
 Installeren: via de Marketplace bijwerken en herstarten.

@@ -35250,3 +35250,11 @@ Ruud 09-11 12:51 ("klopt niet?"): het paneel "Zon, verkopen en reserve" toonde "
 - Na v5.198.0 (geen huisreserve als verkoopvloer meer): "nooit verkocht" / "altijd beschermd" weg; de chip zegt wanneer het plan verkoopt ("verkoopt 16:15") in plaats van de oude verkooptoets ("houdt vast"); de meternoot en de bodemzin zeggen dat verkopen tot de ondergrens mag als terugkopen goedkoper is.
 
 Tests: `test_v5198_1_cockpit_zon.py` (2).
+
+## v5.198.2 — nieuwe prijzen: meteen een nieuw waardeplan
+
+Ruud 09-11 13:22 ("zon laden midden in de nacht?"): in "Prijs en lading" stond om 00:00 een kwartier "zon laden". De prijzen van morgen kwamen midden in het kwartier binnen; het waardeplan rekent één keer per kwartier en liep nog tot 23:45. Vanaf 00:00 toonde de planning daardoor de oude regels, met hun eigen laadstand (16 % -> 32 % in één kwartier = 5,7 kW "laden", in de stand slim dus als zon getekend). Tot het volgende kwartier stuurde het plan ook zonder de prijzen van morgen.
+
+- Het plan onthoudt tot wanneer de prijzen liepen (`prijzen_tot`); komen er prijzen bij, dan rekent de volgende ronde (60 s) meteen opnieuw. Geteld als herplanning `nieuwe_prijzen`.
+
+Tests: `test_v5198_2_nieuwe_prijzen.py` (2).

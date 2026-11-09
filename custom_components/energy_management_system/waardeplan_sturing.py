@@ -793,11 +793,38 @@ class WaardeplanSturingMixin:
             self._tel_herplanning(now, "midkwartier")
         return kwartier, None
 
+    @staticmethod
+    def _prijzen_tot(entries):
+        """Het einde van de bekende prijzen (v5.198.2)."""
+        try:
+            return max((e[1] for e in entries or []), default=None)
+        except (TypeError, IndexError):
+            return None
+
+    def _nieuwe_prijzen(self, now: datetime, plan: dict | None, entries) -> bool:
+        """Zijn er sinds dit plan prijzen bijgekomen? (v5.198.2)
+
+        Gemeld 09-11 13:22 ("zon laden midden in de nacht?"): de prijzen van
+        morgen kwamen midden in het kwartier binnen; het plan van dat kwartier
+        liep tot 23:45 en de planning toonde vanaf 00:00 de oude regels (een
+        andere laadstand, 16 % -> 32 % in een kwartier = 'zon laden' 5,7 kW).
+        Nu: nieuwe prijzen = meteen opnieuw rekenen."""
+        if not plan or not plan.get("beschikbaar"):
+            return False
+        tot = self._prijzen_tot(entries)
+        was = plan.get("prijzen_tot")
+        if tot is None or not was:
+            return False
+        if hasattr(tot, "isoformat") and tot.isoformat() > str(was):
+            self._tel_herplanning(now, "nieuwe_prijzen", tot.isoformat())
+            return True
+        return False
+
     def _waardeplan_nu(self, now: datetime, entries) -> dict:
         """Het plan voor dit kwartier: één keer per kwartier rekenen, of
         opnieuw als de accu-inhoud ver van het plan afwijkt."""
         kwartier, plan = self._waardeplan_uit_cache(now)
-        if plan is not None:
+        if plan is not None and not self._nieuwe_prijzen(now, plan, entries):
             return plan
         laatst = getattr(self, "_waardeplan_laatst", None)
         if laatst is not None and laatst[0] == now:
@@ -807,12 +834,12 @@ class WaardeplanSturingMixin:
         except Exception:  # noqa: BLE001 - het plan mag de sturing nooit breken
             _LOGGER.exception("Waardeplan niet te berekenen; de oude regels gelden")
             plan = {"beschikbaar": False, "reden": "rekenfout"}
-        return self._waardeplan_bewaar(now, kwartier, plan)
+        return self._waardeplan_bewaar(now, kwartier, plan, entries)
 
     async def _async_waardeplan_nu(self, now: datetime, entries) -> dict:
         """`_waardeplan_nu` met het rekenwerk in de executor (v5.186.0, punt 20)."""
         kwartier, plan = self._waardeplan_uit_cache(now)
-        if plan is not None:
+        if plan is not None and not self._nieuwe_prijzen(now, plan, entries):
             return plan
         try:
             plan = await self._async_bereken_waardeplan(now, entries)
@@ -822,10 +849,13 @@ class WaardeplanSturingMixin:
         # v5.186.0: ook een plan zonder uitkomst geldt voor de rest van deze
         # ronde (`_waardeplan_gaat_sturen` rekent dan niet nog eens synchroon).
         self._waardeplan_laatst = (now, plan)
-        return self._waardeplan_bewaar(now, kwartier, plan)
+        return self._waardeplan_bewaar(now, kwartier, plan, entries)
 
-    def _waardeplan_bewaar(self, now: datetime, kwartier, plan: dict) -> dict:
+    def _waardeplan_bewaar(self, now: datetime, kwartier, plan: dict, entries=None) -> dict:
         """Een vers plan vastleggen (v5.186.0 uit `_waardeplan_nu`)."""
+        tot = self._prijzen_tot(entries)
+        if tot is not None and hasattr(tot, "isoformat"):
+            plan["prijzen_tot"] = tot.isoformat()   # v5.198.2
         if not plan.get("beschikbaar"):
             # v5.175.0: dan sturen de oude regels; de tabel toont die.
             self._waardeplan_rijen = None
