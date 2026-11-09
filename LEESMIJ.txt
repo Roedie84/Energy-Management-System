@@ -1,3 +1,10 @@
+EMS v5.195.0 - airco niet meer kort aan en uit
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Wat het EMS met de airco doet, blijft minstens een half uur zo: niet binnen 30 min weer aan na uitzetten, en niet binnen 30 min uit na aanzetten. Een open raam gaat voor.
+- Is er niemand thuis, dan gaat de airco pas na een half uur uit, ook als je ver weg bent.
+
 EMS v5.194.3 - accumodule onder de omvormer niet meer 'uit de pas'
 
 Installeren: via de Marketplace bijwerken en herstarten.

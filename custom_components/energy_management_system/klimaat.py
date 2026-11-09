@@ -1816,6 +1816,8 @@ class KlimaatMixin:
         uit = self._airco_kort_weg_ronde(now, uit)
         uit = self._airco_thuiskomst_ronde(now, uit, stand)
         uit = self._airco_zon_ronde(now, self._airco_buffer_ronde(now, uit, stand), stand)
+        # v5.195.0: niet kort schakelen (vóór de raamregel: een open raam gaat voor)
+        uit = airco_sturing.niet_kort_schakelen(uit, getattr(self, "_airco_geschakeld", None), now)
         # v5.77: als laatste - een raam open en de airco gaat nooit aan.
         uit = airco_sturing.raam_open(
             uit,
@@ -2605,6 +2607,7 @@ class KlimaatMixin:
                 "basis": besluit.get("basis_doel_c", besluit["doel_c"]),
             }
             self.airco_door_ems = True
+            self._airco_geschakeld = ("verwarmen", dt_util.now())
         elif besluit["actie"] == "uit":
             try:
                 await self.hass.services.async_call(
@@ -2620,6 +2623,7 @@ class KlimaatMixin:
                 "doel": toestand.attributes.get("temperature") if toestand else None,
             }
             self.airco_door_ems = False
+            self._airco_geschakeld = ("uit", dt_util.now())
 
     _airco_zaai_bezig: bool = False
 

@@ -35175,3 +35175,12 @@ Gemeld 08-11 13:45: de cockpit meldde module 1 (AB3000 01029, +4,5 °C) en modul
 - `_module_drift_velden`: de temperatuurafwijking telt pas als de dagmediaan van de laatste dagen minstens `BATTERY_MODULE_TEMPERATURE_MATERIEEL_C` (3 °C) afwijkt van de eigen referentie van de module (de CUSUM-referentie), niet meer het moment tegenover nul. Een vaste plek in de stapel is zo geen drift; een module die warmer wordt dan hij gewend is wel. Zonder geschiedenis: het moment, zoals voorheen.
 
 Tests: `test_v5194_3_module_eigen_normaal.py` (3).
+
+## v5.195.0 — de airco niet kort schakelen
+
+08-11: het EMS zette de airco om 15:22 uit ("niemand thuis": Ruud was met de auto weg, Majorie wel thuis maar zonder beweging langs een sensor) en om 15:43 weer aan toen Ruud thuiskwam. Ruud 09-11: "Dat korte schakelen is niet goed voor de airco, dus niet meer voor laten komen."
+
+- `airco_sturing.niet_kort_schakelen`: wat het EMS zelf aan of uit zette, blijft minstens `AIRCO_MIN_AAN_MIN` / `AIRCO_MIN_UIT_MIN` (30 min) zo. Een open raam gaat voor (die regel komt erna). Het besluit zegt hoe lang nog.
+- `airco_ritme.kort_weg`: ook verder dan 3 km van huis gaat de airco pas uit na 30 min afwezigheid (was: meteen).
+
+Tests: `test_v5195_airco_niet_kort_schakelen.py` (6).

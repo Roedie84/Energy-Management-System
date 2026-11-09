@@ -387,7 +387,9 @@ def test_kort_weg_eerst_een_uur():
     r = ar.leeg()
     assert ar.kort_weg(r, 30, 0.8)["uitstel_min"] == 60
     assert ar.kort_weg(r, 61, 0.8) is None
-    assert ar.kort_weg(r, 10, 5.0) is None
+    # v5.195.0: ver weg niet meer meteen uit, maar na KORT_WEG_MIN_MIN
+    assert ar.kort_weg(r, 10, 5.0)["uitstel_min"] == ar.KORT_WEG_MIN_MIN
+    assert ar.kort_weg(r, ar.KORT_WEG_MIN_MIN, 5.0) is None
     assert ar.kort_weg(r, 10, None) is not None
 
 
@@ -421,7 +423,9 @@ def test_met_de_auto_weg_meteen_uit_en_22_uur_gaat_voor(make_coordinator):
     c.airco_ritme = ar.leeg()
     c.presence_state = "weg"
     c._nadering = lambda: ("away_from", 12.0)
-    assert c._airco_kort_weg_ronde(_op(3, 19, 0), _uit_door_weg())["actie"] == "uit"
+    # v5.195.0: met de auto weg pas na 30 min uit (niet kort schakelen)
+    assert c._airco_kort_weg_ronde(_op(3, 19, 0), _uit_door_weg())["actie"] == "niets"
+    assert c._airco_kort_weg_ronde(_op(3, 19, 30), _uit_door_weg())["actie"] == "uit"
     c._weg_sinds = None
     c._nadering = lambda: ("away_from", 0.5)
     altijd = dict(_uit_door_weg(), altijd=True)

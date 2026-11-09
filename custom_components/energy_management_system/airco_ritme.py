@@ -861,9 +861,12 @@ def kort_weg(ritme: dict, weg_minuten: float | None, km: float | None) -> dict |
     """
     if weg_minuten is None:
         return None
-    if km is not None and km > KORT_WEG_VER_KM:
-        return None
     uitstel = kort_weg_uitstel(ritme)
+    if km is not None and km > KORT_WEG_VER_KM:
+        # v5.195.0 (Ruud 09-11: kort schakelen is niet goed voor de airco):
+        # ook ver weg pas uit na KORT_WEG_MIN_MIN; 08-11 ging hij om 15:22 uit
+        # en om 15:43 weer aan.
+        uitstel = KORT_WEG_MIN_MIN
     if weg_minuten >= uitstel:
         return None
     return {

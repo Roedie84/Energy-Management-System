@@ -393,6 +393,43 @@ def ramen(toestanden: list) -> dict:
     return {"open": open_, "onbekend": onbekend}
 
 
+# --- v5.195.0: niet kort schakelen ------------------------------------------
+#
+# Ruud 09-11: "Dat korte schakelen (15:22 - 15:43) is niet goed voor de airco,
+# dus niet meer voor laten komen." Wat het EMS zelf schakelde, blijft minstens
+# zo lang zo staan. Een open raam gaat voor (die regel komt erna).
+
+AIRCO_MIN_AAN_MIN = 30
+AIRCO_MIN_UIT_MIN = 30
+
+
+def niet_kort_schakelen(uit: dict, laatst: tuple | None, nu) -> dict:
+    """Houdt een EMS-schakeling tegen die te snel op de vorige volgt.
+
+    `laatst` = (actie, moment) van de laatste keer dat het EMS de airco aan
+    ("verwarmen") of uit zette, of None."""
+    actie = uit.get("actie")
+    if actie not in ("verwarmen", "uit") or not laatst:
+        return uit
+    vorige, moment = laatst
+    if vorige == actie or moment is None:
+        return uit
+    minimaal = AIRCO_MIN_AAN_MIN if vorige == "verwarmen" else AIRCO_MIN_UIT_MIN
+    verstreken = (nu - moment).total_seconds() / 60
+    if verstreken >= minimaal:
+        return uit
+    nog = max(1, round(minimaal - verstreken))
+    if actie == "uit":
+        reden = f"pas {verstreken:.0f} min aan: minstens {minimaal} min aan laten"
+        tekst = f"Blijft nog {nog} min aan: niet kort schakelen."
+    else:
+        reden = f"pas {verstreken:.0f} min uit: minstens {minimaal} min uit laten"
+        tekst = f"Gaat op zijn vroegst over {nog} min weer aan: niet kort schakelen."
+    redenen = list(uit.get("redenen") or []) + [reden]
+    return dict(uit, actie="niets", tekst=tekst, redenen=redenen,
+                redenen_tekst=" · ".join(redenen), kort_schakelen=True)
+
+
 def raam_open(
     uit: dict,
     raam: dict,
