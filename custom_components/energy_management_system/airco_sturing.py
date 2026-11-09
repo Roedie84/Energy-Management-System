@@ -564,6 +564,8 @@ def weg_keuze(
     kost_terug: float | None,
     vast_c: float = AIRCO_WEG_VAST_C,
     afkoel_per_uur: float = AIRCO_WEG_AFKOEL_PER_UUR,
+    houd_w_graad: float | None = None,
+    vermogen_kw: float | None = None,
 ) -> dict:
     """Uit of vasthouden op `vast_c` tot de verwachte thuiskomst.
 
@@ -593,7 +595,15 @@ def weg_keuze(
     if binnen_c < vast_c:
         bijverwarmen += (vast_c - binnen_c) / tempo_c_per_uur
     eind_vast = max(vast_c, eind_uit)
-    kosten_vast = bijverwarmen * kost_vast + max(0.0, doel_c - eind_vast) / tempo_c_per_uur * kost_terug
+    kosten_houden = bijverwarmen * kost_vast
+    if houd_w_graad is not None and vermogen_kw:
+        # v5.200.0: gemeten - wat vasthouden per graad verschil met buiten
+        # echt kost (lage frequentie, pauzes meegeteld), tegen de kWh-prijs.
+        kosten_houden = (
+            uren_vast * houd_w_graad * (vast_c - buiten_c) / 1000 * (kost_vast / vermogen_kw)
+            + (max(0.0, vast_c - binnen_c) / tempo_c_per_uur * kost_vast)
+        )
+    kosten_vast = kosten_houden + max(0.0, doel_c - eind_vast) / tempo_c_per_uur * kost_terug
     uit = {
         "kosten_uit_eur": round(kosten_uit, 3),
         "kosten_vast_eur": round(kosten_vast, 3),

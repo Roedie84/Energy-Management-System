@@ -31,6 +31,8 @@ from __future__ import annotations
 import statistics
 from datetime import datetime, timedelta
 
+from . import airco_frequentie
+
 OCHTEND_VAN = 4 * 60
 OCHTEND_TOT = 11 * 60
 AVOND_VAN = 19 * 60
@@ -67,6 +69,8 @@ def leeg() -> dict:
         "dag_aan": {"werkdag": {}, "weekend": {}},
         "dagen_thuis": {"werkdag": [], "weekend": []},
         "dag_gezaaid": False,
+        # v5.200.0: het vermogen uit de compressorfrequentie
+        "frequentie": airco_frequentie.leeg(),
     }
 
 
@@ -116,6 +120,7 @@ def geldig(ritme) -> dict:
         if isinstance(waarde, list):
             basis["dagen_thuis"][soort] = [str(d) for d in waarde]
     basis["dag_gezaaid"] = bool(ritme.get("dag_gezaaid"))
+    basis["frequentie"] = airco_frequentie.geldig(ritme.get("frequentie"))
     return basis
 
 
@@ -566,6 +571,10 @@ def noteer_vermogen(ritme: dict, vermogen_w) -> None:
 
 
 def verwarmvermogen_kw(ritme: dict) -> float | None:
+    # v5.200.0: het gemeten opwarmvermogen uit de compressorfrequentie gaat voor
+    opwarm = airco_frequentie.opwarm_kw(ritme.get("frequentie"))
+    if opwarm is not None:
+        return opwarm
     reeks = ritme.get("vermogens") or []
     if len(reeks) < VERMOGEN_MIN_METINGEN:
         return None

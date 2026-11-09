@@ -13,7 +13,7 @@ import logging
 import statistics
 from datetime import datetime, timedelta
 from homeassistant.util import dt as dt_util
-from . import airco_ritme, airco_sturing, klimaat_wind, klimaat_zon
+from . import airco_frequentie, airco_ritme, airco_sturing, klimaat_wind, klimaat_zon
 from .const import (
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -1975,6 +1975,14 @@ class KlimaatMixin:
         """Het vermogen van de woonkamer-airco in W (v5.67): de ingestelde
         sensor, of vanzelf gevonden bij hetzelfde apparaat als de airco - een
         sensor in W of kW met "power" in de naam."""
+        # v5.200.0: zonder ingestelde sensor het vermogen uit de
+        # compressorfrequentie (de Daikin-schatting springt 0-5 kW).
+        if not self.config.get(CONF_AIRCO_POWER_SENSOR):
+            hz = self._airco_bron_waarde("frequentie")
+            if hz is not None:
+                # alleen lezen: `_airco_ritme()` zou het ritme vervangen
+                # terwijl een ronde het bijwerkt
+                return airco_frequentie.vermogen_w((self.airco_ritme or {}).get("frequentie"), hz)
         entiteit = self.config.get(CONF_AIRCO_POWER_SENSOR) or getattr(self, "_airco_vermogen_gevonden", None)
         if entiteit is None and not getattr(self, "_airco_vermogen_gezocht", False):
             self._airco_vermogen_gezocht = True
@@ -1986,6 +1994,86 @@ class KlimaatMixin:
         if waarde is None:
             return None
         return waarde * 1000 if toestand.attributes.get("unit_of_measurement") == "kW" else waarde
+
+    _airco_bronnen: dict | None = None
+
+    def _airco_bron_waarde(self, soort: str) -> float | None:
+        """v5.200.0: de compressorfrequentie (Hz) of de energieteller van de
+        compressor (kWh) van de woonkamer-airco, vanzelf gevonden bij
+        hetzelfde apparaat. None als die er niet is of niets meldt."""
+        if not self._airco_bronnen:
+            # nog niets gevonden (register nog niet klaar): hooguit 20 keer zoeken
+            self._airco_bronnen_pogingen = getattr(self, "_airco_bronnen_pogingen", 0) + 1
+            if self._airco_bronnen_pogingen > 20:
+                return None
+            self._airco_bronnen = self._zoek_airco_bronnen()
+        entiteit = self._airco_bronnen.get(soort)
+        toestand = self.hass.states.get(entiteit) if entiteit else None
+        if toestand is None:
+            return None
+        try:
+            return float(toestand.state)
+        except (TypeError, ValueError):
+            return None
+
+    def _zoek_airco_bronnen(self) -> dict:
+        gevonden: dict = {}
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            register = er.async_get(self.hass)
+            airco = register.async_get(self.config.get(CONF_AIRCO_CLIMATE_ENTITY) or "")
+            if airco is None or not airco.device_id:
+                return gevonden
+            for item in er.async_entries_for_device(register, airco.device_id):
+                toestand = self.hass.states.get(item.entity_id)
+                eenheid = toestand.attributes.get("unit_of_measurement") if toestand else None
+                if not item.entity_id.startswith("sensor."):
+                    continue
+                if "compressor_frequency" in item.entity_id and eenheid == "Hz":
+                    gevonden["frequentie"] = item.entity_id
+                elif "compressor_energy" in item.entity_id and eenheid == "kWh":
+                    gevonden["teller"] = item.entity_id
+        except Exception:  # noqa: BLE001 - zoeken mag de ronde nooit breken
+            return {}
+        return gevonden
+
+    _airco_freq_loop: dict | None = None
+    _airco_freq_vorige: tuple | None = None
+
+    def _noteer_airco_frequentie(self, now: datetime, ritme: dict) -> None:
+        """v5.200.0: model bijleren uit de teller, opwarmen en vasthouden
+        meten - zie `airco_frequentie.ronde`."""
+        hz = self._airco_bron_waarde("frequentie")
+        if hz is None:
+            return
+        if self._airco_freq_loop is None:
+            self._airco_freq_loop = airco_frequentie.nieuwe_teller()
+        vorige = self._airco_freq_vorige
+        self._airco_freq_vorige = (now, hz)
+        if vorige is None:
+            uren = 0.0
+            hz_vorig = hz
+        else:
+            uren = (now - vorige[0]).total_seconds() / 3600
+            hz_vorig = vorige[1]
+        entiteit = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
+        toestand = self.hass.states.get(entiteit) if entiteit else None
+        doel = toestand.attributes.get("temperature") if toestand else None
+        try:
+            buiten = self._airco_buiten_nu(now)
+        except Exception:  # noqa: BLE001
+            buiten = None
+        airco_frequentie.ronde(
+            ritme["frequentie"], self._airco_freq_loop,
+            hz=hz_vorig,
+            teller_kwh=self._airco_bron_waarde("teller"),
+            uren=uren,
+            binnen_c=self.living_room_current_temp_c,
+            buiten_c=buiten,
+            doel_c=float(doel) if isinstance(doel, (int, float)) else None,
+            verwarmt=toestand is not None and toestand.state == "heat",
+        )
 
     def _zoek_airco_vermogen(self) -> str | None:
         try:
@@ -2007,6 +2095,8 @@ class KlimaatMixin:
             return None
         return None
 
+    _airco_uur_stand: tuple | None = None
+
     def _noteer_airco_verbruik(self, now: datetime, ritme: dict) -> None:
         """Vermogen en verbruik per klokuur van de airco bijhouden (v5.67)."""
         vermogen_w = self._airco_vermogen_w()
@@ -2016,11 +2106,21 @@ class KlimaatMixin:
         uur = now.replace(minute=0, second=0, microsecond=0)
         vorige = self._airco_uur_acc
         if vorige is None or vorige[0] != uur:
+            stand = (
+                airco_frequentie.stand_kwh(self._airco_freq_loop)
+                if self._airco_freq_loop is not None else None
+            )
+            begin = self._airco_uur_stand
             if vorige is not None and uur - vorige[0] == timedelta(hours=1):
                 staart = (uur - vorige[2]).total_seconds() / 3600
                 laatste = vorige[3] / 1000 * staart if 0 <= staart <= 0.5 else 0.0
-                airco_ritme.noteer_uur(ritme, vorige[0].hour, vorige[1] + laatste,
+                kwh_uur = vorige[1] + laatste
+                # v5.200.0: uit de energieteller als die het hele uur liep
+                if stand is not None and begin is not None and begin[0] == vorige[0] and stand >= begin[1]:
+                    kwh_uur = stand - begin[1]
+                airco_ritme.noteer_uur(ritme, vorige[0].hour, kwh_uur,
                                        buiten_c=self._airco_buiten_nu(now))
+            self._airco_uur_stand = (uur, stand) if stand is not None else None
             self._airco_uur_acc = (uur, 0.0, now, vermogen_w)
             return
         _, kwh, t0, w0 = vorige
@@ -2299,6 +2399,7 @@ class KlimaatMixin:
             airco_ritme.noteer_ochtend_thuis(ritme, now)
         if self.presence_state == "thuis":
             airco_ritme.noteer_dag_thuis(ritme, now)
+        self._noteer_airco_frequentie(now, ritme)
         self._noteer_airco_verbruik(now, ritme)
         vraag = airco_ritme.besluit(
             ritme,
@@ -2492,6 +2593,8 @@ class KlimaatMixin:
                 uren_weg=(terug - now).total_seconds() / 3600,
                 kost_vast=kost_vast,
                 kost_terug=kost(minuut(terug)),
+                houd_w_graad=airco_frequentie.houd_w_per_graad((self.airco_ritme or {}).get("frequentie")),
+                vermogen_kw=airco_ritme.verwarmvermogen_kw(airco_ritme.geldig(self.airco_ritme)) or 1.0,
             )
             keuze["terug_om"] = terug.isoformat()
             return keuze

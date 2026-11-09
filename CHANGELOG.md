@@ -35268,3 +35268,17 @@ Ruud 09-11: "bij langere afwezigheid de temperatuur wat lager zetten tot terugko
 - Bij vasthouden zet het EMS de airco op 18 °C (geen uit/aan); terug thuis weer naar de gewone temperatuur. De vaste uittijd, handmatige bediening, het open raam en de half-uur-regel gaan voor.
 
 Tests: `test_v5199_airco_weg_vasthouden.py` (10).
+
+## v5.200.0 — airco-vermogen uit de compressorfrequentie
+
+Ruud 09-11: "kun je het verbruik van de airco beter analyseren door sensor.woonkamer_compressor_frequency mee te nemen?" - alle drie de punten akkoord.
+
+Tot nu gebruikte het EMS (zonder ingestelde vermogenssensor) de Daikin-sensor "geschat vermogen": die rekent alleen hoe snel de teller een stap van 0,1 kWh zet, springt 0-5 kW en staat vaak op 0 terwijl de compressor draait. Het geleerde vermogen werd 1,01 kW zolang hij aan staat: 08-11 8,9 kWh tegen 6,0 kWh op de teller.
+
+1. Nieuw `airco_frequentie`: vermogen = a x Hz + b zolang de compressor draait (start 31,4 W/Hz en -238 W, fit 08-11). a en b leert het EMS bij uit de energieteller (per 0,5 kWh de Hz-uren en draai-uren, kleinste kwadraten, alleen redelijke uitkomsten). Replay 08-11: 13 vensters, 28,5 W/Hz en -152 W. Frequentie en teller worden vanzelf gevonden bij het apparaat van de airco. Dit vermogen gebruiken: draait-de-airco, de correctie op het huisverbruik en het uurverbruik.
+2. Opwarmen en vasthouden apart: het vermogen terwijl de kamer >= 1 °C onder het doel zit (`opwarm_w`, gaat nu voor in `verwarmvermogen_kw`), en het verbruik per graad verschil met buiten als de kamer op temperatuur blijft (`houd_w_per_graad`, per uur gemeten, pauzes meegeteld). De keuze uit/18 °C bij afwezigheid rekent vasthouden met dat gemeten getal.
+3. Uurverbruik uit de teller: tellerstappen plus de modelschatting sinds de laatste stap.
+
+Een ingestelde vermogenssensor (bijvoorbeeld een meetstekker) gaat nog altijd voor.
+
+Tests: `test_v5200_airco_frequentie.py` (9).
