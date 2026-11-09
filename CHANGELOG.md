@@ -35282,3 +35282,12 @@ Tot nu gebruikte het EMS (zonder ingestelde vermogenssensor) de Daikin-sensor "g
 Een ingestelde vermogenssensor (bijvoorbeeld een meetstekker) gaat nog altijd voor.
 
 Tests: `test_v5200_airco_frequentie.py` (9).
+
+## v5.201.0 — de hond houdt het huis niet meer op "thuis" na vertrek
+
+Ruud 09-11 15:00: "binary_sensor.ultimatesensor_occupancy detecteert waarschijnlijk vaak de hond, hierdoor onterecht thuis". 14:28 gang, voordeur, daarna alleen de woonkamer-radar (en één keer de zoldercamera): het huis bleef op "thuis".
+
+- `_alleen_een_plek`: een deur in het venster blokkeerde de één-plek-regel, terwijl juist die deur het vertrek was. Nu telt na een deur alleen wat daarna bewoog; is dat één plek (de radar met zijn zones) en is de deur `PRESENCE_EEN_PLEK_NA_DEUR_MINUTEN` (20) geleden, en zijn de telefoons weg, dan "weg". Bij thuiskomst loopt iemand na de deur door de gang: twee plekken, blijft thuis. Aanleiding in de tijdlijn: "alleen beweging bij ... en telefoon weg (na de deur geen andere plek)".
+- Buiten de code (akkoord Ruud): de zoldercamera (`binary_sensor.zolder_beweging`) uit de aanwezigheidssensoren van het EMS, en in de helper "Iemand thuis" telt de radar alleen nog als een andere sensor in het laatste half uur bewoog, na de laatste deur.
+
+Tests: `test_v5201_hond_na_deur.py` (4).

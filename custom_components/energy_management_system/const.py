@@ -6608,6 +6608,9 @@ CONF_PRESENCE_PERSON_ENTITIES = "presence_person_entities"
 # dat apparaat het huis niet op "thuis" - hetzelfde als bij de thuiskomst:
 # een apparaat telt nooit, hoe lang ook.
 PRESENCE_EEN_PLEK_MINUTEN = 45
+#: v5.201.0: na een deur (vertrek) telt alleen wat daarna bewoog; is dat
+#: alleen de radar (de hond), dan na zoveel minuten weg.
+PRESENCE_EEN_PLEK_NA_DEUR_MINUTEN = 20
 
 # --- Lampen als aanwezigheidssignaal (v1.36.0) -----------------------
 # Gevraagd: "Voor aanwezigheids detectie, kan ook nog gekeken naar

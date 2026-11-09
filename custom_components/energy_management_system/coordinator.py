@@ -659,6 +659,7 @@ from .const import (
     CONF_PRESENCE_TV_ENTITY,
     CONF_PRESENCE_PERSON_ENTITIES,
     PRESENCE_EEN_PLEK_MINUTEN,
+    PRESENCE_EEN_PLEK_NA_DEUR_MINUTEN,
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
     CONF_BATTERY_CHARGE_ENERGY_SENSOR,
     ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN,
@@ -9464,6 +9465,11 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         if self.presence_state == "weg":
             een = self._alleen_een_plek(now)
             if een is not None:
+                if self._een_plek_na_deur:
+                    return (
+                        f"alleen beweging bij {een} en telefoon weg"
+                        " (na de deur geen andere plek)"
+                    )
                 return (
                     f"alleen beweging bij {een} en telefoon weg"
                     f" ({PRESENCE_EEN_PLEK_MINUTEN} min geen andere plek)"
@@ -9763,6 +9769,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             return False
         return str(staat.state).lower() in ("on", "playing", "paused", "true")
 
+    _een_plek_na_deur: bool = False
+
     def _alleen_een_plek(self, now: datetime) -> str | None:
         """v5.127.1: was er de laatste PRESENCE_EEN_PLEK_MINUTEN alleen
         beweging bij EEN apparaat (geen deur, geen tweede plek), terwijl
@@ -9773,20 +9781,39 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         radar bleef aan (hond of vast doel) en hield het huis op "thuis".
         Zonder telefoons blijft alles zoals het was: dan is er niets dat
         zegt dat de bewoner weg is.
+
+        v5.201.0 (Ruud 09-11: de radar ziet de hond, "onterecht thuis"):
+        een deur binnen dat venster blokkeerde de regel, terwijl juist die
+        deur het vertrek was (14:28 gang, deur, daarna alleen de radar).
+        Nu telt na een deur alleen wat DAARNA bewoog: is dat één plek en
+        is de deur PRESENCE_EEN_PLEK_NA_DEUR_MINUTEN geleden, dan weg. Bij
+        thuiskomst loopt iemand na de deur door de gang: twee plekken.
         """
+        self._een_plek_na_deur = False
         if not self._telefoon_entiteiten() or self._telefoon_thuis() is not None:
             return None
         grens = now - timedelta(minutes=PRESENCE_EEN_PLEK_MINUTEN)
-        plekken: set[str] = set()
-        laatste = None
+        gezien: list[tuple[datetime, str, bool]] = []
+        deur_om = None
         for entity_id, tijd in self.presence_last_seen.items():
             moment = dt_util.parse_datetime(tijd) if isinstance(tijd, str) else None
             if moment is None or moment < grens:
                 continue
             staat = self.hass.states.get(entity_id)
             klasse = (staat.attributes or {}).get("device_class") if staat is not None else None
-            if thuiskomst_mod.is_deur(entity_id, klasse):
+            is_deur = thuiskomst_mod.is_deur(entity_id, klasse)
+            if is_deur and (deur_om is None or moment > deur_om):
+                deur_om = moment
+            gezien.append((moment, entity_id, is_deur))
+        if deur_om is not None:
+            if now - deur_om < timedelta(minutes=PRESENCE_EEN_PLEK_NA_DEUR_MINUTEN):
                 return None
+            self._een_plek_na_deur = True
+        plekken: set[str] = set()
+        laatste = None
+        for moment, entity_id, is_deur in gezien:
+            if is_deur or (deur_om is not None and moment <= deur_om):
+                continue
             plekken.add(self._apparaat_van(entity_id) or entity_id)
             laatste = entity_id
         if len(plekken) != 1:

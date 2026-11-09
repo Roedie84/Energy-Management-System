@@ -1,3 +1,9 @@
+EMS v5.201.0 - de hond houdt het huis niet meer op thuis
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Gaat de deur open en beweegt daarna alleen de radar in de woonkamer (de hond), terwijl je telefoon weg is, dan staat het huis na 20 minuten op 'weg'. Bij thuiskomst loop je na de deur door de gang; dan blijft het 'thuis'.
+
 EMS v5.200.0 - airco-verbruik uit de compressorfrequentie
 
 Installeren: via de Marketplace bijwerken en herstarten.
