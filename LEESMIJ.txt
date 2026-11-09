@@ -1,3 +1,9 @@
+EMS v5.195.1 - EMS loopt niet meer vast als de kalibratie klaar is
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Zette de kalibratie zichzelf uit (na het uur vasthouden, of na 8 uur niet vol), dan bleef het EMS daarna hangen en stuurde het niets meer tot een herstart. 08-11 gebeurde dat van 16:02 tot de herstart van 09-11 05:23. Dat is opgelost; de melding 'Kalibratie afgerond' komt nu ook echt.
+
 EMS v5.195.0 - airco niet meer kort aan en uit
 
 Installeren: via de Marketplace bijwerken en herstarten.

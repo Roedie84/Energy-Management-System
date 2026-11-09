@@ -3152,6 +3152,26 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         self.kalibratie = value
         await self._handmatig_gezet()
 
+    def _kalibratie_zelf_uit(self) -> None:
+        """De kalibratie zet zichzelf uit, vanuit de ronde (v5.195.1).
+
+        08-11 16:02: `_kalibratie_ronde` riep `async_set_kalibratie(False)`
+        aan. Die roept via `_handmatig_gezet` `async_update` aan, en die
+        wacht op `self._lock` - dat de lopende ronde zelf vasthoudt. De
+        ronde kwam nooit terug: het EMS stuurde tot de herstart van 09-11
+        05:23 niets meer ("Mogelijk vastgelopen"). Hier dus alleen de
+        velden; de ronde draait gewoon af en de opslag gebeurt direct,
+        als losse taak buiten het slot.
+        """
+        self.kalibratie_sinds = None
+        self.kalibratie_vol_sinds = None
+        self.kalibratie = False
+        maak_taak = getattr(getattr(self, "hass", None), "async_create_task", None)
+        if maak_taak is not None:
+            maak_taak(self.async_save_persisted_state_now())
+        else:
+            self.schedule_persisted_state_save()
+
     async def _kalibratie_ronde(self, now: datetime) -> bool:
         """Eén ronde van de kalibratie (v5.194.0). True zolang hij loopt.
 
@@ -3172,7 +3192,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 self.schedule_persisted_state_save()
                 vol = now
             if now - vol >= timedelta(minutes=KALIBRATIE_HOUD_MIN):
-                await self.async_set_kalibratie(False, now)
+                self._kalibratie_zelf_uit()
                 self.kalibratie_fase = "klaar"
                 self._dispatch_notification(
                     notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
@@ -3189,7 +3209,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             self.kalibratie_fase = "vasthouden"
             return True
         if now - sinds >= timedelta(hours=KALIBRATIE_MAX_UREN):
-            await self.async_set_kalibratie(False, now)
+            self._kalibratie_zelf_uit()
             self.kalibratie_fase = "afgebroken"
             self._dispatch_notification(
                 notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),

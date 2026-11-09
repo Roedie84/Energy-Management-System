@@ -35184,3 +35184,13 @@ Tests: `test_v5194_3_module_eigen_normaal.py` (3).
 - `airco_ritme.kort_weg`: ook verder dan 3 km van huis gaat de airco pas uit na 30 min afwezigheid (was: meteen).
 
 Tests: `test_v5195_airco_niet_kort_schakelen.py` (6).
+
+## v5.195.1 — kalibratie klaar: het EMS loopt niet meer vast
+
+Dagcontrole 09-11: op 08-11 om 16:02 zette de kalibratie zichzelf uit en daarna rekende het EMS niets meer (systeemstatus "Mogelijk vastgelopen" vanaf 16:16, uitleg bleef op de kalibratietekst) tot de herstart van 09-11 05:23. De Zendure bleef tot 16:28 op handmatig laden met een volle accu (0,27 kWh net bij 46-48 ct); Ruud zette hem toen zelf op smart.
+
+Oorzaak: `_kalibratie_ronde` riep `async_set_kalibratie(False)` aan. Die roept via `_handmatig_gezet` `async_update` aan, en die wacht op `self._lock` - het slot dat de lopende ronde zelf vasthoudt (asyncio.Lock is niet herintreedbaar). Deadlock; ook de melding "Kalibratie afgerond" werd nooit verstuurd. Hetzelfde gold voor het afbreken na `KALIBRATIE_MAX_UREN`.
+
+- `_kalibratie_zelf_uit`: zet alleen de velden (stand, sinds, vol_sinds) en plant de directe opslag als losse taak buiten het slot. De ronde draait af; de volgende ronde stuurt gewoon.
+
+Tests: `test_v5195_1_kalibratie_geen_deadlock.py` (4; alle 4 falen op de oude code).
