@@ -737,7 +737,8 @@ class LegacySturingMixin:
         if u.get("bodem_kwh") is not None:
             delen.append(
                 f"Bodem: {u['bodem_kwh']:.2f} kWh".replace(".", ",")
-                + " - daaronder wordt nooit verkocht, ook niet in de duurste piek."
+                # v5.198.1: sinds v5.198.0 geen verkoopvloer meer (Ruud 09-11: economisch)
+                + " - de reserve rekent nooit met minder; verkopen mag tot de ondergrens als terugkopen goedkoper is."
                 + (" De bodem is nu bindend." if u.get("bodem_bindend") else "")
             )
         return " ".join(delen)

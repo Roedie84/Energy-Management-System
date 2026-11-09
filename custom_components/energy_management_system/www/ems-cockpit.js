@@ -1013,7 +1013,7 @@ const AFHANKELIJK = {
   planvandaag: ["plan", "schema", "soc", "besparing", "uitleg", "cockpit", "accu_vermogen", "pv", "net", "modus"],
   geld: ["besparing", "perioden", "zelfvoorziening", "zelfanalyse", "repetitie", "dagarchief", "rendement", "gacs"],
   planning: ["plan", "schema", "uitleg", "blok", "soc", "prijsverwachting"],
-  verkoop: ["gacs", "mc", "tekort", "uitleg", "blok", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk",
+  verkoop: ["gacs", "plan", "mc", "tekort", "uitleg", "blok", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk",
     "pvNauw", "bewolking", "pv"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
   huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "vaatwasserPlan", "wasmachinePlan", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip",
@@ -2247,6 +2247,11 @@ class EmsCockpitCard extends HTMLElement {
     const verwacht = num(zon.voorspeld_kwh) ?? getal(this._s("zon_vandaag"));
     const opgewekt = num(zon.opgewekt_kwh) ?? getal(this._s("zon_werkelijk"));
     const rest = getal(this._s("zon_rest"));
+    // v5.198.1: de eigen rest (waar het plan mee rekent) en opgewekt + rest
+    const zonRest = num(zon.rest_kwh);
+    const verwachtNu = num(zon.verwacht_nu_kwh);
+    const planRijen = attr(this._s("plan"), "kwartierplanning") || [];
+    const verkoopRij = Array.isArray(planRijen) ? planRijen.find((r) => /verkopen/.test(String(r.modus || ""))) : null;
     const morgen = getal(this._s("zon_morgen"));
     const pv = getal(this._s("pv"));
     const nauw = getal(this._s("pvNauw"));
@@ -2259,19 +2264,23 @@ class EmsCockpitCard extends HTMLElement {
     const kansKleur = kans == null ? "" : kans >= 50 ? "var(--rood)" : kans >= 20 ? "var(--oranje)" : "var(--groen)";
     const kwh = (v, dec = 2) => (v == null ? STREEP : `${fmt(v, dec)}<small>kWh</small>`);
 
-    const rechts = chip(mag ? "verkopen mag" : "houdt vast", mag ? "ok" : "") +
+    // v5.198.1: het waardeplan beslist over verkopen; de oude verkooptoets niet meer
+    const verkoopt = verkoopRij ? `verkoopt ${verkoopRij.van || ""}`.trim() : (mag ? "verkopen mag" : "geen verkoop gepland");
+    const rechts = chip(verkoopt, verkoopRij || mag ? "ok" : "") +
       (pv != null ? chip(`${watt(Math.max(0, pv))} zon nu`, pv > 20 ? "ok" : "") : "");
     // v5.178.0: zon en verkopen in een raster van negen getallen
     const cijfers =
       `<div class="trio vast">` +
-      mini("Zon vandaag", kwh(opgewekt, 1), `van ${fmt(verwacht, 1)} kWh`, "var(--amber)") +
-      mini("Nog te komen", kwh(rest, 1), "vandaag") +
+      mini("Zon vandaag", kwh(opgewekt, 1),
+        verwachtNu != null ? `van ${fmt(verwachtNu, 1)} kWh${verwacht != null ? " \u00b7 vanochtend " + fmt(verwacht, 1) : ""}` : `van ${fmt(verwacht, 1)} kWh`,
+        "var(--amber)") +
+      mini("Nog te komen", kwh(zonRest ?? rest, 1), zonRest != null && rest != null ? `vandaag \u00b7 Solcast ${fmt(rest, 1)}` : "vandaag") +
       mini("Morgen", kwh(morgen, 1), "voorspeld") +
-      mini("Reserve tot blok", kwh(nodig), "nooit verkocht") +
+      mini("Reserve tot blok", kwh(nodig), "nodig voor het huis") +
       (blokLoopt
         ? mini("Tot het blok", "nu", `laadblok loopt${blokLoopt.eind ? " tot " + blokLoopt.eind : ""}`) +
           mini("Na het blok", STREEP, "volgend blok nog niet bepaald")
-        : mini("Tot het blok", kwh(tot), "altijd beschermd") +
+        : mini("Tot het blok", kwh(tot), "huis tot het blok") +
           mini("Na het blok", kwh(na), "laadt het blok bij")) +
       mini("Vrij te verkopen", vrij == null ? STREEP : `${fmt(vrij, 2)}<small>kWh</small>`, naBlokVrij && terug != null ? `waarvan ${fmt(naBlokVrij, 2)} kWh terugladen ${ct(terug)} ct` : toets.verkoop_na_blok_reden ? esc(toets.verkoop_na_blok_reden) : "", vrij ? "var(--oranje)" : "") +
       mini("Kans op tekort", kans == null ? STREEP : `${fmt(kans)}<small>%</small>`, "tot het blok", kansKleur) +
@@ -2292,11 +2301,11 @@ class EmsCockpitCard extends HTMLElement {
         ? `<div class="meterrij"><div class="meterkop"><span class="lbl">Beschikbaar tegen nodig voor het huis</span>` +
           `<span class="w">${fmt(besch, 2)} / ${fmt(nodig, 2)}<small>kWh</small></span></div>` +
           balk(nodig > 0 ? besch / Math.max(besch, nodig) : 1, mag ? "var(--groen)" : "var(--blauw)", nodig > 0 ? nodig / Math.max(besch, nodig) : null) +
-          `<div class="meternoot">Het witte streepje is de reserve: daaronder verkoopt het EMS nooit.</div></div>`
+          `<div class="meternoot">Het witte streepje is wat het huis tot het blok nodig heeft. Sinds v5.198 verkoopt het EMS ook daaronder als terugkopen goedkoper is.</div></div>`
         : "";
     const zonMeter =
-      `<div class="meterrij"><div class="meterkop"><span class="lbl">Zon vandaag opgewekt</span><span class="w">${fmt(opgewekt, 1)} / ${fmt(verwacht, 1)}<small>kWh</small></span></div>` +
-      balk(zonDeel, "var(--amber)") + `</div>`;
+      `<div class="meterrij"><div class="meterkop"><span class="lbl">Zon vandaag opgewekt</span><span class="w">${fmt(opgewekt, 1)} / ${fmt(verwachtNu ?? verwacht, 1)}<small>kWh</small></span></div>` +
+      balk(verwachtNu ? Math.min(1, (opgewekt || 0) / verwachtNu) : zonDeel, "var(--amber)") + `</div>`;
     // Alleen de uitleg in tekst gaat in de uitklap
     const uitleg =
       (toets.reden ? `<div class="zin">${esc(toets.reden)}</div>` : "") +

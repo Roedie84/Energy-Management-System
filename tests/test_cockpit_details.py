@@ -85,7 +85,7 @@ def test_de_reservekaart_toont_de_zin_uit_de_coordinator(make_coordinator, hass)
 
     assert "50 W" in uit
     assert "1,30 kWh" in uit
-    assert "nooit verkocht" in uit
+    assert "nooit met minder" in uit   # v5.198.1
 
 
 def test_zonder_verschuiving_en_bodem_geen_zin(make_coordinator, hass):

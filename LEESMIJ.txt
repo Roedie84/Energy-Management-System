@@ -1,3 +1,10 @@
+EMS v5.198.1 - zontegels kloppen weer
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- 'Zon vandaag' en 'Nog te komen' rekenen nu met dezelfde schatting als de planning. De verwachting van vanochtend staat erbij.
+- De teksten 'nooit verkocht' en 'altijd beschermd' zijn weg; de chip zegt wanneer het EMS verkoopt.
+
 EMS v5.198.0 - zo weinig mogelijk betalen
 
 Installeren: via de Marketplace bijwerken en herstarten.

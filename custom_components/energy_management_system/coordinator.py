@@ -11830,11 +11830,22 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         afwijking = None
         if voorspeld:
             afwijking = round(100 * (opgewekt - voorspeld) / voorspeld, 1)
+        # v5.198.1 (Ruud 09-11 12:51: "klopt niet?" - 4,2 van 5,0 en nog 3,0 te
+        # komen): de rest zoals het plan ermee rekent (eigen schatting, niet de
+        # kale Solcast), en opgewekt + rest als de verwachting van nu.
+        rest = None
+        try:
+            middernacht = (nu + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            rest = round(max(0.0, self._estimate_pv_kwh_for_period(nu, middernacht)), 2)
+        except Exception:  # noqa: BLE001 - de weergave mag niets breken
+            rest = None
         return {
             "opgewekt_kwh": opgewekt,
             "voorspeld_kwh": voorspeld,
             "herkomst": herkomst,
             "afwijking_procent": afwijking,
+            "rest_kwh": rest,
+            "verwacht_nu_kwh": None if rest is None else round(opgewekt + rest, 1),
         }
 
     def get_sun_position_check(self, now: datetime | None = None) -> dict:

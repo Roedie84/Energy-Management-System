@@ -35240,3 +35240,13 @@ Ruud 09-11 11:40: "Je moet doen wat economisch voor mij het voordeligste is, ik 
 - Ongewijzigd: de bewaarmarge (5 ct) tot de evaluatie van de economische schaduw; de zinloze-verkooptoets; de terugvalsturing.
 
 Tests: `test_v5198_economisch.py` (2); `test_v5182_huis_eerst.py` en `test_v5160_verkoopvloer.py` aangepast.
+
+## v5.198.1 — zontegels sluiten op elkaar aan; reserveteksten na v5.198.0
+
+Ruud 09-11 12:51 ("klopt niet?"): het paneel "Zon, verkopen en reserve" toonde "Zon vandaag 4,2 kWh van 5,0 kWh" en "Nog te komen 3,0 kWh". De 5,0 was de verwachting van vanochtend (momentopname), de 3,0 de kale Solcast-rest; het plan rekende met 2,5 kWh. Drie verschillende bronnen naast elkaar.
+
+- `get_solar_today`: ook `rest_kwh` (de eigen schatting, waar het plan mee rekent) en `verwacht_nu_kwh` (opgewekt + rest).
+- Cockpit: "Zon vandaag 4,2 · van 6,7 kWh · vanochtend 5,0"; "Nog te komen" = de eigen rest, met "Solcast x" erbij; de zonbalk tegen opgewekt + rest.
+- Na v5.198.0 (geen huisreserve als verkoopvloer meer): "nooit verkocht" / "altijd beschermd" weg; de chip zegt wanneer het plan verkoopt ("verkoopt 16:15") in plaats van de oude verkooptoets ("houdt vast"); de meternoot en de bodemzin zeggen dat verkopen tot de ondergrens mag als terugkopen goedkoper is.
+
+Tests: `test_v5198_1_cockpit_zon.py` (2).
