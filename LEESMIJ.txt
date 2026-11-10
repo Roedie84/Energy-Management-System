@@ -1,3 +1,9 @@
+EMS v5.207.1 - knop "Verkopen uit" ook in de Energiecockpit
+
+Installeren: via de Marketplace bijwerken en de browser verversen (geen herstart nodig voor alleen de cockpit).
+
+- Energiecockpit, paneel Bediening: knop "Verkopen uit" (tot middernacht) direct naast "Nu laden".
+
 EMS v5.207.0 - knop "Verkopen uit (vandaag)"
 
 Installeren: via de Marketplace bijwerken en herstarten.

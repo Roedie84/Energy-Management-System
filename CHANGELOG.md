@@ -35403,3 +35403,7 @@ Gevraagd 10-11 (Ruud): "Ik weet dat de oven nog een paar keer aan moet, kunnen w
 - Schakelaar `switch.woonkamer_energy_management_system_verkopen_uit_vandaag` (attributen: actief, tot, uitleg); kaart in `dashboard_template.yaml` naast "Nu laden".
 
 Tests: `test_v5207_verkoop_pauze.py`.
+
+## v5.207.1 — knop "Verkopen uit" in de Energiecockpit
+
+Gevraagd 10-11 (Ruud): "Waar zit de knop in de cockpit?" De schakelaar van v5.207.0 stond alleen op het EMS-dashboard. `ems-cockpit.js`: sleutel `verkoopUit` -> `verkoop_pauze` (via Dashboardbronnen), knop in Bediening na "Nu laden" (icoon euro, rood als hij aan staat).

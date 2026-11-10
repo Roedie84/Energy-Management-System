@@ -108,6 +108,8 @@ const EIGEN = {
   kostenTotaal: "kosten_vandaag_totaal",
   // knoppen
   nuLaden: "nu_laden",
+  // v5.207.1: knop "Verkopen uit (vandaag)"
+  verkoopUit: "verkoop_pauze",
   handLaden: "handmatig_laden",
   handSmart: "handmatig_smart_charge",
   forceManual: "force_manual",
@@ -1020,7 +1022,7 @@ const AFHANKELIJK = {
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
   huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "vaatwasserPlan", "wasmachinePlan", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip",
     "vaatwasser_w", "wasmachine_w", "stofzuiger_w", "fietsen_w", "lader_w", "airco_w"],
-  bediening: ["nuLaden", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
+  bediening: ["nuLaden", "verkoopUit", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "laderOverrule", "meldingenAan", "achterhoeks"],
   voet: ["meetlog", "gezondheid", "status", "cockpit"],
 };
@@ -1029,6 +1031,7 @@ const AFHANKELIJK = {
    v5.178.0: zonder groepskoppen, de vaakst gebruikte eerst. */
 const KNOPPEN = [
   { k: "nuLaden", n: "Nu laden", s: "Direct uit het net bijladen", ic: "bout", kl: "var(--groen)" },
+  { k: "verkoopUit", n: "Verkopen uit", s: "Vandaag niets verkopen (tot middernacht)", ic: "euro", kl: "var(--rood)" },
   { k: "handLaden", n: "Handmatig laden", s: "Laden met vast vermogen", ic: "accu", kl: "var(--groen)", vraag: true },
   { k: "handSmart", n: "Smart charge", s: "Alleen zon de accu in", ic: "zon", kl: "var(--amber)", vraag: true },
   { k: "vakantie", n: "Vakantiestand", s: "Minder verbruik verwacht", ic: "vakantie", kl: "var(--blauw)", vraag: true },
