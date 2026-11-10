@@ -1,3 +1,10 @@
+EMS v5.203.1 - tekortnachten na v5.198.0 eerlijk ingedeeld
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Een nacht waarin de accu 's avonds verkocht en daarna leeg raakte, heette "capaciteit: vol geweest, daarna niets verkocht" zodra het waardeplan hem 's nachts weer vol laadde. Nu telt alleen 'vol' van vóór het tekort.
+- Sinds v5.198.0 is de huisreserve geen verkoopvloer meer. Een verkoop die meer opbracht dan het terugkopen kostte, heet nu 'verkocht met winst' en niet meer 'het huis gaat voor: stuurfout'. Een verkoop met verlies blijft planning. Alleen de indeling en de meldingen veranderen; de sturing en de marge niet.
+
 EMS v5.203.0 - kosten vandaag inclusief vaste kosten
 
 Installeren: via de Marketplace bijwerken en herstarten.

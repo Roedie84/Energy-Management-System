@@ -11,6 +11,8 @@ piekregel-bug (hersteld in v5.28.4)."
 - De bewaarde nachten worden opnieuw ingedeeld.
 """
 import inspect
+
+import pytest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,6 +20,14 @@ import custom_components.energy_management_system as pkg
 from custom_components.energy_management_system.const import TEKORT_RESERVETOETS
 
 MAP = Path(pkg.__file__).parent
+
+
+@pytest.fixture(autouse=True)
+def _oude_verkoopvloer(monkeypatch):
+    """v5.203.1: de reserveregel geldt alleen zolang de huisreserve een
+    verkoopvloer is (sinds v5.198.0 uit). Deze tests toetsen de oude regel."""
+    import custom_components.energy_management_system.coordinator as co
+    monkeypatch.setattr(co, "WAARDEPLAN_VERKOOPVLOER_RESERVE", True)
 
 
 def _c(make_coordinator):

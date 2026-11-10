@@ -35327,3 +35327,12 @@ Ruud 09-11: "Waarom tellen vaste kosten niet mee? Ik moet toch een totaal plaatj
 - Diagnose: `kosten_vandaag`.
 
 Tests: `test_v5203_kosten_incl_vast.py` (4).
+
+## v5.203.1 — tekortnachten na v5.198.0 eerlijk ingedeeld
+
+Dagcontrole 10-11 06:45 (replay op het echte dagverloop van 09-11 09:00 tot 10-11 06:45). Alleen rapportage en indeling; sturing, reserve en marge veranderen niet (de marge telt planning, capaciteit en winst al op dezelfde manier).
+
+- **Vol na het tekort wiste de avondverkoop.** Live (`_volg_vol_en_verkoop`) zette elke ronde met de accu vol de teller "verkocht na vol" op 0, ook als de accu pas na het tekort van die nacht weer vol was. Het waardeplan laadt 's nachts vol voor de dag erna (10-11 05:45: 97 %), dus de nacht naar 10-11 (15:45-19:15 verkocht tegen 63-88 ct, om 19:45 leeg, tekort 0,54 kWh) zou om 09:00 "capaciteit: vol geweest, daarna niets verkocht" heten. De herleiding uit het dagverloop (`_deel_nacht_in_met_reden`) deed hetzelfde met het laatste volle kwartier van het venster. Nu: vol telt alleen vóór het eerste tekortkwartier, en live wist een volle accu de teller niet meer zolang er die nacht al een tekort loopt.
+- **Verkopen onder de reserve is sinds v5.198.0 geen stuurfout.** `_winst_of_onder_reserve` (v5.61) noemde een winstgevende verkoop onder de reserve "het huis gaat voor: stuurfout". Met `WAARDEPLAN_VERKOOPVLOER_RESERVE` uit (Ruud 09-11: "doen wat economisch het voordeligste is") tellen alleen de euro's: meer opgebracht dan teruggekocht is "verkocht met winst", anders planning. Replay nacht naar 10-11: oud "planning ... 3,5 kWh verkocht onder de reserve ... stuurfout", nieuw "3,5 kWh verkocht met winst (gem. 78,3 ct, tekort 52,5 ct: circa € 0,90)". Bewaarde oudere nachten (4 nov) houden hun indeling; die valt na 7 dagen weg.
+
+Tests: `test_v5203_1_winst_zonder_verkoopvloer.py` (6); `test_v561_verkoop_onder_reserve.py` toetst de oude regel met de vlag aan.

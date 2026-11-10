@@ -71,6 +71,7 @@ from . import kalibratie_plan as kalibratie_plan_mod
 from . import salderingspositie as salderingspositie_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .nilm_glue import NilmMixin
+from .const import WAARDEPLAN_VERKOOPVLOER_RESERVE  # v5.203.1
 from .const import (  # v5.186.0 (spoor C)
     PV_BEGRENSD_ONDER_PROCENT,
     PV_GAT_ZONHOOGTE_GRADEN,
@@ -32134,7 +32135,13 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         )
         if soc is not None and soc >= self._bovengrens_procent() - TEKORT_VOL_MARGE_PROCENT:
             self._vol_voor_nacht = True
-            self._verkocht_na_vol_kwh = 0.0
+            # v5.203.1: vol NA het tekort van deze nacht (het waardeplan laadt
+            # 's nachts vol voor de dag erna) wist de verkoop van de avond
+            # ervoor niet. Anders heette de nacht naar 10-11 "capaciteit:
+            # vol geweest, daarna niets verkocht" terwijl de accu 's avonds
+            # 6 kWh verkocht en om 19:45 leeg was.
+            if not (self._tekortnacht_lopend_kwh or 0.0) > 0:
+                self._verkocht_na_vol_kwh = 0.0
         elif self._vol_voor_nacht:
             if uren is None:
                 self._verkoop_laatste = now
@@ -32644,6 +32651,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         winst = cls._verkocht_met_winst(verkocht_kwh, verkoopprijs_ct, tekortprijs_ct, aanloop)
         if winst is None:
             return None
+        # v5.203.1: sinds v5.198.0 (Ruud 09-11: "doen wat economisch het
+        # voordeligste is") is de huisreserve geen verkoopvloer meer. Een
+        # verkoop die meer opbracht dan het terugkopen kostte, is dan geen
+        # stuurfout, ook niet onder de (oude) reserve: alleen de euro's tellen.
+        if not WAARDEPLAN_VERKOOPVLOER_RESERVE:
+            return TEKORTSOORT_VERKOCHT_MET_WINST, winst
         if onder_kwh > 0:
             return TEKORTSOORT_PLANNING, (
                 f"{aanloop}{_nl(onder_kwh)} kWh verkocht onder de reserve "
@@ -32714,12 +32727,17 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         rijen = [r for r in rijen if isinstance(r, dict) and r.get("soc") is not None]
         if len(rijen) < min_kwartieren:
             return None, None
-        laatste_vol = max(
-            (i for i, r in enumerate(rijen) if r["soc"] >= vol_grens), default=None
-        )
         # v5.55: de prijs van het tekort ook voor de tak "vol geweest"; zie
         # `_verkocht_met_winst`.
         eerste, tekortprijs = cls._tekortkwartieren(rijen)
+        # v5.203.1: alleen "vol" vóór het eerste tekortkwartier telt. Een
+        # accu die na het tekort 's nachts weer vol laadt, maakt de verkoop
+        # van de avond ervoor niet ongedaan.
+        laatste_vol = max(
+            (i for i, r in enumerate(rijen)
+             if r["soc"] >= vol_grens and (eerste is None or i < eerste)),
+            default=None,
+        )
         if tekortprijs is None:
             tekortprijs = verwachte_tekortprijs_ct
         if laatste_vol is not None:
