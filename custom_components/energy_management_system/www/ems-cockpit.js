@@ -2171,7 +2171,15 @@ class EmsCockpitCard extends HTMLElement {
       if (!lijst.length) return STREEP;
       const gem = lijst.reduce((a, v) => a + v, 0) / lijst.length;
       if (Math.abs(gem) < 50) return "in rust";
-      return `${gem < 0 ? "laadt" : "ontlaadt"} ${fmt(Math.abs(gem) / 1000, 1)} kW`;
+      // v5.204.0 (Ruud 10-11: "1.6 kW in de planning, 1.27 kW gepland"):
+      // het blok is een gemiddelde van kwartieren met 1,2 en 2,0 kW. Wisselt
+      // het vermogen binnen het blok, dan het bereik in plaats van het
+      // gemiddelde, zodat het kwartier van nu er altijd binnen valt.
+      const zelfde = lijst.filter((v) => (gem < 0 ? v < -50 : v > 50)).map((v) => Math.abs(v));
+      const lo = zelfde.length ? Math.min(...zelfde) : Math.abs(gem);
+      const hi = zelfde.length ? Math.max(...zelfde) : Math.abs(gem);
+      const kw = hi - lo >= 300 ? `${fmt(lo / 1000, 1)}\u2013${fmt(hi / 1000, 1)}` : fmt(Math.abs(gem) / 1000, 1);
+      return `${gem < 0 ? "laadt" : "ontlaadt"} ${kw} kW`;
     };
     const regels = blokken.map((b) => {
       const lo = b.prijzen.length ? Math.min(...b.prijzen) : null;

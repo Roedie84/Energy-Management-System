@@ -8753,7 +8753,63 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             "duiding": self._duid_pv_voorspelkwaliteit(
                 statistics.mean(absoluut), n
             ),
+            # v5.204.0: dit is Solcast zelf; het plan rekent met de
+            # gecorrigeerde voorspelling - zie `plan`.
+            "bron": "Solcast zelf, zonder de eigen correctie van het EMS",
+            "plan": self._pv_plan_kwaliteit(self.plan_review_history),
         }
+
+    @staticmethod
+    def _pv_plan_kwaliteit(geschiedenis) -> dict:
+        """v5.204.0: hoe goed is de voorspelling waar het PLAN mee rekent?
+
+        Ruud 10-11 ("oplossen"): de dagcontrole meldde dat de
+        zonvoorspelling slechter wordt (40 dagen -14,2 %, was -12,9 %). Dat
+        is Solcast zelf; het plan rekent met de gecorrigeerde voorspelling
+        (uurfactoren, de stand van vandaag, het laatste halfuur). Die stond
+        in oktober 17-20 % te hoog, maar de laatste 10 dagen -1,8 %
+        (48,7 kWh voorspeld, 47,8 kWh opgewekt). Gemeten uit de plantoetsing
+        (voorspelling van 08:00 tegen de dagopwek).
+        """
+        rijen = []
+        for r in geschiedenis or []:
+            zon = (r or {}).get("zon") or {}
+            v, w = zon.get("voorspeld_kwh"), zon.get("werkelijk_kwh")
+            if isinstance(v, (int, float)) and isinstance(w, (int, float)) and v > 0.5:
+                rijen.append((r.get("datum"), float(v), float(w)))
+        if not rijen:
+            return {"beschikbaar": False, "reden": "nog geen getoetste dagen"}
+        rijen.sort(key=lambda x: str(x[0]))
+
+        def maat(deel):
+            v = sum(x[1] for x in deel)
+            w = sum(x[2] for x in deel)
+            procent = [(x[2] - x[1]) / x[1] * 100 for x in deel]
+            return {
+                "dagen": len(deel),
+                "voorspeld_kwh": round(v, 1),
+                "werkelijk_kwh": round(w, 1),
+                "bias_procent": round((w - v) / v * 100, 1) if v else None,
+                "gemiddelde_fout_procent": round(statistics.mean(abs(p) for p in procent), 1),
+                "gemiddelde_fout_kwh": round(statistics.mean(abs(x[2] - x[1]) for x in deel), 2),
+            }
+
+        laatste = maat(rijen[-10:])
+        alles = maat(rijen)
+        b = laatste["bias_procent"] or 0.0
+        if abs(b) <= 5:
+            zin = (
+                f"Het plan rekent met een gecorrigeerde voorspelling; die zat de laatste "
+                f"{laatste['dagen']} dagen gemiddeld goed ({b:+.1f} %). Wat overblijft is "
+                f"spreiding per dag (gemiddeld {laatste['gemiddelde_fout_kwh']:.1f} kWh), geen "
+                "structurele afwijking."
+            )
+        else:
+            zin = (
+                f"Ook de gecorrigeerde voorspelling waar het plan mee rekent wijkt "
+                f"structureel af: {b:+.1f} % over de laatste {laatste['dagen']} dagen."
+            )
+        return {"beschikbaar": True, "laatste_10": laatste, "alles": alles, "duiding": zin}
 
     @staticmethod
     def _duid_pv_voorspelkwaliteit(gemiddelde_fout: float, dagen: int) -> str:

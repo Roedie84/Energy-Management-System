@@ -1,3 +1,10 @@
+EMS v5.204.0 - zonvoorspelling: meten wat het plan gebruikt
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De voorspellingskwaliteit toont nu ook hoe goed de gecorrigeerde voorspelling is waar het plan mee rekent: de laatste 10 dagen -1,8 % (oktober nog 17-20 % te hoog). De -14 % die eerder werd gemeld, is Solcast zelf zonder de correctie.
+- Vooruitblik: wisselt het vermogen binnen een blok (bijvoorbeeld 1,2 en 2,0 kW), dan staat er het bereik in plaats van het gemiddelde.
+
 EMS v5.203.1 - tekortnachten na v5.198.0 eerlijk ingedeeld
 
 Installeren: via de Marketplace bijwerken en herstarten.

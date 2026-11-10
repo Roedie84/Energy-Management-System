@@ -35336,3 +35336,22 @@ Dagcontrole 10-11 06:45 (replay op het echte dagverloop van 09-11 09:00 tot 10-1
 - **Verkopen onder de reserve is sinds v5.198.0 geen stuurfout.** `_winst_of_onder_reserve` (v5.61) noemde een winstgevende verkoop onder de reserve "het huis gaat voor: stuurfout". Met `WAARDEPLAN_VERKOOPVLOER_RESERVE` uit (Ruud 09-11: "doen wat economisch het voordeligste is") tellen alleen de euro's: meer opgebracht dan teruggekocht is "verkocht met winst", anders planning. Replay nacht naar 10-11: oud "planning ... 3,5 kWh verkocht onder de reserve ... stuurfout", nieuw "3,5 kWh verkocht met winst (gem. 78,3 ct, tekort 52,5 ct: circa € 0,90)". Bewaarde oudere nachten (4 nov) houden hun indeling; die valt na 7 dagen weg.
 
 Tests: `test_v5203_1_winst_zonder_verkoopvloer.py` (6); `test_v561_verkoop_onder_reserve.py` toetst de oude regel met de vlag aan.
+
+## v5.204.0 — zonvoorspelling: meten wat het plan gebruikt
+
+Dagcontrole 10-11: "de zonvoorspelling wordt slechter, 40 dagen -14,2 % (was -12,9 %)". Ruud: "oplossen".
+
+Uitgezocht (plantoetsing, de voorspelling van 08:00 waar het plan mee rekent, tegen de dagopwek):
+
+| periode | voorspeld | opgewekt | afwijking | gem. fout per dag |
+|---|---|---|---|---|
+| 11-10 t/m 20-10 | 88,1 kWh | 73,5 kWh | -16,5 % | 1,45 kWh |
+| 21-10 t/m 30-10 | 63,7 kWh | 51,2 kWh | -19,7 % | 1,28 kWh |
+| 31-10 t/m 09-11 | 48,7 kWh | 47,8 kWh | **-1,8 %** | 0,80 kWh |
+
+De -14,2 % is Solcast zelf (zonder de eigen correctie) over 40 dagen, en dus vooral oktober. Het plan rekent met de gecorrigeerde voorspelling (uurfactoren, de stand van vandaag, sinds v5.196/v5.197 ook het laatste halfuur); die zit sinds eind oktober gemiddeld goed. Wat overblijft is spreiding per dag (mist 08-11: -78 %), geen structurele afwijking die een correctie kan wegnemen. Euro-effect van de resterende bias: verwaarloosbaar (< 0,1 kWh per dag).
+
+- `get_pv_forecast_quality`: `bron` (Solcast zelf) en `plan` met de laatste 10 en alle getoetste dagen (bias, fout in % en kWh) en een duiding. Zo meet de dagcontrole voortaan wat het plan gebruikt.
+- Cockpit, Vooruitblik (Ruud 10-11 07:32: "1.6 kW in de planning, 1.27 kW gepland, 1.28 kW gemeten"): het blok 07:30-09:45 toonde het gemiddelde van kwartieren met 1,2 en 2,0 kW. Wisselt het vermogen binnen een blok, dan staat er nu het bereik ("ontlaadt 1,2–2,0 kW"), zodat het kwartier van nu er altijd binnen valt.
+
+Tests: `test_v5204_pv_plan_kwaliteit.py` (5).
