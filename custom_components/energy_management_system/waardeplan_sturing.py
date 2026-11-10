@@ -408,6 +408,8 @@ class WaardeplanSturingMixin:
             uren=(eind - van).total_seconds() / 3600,
             prijs_incl_eur=incl if inkoop != incl else None,
             teruglever_accu_eur=teruglever_accu,
+            # v5.207.0: knop "Verkopen uit" (tot middernacht).
+            verkoop_verboden=self.verkoop_verboden_om(begin),
         )
 
     def _waardeplan_slijtage_ct(self) -> float:

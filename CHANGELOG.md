@@ -35392,3 +35392,14 @@ Gemeten 01-11 t/m 10-11 (5-minutenstatistiek van watermeter, gasmeter en de stek
 Oude beurten worden niet opnieuw ingedeeld; het overzicht vult zich vanaf de installatie.
 
 Tests: `test_v5206_douche_herkennen.py` (4).
+
+## v5.207.0 — knop "Verkopen uit (vandaag)"
+
+Gevraagd 10-11 (Ruud): "Ik weet dat de oven nog een paar keer aan moet, kunnen we een knop bouwen waarmee ik zeg dat verkopen niet toegestaan is? Deze moet dagelijks resetten en het plan moet er rekening mee houden."
+
+- `verkoop_pauze.py` (VerkoopPauzeMixin): aan = tot middernacht (lokaal) van de dag waarop hij aanging; de eindtijd wordt bewaard (`verkoop_pauze_tot`, PERSISTED_FIELDS), niet de aan/uit-stand, dus na middernacht of een herstart op een nieuwe dag staat hij uit. Aan/uit gooit de plancache leeg zodat het plan meteen opnieuw rekent.
+- Waardeplan: elk kwartier vóór de eindtijd krijgt `verkoop_verboden` (bestaande vlag: het plan biedt daar geen verkoopstap aan). De accu dekt dus alleen het huis; netladen, zon opslaan en dekken blijven.
+- Oude regels (terugval zonder plan): `_verkoopruimte_met_piek` geeft bij de knop `mag_verkopen=False` met reden "verkopen uitgezet met de knop (tot middernacht)".
+- Schakelaar `switch.woonkamer_energy_management_system_verkopen_uit_vandaag` (attributen: actief, tot, uitleg); kaart in `dashboard_template.yaml` naast "Nu laden".
+
+Tests: `test_v5207_verkoop_pauze.py`.

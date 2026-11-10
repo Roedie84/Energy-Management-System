@@ -3978,6 +3978,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "presence_week_profile": {"type": "plain"},
     "presence_last_seen": {"type": "plain"},
     "nu_laden_tot": {"type": "plain"},
+    # v5.207.0: knop "Verkopen uit" - de eindtijd (middernacht), niet aan/uit.
+    "verkoop_pauze_tot": {"type": "plain"},
     "nu_laden_omslag": {"type": "plain"},
     "fallback_since": {"type": "plain"},
     "veroudering_history": {"type": "plain"},

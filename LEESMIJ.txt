@@ -1,3 +1,11 @@
+EMS v5.207.0 - knop "Verkopen uit (vandaag)"
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Nieuwe schakelaar "Verkopen uit (vandaag)": tot middernacht verkoopt de accu niets aan het net. Het plan houdt de lading voor het huis (bijv. als de oven nog aan moet) en verdeelt hem over de duurste kwartieren van het huis. Netladen, zon opslaan en het huis dekken gaan gewoon door.
+- Na middernacht staat hij vanzelf weer uit, ook na een herstart.
+- Kaart op het EMS-dashboard naast "Nu laden".
+
 EMS v5.206.0 - douchebeurten worden weer herkend
 
 Installeren: via de Marketplace bijwerken en herstarten.

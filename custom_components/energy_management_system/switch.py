@@ -74,6 +74,7 @@ async def async_setup_entry(
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
             AircoAutomaatSwitch(coordinator, entry_id=entry.entry_id),
             NuLadenSwitch(coordinator, entry_id=entry.entry_id),
+            VerkoopPauzeSwitch(coordinator, entry_id=entry.entry_id),
             AchterhoeksSwitch(coordinator, entry_id=entry.entry_id),
             # v5.187.0: de economische schaduw (alleen meten) aan of uit.
             EconomischeSchaduwSwitch(coordinator, entry_id=entry.entry_id),
@@ -610,6 +611,51 @@ class NuLadenSwitch(SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._coordinator.async_set_nu_laden(False)
+        self.async_write_ha_state()
+
+
+class VerkoopPauzeSwitch(SwitchEntity):
+    """Knop "Verkopen uit" tot middernacht (v5.207.0, gevraagd 10-11).
+
+    Geen RestoreEntity: de coordinator bewaart de eindtijd, zodat de knop na
+    een herstart niet aan blijft staan als de dag al voorbij is.
+    """
+
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
+    _attr_has_entity_name = True
+    _attr_name = "Verkopen uit (vandaag)"
+    _attr_icon = "mdi:cash-remove"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_verkoop_pauze"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.verkoop_pauze_actief()
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._coordinator.get_verkoop_pauze_status()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._coordinator.unregister_listener(self.async_write_ha_state)
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._coordinator.async_set_verkoop_pauze(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._coordinator.async_set_verkoop_pauze(False)
         self.async_write_ha_state()
 
 

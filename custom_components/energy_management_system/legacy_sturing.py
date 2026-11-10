@@ -1885,6 +1885,9 @@ class LegacySturingMixin:
         Nu geldt de huisgrens altijd: alleen `may_sell_now` beslist. De naam
         blijft voor de aanroepers.
         """
+        # v5.207.0: de knop "Verkopen uit" gaat voor (zie verkoop_pauze.py).
+        if self.verkoop_pauze_actief(now):
+            return self.verkoop_pauze_toets(self.may_sell_now(now, beschikbaar))
         return self.may_sell_now(now, beschikbaar)
 
     def may_sell_now(

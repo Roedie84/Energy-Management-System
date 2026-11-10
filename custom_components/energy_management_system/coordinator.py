@@ -105,6 +105,7 @@ from .financien import FinancienMixin
 from .coordinator_hulp import (PriceEntry, _nl, accu_is_leeg, demp_soc_stap, effectieve_ondergrens)  # noqa: F401 - re-export
 from .waardeplan_sturing import WaardeplanSturingMixin
 from .economische_schaduw_sturing import EconomischeSchaduwMixin
+from .verkoop_pauze import VerkoopPauzeMixin
 from .jaarafrekening_sturing import JaarafrekeningMixin
 from .const import (
     ACCU_MEETREEKS_DAGEN,
@@ -1255,7 +1256,7 @@ def _tel_rangorde(paren: list[tuple[float, float]]) -> tuple[int, int]:
     return eens, totaal
 
 
-class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchaduwMixin, JaarafrekeningMixin, FinancienMixin, AccuToestandMixin, UitlegMixin, LegacySturingMixin, KlimaatMixin, NilmMixin):
+class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixin, EconomischeSchaduwMixin, JaarafrekeningMixin, FinancienMixin, AccuToestandMixin, UitlegMixin, LegacySturingMixin, KlimaatMixin, NilmMixin):
     """Runs the control loop that decides the Zendure operation mode."""
 
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
