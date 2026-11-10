@@ -59,6 +59,7 @@ from .const import (
     CONF_WASHING_MACHINE_READY_SENSOR,
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
+    CONF_AIRCO_EXTERN_ENTITY,
     CONF_AIRCO_POWER_SENSOR,
     CONF_AIRCO_UIT_OM,
     CONF_AIRCO_RAAM_ENTITIES,
@@ -611,6 +612,10 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 default=defaults.get(CONF_AIRCO_RAAM_ENTITIES, []),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor", multiple=True)
+            ),
+            # v5.208.0: eigen automatisering die de airco tijdelijk bijstelt.
+            _optioneel(CONF_AIRCO_EXTERN_ENTITY, defaults): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["input_boolean", "binary_sensor", "switch"])
             ),
             _optioneel(CONF_SLAAPKAMER_CLIMATE_ENTITY, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")

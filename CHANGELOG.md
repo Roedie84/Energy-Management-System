@@ -35407,3 +35407,13 @@ Tests: `test_v5207_verkoop_pauze.py`.
 ## v5.207.1 — knop "Verkopen uit" in de Energiecockpit
 
 Gevraagd 10-11 (Ruud): "Waar zit de knop in de cockpit?" De schakelaar van v5.207.0 stond alleen op het EMS-dashboard. `ems-cockpit.js`: sleutel `verkoopUit` -> `verkoop_pauze` (via Dashboardbronnen), knop in Bediening na "Nu laden" (icoon euro, rood als hij aan staat).
+
+## v5.208.0 — een eigen airco-automatisering is geen handbediening
+
+Gemeld 10-11 (Ruud): de oven ging aan en de airco zakte van 21,5 naar 19,5 (automatisering "2 graden zuiniger tijdens koken"). Het EMS zag dat als "jullie bedienen de airco zelf" en trok zich terug tot de aanwezigheid veranderde: na het koken bleef het doel op de voorverwarmwaarde (21,5) staan, en de verlaagde waarde kwam in de geleerde setpunten.
+
+- Nieuwe optie `airco_extern_entity` (input_boolean/binary_sensor/switch, optioneel). Zolang die "on" is, en in de ronde direct erna (terugzetten), telt een wijziging van stand of doel niet als handbediening: geen terugtrekken, geen `noteer_bediening`, geen setpunt geleerd.
+- Zolang hij "on" is, stelt het EMS het doel van een airco die al verwarmt niet bij (besluit "niets", reden "een eigen automatisering bedient de airco"); uitzetten (bedtijd, raam, weg) mag wel. Daarna pakt de bufferregel het doel weer op.
+- Zonder de optie verandert er niets.
+
+Tests: `test_v5208_airco_eigen_automatisering.py`.

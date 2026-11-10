@@ -1,3 +1,11 @@
+EMS v5.208.0 - koken en de airco: het EMS blijft meesturen
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De automatisering "airco 2 graden zuiniger tijdens koken" telde voor het EMS als handbediening. Het EMS trok zich dan terug, waardoor de airco na het koken op de voorverwarmwaarde (bijv. 21,5) bleef staan in plaats van terug naar jullie 21.
+- Nieuwe instelling "Eigen automatisering bedient de woonkamer-airco" (bij Ruud: de kookstand). Zolang die aan staat laat het EMS de airco met rust; daarna stuurt het weer zelf (voorverwarmen op goedkope stroom, een halve graad lager op dure kwartieren).
+- De verlaagde kooktemperatuur telt niet meer mee in de geleerde gewenste temperatuur.
+
 EMS v5.207.1 - knop "Verkopen uit" ook in de Energiecockpit
 
 Installeren: via de Marketplace bijwerken en de browser verversen (geen herstart nodig voor alleen de cockpit).

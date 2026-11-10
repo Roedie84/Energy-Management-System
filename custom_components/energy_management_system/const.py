@@ -191,6 +191,11 @@ CONF_WASHING_MACHINE_READY_SENSOR = "washing_machine_ready_sensor_entity"
 CONF_QUOOKER_POWER_SENSOR = "quooker_power_sensor_entity"
 CONF_AIRCO_CLIMATE_ENTITY = "airco_climate_entity"
 CONF_SLAAPKAMER_CLIMATE_ENTITY = "slaapkamer_climate_entity"
+# v5.208.0 (Ruud 10-11): een eigen automatisering die de woonkamer-airco
+# tijdelijk bijstelt (bij Ruud: 2 graden zuiniger tijdens het koken). Zolang
+# deze entiteit "on" is, telt een wijziging niet als "jullie bedienen hem
+# zelf" en stelt het EMS het doel niet bij; daarna pakt het EMS het weer op.
+CONF_AIRCO_EXTERN_ENTITY = "airco_extern_entity"
 # v5.67: vermogen van de woonkamer-airco (W of kW). Leeg: vanzelf gezocht
 # bij hetzelfde apparaat als de airco.
 CONF_AIRCO_POWER_SENSOR = "airco_power_sensor_entity"

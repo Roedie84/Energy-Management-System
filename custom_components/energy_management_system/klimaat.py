@@ -51,6 +51,7 @@ from .const import (
     CONF_AIRCO_RAAM_ENTITIES,
     CONF_AIRCO_COP_BIJ_7C,
     CONF_AIRCO_COP_PER_GRAAD,
+    CONF_AIRCO_EXTERN_ENTITY,
     CONF_AIRCO_UIT_OM,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
     CONF_KNMI_WEATHER_ENTITY,
@@ -1772,7 +1773,12 @@ class KlimaatMixin:
         self._airco_laatst_gezien = gezien
         ems = self._airco_laatste_ems
         door_ems = ems is not None and (ems.get("stand"), ems.get("doel")) == gezien
-        if vorige is not None and gezien != vorige and not door_ems:
+        # v5.208.0: een eigen automatisering (koken) is geen handbediening -
+        # ook niet in de ronde direct na afloop, waarin hij terugzet.
+        extern = self._airco_extern_bezig()
+        extern_net = extern or self._airco_extern_vorige
+        self._airco_extern_vorige = extern
+        if vorige is not None and gezien != vorige and not door_ems and not extern_net:
             # Iemand bediende de airco zelf: dat gaat voor, tot de
             # aanwezigheid verandert - en wat hij nu doet is niet meer van het
             # EMS.
@@ -1817,6 +1823,14 @@ class KlimaatMixin:
         uit = self._airco_weg_ronde(now, uit, stand, doel_nu)
         uit = self._airco_thuiskomst_ronde(now, uit, stand)
         uit = self._airco_zon_ronde(now, self._airco_buffer_ronde(now, uit, stand), stand)
+        # v5.208.0: zolang de eigen automatisering loopt, stelt het EMS het doel
+        # van een airco die al verwarmt niet bij; uitzetten mag wel.
+        if extern and uit.get("actie") == "verwarmen" and stand == "heat":
+            redenen = list(uit.get("redenen") or []) + ["een eigen automatisering bedient de airco"]
+            uit = dict(
+                uit, actie="niets", redenen=redenen, redenen_tekst=" · ".join(redenen),
+                tekst="Een eigen automatisering bedient de airco; het EMS wacht tot die klaar is.",
+            )
         # v5.195.0: niet kort schakelen (vóór de raamregel: een open raam gaat voor)
         uit = airco_sturing.niet_kort_schakelen(uit, getattr(self, "_airco_geschakeld", None), now)
         # v5.77: als laatste - een raam open en de airco gaat nooit aan.
@@ -1848,6 +1862,17 @@ class KlimaatMixin:
         self.last_airco_besluit = uit
         if uit["toegepast"]:
             self.hass.async_create_task(self._async_pas_airco_toe(entiteit, uit))
+
+    _airco_extern_vorige: bool = False
+
+    def _airco_extern_bezig(self) -> bool:
+        """Een eigen automatisering stelt de airco nu bij (v5.208.0) - zie
+        `CONF_AIRCO_EXTERN_ENTITY`."""
+        entiteit = self.config.get(CONF_AIRCO_EXTERN_ENTITY)
+        if not entiteit:
+            return False
+        toestand = self.hass.states.get(entiteit)
+        return toestand is not None and toestand.state == "on"
 
     def _airco_ramen(self) -> dict:
         """De ramen van woonkamer en keuken (v5.77) - zie `airco_sturing.ramen`."""
