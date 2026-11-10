@@ -6377,6 +6377,10 @@ WATER_SOURCE_MATCH_WINDOW_MINUTES = 10
 # Ketel aan: langer dan dit is douchen, korter is tandenpoetsen of
 # handen wassen.
 WATER_SHOWER_MIN_DURATION_MINUTES = 3.0
+# v5.206.0: en minstens zoveel liter. 02-11 en 05-11 telden kranen van 4,8,
+# 10,8 en 8,7 liter (3-5,5 min, ketel aan) als douche; echte beurten waren
+# 45-140 liter.
+WATER_SHOWER_MIN_LITERS = 20.0
 
 # Een wc-spoeling is opvallend constant van volume - dat is juist wat
 # hem herkenbaar maakt. De marge is ruim genoeg voor een spaarknop en

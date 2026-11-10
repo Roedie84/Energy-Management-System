@@ -241,6 +241,7 @@ from .const import (
     WATER_TREND_MIN_PROFIELDAGEN,
     WATER_TREND_ZONDER_PROFIEL_VANAF_UUR,
     WATER_SHOWER_MIN_DURATION_MINUTES,
+    WATER_SHOWER_MIN_LITERS,
     WATER_SOFTENER_MIN_DURATION_MINUTES,
     WATER_SOURCE_HISTORY_LENGTH,
     WATER_SOURCE_MATCH_WINDOW_MINUTES,
@@ -1434,6 +1435,8 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         # plaats van uitsluitend het verschil van de cumulatieve
         # meterstand te nemen. Zie `_process_water_flow_sample`.
         self._water_session_liters_integrated: float = 0.0
+        # v5.206.0: hoogste vermogen van ketel en Quooker tijdens de sessie.
+        self._water_session_bron_max: dict = {}
         self._water_last_flow_l_per_min: float | None = None
         self._water_last_flow_sample_at: datetime | None = None
         # Losstaande dagteller: `water_session_history` bewaart maar de
@@ -8921,6 +8924,24 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 return self._read_sensor_float(entity_id)
         return None
 
+    def _water_bronnen_bijhouden(self) -> None:
+        """Het hoogste vermogen van ketel en Quooker terwijl het water loopt
+        (v5.206.0).
+
+        Ruud 10-11: "de herkenning van een douchebeurt optimaliseren". De bron
+        werd pas bepaald bij het afsluiten van de sessie, twee minuten na het
+        laatste water; de ketel staat dan al weer op 6 W. Gemeten 01-11 t/m
+        10-11: zes tot zeven douchebeurten (45-140 liter, ketel ~170 W), waarvan
+        er geen als douche in het overzicht kwam.
+        """
+        try:
+            for naam, waarde in (("ketel", self._boiler_power_w()),
+                                 ("quooker", self._read_sensor_float(self.config.get(CONF_QUOOKER_POWER_SENSOR)))):
+                if waarde is not None and waarde > self._water_session_bron_max.get(naam, 0.0):
+                    self._water_session_bron_max[naam] = float(waarde)
+        except Exception:  # noqa: BLE001 - de watermeting mag hier nooit op breken
+            _LOGGER.debug("Bron van het water niet bijgehouden", exc_info=True)
+
     def classify_water_session(
         self,
         liters: float | None,
@@ -8952,6 +8973,12 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
             self.config.get(CONF_QUOOKER_POWER_SENSOR)
         )
         ketel = self._boiler_power_w()
+        # v5.206.0: ook wat ketel en Quooker deden terwijl het water liep.
+        tijdens = getattr(self, "_water_session_bron_max", None) or {}
+        if tijdens.get("ketel") is not None:
+            ketel = max(ketel or 0.0, tijdens["ketel"])
+        if tijdens.get("quooker") is not None:
+            quooker = max(quooker or 0.0, tijdens["quooker"])
 
         if vaatwasser is not None and vaatwasser > 10:
             return {
@@ -8990,7 +9017,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         if ketel is not None and ketel > WATER_BOILER_ACTIVE_W:
             if duur_minuten is not None and (
                 duur_minuten >= WATER_SHOWER_MIN_DURATION_MINUTES
-            ):
+            ) and (liters is None or liters >= WATER_SHOWER_MIN_LITERS):
                 return {
                     "bron": "douche",
                     "zekerheid": "waarschijnlijk",
@@ -36936,6 +36963,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                 self._water_session_started_at = now
                 self._water_usage_state = "actief"
                 self._water_session_liters_integrated = 0.0
+                self._water_session_bron_max = {}
                 self._water_gas_start = self._gasstand_m3()
                 if total_entity:
                     # v5.47: in m³, ook als de meter liters meldt.
@@ -36943,6 +36971,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
                     self._water_session_start_total_m3 = (
                         start_l / 1000 if start_l is not None else None
                     )
+            self._water_bronnen_bijhouden()
             return
 
         if self._water_usage_state != "actief":
@@ -37057,6 +37086,7 @@ class EnergyManagementSystemCoordinator(WaardeplanSturingMixin, EconomischeSchad
         self._water_session_started_at = None
         self._water_session_start_total_m3 = None
         self._water_session_liters_integrated = 0.0
+        self._water_session_bron_max = {}
 
     def rebuild_water_session_day_counter(self) -> None:
         """Herbouwt de dagteller uit de herstelde sessiegeschiedenis

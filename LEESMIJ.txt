@@ -1,3 +1,10 @@
+EMS v5.206.0 - douchebeurten worden weer herkend
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Een douchebeurt werd bijna nooit herkend, omdat het EMS pas naar de ketel keek als die al weer uit was. Nu kijkt het terwijl het water loopt.
+- Een kraan van een paar liter telt niet meer als douche (minstens 20 liter).
+
 EMS v5.205.0 - bewaarmarge en bewaarkost op 0
 
 Installeren: via de Marketplace bijwerken en herstarten.

@@ -35379,3 +35379,16 @@ Met 4 punten minder rendement dan het plan denkt (rondrit 80 %) blijft zonder ma
 - De verkoopmarge is een instelling (`verkoop_min_winst_ct`); die staat sinds 10-11 op 0 (was 2).
 
 Tests: `test_v5205_marges_nul.py` (3); `test_v5183_bewaarmarge.py` aangepast aan de nieuwe waarden.
+
+## v5.206.0 — douchebeurt herkennen aan de ketel tijdens het tappen
+
+Ruud 10-11 14:35: "misschien alleen de herkenning van een douchebeurt optimaliseren?"
+
+Gemeten 01-11 t/m 10-11 (5-minutenstatistiek van watermeter, gasmeter en de stekker van de CV-ketel): zes tot zeven douchebeurten van 45-140 liter met de ketel op ~170 W en 0,18-0,72 m³ gas (03-11 18:50 en 19:45, 05-11 18:35 en 19:15, 08-11 10:25 en 18:45). Het douche-overzicht had er over 30 dagen vier, waarvan drie kranen van 4,8, 10,8 en 8,7 liter.
+
+- **Oorzaak:** `classify_water_session` las het vermogen van de ketel bij het afsluiten van de sessie, twee minuten na het laatste water. De ketel staat dan weer op 6 W: "geen apparaat actief". Nu houdt `_water_bronnen_bijhouden` tijdens de sessie het hoogste vermogen van ketel en Quooker bij en telt dat mee.
+- **Minstens 20 liter** (`WATER_SHOWER_MIN_LITERS`): een kraan van een paar liter die langer dan drie minuten loopt met de ketel aan is "warm water kort", geen douche.
+
+Oude beurten worden niet opnieuw ingedeeld; het overzicht vult zich vanaf de installatie.
+
+Tests: `test_v5206_douche_herkennen.py` (4).

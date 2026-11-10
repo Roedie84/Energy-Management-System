@@ -657,6 +657,7 @@ VLUCHTIG_MET_REDEN = {
     "_efficiency_cumulative_charged_kwh": "oude methode, vervalt",
     "_efficiency_cumulative_discharged_kwh": "oude methode, vervalt",
     "_water_session_liters_integrated": "halve tapsessie",
+    "_water_session_bron_max": "halve tapsessie (v5.206.0)",
     # v1.61.0: de metingen van een lopende cyclus. Een halve cyclus
     # terugzetten zou een verkeerd kWh-getal opleveren; de UITKOMST
     # (`appliance_cycle_kwh`) wordt wel bewaard.
