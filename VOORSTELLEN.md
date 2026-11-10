@@ -551,3 +551,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: kalibratie uit 08-11 16:02:22 zonder gebruiker (EMS); last_successful_update bleef 16:01; status 'Mogelijk vastgelopen' 16:16 - 05:23; uitleg, gacs en reserve-sensoren schreven niets meer, de 30-s waterlus wel.
 - Bouw: `_kalibratie_zelf_uit` zet alleen de velden en plant de opslag als losse taak; geen `async_update` vanuit de ronde.
 - Meten: na de volgende kalibratie geen 'Mogelijk vastgelopen', melding 'Kalibratie afgerond' in meldingen_historie.
+
+## L-EMS-077 · tekortnacht na v5.198.0: 'capaciteit' of 'stuurfout' terwijl er met winst verkocht werd (rapportage)
+- Status: **gebouwd v5.203.1**, 10-11; suite 7557 groen, `test_v5203_1_winst_zonder_verkoopvloer.py` (6). Gepusht vanuit de chat (de geplande taak kreeg 403).
+- Onderbouwing: nacht naar 10-11 verkocht 15:45-19:15 3,5 kWh netto tegen gem. 78,3 ct, leeg 19:45, tekort 0,54 kWh; het waardeplan laadde 's nachts vol (05:45 97 %). Live (`_volg_vol_en_verkoop`) en herleiding (`_deel_nacht_in_met_reden`) namen dat laatste volle moment → 'capaciteit, daarna niets verkocht'. Met het juiste vol-moment gaf de v5.61-regel 'het huis gaat voor: stuurfout', terwijl de huisreserve sinds v5.198.0 geen verkoopvloer meer is.
+- Bouw: vol telt alleen vóór het eerste tekortkwartier; live wist een volle accu de verkoopteller niet zolang er die nacht een tekort loopt; met `WAARDEPLAN_VERKOOPVLOER_RESERVE` uit is winst (verkoop > terugkoop) 'verkocht met winst', verlies blijft planning.
+- Verwacht effect: geen valse LET OP / 'had genoeg moeten hebben' na verkoopavonden. Euro-effect op de sturing 0 (marge telt de soorten gelijk).
+- Meten: nachten na installatie met avondverkoop en tekort → soort verkocht_met_winst of planning (bij verlies), nooit capaciteit als er na vol > 0,25 kWh verkocht is.

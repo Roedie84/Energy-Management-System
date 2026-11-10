@@ -1135,4 +1135,16 @@ laatste ronde: 08-11 09:15 (herleid 09:25), gemeten t/m 08-11 09:00
 - Economische schaduw: 3 dagregels, 0 volledig (herstart 07-11, kalibratie + vastloper 08-11) → evaluatie schuift op. Stilstand: 8 wachten, 0 doen.
 - Niet gemeten: PV/verbruik per uur, SoC-voorspelling, MC-Brier (nacht nog niet af), NILM.
 
-laatste ronde: 09-11 07:40, gemeten t/m 09-11 07:30
+
+## 10-11 06:45 · dagcontrole (09-11 07:30 t/m 10-11 06:45; geïnstalleerd v5.203.0)
+- Achteraf (LP, 93 kwartieren, symmetrische prijs, rendement 84,1/100, slijtage 2 ct, eind-SoC = werkelijk 99 %): werkelijk € 3,42, optimum € 3,25 → **gemist € 0,17** (prijs−EB € 0,18; slijtage 4,22 ct € 0,17). 0 FOUT, 0 PECH: verschil is spreiding van nachtladen over gelijke prijzen (39,7-42 ct) en 0,3 kWh verkocht om 15:45 (63,4 ct) die om 19:30 (65,9 ct) iets meer waard was (€ 0,01; bewaarmarge 5 ct, bewust tot de schaduw-evaluatie).
+- Eerste dag na v5.198.0: 15:45-19:15 3,51 kWh verkocht tegen gem. 79,8 ct, accu 19:45 leeg, huis daarna 3,05 kWh van het net tegen 49,6 ct, 's nachts 8,98 kWh geladen tegen 40,4 ct. Onder de oude huisreserve (7,78 kWh) was er niets verkocht: loslaten leverde ≈ € 1,06 op (3,51 × (79,8 − 49,6)).
+- Gevonden + gebouwd: v5.203.1 (in de chat gepusht 10-11): de nacht naar 10-11 zou om 09:00 'capaciteit: vol geweest, daarna niets verkocht' heten (vol 05:45 na het nachtladen wist de avondverkoop), en met de oude regel 'het huis gaat voor: stuurfout'. Replay echt dagverloop: nieuw 'verkocht met winst, 3,5 kWh gem. 78,3 ct, tekort 52,5 ct, ~€ 0,90'. Alleen indeling/meldingen; marge telt planning/capaciteit/winst gelijk. → L-EMS-077.
+- PV 09-11 6,39 kWh tegen Solcast 00:00 6,82 (−6,3 %); 40 d MAE 18,7 % (was 17,5), bias −14,2 % (was −12,9) → H-EMS-2 (klein en stabiel) geldt niet meer: bias loopt op, vooral november (sterkste uurcorrectie 16 u × 0,47).
+- MC 22:00 (09-11) 100 %, tekort kwam (0,54 kWh 22-09 t/m 06:45): goed. Brier 0,175 over 14 avonden.
+- H-EMS-20 afgerond: nachten naar 5-8 nov staan nu economisch (v5.197.1); alleen 4 nov planning (valt 11-11 uit de 7 dagen).
+- Economische schaduw: 4 dagregels, 0 volledig (09-11 75/96: vastloper tot 05:15). 10-11 tot nu 27/27. Stilstand: 9 wachten, 0 doen; airco-besluit rekent (dagritme 90 %, knop uit).
+- Module 1 (AB3000 01029): Ruud 10-11 "samen in de gaten houden". Nulmeting celverschil 100 % 0,09 V (anderen 0,02/0,01), 0 % 0,04 V (0,01), 20-90 % gelijk, laagste cel gelijk. Temperatuur is de plek (bekend). Drempels in de dagcontrole. → H-EMS-21.
+- Niet gemeten: kwartierfout 0-1 u (v5.196/197; geen bewaarde kwartiervoorspellingen in de recorder), SoC-voorspelling, NILM, nacht 22-09 compleet (loopt tot 09:00).
+
+laatste ronde: 10-11 06:45, gemeten t/m 10-11 06:45
