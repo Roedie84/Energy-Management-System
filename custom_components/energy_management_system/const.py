@@ -8322,6 +8322,23 @@ FIETS_OVERSCHOT_HOUD_MINUTEN = 20
 # --- v5.121.0: P1-doel 2027 (punt 3) -----------------------------------------
 #: Zoveel meldingen van (regel - echt) voor de mediaan van de templateverschuiving.
 P1_VERSCHIL_MONSTERS = 300
+
+# v5.209.0 (akkoord Ruud 10-11 16:45): versterkingsfactor op "P1 regeldoel"
+# bij GROTE afwijkingen. Gemeten 10-11 16:20-16:41: na een lastsprong van
+# ~2 kW corrigeert de accu ongeveer twee keer de gemeten afwijking en pendelt
+# dan minutenlang (periode 30 s, +/-900 W bij constant verbruik). Geen filter
+# in de tijd (dat was de demping van v5.154, te traag): boven
+# P1_REGELDOEL_FACTOR_VANAF_W krijgt de Zendure alleen het deel `factor` van
+# wat erboven zit. Kleine afwijkingen gaan onveranderd door. 1,0 = uit.
+CONF_P1_REGELDOEL_FACTOR = "p1_regeldoel_factor"
+DEFAULT_P1_REGELDOEL_FACTOR = 1.0
+P1_REGELDOEL_FACTOR_MIN = 0.3
+P1_REGELDOEL_FACTOR_VANAF_W = 150.0
+#: Pendelenergie (diagnose): per blok van zoveel seconden telt wat in dat
+#: blok zowel werd afgenomen als teruggeleverd (2 x het kleinste van de twee).
+P1_PENDEL_ENERGIE_BLOK_S = 60
+#: Een gat tussen twee metingen telt hooguit zo lang mee.
+P1_PENDEL_ENERGIE_MAX_GAT_S = 30
 #: v5.131.1 (H-EMS-14): een regelverschuiving boven deze waarde is geen bewuste
 #: verschuiving (+10..50 W) maar twee sensoren die uit de pas lopen (live 26-10
 #: 15:00:25, herstart: 1462/1497 W x 20 u = reserve 76-79 kWh in een accu van

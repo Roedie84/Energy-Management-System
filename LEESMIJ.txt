@@ -1,3 +1,10 @@
+EMS v5.209.0 - accu schiet minder door na een grote lastsprong
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Nieuwe instelling "P1 regeldoel: deel van een grote afwijking". Staat standaard uit (1). Lager (bijv. 0,5): boven 150 W afwijking krijgt de accu maar een deel door, zodat hij na een sprong van de oven of kookplaat niet meer doorschiet en gaat pendelen. Kleine afwijkingen blijven zoals ze waren: nul op de meter blijft even snel.
+- De sensor "P1 regeldoel" toont nu de pendelenergie van vandaag en gisteren (Wh die binnen dezelfde minuut heen en terug ging), om te zien of het helpt.
+
 EMS v5.208.0 - koken en de airco: het EMS blijft meesturen
 
 Installeren: via de Marketplace bijwerken en herstarten.

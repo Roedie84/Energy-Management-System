@@ -113,6 +113,12 @@ from .const import (
     HERSPEEL_DAGEN,
     HERSPEEL_VERSIES,
     P1_VERSCHIL_MONSTERS,
+    CONF_P1_REGELDOEL_FACTOR,
+    DEFAULT_P1_REGELDOEL_FACTOR,
+    P1_REGELDOEL_FACTOR_MIN,
+    P1_REGELDOEL_FACTOR_VANAF_W,
+    P1_PENDEL_ENERGIE_BLOK_S,
+    P1_PENDEL_ENERGIE_MAX_GAT_S,
     PENDEL_LOS_S,
     PENDEL_MIN_WISSELS,
     PENDEL_RUIS_W,
@@ -47882,8 +47888,21 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             waarde = regel_w
         else:
             waarde = regel_w - verschuiving - P1_DOEL_2027_W
+        # v5.209.0: grote afwijkingen maar voor een deel doorgeven (de accu
+        # schiet anders door); kleine onveranderd.
+        ongedempt = waarde
+        factor = self._p1_regeldoel_factor()
+        if waarde is not None and factor < 1.0 and abs(waarde) > P1_REGELDOEL_FACTOR_VANAF_W:
+            teken = 1.0 if waarde > 0 else -1.0
+            waarde = teken * (
+                P1_REGELDOEL_FACTOR_VANAF_W + (abs(waarde) - P1_REGELDOEL_FACTOR_VANAF_W) * factor
+            )
+        pendel_energie = self._p1_pendel_energie(echt_w, now)
         return {
             "waarde_w": round(waarde, 1) if waarde is not None else None,
+            "factor": factor,
+            "ongedempt_w": round(ongedempt, 1) if ongedempt is not None else None,
+            **pendel_energie,
             "pendel": pendel,
             "modus": "spiegel van de regelsensor (salderen)" if salderen else f"2027: doel {P1_DOEL_2027_W:.0f} W op de meter",
             "template_verschuiving_w": round(verschuiving, 1),
@@ -47891,6 +47910,46 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "monsters": len(monsters),
             "terugval": "ruwe P1-meter + verschuiving (regelsensor onbeschikbaar)" if terugval else None,
         }
+
+    def _p1_regeldoel_factor(self) -> float:
+        """De versterkingsfactor voor grote afwijkingen (v5.209.0); 1,0 = uit."""
+        try:
+            factor = float(self.instelling(CONF_P1_REGELDOEL_FACTOR, DEFAULT_P1_REGELDOEL_FACTOR))
+        except (TypeError, ValueError):
+            return DEFAULT_P1_REGELDOEL_FACTOR
+        return min(1.0, max(P1_REGELDOEL_FACTOR_MIN, factor))
+
+    _p1_pendel_energie_staat: dict | None = None
+
+    def _p1_pendel_energie(self, echt_w: float | None, now: datetime) -> dict:
+        """Pendelenergie op de echte meter (v5.209.0, diagnose).
+
+        Per blok van P1_PENDEL_ENERGIE_BLOK_S: wat in dat blok zowel werd
+        afgenomen als teruggeleverd (2 x het kleinste van de twee). Een dag
+        zon of een avond afname telt dus niet; heen en weer binnen een
+        minuut wel. Vandaag en gisteren, in Wh. Niet bewaard over een herstart.
+        """
+        s = self._p1_pendel_energie_staat
+        dag = now.date().isoformat()
+        if s is None:
+            s = {"t": None, "w": None, "blok": None, "imp": 0.0, "exp": 0.0,
+                 "dag": dag, "vandaag": 0.0, "gisteren": None}
+            self._p1_pendel_energie_staat = s
+        blok = int(now.timestamp() // P1_PENDEL_ENERGIE_BLOK_S)
+        if s["t"] is not None and s["w"] is not None:
+            dt_s = min(max((now - s["t"]).total_seconds(), 0.0), P1_PENDEL_ENERGIE_MAX_GAT_S)
+            wh = s["w"] * dt_s / 3600
+            if wh >= 0:
+                s["imp"] += wh
+            else:
+                s["exp"] -= wh
+        if s["blok"] is not None and blok != s["blok"]:
+            s["vandaag"] += 2 * min(s["imp"], s["exp"])
+            s["imp"] = s["exp"] = 0.0
+        if dag != s["dag"]:
+            s["gisteren"], s["vandaag"], s["dag"] = round(s["vandaag"], 1), 0.0, dag
+        s["blok"], s["t"], s["w"] = blok, now, echt_w
+        return {"pendel_wh_vandaag": round(s["vandaag"], 1), "pendel_wh_gisteren": s["gisteren"]}
 
     _p1_pendel_staat: dict | None = None
 

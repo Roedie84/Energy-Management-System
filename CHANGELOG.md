@@ -35417,3 +35417,12 @@ Gemeld 10-11 (Ruud): de oven ging aan en de airco zakte van 21,5 naar 19,5 (auto
 - Zonder de optie verandert er niets.
 
 Tests: `test_v5208_airco_eigen_automatisering.py`.
+
+## v5.209.0 — versterkingsfactor op "P1 regeldoel" tegen doorschieten, pendelenergie als meetlat
+
+Gemeld 10-11 16:41 (Ruud): "Ik vind de accusturing net wat oscilleren." Gemeten (P1 en accuvermogen per 5 s, 16:20-16:41): bij constant huisverbruik pendelde de accu +/-900 W met een periode van 30 s en doofde pas na zes minuten uit; bij ~2 kW bleef +/-200 W staan. Na een grote lastsprong (oven, ~2 kW per minuut aan/uit) corrigeert de accu ongeveer twee keer de gemeten afwijking. Op 6 en 9 november, met kleine sprongen, lag de meter binnen 2-8 W van nul.
+
+- Nieuwe optie `p1_regeldoel_factor` (0,3-1,0; standaard 1,0 = uit). Boven 150 W afwijking krijgt de Zendure 150 W plus `factor` x het meerdere; daaronder de momentwaarde. Geen filter in de tijd (de demping van v5.154 blijft weg): een aanhoudende last komt elke meting door.
+- Attributen op "P1 regeldoel": `factor`, `ongedempt_w`, `pendel_wh_vandaag`, `pendel_wh_gisteren`. Pendelenergie = per minuut 2 x het kleinste van afname en teruglevering op de echte meter; gewone afname of teruglevering telt niet. Niet bewaard over een herstart.
+
+Tests: `test_v5209_p1_regeldoel_factor.py`.
