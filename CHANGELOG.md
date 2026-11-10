@@ -35355,3 +35355,27 @@ De -14,2 % is Solcast zelf (zonder de eigen correctie) over 40 dagen, en dus voo
 - Cockpit, Vooruitblik (Ruud 10-11 07:32: "1.6 kW in de planning, 1.27 kW gepland, 1.28 kW gemeten"): het blok 07:30-09:45 toonde het gemiddelde van kwartieren met 1,2 en 2,0 kW. Wisselt het vermogen binnen een blok, dan staat er nu het bereik ("ontlaadt 1,2–2,0 kW"), zodat het kwartier van nu er altijd binnen valt.
 
 Tests: `test_v5204_pv_plan_kwaliteit.py` (5).
+
+## v5.205.0 — bewaarmarge en bewaarkost op 0
+
+Ruud 10-11 13:34: "economisch het beste doen voor mij", na een doorrekening van 31-10 t/m 09-11 (projectdocument `claude/ems-analyse-10-11.md`).
+
+Methode: kwartiertellers uit de recorder (960 kwartieren, geen gaten; 09-11 inkoop € 3,50 en teruglevering € 3,16 tegen Zonneplan € 3,48 en € 3,14), geld zoals het plan rekent (marginale prijs zonder belastingdeel, teruglevering + 2 ct, slijtage 4,22 ct). `waardeplan.plan()` van v5.204 elk kwartier opnieuw met de prijskennis van dat moment en een simpele verwachting (verbruik: zelfde kwartier van de 3 dagen ervoor; zon: gisteren), uitgevoerd op het echte verbruik en de echte zon.
+
+| 10 dagen | kosten |
+|---|---|
+| zonder accu | € 27,22 |
+| werkelijk (regels van toen, incl. kalibratiedag 08-11) | € 24,76 |
+| v5.204 nagespeeld, bewaarmarge 5 ct, verkoopmarge 2 ct | € 22,18 |
+| bewaarmarge 2 ct | € 21,62 |
+| bewaarmarge en bewaarkost 0 | € 21,39 |
+| verkoopmarge 0 | € 21,44 |
+| alle drie 0 | € 20,97 |
+| perfect achteraf (MILP) | € 20,14 |
+
+Met 4 punten minder rendement dan het plan denkt (rondrit 80 %) blijft zonder marges € 0,87 per 10 dagen beter. De doorzet stijgt van 72 naar 94 kWh per 10 dagen uit de accu (werkelijk 42); de slijtage zit in de bedragen.
+
+- `WAARDEPLAN_BEWAARMARGE_EUR` 0,05 → 0 en `WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR` 0,002 → 0. De regel zelf (`te_duur_bewaard`, de marge in het plan) blijft in de code. De economische schaduw (C2/C0) loopt door; C0 is nu gelijk aan productie.
+- De verkoopmarge is een instelling (`verkoop_min_winst_ct`); die staat sinds 10-11 op 0 (was 2).
+
+Tests: `test_v5205_marges_nul.py` (3); `test_v5183_bewaarmarge.py` aangepast aan de nieuwe waarden.

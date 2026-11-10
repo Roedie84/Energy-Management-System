@@ -60,8 +60,9 @@ def test_te_duur_bewaard_regel():
 
 def test_sturing_en_constanten():
     from custom_components.energy_management_system import const as C
-    assert C.WAARDEPLAN_BEWAARMARGE_EUR == 0.05
-    assert C.WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR == 0.002
+    # v5.205.0 (Ruud 10-11): allebei 0; de regel zelf blijft (toetsen hierboven).
+    assert C.WAARDEPLAN_BEWAARMARGE_EUR == 0.0
+    assert C.WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR == 0.0
     code = (Path(pkg.__file__).parent / "waardeplan_sturing.py").read_text(encoding="utf-8")
     assert "bewaarmarge_eur=WAARDEPLAN_BEWAARMARGE_EUR" in code
 

@@ -1,3 +1,11 @@
+EMS v5.205.0 - bewaarmarge en bewaarkost op 0
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De accu bewaart lading voortaan ook voor een klein prijsverschil later (was: alleen bij minstens 5 ct voordeel). Nagespeeld op 31-10 t/m 09-11 scheelt dat samen met de verkoopmarge op 0 ongeveer EUR 1,20 per 10 dagen.
+- De verkoopmarge (instelling) staat op 0 ct (was 2).
+- De accu gaat hierdoor meer laden en ontladen; de slijtage is in de berekening meegenomen.
+
 EMS v5.204.0 - zonvoorspelling: meten wat het plan gebruikt
 
 Installeren: via de Marketplace bijwerken en herstarten.

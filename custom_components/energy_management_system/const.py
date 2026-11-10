@@ -7707,10 +7707,15 @@ WAARDEPLAN_HUIS_EERST = False
 WAARDEPLAN_VERKOOPVLOER_RESERVE = False
 #: v5.183.0 (akkoord Ruud 04-11 14:04, punt 1): bewaren terwijl het huis op het
 #: net draait alleen bij minstens 5 ct/kWh voordeel later.
-WAARDEPLAN_BEWAARMARGE_EUR = 0.05
+#: v5.205.0 (Ruud 10-11 13:34: "economisch het beste doen voor mij"): 0. Naspelen
+#: van v5.204 op 31-10 t/m 09-11 (kwartiertellers, marginale prijs, slijtage):
+#: 5 ct EUR 22,18, 2 ct EUR 21,62, 0 ct (met bewaarkost 0) EUR 21,39 per 10
+#: dagen; ook met 4 punten minder rendement dan het plan denkt blijft 0 beter.
+WAARDEPLAN_BEWAARMARGE_EUR = 0.0
 #: v5.183.0 (punt 2): onzekerheid vooruit, 0,2 ct per kWh inhoud per uur
 #: (~5 ct per dag): bij een gelijkspel gaat de lading nu naar het huis.
-WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR = 0.002
+#: v5.205.0: 0, samen met de bewaarmarge (zie daar).
+WAARDEPLAN_BEWAARKOST_EUR_PER_KWH_UUR = 0.0
 # v5.177.0 (A5): zo lang (minuten) zonder waardeplan wordt een aandachtspunt.
 WAARDEPLAN_WEG_AANDACHT_MINUTEN = 30
 # v5.177.0 (A10): zoveel uur na de horizon telt de prijsverwachting voor de
