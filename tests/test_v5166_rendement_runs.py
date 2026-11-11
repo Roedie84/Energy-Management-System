@@ -142,9 +142,12 @@ def test_uitvoer_structuur_ongewijzigd():
     for richting in uit.values():
         assert tuple(richting) == A.BAND_NAMEN
         for band in richting.values():
-            assert set(band) == {"kwartieren", "kwh", "rendement_procent", "betrouwbaar"}
+            # v5.212.0: rondes en onzekerheid erbij (alleen meten)
+            assert set(band) == {"kwartieren", "kwh", "rendement_procent", "betrouwbaar",
+                                 "rondes", "onzekerheid_procentpunt"}
     assert A.rendement_per_band([]) == {
-        r: {n: {"kwartieren": 0, "kwh": 0.0, "rendement_procent": None, "betrouwbaar": False}
+        r: {n: {"kwartieren": 0, "kwh": 0.0, "rendement_procent": None, "betrouwbaar": False,
+                "rondes": 0, "onzekerheid_procentpunt": None}
             for n in A.BAND_NAMEN} for r in ("laden", "ontladen")}
 
 

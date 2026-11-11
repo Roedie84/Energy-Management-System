@@ -810,14 +810,17 @@ def rendement_per_band(reeks: list[dict]) -> dict:
     van de meegetelde rondes, zodat de betrouwbaarheidseisen gelijk blijven.
     """
     som = {(r, b): [0, 0.0, 0.0] for r in ("laden", "ontladen") for b in range(len(BAND_NAMEN))}
+    per_ronde: dict = {sleutel: [] for sleutel in som}
     for r in laad_ontlaadrondes(reeks):
         meting = _ronde_meting(r)
         if meting is None:
             continue
-        t = som[(r["richting"], _band(r["ac_kwh"] / (r["kwartieren"] / 4)))]
+        sleutel = (r["richting"], _band(r["ac_kwh"] / (r["kwartieren"] / 4)))
+        t = som[sleutel]
         t[0] += r["kwartieren"]
         t[1] += meting[0]
         t[2] += meting[1]
+        per_ronde[sleutel].append(meting)
     uit: dict = {"laden": {}, "ontladen": {}}
     for (richting, b), (n, teller, noemer) in som.items():
         eta = min(rendement_max(richting), teller / noemer) if noemer > 0 else None
@@ -826,8 +829,27 @@ def rendement_per_band(reeks: list[dict]) -> dict:
             "kwh": round(noemer, 2),
             "rendement_procent": round(eta * 100, 1) if eta is not None else None,
             "betrouwbaar": n >= BAND_MIN_KWARTIEREN and noemer >= BAND_MIN_KWH and eta is not None,
+            # v5.212.0 (Ruud 11-11, punt 3): op hoeveel rondes rust dit getal en
+            # hoe zeker is het? Alleen meten; het plan gebruikt het nog niet.
+            "rondes": len(per_ronde[(richting, b)]),
+            "onzekerheid_procentpunt": _band_onzekerheid(per_ronde[(richting, b)]),
         }
     return uit
+
+
+def _band_onzekerheid(metingen: list) -> float | None:
+    """Standaardfout (procentpunt) van teller/noemer over de rondes (v5.212.0).
+
+    De verhoudingsschatter: elke ronde weegt met zijn noemer; de fout volgt
+    uit hoe ver de rondes onderling uiteen liggen. None onder drie rondes.
+    """
+    k = len(metingen)
+    noemer = sum(m[1] for m in metingen)
+    if k < 3 or noemer <= 0:
+        return None
+    eta = sum(m[0] for m in metingen) / noemer
+    kwadraat = sum((m[0] - eta * m[1]) ** 2 for m in metingen)
+    return round((k / (k - 1) * kwadraat) ** 0.5 / noemer * 100, 1)
 
 
 def laadrendement_uit_banden(banden: dict | None) -> float | None:

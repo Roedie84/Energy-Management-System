@@ -8053,6 +8053,15 @@ VANGNET_RONDES_ZONDER_BESLUIT = 3
 # bijstellen; een andere stand alleen als die naar schatting zoveel euro
 # (rest van het kwartier) beter is, of de veiligheid erom vraagt.
 WAARDEPLAN_MIDKWARTIER_WISSEL_EUR = 0.05
+# v5.212.0 (Ruud 11-11 11:14, akkoord): de live toets. Het plan kiest
+# 'houden' of 'huis' op het VERWACHTE verbruik van het kwartier. Wijkt het
+# echte verbruik af (11-11 11:03: 0,9 kW verwacht, 1,7-2,2 kW gemeten, accu
+# hield vast bij 1,3 kW afname), dan vergelijkt het EMS elke ronde wat dekken
+# bij het GEMETEN vermogen oplevert met wat het plan de inhoud waard vindt.
+# Wisselen als dat de rest van het kwartier minstens zoveel euro scheelt en de
+# afwijking zoveel seconden aanhoudt; hooguit een wissel per kwartier.
+WAARDEPLAN_LIVE_WISSEL_EUR = 0.005
+WAARDEPLAN_LIVE_WISSEL_SECONDEN = 120
 # B12: wijkt het zonoverschot zoveel af van het geplande laadvermogen bij
 # zon_export (fractie), dan eens per kwartier opnieuw plannen.
 WAARDEPLAN_ZON_AFWIJKING_FRACTIE = 0.5

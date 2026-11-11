@@ -35447,3 +35447,16 @@ Ruud 11-11 10:18: "Aanzetten". Na installatie van v5.210.0 gaf de terugtoets ove
 - `plan.snellere_correctie` op "Zonvoorspelling ijking" blijft meelopen ("nu" = zonder, "snel" = met; `stuurt: true`). Uit te zetten met `PV_SNELLE_CORRECTIE_AAN`.
 
 Tests: `test_v5211_pv_snelle_correctie.py` (9).
+
+## v5.212.0 — live toets: houden of dekken op het gemeten verbruik; onzekerheid per rendementsband
+
+Ruud 11-11 11:08 ("Is leveren aan woning niet voordeliger?") en 11:14 (drie punten akkoord, "het EMS moet immers perfect worden").
+
+Gemeten 11-11 11:03-11:15: het plan rekende dit uur met 0,9 kW verbruik (tekort na zon 0,47 kW, de band onder 500 W met 99 % ontlaadrendement) en koos 'houden'. Het huis gebruikte 1,0-2,2 kW; er kwam 1,3-1,6 kW uit het net tegen 57,3 ct terwijl dekken bij dat vermogen (band 500-1500 W, 106 %) ~4 ct per kWh inhoud meer waard was dan bewaren (dekwaarde 0,473 tegen inhoudswaarde 0,431 EUR/kWh). Het plan herrekent midden in een kwartier alleen als de accu-inhoud afwijkt; in 'houden' gebeurt dat niet. De wisselregel van v5.186.0 (B11) vraagt bovendien 5 ct voordeel in de rest van het kwartier.
+
+- **Live toets** (`_live_toets`, `waardeplan_sturing.py`): elke ronde, alleen voor de standen 'houden' en 'huis'. Dekwaarde = rekenprijs x ontlaadrendement van de band van het GEMETEN tekort - slijtage, tegen `waarde_inhoud_eur_per_kwh` van het plan. Scheelt dat in de rest van het kwartier minstens `WAARDEPLAN_LIVE_WISSEL_EUR` (0,005) en houdt het `WAARDEPLAN_LIVE_WISSEL_SECONDEN` (120) aan, dan wisselt de stand voor de rest van het kwartier. Hooguit een wissel per kwartier; een lege accu gaat niet dekken; laden, verkopen en terugleveren blijven van het plan. De wisselregel B11 (herplanning) is ongewijzigd en rekent met de stand van het plan.
+- Zichtbaar: `waardeplan.live_toets` (tekort, dekwaarde, inhoudswaarde, voordeel, gewisseld) en in `herplanningen`: `live_wissel` (aantal vandaag) en `live_wissel_eur` (geschat voordeel).
+- **Rendementsbanden** (`accukosten.rendement_per_band`): per band `rondes` en `onzekerheid_procentpunt` (standaardfout van de verhoudingsschatter over de rondes). Alleen meten. Stand 11-11: ontladen <500 W 99,0 % (1018 kw, 101 kWh), 500-1500 W 106,1 % (249 kw, 50 kWh), >1500 W 101,8 % (49 kw, 20 kWh - net boven de grens van 40 kw).
+- Nagerekend met de echte planner: het plan van 11:07 (verkopen 12:30 tegen 57,7 ct, huis op het net om 16:00 tegen 59,6 ct) was binnen deze banden consistent - geen fout.
+
+Tests: `test_v5212_live_toets.py` (12), `test_v5212_band_onzekerheid.py` (4).

@@ -39,6 +39,8 @@ from .const import (
     WAARDEPLAN_HERREKEN_AFWIJKING_KWH,
     WAARDEPLAN_INHAAL_FACTOR,
     WAARDEPLAN_MIDKWARTIER_WISSEL_EUR,
+    WAARDEPLAN_LIVE_WISSEL_EUR,
+    WAARDEPLAN_LIVE_WISSEL_SECONDEN,
     WAARDEPLAN_ZON_AFWIJKING_FRACTIE,
     WAARDEPLAN_HORIZON_UUR,
     WAARDEPLAN_LIVE_AFWIJKING_KWH,
@@ -995,6 +997,10 @@ class WaardeplanSturingMixin:
         if not plan.get("beschikbaar"):
             return False
         actie, charge_power, discharge_power, uitvoerplan = self._waardeplan_kies(now, plan)
+        plan_actie = actie
+        if charge_power is None and discharge_power is None:
+            # v5.212.0: houden/huis getoetst aan het gemeten verbruik.
+            actie = self._live_toets(now, plan, uitvoerplan, actie)
         plan["uitgevoerd"] = actie
         # v5.181.1 (punten 1 en 2): wat er naar de accu gaat (W, + ontladen,
         # - laden; 0 bij terugleveren), en of het er wel heen gaat.
@@ -1011,7 +1017,8 @@ class WaardeplanSturingMixin:
             plan["opdracht_w"] = None
             if not plan["niet_gestuurd"]:
                 plan["niet_gestuurd"] = getattr(self, "laatste_schrijfuitkomst", None) or "schrijven mislukt"
-        self._kwartier_uitvoering = {"kwartier": self._kwartier_sleutel(now), "plan": uitvoerplan, "actie": actie}
+        # v5.212.0: de stand van het PLAN onthouden; de live toets komt er elke ronde overheen.
+        self._kwartier_uitvoering = {"kwartier": self._kwartier_sleutel(now), "plan": uitvoerplan, "actie": plan_actie}
         plan["herplanningen"] = {k: v for k, v in (self.waardeplan_herplanningen or {}).items()
                                  if not k.startswith("_")}
         self.last_waardeplan = plan
@@ -1048,6 +1055,103 @@ class WaardeplanSturingMixin:
             else:
                 self.last_reason = "waardeplan_houden"
         return gelukt is not False
+
+    # --- v5.212.0: live toets op het gemeten verbruik -----------------------
+
+    _live_wissel: dict | None = None
+    _live_toets_sinds: tuple | None = None
+
+    def _live_dekwaarde(self, plan: dict, nu: dict, tekort_w: float) -> tuple | None:
+        """(waarde per kWh inhoud, rendement) van het huis dekken bij dit
+        gemeten vermogen: rekenprijs x ontlaadrendement van de band - slijtage."""
+        prijs = nu.get("rekenprijs_eur")
+        if prijs is None:
+            prijs = nu.get("prijs_eur")
+        if prijs is None:
+            return None
+        terugval = (self.learned_discharge_efficiency_percent or 0) / 100 or None
+        if terugval is None:
+            rondrit = (self.learned_battery_efficiency_percent or 0) / 100
+            terugval = rondrit ** 0.5 if rondrit else None
+        eta = None
+        for band in plan.get("ontlaadbanden") or ():
+            tot = band.get("tot_w")
+            if tot is None or tekort_w < float(tot):
+                if band.get("rendement_procent"):
+                    eta = float(band["rendement_procent"]) / 100
+                break
+        eta = eta or terugval
+        if not eta:
+            return None
+        return float(prijs) * eta - self._waardeplan_slijtage_ct() / 100, eta
+
+    def _live_toets(self, now: datetime, plan: dict, uitvoerplan: dict, actie: str) -> str:
+        """'houden' of 'huis' getoetst aan het gemeten verbruik (v5.212.0).
+
+        Het plan geeft de waarde van een kWh in de accu (`waarde_inhoud`);
+        hier wordt elke ronde vergeleken wat het huis dekken NU oplevert bij
+        het gemeten tekort (zon - huis). Is dat de rest van het kwartier
+        minstens WAARDEPLAN_LIVE_WISSEL_EUR beter dan de stand van het plan en
+        houdt het WAARDEPLAN_LIVE_WISSEL_SECONDEN aan, dan wisselt de stand
+        voor de rest van het kwartier. Hooguit een wissel per kwartier; andere
+        acties (laden, verkopen, terugleveren) blijven van het plan.
+        """
+        try:
+            if actie not in ("houden", "huis"):
+                self._live_toets_sinds = None
+                return actie
+            kwartier = self._kwartier_sleutel(now)
+            wissel = self._live_wissel
+            if wissel and wissel.get("kwartier") == kwartier:
+                naar = wissel["naar"]
+                if naar == "huis" and self._waardeplan_accu_leeg(now):
+                    naar = actie
+                plan["live_toets"] = {**wissel.get("toets", {}), "gewisseld": True, "stand": naar}
+                return naar
+            nu = (uitvoerplan or plan).get("nu") or {}
+            overschot = self._overschot_toestand().get("overschot_w")
+            if overschot is None:
+                return actie
+            tekort_w = -float(overschot)
+            grens_w = float(self.slimme_ontlaadgrens_w() or 2400.0)
+            lam = nu.get("waarde_inhoud_eur_per_kwh")
+            dek = self._live_dekwaarde(plan, nu, min(tekort_w, grens_w)) if tekort_w > 0 else None
+            rest_h = max(0.0, (kwartier + timedelta(minutes=15) - now.astimezone(timezone.utc)).total_seconds() / 3600)
+            toets = {"tekort_w": round(tekort_w), "stand_plan": actie, "gewisseld": False}
+            naar = None
+            if lam is not None and dek is not None and rest_h > 0:
+                waarde, eta = dek
+                kwh = min(tekort_w, grens_w) / 1000 * rest_h / eta
+                verschil = waarde - float(lam)
+                toets.update(dekwaarde_eur_per_kwh=round(waarde, 4), inhoudswaarde_eur_per_kwh=round(float(lam), 4),
+                             voordeel_eur=round(abs(verschil) * kwh, 4))
+                if abs(verschil) * kwh >= WAARDEPLAN_LIVE_WISSEL_EUR:
+                    if actie == "houden" and verschil > 0 and not self._waardeplan_accu_leeg(now):
+                        naar = "huis"
+                    elif actie == "huis" and verschil < 0:
+                        naar = "houden"
+            plan["live_toets"] = toets
+            if naar is None:
+                self._live_toets_sinds = None
+                return actie
+            sinds = self._live_toets_sinds
+            if not sinds or sinds[0] != kwartier or sinds[1] != naar:
+                self._live_toets_sinds = (kwartier, naar, now)
+                return actie
+            if (now - sinds[2]).total_seconds() < WAARDEPLAN_LIVE_WISSEL_SECONDEN:
+                return actie
+            toets.update(gewisseld=True, stand=naar, om=now.isoformat())
+            self._live_wissel = {"kwartier": kwartier, "naar": naar, "toets": dict(toets)}
+            self._live_toets_sinds = None
+            self._tel_herplanning(now, "live_wissel")
+            teller = self.waardeplan_herplanningen or {}
+            som = float(teller.get("_live_wissel_som") or 0.0) + toets["voordeel_eur"]
+            teller["_live_wissel_som"] = som
+            teller["live_wissel_eur"] = round(som, 4)
+            return naar
+        except Exception:  # noqa: BLE001 - de toets mag de sturing nooit breken
+            _LOGGER.debug("Live toets mislukt; de stand van het plan geldt", exc_info=True)
+            return actie
 
     # --- v5.186.0 (B11/B12): niet wisselen midden in het kwartier ------------
 

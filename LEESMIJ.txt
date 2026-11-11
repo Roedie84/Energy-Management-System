@@ -1,3 +1,11 @@
+EMS v5.212.0 - de accu springt bij als het huis onverwacht veel verbruikt
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het plan kiest per kwartier "vasthouden" of "huis dekken" op het verwachte verbruik. Gebruikt het huis in werkelijkheid veel meer (of veel minder) dan verwacht, dan rekent het EMS nu elke ronde na wat dekken bij het gemeten verbruik oplevert. Is dat twee minuten lang beter dan de stand van het plan, dan wisselt de accu voor de rest van het kwartier. Hooguit een wissel per kwartier.
+- Bij de waardeplan-gegevens staat hoe vaak dat vandaag gebeurde en wat het naar schatting opleverde.
+- Bij het rendement per vermogensband staat nu op hoeveel laad-/ontlaadrondes het getal rust en hoe zeker het is.
+
 EMS v5.211.0 - zonvoorspelling stuurt sneller bij
 
 Installeren: via de Marketplace bijwerken en herstarten.
