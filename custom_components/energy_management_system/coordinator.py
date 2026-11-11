@@ -18387,26 +18387,22 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # --- 0. Eigen getallen tegen hun bron (v3.49.0) ---
         bevindingen.extend(self._spiegelbevindingen())
 
-        # --- 1. Zelfvoorziening moet volgen uit import en verbruik ---
+        # --- 1. Zelfvoorziening kan niet boven de eigen zon uitkomen ---
         verbruik = self.gross_consumption_today_kwh
         if verbruik > 1.0:
-            # v3.16.0: dezelfde formule als de sensor - netlading telt
-            # niet mee. Zonder dit meldt de zelfcontrole vanaf nu elke
-            # dag een fout die er niet is.
-            # v3.23.1: dezelfde begrenzing als de sensor - anders meldt
-            # de zelfcontrole vanaf nu elke dag een fout die er niet is.
-            netlading = self.grid_charge_today_kwh or 0.0
-            import_voor_huis = min(
-                verbruik,
-                max(0.0, self.grid_import_today_kwh - netlading),
-            )
-            verwacht = 100 * (1 - import_voor_huis / verbruik)
+            # v5.222.0: de sensor rekent met de eigen zon in huis gedeeld
+            # door het verbruik (zie `_zelfvoorziening_uit_zon`). De oude
+            # narekening (import min netlading) hoort bij de oude definitie
+            # en zou nu elke dag een fout melden die er niet is. Wat wel
+            # altijd moet gelden: tussen 0 en 100, en nooit meer dan wat de
+            # zon vandaag opwekte.
             gemeld = self.self_sufficiency_ratio_percent
             if gemeld is not None:
+                plafond = 100 * min(1.0, (self.pv_production_today_kwh or 0.0) / verbruik)
                 _toets(
                     "Zelfvoorziening",
-                    abs(gemeld - verwacht) < 0.5,
-                    f"Gemeld {gemeld:.1f}%, narekening {verwacht:.1f}%.",
+                    -0.01 <= gemeld <= plafond + 0.5,
+                    f"Gemeld {gemeld:.1f}%, hoogstens {plafond:.1f}% uit de zon van vandaag.",
                 )
 
         # --- 2. vervallen in v3.49.0 ---
@@ -18502,7 +18498,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
 
         # --- 6. Elke periode dezelfde waarde wijst op één bron ---
         try:
-            perioden = self.get_period_overview(nu).get("perioden") or {}
+            perioden = self.get_period_overview(nu, ruw=True).get("perioden") or {}
         except Exception:  # noqa: BLE001
             perioden = {}
         lang = [
@@ -30863,7 +30859,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         beide los, en wordt er nergens met een percentage omgerekend.
         """
         nu = now or dt_util.now()
-        perioden = (self.get_period_overview(nu) or {}).get("perioden") or {}
+        perioden = (self.get_period_overview(nu, ruw=True) or {}).get("perioden") or {}
         vandaag = perioden.get("vandaag") or {}
         belastingdeel = None
         if vandaag.get("import_kwh"):
@@ -30894,7 +30890,34 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             ),
         }
 
-    def get_period_overview(self, now: datetime | None = None) -> dict:
+    #: v5.222.0: perioden waarin een som over een deel van de dagen misleidt.
+    PERIODEN_LANG = ("jaar", "contractjaar")
+
+    @staticmethod
+    def _zonder_onvolledige_sommen(periode: dict) -> dict:
+        """Haal uit een lange periode de sommen die niet elke dag dekken (v5.222.0).
+
+        Op 11-11 stond bij het contractjaar EUR 92,62 inkoop over 48 van de
+        224 dagen, naast EUR 135,80 in de jaarafrekening. Zo'n som leest als
+        het jaartotaal en is het niet. De waarde wordt None; `onvolledig`
+        zegt hoeveel dagen er wel waren. Het gemiddelde per dag blijft (dat
+        deelt al door de dagen met een waarde).
+        """
+        dagen = periode.get("dagen") or 0
+        gevuld = periode.get("dagen_met_waarde") or {}
+        uit = dict(periode)
+        onvolledig = {}
+        for sleutel, aantal in gevuld.items():
+            if isinstance(aantal, int) and 0 < aantal < dagen and uit.get(sleutel) is not None:
+                uit[sleutel] = None
+                onvolledig[sleutel] = f"{aantal} van {dagen} dagen"
+        if onvolledig:
+            uit["onvolledig"] = onvolledig
+            if "besparing_eur" in onvolledig:
+                uit["besparing_rauw_eur"] = None
+        return uit
+
+    def get_period_overview(self, now: datetime | None = None, *, ruw: bool = False) -> dict:
         """Alle dagcijfers over dag, week, maand, jaar en contractjaar
         (v1.91.0).
 
@@ -31015,6 +31038,22 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 if met_tegenfeit
                 else None
             )
+            # v5.222.0: het hoofdgetal (met de verandering van de voorraad in
+            # de accu) als elke dag van de periode zo'n dagregel heeft. De
+            # rauwe som liet de voorraad weg: voor 4 t/m 10 november stond
+            # hier EUR 4,95 naast EUR 2,39 in de besparingssensor.
+            uitkomst["besparing_rauw_eur"] = uitkomst["besparing_eur"]
+            uitkomst["besparing_met_voorraad"] = False
+            if met_tegenfeit:
+                per_dag = {
+                    d.get("datum"): d.get("hoofdgetal_eur")
+                    for d in (getattr(self, "besparing_dagen", None) or [])
+                    if isinstance(d, dict)
+                }
+                waarden = [per_dag.get(r.get("datum")) for r in met_tegenfeit]
+                if all(isinstance(w, (int, float)) for w in waarden):
+                    uitkomst["besparing_eur"] = round(sum(waarden), 2)
+                    uitkomst["besparing_met_voorraad"] = True
             # v1.92.0: gemiddelde per dag. Gevraagd: "Worden de kosten en
             # het verbruik etc ook dag/week/maand/jaar meegenomen en
             # gemiddelden etc."
@@ -31096,7 +31135,12 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 {"sleutel": s, "naam": n, "eenheid": e}
                 for s, n, e in self.PERIODE_GROOTHEDEN
             ],
-            "perioden": {k: v for k, v in perioden.items() if v},
+            # v5.222.0: `ruw` (intern, voor prijzen per periode en de
+            # zelfcontrole) houdt de sommen zoals ze waren.
+            "perioden": {
+                k: (v if ruw or k not in self.PERIODEN_LANG else self._zonder_onvolledige_sommen(v))
+                for k, v in perioden.items() if v
+            },
             "contractjaar_begin": (
                 contract_begin.isoformat() if contract_begin else None
             ),
@@ -31152,7 +31196,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 for r in dagen
             )
             verbruik = sum(r.get("verbruik_kwh") or 0.0 for r in dagen)
-            invoer = sum(r.get("import_kwh") or 0.0 for r in dagen)
             return {
                 "dagen": len(dagen),
                 "opwek_kwh": round(opwek, 1),
@@ -31160,13 +31203,17 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 "zelfconsumptie_procent": round(
                     100 * (opwek - min(zon_export, opwek)) / opwek, 1
                 ),
-                "zelfvoorziening_procent": (
-                    round(100 * (1 - invoer / verbruik), 1) if verbruik else None
-                ),
+                # v5.222.0: eigen zon in huis (direct of via de accu) gedeeld
+                # door het verbruik. Was 1 - import/verbruik: daarin telt ook
+                # wat de accu uit het net laadt om later te verkopen, en dat
+                # is geen huisverbruik.
+                "zelfvoorziening_procent": self._zelfvoorziening_uit_zon(opwek, zon_export, verbruik),
             }
 
         perioden = {
-            "week": _over(vandaag - timedelta(days=6)),
+            # v5.222.0: zeven afgesloten dagen, zoals `get_period_overview`
+            # (was zes: vandaag telde mee in het venster maar staat niet in de reeks).
+            "week": _over(vandaag - timedelta(days=7)),
             "maand": _over(vandaag.replace(day=1)),
             "jaar": _over(vandaag.replace(month=1, day=1)),
         }
@@ -31268,6 +31315,28 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             return gemeten <= 0
         return gemeten >= self.pv_export_today_kwh * 0.9
 
+    @staticmethod
+    def _zelfvoorziening_uit_zon(opwek_kwh, zon_export_kwh, verbruik_kwh) -> float | None:
+        """Welk deel van het verbruik dekte de eigen zon? (v5.222.0)
+
+        Een definitie voor vandaag en voor elke periode. Tot nu toe waren het
+        er twee: vandaag telde alles wat niet rechtstreeks van het net kwam
+        (dus ook stroom die de accu eerder uit het net laadde: 60 % op 11-11),
+        de perioden rekenden 1 - import/verbruik (21 % over dezelfde week).
+        Met een accu die op prijs laadt en verkoopt zegt geen van beide wat de
+        naam belooft. Dit wel: zon die niet het net op ging, gedeeld door het
+        verbruik, tussen 0 en 100. Zon die nog in de accu zit telt al mee;
+        over een dag is het cijfer daardoor ruw, over langere tijd klopt het.
+        """
+        try:
+            opwek, export, verbruik = float(opwek_kwh or 0.0), float(zon_export_kwh or 0.0), float(verbruik_kwh or 0.0)
+        except (TypeError, ValueError):
+            return None
+        if verbruik <= 0:
+            return None
+        eigen = max(0.0, opwek - min(export, opwek))
+        return round(100 * min(1.0, eigen / verbruik), 1)
+
     @property
     def self_sufficiency_ratio_percent(self) -> float | None:
         """Welk deel van het huisverbruik kwam niet van het net?
@@ -31305,11 +31374,14 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # verbruikt, is per definitie ergens anders heen gegaan - de
         # accu. Daarmee is de uitkomst gebonden aan 0 tot 100 zonder van
         # een aparte meting af te hangen.
-        netlading = self.grid_charge_today_kwh or 0.0
-        import_voor_huis = min(
-            verbruik, max(0.0, self.grid_import_today_kwh - netlading)
-        )
-        return round(100 * (verbruik - import_voor_huis) / verbruik, 1)
+        # v5.222.0: dezelfde definitie als de perioden - eigen zon in huis
+        # (direct of via de accu) gedeeld door het verbruik. Tot dan toe telde
+        # alles wat niet rechtstreeks van het net kwam, dus ook wat de accu
+        # eerder uit het net laadde (60 % op 11-11 bij 24 % uit de zon).
+        opwek = self.pv_production_today_kwh or 0.0
+        zelfconsumptie = self.self_consumption_ratio_percent
+        eigen_zon = opwek if zelfconsumptie is None else opwek * zelfconsumptie / 100
+        return self._zelfvoorziening_uit_zon(eigen_zon, 0.0, verbruik)
 
     def _read_battery_cooling_inputs(self) -> tuple | None:
         """Leest de drie metingen die de koelbeslissing nodig heeft:

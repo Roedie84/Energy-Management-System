@@ -35579,3 +35579,15 @@ Ruud 11-11 16:10 ("10 en 11 oppakken"). Vooraf per onderdeel nagelopen wie het l
 - **Blijft**: de tekortkans (Monte Carlo, staat in de cockpit), de proefstand met de overige 14 kandidaten en de meldingen daarover (volgt apart: hangt aan "nog niet bepaald" en twee meldingen), de oude sturing als terugval.
 
 In totaal ruim 8.500 regels minder (code en tests). Tests: 17 testbestanden over de vervallen onderdelen verwijderd, 14 bijgewerkt; nieuw `test_v5221_meetmodules_weg.py` (28).
+
+## v5.222.0 — periodecijfers die elkaar tegenspraken
+
+Ruud 11-11 16:52 ("Kunnen we alvast wat anders oppakken"). Punten 2, 3 en 4 van het onderzoek; punt 7 bleek al gedaan.
+
+- **Zelfvoorziening (punt 3)**: een definitie voor vandaag en voor elke periode: de zon die niet het net op ging, gedeeld door het verbruik (`_zelfvoorziening_uit_zon`). Vandaag telde alles wat niet rechtstreeks van het net kwam, dus ook wat de accu eerder uit het net laadde (60 % op 11-11 bij 24 % uit de zon); de perioden rekenden 1 - import/verbruik (21 %), waarin netlading voor verkoop het cijfer drukt. De zelfcontrole toetst nu of het cijfer tussen 0 en het zonplafond ligt.
+- **Week (punt 3)**: bij de zelfconsumptie zeven afgesloten dagen, zoals het periodeoverzicht (was zes).
+- **Jaar en contractjaar (punt 2)**: een som die niet elke dag dekt wordt None, met `onvolledig: {"inkoop_eur": "48 van 224 dagen"}`. Stond er als EUR 92,62 naast EUR 135,80 in de jaarafrekening. Week en maand blijven (de cockpit toont daar de dekking bij); intern (`ruw=True`) rekenen de prijzen per periode en de zelfcontrole met de oude sommen.
+- **Besparing per periode (punt 4)**: het hoofdgetal met de verandering van de voorraad als elke dag een dagregel heeft (`besparing_met_voorraad`), anders de rauwe som; `besparing_rauw_eur` staat er altijd bij. Was EUR 4,95 naast EUR 2,39 voor dezelfde week.
+- **Punt 7 (oude huisreserve geeft alarm)**: geen wijziging nodig. Sinds v5.203.1 is een verkoop met winst onder de oude reserve al geen stuurfout meer; het aandachtspunt van 11-11 kwam van de nacht naar 4 november (van voor v5.198.0) en valt op 12-11 uit het venster van 7 dagen.
+
+Tests: `test_v5222_periodecijfers.py` (9); `test_self_sufficiency_grid_charge.py` herschreven voor de nieuwe definitie (8).

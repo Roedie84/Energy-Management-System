@@ -140,6 +140,7 @@ def test_a_healthy_system_reports_nothing(
     c = _coordinator(make_coordinator, hass)
     c.gross_consumption_today_kwh = 10.0
     c.grid_import_today_kwh = 2.0
+    c.pv_production_today_kwh = 8.0  # v5.222.0: 80 % kan alleen met 8 kWh eigen zon
     vervang_zelfvoorziening(80.0)
 
     uitkomst = c.get_consistency_checks(NU)

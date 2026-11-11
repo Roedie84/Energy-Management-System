@@ -1,3 +1,12 @@
+EMS v5.222.0 - cijfers die elkaar tegenspraken rechtgezet
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Zelfvoorziening zegt nu overal hetzelfde: welk deel van je verbruik de eigen zon dekte. Stroom die de accu uit het net laadde telt niet meer mee, dus het dagcijfer valt lager uit dan je gewend bent.
+- Een week is overal zeven afgesloten dagen.
+- Jaarcijfers in euro's worden alleen nog getoond als elke dag meetelt.
+- De besparing per week telt de voorraad in de accu mee, net als het hoofdgetal.
+
 EMS v5.221.0 - oude meetmodules en tekeningen verwijderd
 
 Installeren: via de Marketplace bijwerken en herstarten.

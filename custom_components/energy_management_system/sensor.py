@@ -2699,8 +2699,9 @@ class SelfSufficiencySensor(ZuinigSchrijven, SensorEntity):
             "note": (
                 "Zelfconsumptie = welk deel van de eigen PV-productie zelf "
                 "verbruikt wordt (niet geëxporteerd). Zelfvoorziening = "
-                "welk deel van het totale verbruik gedekt wordt door eigen "
-                "bronnen (PV + accu), niet geïmporteerd van het net."
+                "welk deel van het verbruik de eigen zon dekte, direct of "
+                "via de accu (v5.222.0). Stroom die de accu uit het net "
+                "laadde telt niet mee."
             ),
         }
 

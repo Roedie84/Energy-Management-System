@@ -46,10 +46,12 @@ def test_a_week_is_computed(make_coordinator, hass):
 
     week = c.get_self_consumption_overview(NU)["perioden"]["week"]
 
-    assert week["dagen"] == 6
+    # v5.222.0: zeven afgesloten dagen (was zes), zoals het periodeoverzicht.
+    assert week["dagen"] == 7
     # 20 kWh opwek, 8 het net op -> 60% zelf gebruikt.
     assert week["zelfconsumptie_procent"] == 60.0
-    assert week["zelfvoorziening_procent"] == 90.0
+    # v5.222.0: 12 kWh eigen zon per dag bij 10 kWh verbruik -> alles gedekt.
+    assert week["zelfvoorziening_procent"] == 100.0
 
 
 def test_the_measured_split_is_used(make_coordinator, hass):

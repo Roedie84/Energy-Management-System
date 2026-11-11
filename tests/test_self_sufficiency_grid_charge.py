@@ -1,131 +1,85 @@
-"""Zelfvoorziening telt netlading niet mee (v3.16.0).
+"""Zelfvoorziening: welk deel van het verbruik dekte de eigen zon? (v5.222.0)
 
-Gemeld met een screenshot: "-103.2% Zelfvoorziening". Een schaal die van
-0 tot 100 loopt kan niet op min honderd uitkomen.
+Geschiedenis. v3.16.0: "-103.2% Zelfvoorziening" doordat netlading als
+huisverbruik telde. v3.23.1: "-54%" doordat de netladingsteller kon
+ontbreken. Beide reparaties hielden de definitie "alles wat niet rechtstreeks
+van het net kwam". Met een accu die op prijs uit het net laadt is dat niet
+wat de naam belooft: op 11-11-2026 stond er 60 % terwijl de zon 24 % van het
+verbruik dekte, en de perioden gaven met een andere formule 21 %.
 
-De rekensom klopte, maar de vraag niet. Op 18 augustus was er 5,88 kWh
-geïmporteerd bij 2,87 kWh verbruik - het verschil zat in de ACCU, want de
-winterguard had bijgeladen. De formule nam aan dat alle import naar het
-huis gaat.
+Sinds v5.222.0 een definitie, voor vandaag en voor elke periode: de zon die
+niet het net op ging, gedeeld door het verbruik, tussen 0 en 100.
 """
 from tests._coordinator_bron import coordinator_bron
 
 
-def _c(make_coordinator, verbruik, importeren, netlading=0.0):
+def _c(make_coordinator, verbruik, opwek, zon_export=0.0, importeren=0.0, netlading=0.0):
     c = make_coordinator({})
     c.gross_consumption_today_kwh = verbruik
+    c.pv_production_today_kwh = opwek
+    c.pv_export_today_kwh = zon_export
+    c.solar_export_today_kwh = zon_export
+    c.battery_discharge_today_kwh = 0.0
     c.grid_import_today_kwh = importeren
     c.grid_charge_today_kwh = netlading
     return c
 
 
-def test_the_reported_case_is_no_longer_negative(make_coordinator, hass):
-    """5,88 kWh import bij 2,87 kWh verbruik, waarvan het meeste de accu
-    in ging."""
-    c = _c(make_coordinator, verbruik=2.87, importeren=5.88, netlading=3.6)
-
-    ratio = c.self_sufficiency_ratio_percent
-
-    assert 0 <= ratio <= 100
+def test_de_dag_van_de_melding(make_coordinator, hass):
+    """11-11: 6,77 kWh verbruik, 2,03 kWh zon waarvan 0,38 het net op,
+    en een accu die 's ochtends uit het net laadde."""
+    c = _c(make_coordinator, verbruik=6.77, opwek=2.03, zon_export=0.38, importeren=11.95, netlading=9.15)
+    assert c.self_sufficiency_ratio_percent == 24.4
 
 
-def test_grid_charging_is_not_house_consumption(make_coordinator, hass):
-    """Wat er van het net de accu in gaat is geen huisverbruik. Die kWh
-    wordt later gebruikt of verkocht, en telt dan mee - niet nu."""
-    zonder = _c(make_coordinator, 10.0, 4.0, 0.0).self_sufficiency_ratio_percent
-    met = _c(make_coordinator, 10.0, 4.0, 3.0).self_sufficiency_ratio_percent
-
-    assert met > zonder
-
-
-def test_without_grid_charging_nothing_changes(make_coordinator, hass):
-    """Op een gewone dag verandert er niets aan het cijfer."""
-    c = _c(make_coordinator, verbruik=10.0, importeren=2.0)
-
-    assert c.self_sufficiency_ratio_percent == 80.0
+def test_netlading_telt_niet_als_eigen(make_coordinator, hass):
+    """Wat de accu uit het net laadde en later aan het huis levert is geen
+    eigen opwek, hoeveel het ook is."""
+    zonder = _c(make_coordinator, 10.0, 3.0, importeren=7.0).self_sufficiency_ratio_percent
+    met = _c(make_coordinator, 10.0, 3.0, importeren=12.0, netlading=5.0).self_sufficiency_ratio_percent
+    assert zonder == met == 30.0
 
 
-def test_it_never_goes_below_zero(make_coordinator, hass):
-    """Meer netlading dan import kan niet, maar een meetfout wel - en
-    dan mag het cijfer niet omslaan."""
-    c = _c(make_coordinator, verbruik=5.0, importeren=2.0, netlading=9.0)
-
-    assert c.self_sufficiency_ratio_percent == 100.0
-
-
-def test_full_grid_supply_is_zero_percent(make_coordinator, hass):
-    """Alles van het net, niets in de accu: nul procent zelfvoorziening."""
-    c = _c(make_coordinator, verbruik=4.0, importeren=4.0)
-
-    assert c.self_sufficiency_ratio_percent == 0.0
+def test_altijd_tussen_nul_en_honderd(make_coordinator, hass):
+    assert _c(make_coordinator, 2.87, 0.0, importeren=5.88, netlading=3.6).self_sufficiency_ratio_percent == 0.0
+    assert _c(make_coordinator, 3.91, 0.0, importeren=5.93).self_sufficiency_ratio_percent == 0.0
+    assert _c(make_coordinator, 4.0, 9.0).self_sufficiency_ratio_percent == 100.0
+    assert _c(make_coordinator, 4.0, 9.0, zon_export=12.0).self_sufficiency_ratio_percent == 0.0
 
 
-def test_the_counter_rolls_over_at_midnight():
-    """Anders telt de netlading van gisteren morgen nog mee."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    bron = coordinator_bron()
-    kop = bron.index("self.grid_import_today_kwh = 0.0")
-    blok = bron[kop : kop + 200]
-
-    assert "self.grid_charge_today_kwh = 0.0" in blok
+def test_zonder_verbruik_geen_cijfer(make_coordinator, hass):
+    assert _c(make_coordinator, 0.0, 5.0).self_sufficiency_ratio_percent is None
 
 
-def test_the_counter_survives_a_restart():
-    from custom_components.energy_management_system.const import (
-        PERSISTED_PLAIN_FIELDS,
-    )
-
-    assert "grid_charge_today_kwh" in PERSISTED_PLAIN_FIELDS
-
-
-def test_the_consistency_check_uses_the_same_formula(make_coordinator, hass):
-    """De zelfcontrole rekent de zelfvoorziening na. Rekent die anders,
-    dan meldt hij vanaf nu elke dag een fout die er niet is."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    bron = coordinator_bron()
-    kop = bron.index("# --- 1. Zelfvoorziening moet volgen uit import en verbruik ---")
-    blok = bron[kop : kop + 900]
-
-    assert "grid_charge_today_kwh" in blok
-
-
-# --- v3.23.1: niet meer afhankelijk van een teller -------------------
-
-
-def test_it_never_goes_negative_without_the_counter(make_coordinator, hass):
-    """Gemeld: "-54% zelfvoorziening", en na de reparatie van v3.16.0
-    nog steeds.
-
-    Die reparatie trok de netlading eraf, maar die teller wordt alleen
-    gevuld door de kostprijsboekhouding - en die draait niet bij elke
-    laadroute. Op 18 augustus stond hij op `None` terwijl er 5,93 kWh
-    binnenkwam bij 3,91 kWh verbruik.
-    """
-    c = _c(make_coordinator, verbruik=3.91, importeren=5.93)
-    c.grid_charge_today_kwh = 0.0
-
-    ratio = c.self_sufficiency_ratio_percent
-
-    assert ratio == 0.0
-
-
-def test_a_missing_counter_does_not_crash(make_coordinator, hass):
-    """De teller stond zelfs op `None` - dan mag de som niet omvallen."""
-    c = _c(make_coordinator, verbruik=4.0, importeren=2.0)
+def test_een_ontbrekende_teller_valt_niet_om(make_coordinator, hass):
+    c = _c(make_coordinator, verbruik=4.0, opwek=2.0)
     c.grid_charge_today_kwh = None
-
     assert c.self_sufficiency_ratio_percent == 50.0
 
 
-def test_the_house_cannot_import_more_than_it_used(make_coordinator, hass):
-    """Wat er méér binnenkomt dan het huis verbruikt is per definitie
-    ergens anders heen gegaan - de accu."""
-    c = _c(make_coordinator, verbruik=2.0, importeren=9.0)
+def test_vandaag_en_de_perioden_rekenen_hetzelfde(make_coordinator, hass):
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
 
-    assert c.self_sufficiency_ratio_percent == 0.0
+    c = _c(make_coordinator, verbruik=10.0, opwek=6.0, zon_export=2.0)
+    assert c.self_sufficiency_ratio_percent == C._zelfvoorziening_uit_zon(6.0, 2.0, 10.0) == 40.0
+
+
+def test_de_netladingsteller_blijft_bestaan():
+    """Andere onderdelen rekenen ermee; hij rolt om middernacht en overleeft een herstart."""
+    from custom_components.energy_management_system.const import PERSISTED_PLAIN_FIELDS
+
+    bron = coordinator_bron()
+    kop = bron.index("self.grid_import_today_kwh = 0.0")
+    assert "self.grid_charge_today_kwh = 0.0" in bron[kop : kop + 200]
+    assert "grid_charge_today_kwh" in PERSISTED_PLAIN_FIELDS
+
+
+def test_de_zelfcontrole_past_bij_de_nieuwe_definitie():
+    """De narekening met import min netlading hoorde bij de oude definitie
+    en zou nu elke dag een fout melden."""
+    bron = coordinator_bron()
+    kop = bron.index("# --- 1. Zelfvoorziening kan niet boven de eigen zon uitkomen ---")
+    blok = bron[kop : kop + 1100]
+    assert "plafond" in blok and "grid_charge_today_kwh" not in blok
