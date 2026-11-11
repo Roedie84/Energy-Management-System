@@ -194,10 +194,10 @@ def test_a_block_shows_the_price_range(make_coordinator, hass):
         ]
     )
 
-    assert "13.1 – 32.1 ct" in tekst
+    assert "13,1 – 32,1 ct" in tekst  # v5.217.0: komma
     # Een blok van één kwartier heeft geen bereik; dan geen streepje.
-    assert "22.8 ct" in tekst
-    assert "22.8 – 22.8" not in tekst
+    assert "22,8 ct" in tekst
+    assert "22,8 – 22,8" not in tekst
 
 
 # --- v1.16.1: "Onbekend" dat geen storing is ------------------------

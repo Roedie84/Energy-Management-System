@@ -478,3 +478,21 @@ def make_price_forecast(day0: datetime, price_fn) -> list[dict]:
                 }
             )
     return entries
+
+
+# v5.217.0: de sjablonen van het dashboard gebruiken het Home Assistant-filter
+# `regex_replace` (dashboard_opmaak). Toetsen die een sjabloon met een kale
+# jinja2-omgeving renderen krijgen het hier, met dezelfde betekenis als in HA.
+try:
+    import re as _re
+
+    import jinja2.defaults as _jinja_defaults
+
+    _jinja_defaults.DEFAULT_FILTERS.setdefault(
+        "regex_replace",
+        lambda value="", find="", replace="", ignorecase=False: _re.sub(
+            find, replace, str(value), flags=_re.IGNORECASE if ignorecase else 0
+        ),
+    )
+except ImportError:  # jinja2 is optioneel in de testomgeving
+    pass

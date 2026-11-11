@@ -10,6 +10,7 @@ Terecht: de verzamelpagina telde zestien kaarten en bijna 6000 tekens -
 niet overzichtelijker dan de tabbladen die er in v1.12.0 voor waren
 opgeruimd. Het probleem was alleen verplaatst.
 """
+from custom_components.energy_management_system.dashboard_opmaak import kern as _kern  # v5.217.0
 import re
 from pathlib import Path
 
@@ -62,7 +63,8 @@ def test_each_page_stays_small():
     indeling weer te grof geworden."""
     for pagina in _detailpaginas():
         kaarten = _kaarten(pagina)
-        tekens = sum(len(k.get("content") or "") for k in kaarten)
+        # v5.217.0: zonder de opmaak-wikkel (dashboard_opmaak) - die is geen tekst op de pagina.
+        tekens = sum(len(_kern(k.get("content") or "")) for k in kaarten)
 
         # v1.17.1: van 6 naar 10. Planning telt negen korte tegels op
         # één onderwerp; dat is nog steeds overzichtelijk. De tekengrens

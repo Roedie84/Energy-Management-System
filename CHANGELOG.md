@@ -35523,3 +35523,14 @@ Ruud 11-11 13:25: "Alle 7 akkoord" (punt 7, de detailpagina's nalopen, volgt apa
 6. **Voetregel**: alleen versie, fouten en storingen plus "bijgewerkt"; de diagnoseregels staan op de pagina Gezondheid.
 
 Tests: `test_v5216_cockpit_keuzes.py` (5); drie bestaande tests bijgewerkt.
+
+## v5.217.0 — detailpagina's in Nederlandse opmaak
+
+Ruud 11-11 13:36 ("Ja graag doen"), vervolg op de audit van de weergave. De 31 detailpagina's (326 sjablonen in `dashboard_template.yaml`) zijn lokaal gerenderd met de live standen van 13:06 en doorzocht. Gevonden: 962 getallen met een punt (102 kaarten op 28 pagina's), "EUR" of het euroteken achter het bedrag (38), datums als 2026-04-01 (45), interne namen en ruwe standen (72), None/unknown/True (7) en getallen met vier of meer decimalen (11). Na dit pakket: 0 punten, 0 datums, 0 None/unknown; over blijven enkele technische namen in uitlegteksten.
+
+- **Eén opmaak voor alle tekst** (`dashboard_opmaak.py`): elk tekstsjabloon (`primary`, `secondary`, `content`; 238 stuks) staat in `{% set ems_u %}...{% endset %}{{ ems_u | regex_replace(...) }}`. Altijd: een punt tussen cijfers wordt een komma (niet in versies, IP-adressen, entiteiten, tijden of getallen die al Nederlands zijn). Waar het voorkomt ook: "EUR"/euroteken vóór het bedrag, datum als dd-mm-jjjj, "bewaren" in plaats van `smart_charging (sparen)`. Het sjabloon zelf blijft ongewijzigd binnen de wikkel; dit vangt ook de teksten die uit Python komen.
+- **Losse herstellingen**: accu-inhoud op één decimaal (was 7.4304 kWh); prijs nu in ct/kWh (was 0.6049 €/kWh); kostprijs accu in ct/kWh; besparing en Zonneplan-bedragen op twee decimalen (was "gas 0.3947414 €"); "unknown%" bij de vermogensgrens → "niet beschikbaar"; "daggemiddelde van None%" → "geen correctie"; ruwe standen en namen met spaties (`waardeplan huis`, `vol blijft aan`, `weather ensemble`); Perioden toont "opwek/import/export" in plaats van `opwek_kwh`; de luchtreiniger toont aan/uit in plaats van True/False.
+- **Python**: de waarde in het betrouwbaarheidsoverzicht wordt aan de bron afgerond (was 84,09719999999999 %).
+- `dashboards/energy_management_system_dashboard.yaml` is gelijk gehouden.
+
+Tests: `test_v5217_dashboard_opmaak.py` (27): elk tekstsjabloon moet gewikkeld zijn, de kopie moet gelijk zijn, en wat de patronen wel en niet raken. `tests/conftest.py` geeft kale jinja-omgevingen het HA-filter `regex_replace`. Vijf bestaande tests bijgewerkt op de nieuwe opmaak; `test_live_narrative_sensor` leunde op de echte datum (binnen 60 dagen voor het einde van de saldering komt er een mededeling achter het verhaal) en is robuust gemaakt.

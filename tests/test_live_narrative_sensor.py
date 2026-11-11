@@ -27,4 +27,6 @@ def test_full_narrative_available_as_attribute(make_coordinator, hass):
 
     sensor = LiveNarrativeSensor(coordinator, "entry1")
 
-    assert len(sensor.extra_state_attributes["verhaal"]) == 400
+    # v5.217.0: het verhaal kan een mededeling achteraan krijgen (binnen 60 dagen
+    # voor het einde van de saldering); de toets leunde op de echte datum.
+    assert sensor.extra_state_attributes["verhaal"].startswith("A" * 400)

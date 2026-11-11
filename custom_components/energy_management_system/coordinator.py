@@ -20302,7 +20302,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                     "niveau": niveau,
                     "label": self.reliability_label(niveau),
                     "reden": oordeel.get("reden"),
-                    "waarde": waarde,
+                    # v5.217.0: afgerond aan de bron (was 84,09719999999999 % op de pagina).
+                    "waarde": round(waarde, 2) if isinstance(waarde, float) else waarde,
                     "eenheid": eenheid,
                 }
             )

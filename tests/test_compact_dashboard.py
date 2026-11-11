@@ -10,6 +10,7 @@ afging. De onderbouwing blijft volledig beschikbaar in de
 sensorattributen en de diagnostiek-export; alleen staat ze niet meer
 standaard open.
 """
+from custom_components.energy_management_system.dashboard_opmaak import kern as _kern  # v5.217.0
 import re
 from pathlib import Path
 
@@ -325,7 +326,8 @@ def test_no_tab_is_a_wall_of_text():
     for view in _views():
         if view["title"] == "Meldingen":
             continue
-        tekens = sum(len(k.get("content") or "") for k in _kaarten(view))
+        # v5.217.0: zonder de opmaak-wikkel (dashboard_opmaak) - die is geen tekst op de pagina.
+        tekens = sum(len(_kern(k.get("content") or "")) for k in _kaarten(view))
         # v1.14.5: van 800 naar 1400. Bewust ruimer: met alleen
         # samenvattingen viel er te weinig te beoordelen. De grens blijft
         # bestaan zodat een tabblad niet opnieuw een muur tekst wordt -

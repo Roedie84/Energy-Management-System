@@ -1,3 +1,11 @@
+EMS v5.217.0 - de detailpagina's in gewone Nederlandse opmaak
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Op alle detailpagina's staan getallen nu met een komma (84,1% in plaats van 84.1%), bedragen met het euroteken ervoor en datums als 01-04-2026.
+- Ruwe waarden zijn afgerond (7,4 kWh in plaats van 7.4304 kWh) en interne namen zijn leesbaar gemaakt.
+- Let op: gebruik je een eigen kopie van het dashboard in plaats van het meegeleverde sjabloon, neem dan dashboards/energy_management_system_dashboard.yaml opnieuw over.
+
 EMS v5.216.0 - cockpit: duidelijker cijfers
 
 Installeren: via de Marketplace bijwerken en herstarten. Ververs daarna de cockpit hard (Ctrl+F5).

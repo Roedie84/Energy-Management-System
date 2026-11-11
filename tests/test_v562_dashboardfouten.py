@@ -119,14 +119,14 @@ def test_de_plantoetsing_rendert_met_echte_gegevens(make_coordinator, hass, tite
     uit = _render(kaart["content"], attributen)
 
     if titel == "Per dag":
-        assert "2026-10-08" in uit
-        assert "11.87 / 12.6 kWh" in uit
-        assert "€ -0.9 / € 1.32" in uit
+        assert "08-10-2026" in uit  # v5.217.0: datum als dd-mm-jjjj
+        assert "11,87 / 12,6 kWh" in uit
+        assert "€ -0,9 / € 1,32" in uit
         assert "58% / 31%" in uit
     else:
         assert "| Dagen getoetst | 30 |" in uit
-        assert "Verkocht, mediane afwijking | -79.0%" in uit
-        assert "Zon, mediane afwijking | -5.8%" in uit
+        assert "Verkocht, mediane afwijking | -79,0%" in uit  # v5.217.0: komma
+        assert "Zon, mediane afwijking | -5,8%" in uit
 
 
 @pytest.mark.parametrize(
