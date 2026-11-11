@@ -678,6 +678,7 @@ from .const import (
     PV_SNELLE_CORRECTIE_MIN,
     PV_SNELLE_CORRECTIE_MAX,
     PV_SNELLE_CORRECTIE_MIN_TOETSDAGEN,
+    PV_SNELLE_CORRECTIE_AAN,
     OPDRACHT_HERHAAL_SECONDEN,
     CONF_COST_ENERGY_SENSOR,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
@@ -8788,15 +8789,9 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         (48,7 kWh voorspeld, 47,8 kWh opgewekt). Gemeten uit de plantoetsing
         (voorspelling van 08:00 tegen de dagopwek).
         """
-        rijen = []
-        for r in geschiedenis or []:
-            zon = (r or {}).get("zon") or {}
-            v, w = zon.get("voorspeld_kwh"), zon.get("werkelijk_kwh")
-            if isinstance(v, (int, float)) and isinstance(w, (int, float)) and v > 0.5:
-                rijen.append((r.get("datum"), float(v), float(w)))
+        rijen = EnergyManagementSystemCoordinator._pv_plan_rijen(geschiedenis)
         if not rijen:
             return {"beschikbaar": False, "reden": "nog geen getoetste dagen"}
-        rijen.sort(key=lambda x: str(x[0]))
 
         def maat(deel):
             v = sum(x[1] for x in deel)
@@ -8828,7 +8823,9 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             )
         return {
             "beschikbaar": True, "laatste_10": laatste, "alles": alles, "duiding": zin,
-            "snellere_correctie": EnergyManagementSystemCoordinator._pv_snelle_correctie_toets(rijen),
+            "snellere_correctie": EnergyManagementSystemCoordinator._pv_snelle_correctie_toets(
+                EnergyManagementSystemCoordinator._pv_plan_rijen(geschiedenis, ruw=True)
+            ),
         }
 
     @staticmethod
@@ -8840,8 +8837,10 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         wegen op de laatste dagen. Getoetst zonder vooruit te kijken: per
         dag de planvoorspelling maal (opgewekt / voorspeld) van de vijf
         dagen ervoor, begrensd op 0,8-1,2. Op 28-10 t/m 10-11 werd de fout
-        daar groter van (0,88 -> 0,99 kWh per dag): de afwijking wisselt per
-        dag van kant. Daarom stuurt dit niets; de toets blijft meelopen.
+        daar groter van (0,88 -> 0,99 kWh per dag), over alle 25 getoetste
+        dagen kleiner (1,20 -> 0,96). v5.211.0 (Ruud: "Aanzetten"): stuurt
+        mee; de toets rekent met de voorspelling zonder de factor en blijft
+        meelopen ("nu" = zonder, "snel" = met).
         """
         n = PV_SNELLE_CORRECTIE_DAGEN
         nu = snel = bias_nu = bias_snel = 0.0
@@ -8869,11 +8868,11 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "bias_nu_kwh_per_dag": round(bias_nu / dagen, 2),
             "bias_snel_kwh_per_dag": round(bias_snel / dagen, 2),
             "beter": beter,
-            "stuurt": False,
+            "stuurt": PV_SNELLE_CORRECTIE_AAN,
             "duiding": (
-                "Een snellere correctie zou de fout verkleinen - voorleggen."
+                "De snelle correctie verkleint de fout van de voorspelling."
                 if beter else
-                "Een snellere correctie maakt de voorspelling niet beter; de afwijking wisselt per dag van kant."
+                "De snelle correctie maakt de voorspelling over deze dagen niet beter; de afwijking wisselt per dag van kant."
             ),
         }
 
@@ -22668,12 +22667,62 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
     def _zon_bias_factor(self, moment: datetime, daily_bias_percent: float | None) -> float:
         """De geleerde correctie op Solcast voor dit uur: per uur, anders per
         dag(soort), anders geen."""
+        # v5.211.0: maal de snelle correctie op de laatste dagen.
+        return self._zon_bias_geleerd(moment, daily_bias_percent) * self._pv_snelle_factor()
+
+    def _zon_bias_geleerd(self, moment: datetime, daily_bias_percent: float | None) -> float:
         hourly_ratio = self.learned_pv_hourly_ratio(self._utc_uur(moment))
         if hourly_ratio is not None:
             return hourly_ratio
         if daily_bias_percent is not None:
             return 1 + daily_bias_percent / 100
         return 1.0
+
+    _pv_snelle_factor_onthouden: tuple | None = None
+
+    def _pv_snelle_factor(self) -> float:
+        """Snelle correctie op de planvoorspelling van de zon (v5.211.0).
+
+        Ruud 11-11 ("Aanzetten"): opgewekt / voorspeld over de laatste vijf
+        getoetste dagen, begrensd op 0,8-1,2, bovenop de geleerde correctie
+        per uur. Gerekend met de voorspelling ZONDER deze factor (de factor
+        van die dag staat in de plantoetsing), anders corrigeert hij zijn
+        eigen correctie. Onder de vijf dagen: 1,0.
+        """
+        if not PV_SNELLE_CORRECTIE_AAN:
+            return 1.0
+        try:
+            geschiedenis = self.plan_review_history or []
+            sleutel = (len(geschiedenis), (geschiedenis[-1] or {}).get("datum") if geschiedenis else None)
+            vorig = self._pv_snelle_factor_onthouden
+            if vorig is not None and vorig[0] == sleutel:
+                return vorig[1]
+            rijen = self._pv_plan_rijen(geschiedenis, ruw=True)[-PV_SNELLE_CORRECTIE_DAGEN:]
+            v_som = sum(x[1] for x in rijen)
+            if len(rijen) < PV_SNELLE_CORRECTIE_DAGEN or v_som <= 0:
+                factor = 1.0
+            else:
+                factor = min(PV_SNELLE_CORRECTIE_MAX, max(PV_SNELLE_CORRECTIE_MIN, sum(x[2] for x in rijen) / v_som))
+            self._pv_snelle_factor_onthouden = (sleutel, factor)
+            return factor
+        except Exception:  # noqa: BLE001 - een correctie mag het plan nooit breken
+            return 1.0
+
+    @staticmethod
+    def _pv_plan_rijen(geschiedenis, ruw: bool = False) -> list:
+        """(datum, voorspeld, opgewekt) per getoetste dag; `ruw` = zonder de
+        snelle factor die die dag meerekende (v5.211.0)."""
+        rijen = []
+        for r in geschiedenis or []:
+            zon = (r or {}).get("zon") or {}
+            v, w = zon.get("voorspeld_kwh"), zon.get("werkelijk_kwh")
+            if isinstance(v, (int, float)) and isinstance(w, (int, float)) and v > 0.5:
+                f = zon.get("snelle_factor")
+                if ruw and isinstance(f, (int, float)) and f > 0:
+                    v = v / f
+                rijen.append((r.get("datum"), float(v), float(w)))
+        rijen.sort(key=lambda x: str(x[0]))
+        return rijen
 
     def _zon_factor_vandaag(
         self, vast: dict, moment: datetime, daily_bias_percent: float | None, met_band: bool
@@ -25973,6 +26022,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 ),
                 "verwachte_opbrengst_eur": samenvatting.get("verwachte_opbrengst_eur"),
                 "verwachte_zon_kwh": samenvatting.get("zon_kwh"),
+                "zon_snelle_factor": round(self._pv_snelle_factor(), 4),  # v5.211.0
                 "verwacht_verbruik_kwh": samenvatting.get("verbruik_kwh"),
                 "verwachte_import_kwh": samenvatting.get("import_kwh"),
                 "verwachte_export_kwh": samenvatting.get("export_kwh"),
@@ -26041,6 +26091,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "opgenomen_om": plan["opgenomen_om"],
             "zon": {
                 "voorspeld_kwh": plan["verwachte_zon_kwh"],
+                "snelle_factor": plan.get("zon_snelle_factor"),  # v5.211.0
                 "werkelijk_kwh": round(werkelijke_zon, 2),
                 "afwijking_procent": _afwijking(
                     plan["verwachte_zon_kwh"], werkelijke_zon

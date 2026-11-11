@@ -1,3 +1,10 @@
+EMS v5.211.0 - zonvoorspelling stuurt sneller bij
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het plan corrigeert de zonvoorspelling nu ook op de laatste vijf dagen: kwam er toen minder zon dan voorspeld, dan rekent het plan vandaag met minder (hooguit 20 % omlaag of omhoog). Over 25 dagen teruggerekend was de voorspelling daarmee gemiddeld 0,24 kWh per dag nauwkeuriger en zat hij niet meer structureel te hoog.
+- De sensor "Zonvoorspelling ijking" blijft tonen of de correctie helpt.
+
 EMS v5.210.0 - Zendure-integratie wordt zelf herladen als de accu offline raakt
 
 Installeren: via de Marketplace bijwerken en herstarten.

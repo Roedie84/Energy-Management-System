@@ -35437,3 +35437,13 @@ Verbeterronde 11-11 (Ruud: punten 2 t/m 5 akkoord, punt 1 afgewezen).
 - **Zelfconsumptieratio "unknown"**: geen fout. Onder 0,5 kWh dagopwek wordt bewust geen aandeel getoond (v1.16.8). Niets gewijzigd.
 
 Tests: `test_v5210_zendure_herladen_prijscache_pvtoets.py` (12).
+
+## v5.211.0 — snelle zon-correctie stuurt mee
+
+Ruud 11-11 10:18: "Aanzetten". Na installatie van v5.210.0 gaf de terugtoets over de volledige geschiedenis (25 dagen) een ander beeld dan de 9 dagen vanuit de chat: fout 1,20 → 0,96 kWh per dag, afwijking −0,91 → −0,09 kWh per dag (laatste 9 dagen: 0,88 → 0,99).
+
+- `_zon_bias_factor` vermenigvuldigt de geleerde correctie met `_pv_snelle_factor()`: opgewekt / voorspeld over de laatste `PV_SNELLE_CORRECTIE_DAGEN` (5) getoetste dagen, begrensd 0,8-1,2; onder vijf dagen 1,0.
+- De plantoetsing legt per dag `zon.snelle_factor` vast; de factor en de terugtoets rekenen met de voorspelling zonder die factor, zodat hij zijn eigen correctie niet corrigeert.
+- `plan.snellere_correctie` op "Zonvoorspelling ijking" blijft meelopen ("nu" = zonder, "snel" = met; `stuurt: true`). Uit te zetten met `PV_SNELLE_CORRECTIE_AAN`.
+
+Tests: `test_v5211_pv_snelle_correctie.py` (9).

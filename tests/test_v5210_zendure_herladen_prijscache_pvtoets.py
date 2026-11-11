@@ -129,7 +129,7 @@ def test_pv_terugtoets_op_de_gemeten_dagen():
     assert uit["beschikbaar"] and uit["dagen"] == 9
     assert uit["fout_nu_kwh_per_dag"] == 0.88
     assert uit["fout_snel_kwh_per_dag"] == 0.99
-    assert uit["beter"] is False and uit["stuurt"] is False
+    assert uit["beter"] is False
 
 
 def test_pv_terugtoets_te_weinig_dagen():

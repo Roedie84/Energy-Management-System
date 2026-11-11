@@ -8132,11 +8132,15 @@ ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN = 10
 # herstelt vaak vanzelf) en hooguit een keer per uur.
 ZENDURE_HERLAAD_NA_MINUTEN = 5
 ZENDURE_HERLAAD_PAUZE_MINUTEN = 60
-# v5.210.0: terugtoets van een snellere zon-correctie (alleen meten).
+# v5.210.0: terugtoets van een snellere zon-correctie (v5.211.0: stuurt mee).
 PV_SNELLE_CORRECTIE_DAGEN = 5
 PV_SNELLE_CORRECTIE_MIN = 0.8
 PV_SNELLE_CORRECTIE_MAX = 1.2
 PV_SNELLE_CORRECTIE_MIN_TOETSDAGEN = 5
+# v5.211.0 (Ruud 11-11 10:18: "Aanzetten"): de snelle correctie stuurt mee.
+# Over 25 getoetste dagen: fout 1,20 -> 0,96 kWh per dag, afwijking -0,91 ->
+# -0,09 kWh per dag. Op False rekent het plan weer zonder.
+PV_SNELLE_CORRECTIE_AAN = True
 
 # v5.31.2: een stand die het EMS zelf al schreef, wordt pas na zoveel seconden
 # opnieuw geschreven. Op 6 oktober stond de select na een herstart op
