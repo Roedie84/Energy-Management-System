@@ -127,24 +127,6 @@ def test_every_call_is_shielded():
     assert "_veilig" in bron
 
 
-def test_a_broken_part_does_not_break_the_rest(make_coordinator, hass):
-    c = make_coordinator({})
-
-    def stuk():
-        raise KeyError("gesimuleerd")
-
-    c.get_topic_summaries = stuk
-
-    def veilig(functie):
-        try:
-            return functie()
-        except Exception as fout:  # noqa: BLE001
-            return {"fout": f"{type(fout).__name__}: {fout}"}
-
-    assert veilig(c.get_topic_summaries) == {"fout": "KeyError: 'gesimuleerd'"}
-    assert veilig(c.get_dashboard_health)["beschikbaar"] is True
-
-
 def test_the_failure_is_recorded_not_swallowed():
     """Een stil weggevallen onderdeel is erger dan een zichtbare fout:
     dan denk je dat er niets te melden was."""

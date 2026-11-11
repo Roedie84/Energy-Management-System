@@ -128,20 +128,6 @@ def test_the_startup_grace_also_does_not_fill_the_history(
 # --- zichtbaar op het dashboard --------------------------------------
 
 
-def test_the_table_marks_unsent_notifications():
-    """Zonder markering lijkt het alsof de schakelaar niets doet."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    assert "m.verstuurd is defined and not m.verstuurd" in yaml_tekst
-    assert "niet naar je telefoon gestuurd" in yaml_tekst
-
-
 def test_every_type_can_be_disabled_and_still_logged(
     make_coordinator, hass
 ):

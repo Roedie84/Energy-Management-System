@@ -84,45 +84,6 @@ def test_all_learned_bins_are_exposed():
     assert '"geleerde_buckets"' in bron
 
 
-def test_the_card_shows_the_bins():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    klimaat = next(v for v in data["views"] if v["path"] == "detail-klimaat")
-    kaarten = [k for s in klimaat["sections"] for k in s.get("cards") or []]
-
-    kaart = next(k for k in kaarten if "airco" in str(k.get("title", "")).lower())
-
-    assert "geleerde_buckets" in kaart["content"]
-    assert "20 waarnemingen" in kaart["content"]
-
-
-def test_the_card_explains_the_mechanism():
-    """Zonder uitleg is niet te beoordelen waarom een bin op 0% staat."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    klimaat = next(v for v in data["views"] if v["path"] == "detail-klimaat")
-    kaarten = [k for s in klimaat["sections"] for k in s.get("cards") or []]
-
-    kaart = next(k for k in kaarten if "airco" in str(k.get("title", "")).lower())
-
-    # v5.60: per halve graad
-    assert "bakje van 0,5 °C" in kaart["content"]
-    assert "19,3 t/m 19,7 → 19,5" in kaart["content"]
-    assert "binnen dat uur aangezet" in kaart["content"]  # v5.98.0
-
-
 def test_zero_percent_is_a_real_answer(make_coordinator, hass):
     """0% betekent "je zet hem hier nooit aan" - dat is informatie, geen
     ontbrekende meting."""
@@ -190,23 +151,3 @@ def test_without_direction_data_it_stays_empty(make_coordinator, hass):
     assert c.get_airco_activation_probability("22.0")["richting"] is None
 
 
-def test_the_card_shows_the_direction():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    klimaat = next(v for v in data["views"] if v["path"] == "detail-klimaat")
-    kaarten = [k for s in klimaat["sections"] for k in s.get("cards") or []]
-
-    kaart = next(
-        k
-        for k in kaarten
-        if "airco" in str(k.get("title", "")).lower() and k.get("type") == "markdown"
-    )
-
-    assert "Richting" in kaart["content"]
-    assert "het hele jaar" in kaart["content"]

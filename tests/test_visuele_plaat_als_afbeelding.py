@@ -199,26 +199,6 @@ def test_the_coordinator_never_returns_a_bare_plate():
         assert "als_afbeelding(" in romp, f"{naam} levert ruwe SVG"
 
 
-def test_the_dashboard_reads_those_attributes_unchanged():
-    """Het dashboard verandert niet, dus hoeft de gebruiker het niet
-
-    opnieuw te importeren. Wijzigt dit ooit wel, dan hoort daar een
-    uitdrukkelijke instructie bij.
-    """
-    import yaml
-
-    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-    visueel = next(v for v in data["views"] if v.get("title") == "Visueel")
-    inhoud = yaml.dump(visueel)
-
-    # v5.19: de pagina leest de COCKPITSENSOR, die meebeweegt met de
-    # metingen. De zware GACS-sensor werd maar eens per 30 seconden
-    # opgehaald, en dan staat de plaat stil.
-    # v5.177.0 (A14): de pagina verwijst naar de EMS-cockpit.
-    assert "/ems-cockpit" in inhoud
-    assert "overzichtsecties" not in inhoud
-
-
 def test_de_afbeelding_rekt_mee_met_de_kaart():
     """Gemeld met een schermafdruk: "geen volledig scherm".
 

@@ -264,42 +264,6 @@ def test_temperatuur_regressie_onvoldoende_data_without_samples(make_coordinator
 # --- v1.0.3: de legenda mag niet achterlopen op de code ------------
 
 
-def _legenda_tekst():
-    """De legenda als één doorlopende regel.
-
-    De YAML-bronopmaak breekt zinnen over meerdere regels af, dus een
-    letterlijke zoekopdracht op een zinsdeel zou stuklopen op een
-    regelafbreking die niets met de inhoud te maken heeft.
-    """
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    # v1.3.0: het Betrouwbaarheid-tabblad heeft óók een kaart met de
-    # titel "Legenda". Alleen op titel zoeken pakt dan de verkeerde, dus
-    # eerst het juiste tabblad opzoeken.
-    # v1.10.1: het Advies-tabblad is samengevoegd in "Kwaliteit". Daar
-    # staan nu twee kaarten met de titel "Legenda" - die van de
-    # betrouwbaarheidsschaal en die van de adviesmodules - dus zoeken op
-    # titel alleen is niet genoeg; de inhoud onderscheidt ze.
-    for view in data["views"]:
-        if view.get("title") != "Kwaliteit":
-            continue
-        for card in view.get("cards") or []:
-            if card.get("title") == "Legenda" and "MPC" in card.get(
-                "content", ""
-            ):
-                return " ".join(card["content"].split())
-    raise AssertionError("geen legenda-kaart gevonden op het Advies-tabblad")
-
-
-
-
-
 def test_weather_ensemble_can_reach_ready_now(make_coordinator, hass):
     """Gedragsbewijs achter die legenda-tekst: de ensemble kan
     daadwerkelijk "klaar" bereiken, iets wat vóór v1.0.2 onmogelijk
@@ -314,24 +278,6 @@ def test_weather_ensemble_can_reach_ready_now(make_coordinator, hass):
 
 
 # --- v1.0.5: geen module mag onzichtbaar blijven -------------------
-
-
-def _dashboard_modulelabels():
-    """De labels die het Advies-tabblad hardcodeert, uit de
-    `namen`-dict in de markdown-kaart."""
-    import re
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    blok = yaml_tekst[yaml_tekst.index("{% set namen = {") :]
-    blok = blok[: blok.index("} %}")]
-    return set(re.findall(r"'([a-z_]+)':", blok))
-
-
-
-
 
 
 def test_the_acting_module_actually_sends_a_command():
@@ -384,9 +330,6 @@ def test_advisory_modules_never_reach_the_decision_tree():
         ]
         for regel in lezend:
             assert "_async_apply" not in regel, f"{module}: {regel}"
-
-
-
 
 
 # --- v1.12.0: dezelfde garanties, nu op de data ---------------------

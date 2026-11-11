@@ -301,23 +301,6 @@ def test_de_regel_staat_bij_de_adviesmodules(make_coordinator, hass):
     assert len(koppen) == len(set(groepen))
 
 
-def test_de_kaart_leest_de_juiste_sleutel():
-    """Zonder deze toets kan de kaart stil op een hernoemde sleutel
-
-    blijven staan - dat is scan 19 in een andere vorm.
-    """
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    kaart = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    assert "helderheid_ijking" in kaart
-    assert "mag_regelen" in kaart
-
-
 # --- 5. wat de eerste meetdag liet zien (v3.94.1) ---------------------
 #
 # Na 6,3 uur meten stond er in de export:

@@ -218,37 +218,3 @@ def test_blokken_dragen_de_accustand_van_begin_tot_eind(make_coordinator):
     assert c._accu_tekst(None, None) == "—"
 
 
-def test_de_kaart_toont_de_accukolom():
-    import yaml
-    from jinja2 import Environment
-
-    data = yaml.safe_load(
-        open(
-            "custom_components/energy_management_system/dashboard_template.yaml",
-            encoding="utf-8",
-        )
-    )
-    kaart = next(
-        k
-        for v in data["views"]
-        for s in v.get("sections") or []
-        for k in s.get("cards") or []
-        if k.get("title") == "Komend schema"
-    )
-    inhoud = kaart["content"].replace(
-        "state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions')",
-        "BLOKKEN",
-    )
-    uit = Environment().from_string(inhoud).render(
-        BLOKKEN=[
-            {"van_tekst": "12:00", "tot_tekst": "13:00", "mode": "manual (laden)",
-             "min_price_per_kwh": 0.125, "max_price_per_kwh": 0.127,
-             "soc_begin": 38, "soc_eind": 66, "accu_tekst": "38 → 66%"},
-            {"van_tekst": "13:00", "tot_tekst": "14:00", "mode": "smart",
-             "min_price_per_kwh": 0.13, "max_price_per_kwh": 0.13,
-             "soc_begin": None, "soc_eind": None},
-        ]
-    )
-    assert "| Accu |" in uit
-    assert "38 → 66%" in uit
-    assert "| — |" in uit

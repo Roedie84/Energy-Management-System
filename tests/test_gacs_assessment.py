@@ -175,14 +175,3 @@ def test_monitoring_and_interoperability_are_solid(make_coordinator, hass):
     assert beoordeling["interoperabiliteit"] == RELIABILITY_RELIABLE
 
 
-def test_the_tab_exists():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-
-    assert "Meetkwaliteit" in [v["title"] for v in data["views"]]

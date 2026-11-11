@@ -116,13 +116,3 @@ def test_the_message_names_the_files():
     assert "afwijkend" in bron and "ontbrekend" in bron
 
 
-def test_there_is_a_switch_on_the_dashboard():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    sjabloon = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    assert "melding_installatie_onvolledig" in sjabloon

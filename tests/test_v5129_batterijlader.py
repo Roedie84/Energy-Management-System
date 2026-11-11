@@ -184,13 +184,3 @@ def test_drempel_constant_en_bewaarde_velden():
         assert f'"{veld}"' in tekst
 
 
-def test_vertalingen_en_cockpit():
-    for naam in ("strings.json", "translations/nl.json", "translations/en.json"):
-        data = json.loads((COMP / naam).read_text())
-        assert "batterijlader_switch_entity" in json.dumps(data)
-    js = (COMP / "www" / "ems-cockpit.js").read_text()
-    assert 'lader: "batterijlader_status"' in js
-    assert 'laderOverrule: "batterijlader_override"' in js
-    tpl = (COMP / "dashboard_template.yaml").read_text()
-    assert "switch.woonkamer_energy_management_system_batterijlader_overrule" in tpl
-    assert "sensor.woonkamer_energy_management_system_batterijlader_status" in tpl

@@ -217,31 +217,6 @@ def test_both_switches_exist():
     assert "Handmatig smart charge" in bron
 
 
-def test_the_wattage_is_an_attribute_not_a_name():
-    """Dat getal hoort in de knop, niet in de identiteit: wijzigt het
-
-    ooit, dan klopt elke verwijzing niet meer.
-    """
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    map_ = Path(pkg.__file__).parent
-    bron = (map_ / "switch.py").read_text()
-    sjabloon = (map_ / "dashboard_template.yaml").read_text()
-
-    assert '"vermogen_w"' in bron
-
-    # De KAART toont het als vaste tekst.
-    #
-    # v3.79.0: een `mushroom-entity-card` accepteert geen sjabloon in
-    # `name` - dat werkt alleen bij een `mushroom-template-card`. De
-    # eerste versie zette er wel een in, en toen stond de sjabloontekst
-    # zelf op het dashboard.
-    assert "Handmatig laden 2000 W" in sjabloon
-    assert "state_attr(e, 'vermogen_w')" not in sjabloon
-
-
 def test_the_switches_do_not_survive_a_restart():
     """Bewust geen herstel: anders staat de accu na een herstart uren
 

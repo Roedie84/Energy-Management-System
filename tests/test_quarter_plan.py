@@ -183,31 +183,6 @@ def test_without_a_battery_reading_there_is_no_plan(make_coordinator, hass):
 # --- inbedding -------------------------------------------------------
 
 
-def test_it_is_on_the_dashboard():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    pagina = next(
-        v for v in data["views"] if v.get("path") == "detail-kwartier"
-    )
-    kaarten = [k for s in pagina["sections"] for k in s.get("cards") or []]
-
-    # v1.23.1: er staan meerdere markdown-kaarten op deze pagina
-    # (samenvatting, verkooptoets, tabel). Zoeken op de kolomkop is
-    # stabieler dan op één veld dat ook elders kan voorkomen.
-    inhoud = next(
-        k["content"]
-        for k in kaarten
-        if k.get("type") == "markdown" and "{% for r in p %}" in str(k.get("content"))
-    )
-
-    assert "soc_procent" in inhoud
-    assert "prijs_ct" in inhoud
     # v1.23.2: de uitleg over de manual-verkoop staat op de
     # samenvattingspagina, bij de verkooptoets waar hij thuishoort.
 
@@ -312,38 +287,6 @@ def test_no_plan_means_no_summary(make_coordinator, hass):
     c._get_forecast_entries = lambda: []
 
     assert c.get_quarter_plan_summary(NU)["beschikbaar"] is False
-
-
-def test_the_summary_is_on_the_dashboard():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    pagina = next(v for v in data["views"] if v.get("path") == "detail-kwartier")
-    kaarten = [k for s in pagina["sections"] for k in s.get("cards") or []]
-
-    inhoud = " ".join(str(k.get("content", "")) for k in kaarten)
-
-    # v1.23.2: de samenvatting staat op een eigen pagina, omdat de
-    # tabel met alle kolommen anders over de leesbaarheidsgrens loopt.
-    data2 = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    sam = next(
-        v
-        for v in data2["views"]
-        if v.get("path") == "detail-planning-samenvatting"
-    )
-    samkaarten = [k for s in sam["sections"] for k in s.get("cards") or []]
-    saminhoud = " ".join(str(k.get("content", "")) for k in samkaarten)
-
-    assert "verwachte_opbrengst_eur" in saminhoud
-    assert "laagste_soc_procent" in saminhoud
-    assert "zon_kwh" in inhoud
 
 
 # --- v1.23.2: vooruitkijken en wijzigingen --------------------------
@@ -538,26 +481,6 @@ def test_the_snapshot_stays_bounded(make_coordinator, hass):
         c.get_quarter_plan(NU + timedelta(hours=uur))
 
     assert len(c.quarter_plan_first_seen) <= QUARTER_PLAN_SNAPSHOT_LENGTH
-
-
-def test_the_card_marks_changes_in_red():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    pagina = next(v for v in data["views"] if v.get("path") == "detail-kwartier")
-    kaarten = [k for s in pagina["sections"] for k in s.get("cards") or []]
-    tabel = next(
-        k["content"] for k in kaarten if "{% for r in p %}" in str(k.get("content"))
-    )
-
-    assert "color:#e05252" in tabel
-    assert "r.gewijzigd" in tabel
-    assert "eerst_voorspeld" in tabel
 
 
 # --- v1.24.1: de accustand rechtstreeks lezen -----------------------

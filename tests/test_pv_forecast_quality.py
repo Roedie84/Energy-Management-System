@@ -135,26 +135,6 @@ def test_it_is_in_the_export():
     assert "pv_forecast_quality" in bron
 
 
-def test_it_is_on_the_pv_page():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    zon = next(v for v in data["views"] if v["path"] == "detail-zon")
-    kaarten = [k for s in zon["sections"] for k in s.get("cards") or []]
-
-    kaart = next(
-        k for k in kaarten if "voorspelling" in str(k.get("title", "")).lower()
-    )
-
-    for veld in ("bias_procent", "gemiddelde_fout_procent", "slechtste_dag_procent"):
-        assert veld in kaart["content"], veld
-
-
 # --- v1.17.5: de PV-tegel op Overzicht ------------------------------
 
 
@@ -209,20 +189,3 @@ def test_without_history_it_still_shows_production(make_coordinator, hass):
     assert "Nog geen voltooide dagen" in zon["zin"]
 
 
-def test_the_tile_is_on_the_overview_and_leads_to_the_pv_page():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
-    kaarten = [k for s in overzicht["sections"] for k in s.get("cards") or []]
-
-    tegel = next(k for k in kaarten if k.get("primary") == "PV / zon")
-
-    assert "'zon'" in str(tegel)
-    assert tegel["tap_action"]["navigation_path"].endswith("detail-zon")
-    assert tegel["icon"] == "mdi:solar-power"

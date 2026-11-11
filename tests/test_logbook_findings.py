@@ -224,19 +224,6 @@ def test_no_blocking_file_access_outside_the_executor():
     assert not overtredingen, overtredingen
 
 
-def test_the_dashboard_template_is_read_once_at_startup():
-    """Het sjabloon verandert alleen bij een update, dus het hoeft maar
-    één keer gelezen te worden."""
-    bron = coordinator_bron()
-
-    assert "async_load_dashboard_template" in bron
-    assert "_dashboard_template_cache" in bron
-
-    kop = bron.index("    async def async_setup(self) -> None:")
-    blok = bron[kop : bron.index("\n    async def ", kop + 40)]
-    assert "async_load_dashboard_template()" in blok
-
-
 def test_a_swallowed_startup_error_becomes_visible():
     """v2.2.4: de try/except rond het inlezen ving drie dagen lang een
     NameError op zonder dat er iets van te zien was.

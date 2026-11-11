@@ -312,46 +312,6 @@ def test_logboek_40_regels_met_kort_detail(make_coordinator, hass):
 # --- het dashboard ziet hetzelfde ----------------------------------------
 
 
-def _dashboard_teksten() -> list[str]:
-    uit = []
-
-    def loop(x):
-        if isinstance(x, dict):
-            for w in x.values():
-                loop(w)
-        elif isinstance(x, list):
-            for w in x:
-                loop(w)
-        elif isinstance(x, str):
-            uit.append(x)
-
-    loop(yaml.safe_load((MAP / "dashboard_template.yaml").read_text(encoding="utf-8")))
-    return uit
-
-
-def _gelezen_attributen() -> dict[str, set[str]]:
-    gelezen: dict[str, set[str]] = {}
-    for tekst in _dashboard_teksten():
-        for entiteit, sleutel in re.findall(r"state_attr\('(sensor\.[a-z0-9_]+)',\s*'([a-z0-9_]+)'\)", tekst):
-            gelezen.setdefault(entiteit, set()).add(sleutel)
-    return gelezen
-
-
-def test_lijsten_en_sjabloon_kloppen_met_elkaar():
-    """Elk attribuut dat het dashboard van de zelfbeoordeling of een
-    pagina-sensor leest, staat in diens lijst - en andersom staat er niets
-    in een lijst dat niemand leest."""
-    gelezen = _gelezen_attributen()
-
-    assert gelezen[GACS] == set(m.GACS_DASHBOARD_SLEUTELS) - {"gacs_fout", "rekentijd_ms"}
-    for rij in m.DASHBOARD_PAGINA_SENSOREN:
-        assert gelezen.get(_entity_id(rij)) == set(rij[3]), rij[1]
-    alle = set(m.GACS_DASHBOARD_SLEUTELS)
-    for rij in m.DASHBOARD_PAGINA_SENSOREN:
-        assert not alle & set(rij[3]), rij[1]  # nergens dubbel
-        alle |= set(rij[3])
-
-
 def _sleutels_per_variabele(tekst: str) -> dict[tuple[str, str], set[str]]:
     """(entiteit, attribuut) -> sleutels die het sjabloon daarbinnen leest,
     ook in een lus over een lijst ervan (`for r in p.get('rijen')`)."""
@@ -386,26 +346,6 @@ def _alle_sleutels(waarde) -> set[str]:
             uit |= _alle_sleutels(w)
         return uit
     return set()
-
-
-def test_het_inkorten_laat_niets_weg_wat_een_kaart_leest(make_coordinator, hass):
-    """Elke sleutel die een kaart leest en die in de volledige gegevens
-    staat, staat ook in wat de sensor doorgeeft."""
-    c = _live_groot(make_coordinator)
-    volledig = m.gacs_volledig(c)
-    doorgegeven = {GACS: m.GacsAssessmentSensor(c, "x").extra_state_attributes}
-    for rij in m.DASHBOARD_PAGINA_SENSOREN:
-        doorgegeven[_entity_id(rij)] = m.DashboardPaginaSensor(c, "x", *rij).extra_state_attributes
-
-    gemist = []
-    for tekst in _dashboard_teksten():
-        for (entiteit, attribuut), sleutels in _sleutels_per_variabele(tekst).items():
-            if entiteit not in doorgegeven:
-                continue
-            had = _alle_sleutels(volledig.get(attribuut))
-            heeft = _alle_sleutels(doorgegeven[entiteit].get(attribuut))
-            gemist += [f"{attribuut}.{s}" for s in sleutels if s in had and s not in heeft]
-    assert not gemist, sorted(set(gemist))
 
 
 def test_niets_veranderd_aan_wat_niet_wordt_ingekort(make_coordinator, hass):

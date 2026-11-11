@@ -45,11 +45,3 @@ def test_een_blok_morgen(make_coordinator):
     assert blokken[0]["tot_tekst"] == "24:00"
 
 
-def test_het_dashboard_toont_de_tekst(make_coordinator):
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    sjabloon = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text(encoding="utf-8")
-    assert "''tot_tekst''" in sjabloon and "''van_tekst''" in sjabloon
-    assert "as_timestamp(t[0].get(''end''))" not in sjabloon

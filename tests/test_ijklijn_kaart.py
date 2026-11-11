@@ -57,15 +57,3 @@ def test_bijna_gevulde_bakjes_worden_genoemd(make_coordinator, hass):
     assert "1 dag" in uit["wat_ontbreekt"] or "morgen" in uit["wat_ontbreekt"]
 
 
-def test_de_kaart_toont_de_scores():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    kaart = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    i = kaart.index("ijklijn")
-
-    # v4.9: de kaart leest klaar opgemaakte regels uit de coordinator -
-    # het sjabloon staat op de ratel voor logica.
-    assert "voortgang_regels" in kaart
-    assert "dagen_per_bakje_nodig" in kaart

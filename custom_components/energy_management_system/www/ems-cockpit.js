@@ -427,10 +427,9 @@ const icoon = (naam, klasse = "ic") =>
 /* Bouwstenen                                                          */
 /* ------------------------------------------------------------------ */
 
-const paneelKop = (ic, titel, rechts = "", link = "") =>
-  `<div class="ph">${icoon(ic)}<h2>${esc(titel)}</h2><div class="ph-r">${rechts}` +
-  (link ? `<button class="meer" data-nav="${esc(link)}" title="Details">${icoon("pijl")}</button>` : "") +
-  `</div></div>`;
+// v5.219.0: geen knop "Details" meer; de detailpagina's zijn vervallen.
+const paneelKop = (ic, titel, rechts = "") =>
+  `<div class="ph">${icoon(ic)}<h2>${esc(titel)}</h2><div class="ph-r">${rechts}</div></div>`;
 
 const chip = (tekst, klasse = "") => (tekst ? `<span class="chip ${klasse}">${tekst}</span>` : "");
 
@@ -550,9 +549,6 @@ button { font: inherit; }
 .ph h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--tekst); white-space: nowrap; }
 /* v5.215.0: de chips lopen door naar een tweede regel in plaats van afgekapt te worden. */
 .ph-r { margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px 8px; justify-content: flex-end; align-items: center; min-width: 0; }
-.meer { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: var(--r2); border: 1px solid var(--rand); background: transparent; color: var(--tekst3); cursor: pointer; padding: 0; }
-.meer:hover { color: var(--tekst); border-color: var(--rand2); }
-.meer .ic { width: 14px; height: 14px; }
 .pb { padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-content: start; flex: 1 1 auto; }
 .leegmelding { color: var(--tekst3); font-size: 13px; }
 .meta { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -699,7 +695,7 @@ button { font: inherit; }
 .tabs button { font-size: 12px; color: var(--tekst2); background: none; border: 0; border-radius: 6px; padding: 0 10px; cursor: pointer; }
 .tabs button[aria-selected="true"] { background: var(--vlak2); color: var(--tekst); font-weight: 600; }
 .tabs button:disabled { opacity: .35; cursor: default; }
-.tabs button:focus-visible, .links button:focus-visible, .vb-knoppen button:focus-visible { outline: 2px solid var(--blauw); outline-offset: 2px; }
+.tabs button:focus-visible, .vb-knoppen button:focus-visible { outline: 2px solid var(--blauw); outline-offset: 2px; }
 
 /* ---- tabellen ---- */
 .tabel { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -769,9 +765,6 @@ button { font: inherit; }
 
 /* ---- voet ---- */
 .voet { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-.links { display: flex; gap: 4px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
-.links button { font-size: 12px; color: var(--tekst2); background: transparent; border: 1px solid var(--rand); height: 28px; padding: 0 10px; border-radius: var(--r2); cursor: pointer; }
-.links button:hover { color: var(--tekst); border-color: var(--rand2); }
 .voetregel { font-size: 11px; color: var(--tekst3); margin-left: auto; }
 
 /* ---- geen bron ---- */
@@ -1051,14 +1044,6 @@ const KNOPPEN = [
 ];
 
 /* Snelkoppelingen naar de detailpagina's van het EMS-dashboard. */
-const DETAIL = "/energy-management-system/";
-const LINKS = [
-  ["Planning", "detail-planning"], ["Kwartierplanning", "detail-kwartier"], ["Accu", "detail-accu"],
-  ["Reservemarge", "detail-reservemarge"], ["Zon", "detail-zon"], ["Kosten", "detail-kosten"],
-  ["Besparing", "detail-besparing"], ["Plantoetsing", "detail-plantoetsing"], ["Klimaat", "detail-klimaat"],
-  ["Apparaten", "detail-apparaten"], ["Meldingen", "meldingen"], ["Gezondheid", "detail-gezondheid"],
-  ["Logboek", "detail-logboek"], ["Overzicht", "overzicht"],
-];
 
 /* ---- rustig scrollen (v5.71.1) ----
    Op mobiel (vooral iOS, dat geen scroll anchoring kent) verspringt de pagina
@@ -1303,11 +1288,6 @@ class EmsCockpitCard extends HTMLElement {
         this._schakel(knop.dataset.knop);
         return;
       }
-      const nav = doel.closest("[data-nav]");
-      if (nav) {
-        this._ga(nav.dataset.nav);
-        return;
-      }
       // v5.178.0: tabblad van Prijs en lading
       const tab = doel.closest("[data-tab]");
       if (tab) {
@@ -1415,12 +1395,6 @@ class EmsCockpitCard extends HTMLElement {
   }
 
   /* ---- acties ---- */
-
-  _ga(pad) {
-    const doel = pad.startsWith("/") ? pad : DETAIL + pad;
-    history.pushState(null, "", doel);
-    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
-  }
 
   _info(sleutel) {
     const id = this._ids[sleutel];
@@ -2000,7 +1974,7 @@ class EmsCockpitCard extends HTMLElement {
         `${heeft[k] ? "" : ` disabled title="Geen gegevens"`}>${naam}</button>`
       ).join("") +
       `</div>`;
-    const kop = paneelKop("grafiek", "Prijs en lading", knoppen, "detail-planning");
+    const kop = paneelKop("grafiek", "Prijs en lading", knoppen);
 
     // Prijzen: alle bekende kwartieren met de Vooruitblik eronder. 7 dagen: de
     // prijsverwachting met hoe goed die is.
@@ -2360,7 +2334,7 @@ class EmsCockpitCard extends HTMLElement {
       meter + zonMeter +
       (kans != null ? `<div class="meternoot">Kans op tekort: Monte Carlo over verbruik en zon, tot het volgende goedkope blok.</div>` : "") +
       (uitstel.reden ? `<div class="zin"><b>Zon opvangen uitstellen: ${uitstel.uitstellen ? "ja" : "nee"}.</b> ${esc(uitstel.reden)}</div>` : "");
-    return paneelKop("schild", "Zon, verkopen en reserve", rechts, "detail-reservemarge") +
+    return paneelKop("schild", "Zon, verkopen en reserve", rechts) +
       `<div class="pb">${cijfers}${regels}${this._uitklap("zon_reserve", "Uitleg reserve en zon", `<div class="lijst">${uitleg}</div>`)}</div>`;
   }
 
@@ -2387,7 +2361,7 @@ class EmsCockpitCard extends HTMLElement {
       const s = this._s("modules");
       const sinds = s ? Date.parse(s.last_changed || "") : NaN;
       const start = s && (Date.now() - sinds < 10 * 60000 || attr(this._s("status"), "opstarten"));
-      return paneelKop("cellen", "Accumodules", "", "detail-accu") +
+      return paneelKop("cellen", "Accumodules") +
         `<div class="pb"><div class="meta">${rechts}</div></div><div class="leegmelding">${start ? "Modulegegevens laden nog (EMS net gestart)." : "Geen modulegegevens."}</div>`;
     }
     const regels = mods.map((m) => {
@@ -2423,7 +2397,7 @@ class EmsCockpitCard extends HTMLElement {
     const koel = bruikbaar(koeling) && attr(koeling, "reden")
       ? `<div class="za-s">Koeling ${koelAan ? "aan" : "uit"}: ${esc(attr(koeling, "reden"))}</div>`
       : "";
-    return paneelKop("cellen", "Accumodules", "", "detail-accu") +
+    return paneelKop("cellen", "Accumodules") +
       `<div class="pb"><div class="meta">${rechts}</div><div class="lijst">${regels}</div>${koel}${this._accukosten()}</div>`;
   }
 
@@ -2587,7 +2561,7 @@ class EmsCockpitCard extends HTMLElement {
     const huis = getal(this._s("huis"));
     // v5.178.0: alle regels blijven zichtbaar, in een dichter raster
     return (
-      paneelKop("huis", "Huis en apparaten", huis != null ? chip(`${watt(huis)} nu`) : "", "detail-apparaten") +
+      paneelKop("huis", "Huis en apparaten", huis != null ? chip(`${watt(huis)} nu`) : "") +
       (uit.length ? `<div class="pb"><div class="lijst huislijst">${uit.join("")}</div></div>` : `<div class="leegmelding">Geen apparaten ingesteld.</div>`)
     );
   }
@@ -2650,7 +2624,7 @@ class EmsCockpitCard extends HTMLElement {
     ].filter(Boolean).join(PUNT);
     return (
       `<div class="tegel">` +
-      paneelKop("euro", "Geld", "", "detail-besparing") +
+      paneelKop("euro", "Geld") +
       `<div class="geld-grid"><div class="rijen geld-r">` +
       // v5.203.0 (Ruud 09-11: "een totaal plaatje voor gas en elektra"):
       // stroom en gas van vandaag inclusief vastrecht, netbeheer en de
@@ -2924,14 +2898,13 @@ class EmsCockpitCard extends HTMLElement {
     // v5.173.0: eerst de cockpit zelf (wordt bij elke meting getekend); de
     // systeemstatus schrijft nog alleen bij een echte wijziging.
     const bijgewerkt = attr(this._s("cockpit"), "bijgewerkt") || attr(st, "last_successful_update");
-    const links = LINKS.map(([n, p]) => `<button type="button" data-nav="${p}">${esc(n)}</button>`).join("");
     const regel = [
-      // v5.216.0 (punt 6): alleen versie, fouten en storingen; de rest staat op de pagina Gezondheid.
+      // v5.216.0 (punt 6): alleen versie, fouten en storingen; de rest staat in de sensor Diagnose gezondheid.
       bruikbaar(gez) ? esc(String(gez.state).split(" \u00b7 ").slice(0, 3).join(" \u00b7 ")) : "",
       bijgewerkt ? `Bijgewerkt ${esc(geleden(bijgewerkt) || "")}` : "",
       VERSIE === "onbekend" ? "Cockpit: versie onbekend" : `Cockpit v${esc(VERSIE)}`,
     ].filter(Boolean).join(PUNT);
-    return `<nav class="links" aria-label="Detailpagina's">${links}</nav><span class="voetregel">${regel}</span>`;
+    return `<span class="voetregel">${regel}</span>`;
   }
 }
 

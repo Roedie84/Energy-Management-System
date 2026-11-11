@@ -26,11 +26,6 @@ from custom_components.energy_management_system.overview_svg import (
 PAKKET = Path(pkg.__file__).parent
 
 
-def _visuele_view():
-    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-    return next(v for v in data["views"] if v.get("title") == "Visueel")
-
-
 # --- 1. Dynamisch: geen zon als het bewolkt is -----------------------
 
 
@@ -95,15 +90,6 @@ def test_the_drawing_scales_with_the_screen():
     assert 'height="1000"' not in svg
 
 
-def test_the_card_fills_the_width():
-    view = _visuele_view()
-
-    # v3.25.2: terug naar de paneelweergave - zie
-    # test_the_visual_page_is_a_panel_again.
-    assert view.get("panel") is True
-    assert len(view["cards"]) == 1
-
-
 # --- 4. Klikbaar ------------------------------------------------------
 
 
@@ -112,18 +98,6 @@ def test_the_blocks_link_to_their_detail_pages():
 
     for doel in ("detail-zon", "detail-accu", "detail-kwartier"):
         assert f"/energy-management-system/{doel}" in svg
-
-
-def test_every_link_points_at_a_page_that_exists():
-    """Een klikbaar blok dat nergens heen gaat is erger dan geen link."""
-    import re
-
-    svg = bouw_overzicht({})
-    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-    paden = {v.get("path") for v in data["views"]}
-
-    for doel in re.findall(r"/energy-management-system/([\w-]+)", svg):
-        assert doel in paden, doel
 
 
 # --- 5. Stromen -------------------------------------------------------

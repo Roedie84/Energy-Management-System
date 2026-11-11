@@ -375,18 +375,3 @@ def test_missing_feedin_tariff_after_salderen_is_a_real_attention_point(
     assert any("teruglevertarief" in p for p in summary["aandachtspunten"])
 
 
-
-def test_dashboard_template_matches_the_repository_dashboard():
-    """De twee dashboardbestanden moeten identiek blijven."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    template = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    repo = (
-        Path(pkg.__file__).parent.parent.parent
-        / "dashboards"
-        / "energy_management_system_dashboard.yaml"
-    ).read_text()
-
-    assert template == repo

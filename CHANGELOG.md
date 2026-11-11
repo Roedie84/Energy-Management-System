@@ -35543,3 +35543,15 @@ Ruud 11-11 14:33 ("1 Akkoord"). Gevonden bij het uitrollen van v5.217.0: de cock
 - De aanmelding gebeurt direct na het kopieren van het sjabloon en kan de opstart niet tegenhouden; de uitkomst staat in het logboek.
 
 Tests: `test_v5218_detaildashboard.py` (10).
+
+## v5.219.0 — de detailpagina's zijn vervallen
+
+Ruud 11-11 15:08 ("In principe kunnen alle detailpagina's weg toch? Ik heb ze niet gemist") en 15:09 ("1, 2 en 3 akkoord"). Het detaildashboard bestond tot v5.218.0 niet eens in zijn Home Assistant; de analyse loopt via de sensoren en de diagnose, niet via die pagina's.
+
+- **Detaildashboard verwijderd**: `dashboard_template.yaml` (32 pagina's, 220 KB), de kopie `dashboards/energy_management_system_dashboard.yaml`, `detail_dashboard.py` (aanmelding, v5.218.0) en `dashboard_opmaak.py` (opmaakfilter, v5.217.0).
+- **Cockpit**: de 14 knoppen onderaan en de knop "Details" op de tegels zijn weg, met de bijbehorende navigatiecode en stijl. De voetregel (versie, fouten, storingen, bijgewerkt) blijft.
+- **Opstart**: kopieert en meldt niets meer aan; een oude `energy_management_system_dashboard.yaml` in de configuratiemap wordt eenmalig verwijderd (`_verwijder_oude_dashboardkopie`).
+- **Dashboardcontrole**: `get_dashboard_health` meldt "niet beschikbaar"; de reparatiemelding over dashboardkaarten kan daardoor niet meer afgaan. De cockpit houdt zijn eigen bronnencontrole.
+- Sensoren en attributen zijn ongewijzigd; alleen de weergave is weg.
+
+Tests: 15 testbestanden en 205 testfuncties over het dashboardsjabloon verwijderd; nieuw `test_v5219_detaildashboard_weg.py` (7).

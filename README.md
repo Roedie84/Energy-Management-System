@@ -5,7 +5,7 @@
 **Home Assistant-integratie die een thuisaccu aanstuurt op dynamische energieprijzen — en zichzelf bijleert.**
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/versie-5.218.0-blue.svg?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/versie-5.219.0-blue.svg?style=flat-square)](CHANGELOG.md)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6.0%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io)
 [![Tests](https://img.shields.io/badge/tests-7069%20groen-brightgreen.svg?style=flat-square)](tests)
 [![License](https://img.shields.io/badge/licentie-MIT-lightgrey.svg?style=flat-square)](LICENSE)
@@ -151,24 +151,13 @@ daarvoor nodig is.
 Kopieer `custom_components/energy_management_system/` naar je
 `config/custom_components/`-map en herstart Home Assistant.
 
-### Dashboard koppelen
+### Dashboard
 
-Bij het opstarten wordt `energy_management_system_dashboard.yaml` naar je
-configuratiemap gekopieerd. Koppel dat bestand in `configuration.yaml`:
-
-```yaml
-lovelace:
-  dashboards:
-    ems-dashboard:
-      mode: yaml
-      filename: energy_management_system_dashboard.yaml
-      title: Energy Management System
-      icon: mdi:home-battery
-      show_in_sidebar: true
-```
-
-Het dashboard gebruikt
-[Mushroom Cards](https://github.com/piitaya/lovelace-mushroom).
+De integratie levert de **Energiecockpit** als kaart en dashboardstrategie
+(`ems-cockpit-card`); het script wordt bij de start zelf aan Home Assistant
+gegeven. Er is geen los dashboardbestand meer: de 32 detailpagina's zijn in
+v5.219.0 vervallen, en een oude kopie in de configuratiemap wordt bij de
+eerstvolgende start verwijderd.
 
 ---
 

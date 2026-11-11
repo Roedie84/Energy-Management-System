@@ -206,15 +206,3 @@ def test_advisory_modules_appear_in_the_new_language(make_coordinator, hass):
     assert rij["niveau"] == RELIABILITY_UNVERIFIABLE
 
 
-def test_the_tab_exists_and_shows_the_scale():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    titels = [v["title"] for v in data["views"]]
-
-    assert "Meetkwaliteit" in titels

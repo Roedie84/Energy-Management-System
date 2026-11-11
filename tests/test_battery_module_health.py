@@ -461,49 +461,6 @@ def test_attention_threshold_matches_the_constant(make_coordinator, hass):
     assert coordinator.get_battery_module_table()[0]["waarschuwingen"] != []
 
 
-def test_dashboard_shows_the_battery_modules():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    titels = [v["title"] for v in data["views"]]
-
-    # v1.12.2: samengevoegd tot het tabblad "Systeem", met een kop
-    # "Accumodules" erboven.
-    plat = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    assert "Accu" in titels
-    assert "title: Accumodules" in plat
-
-
-def test_every_tab_shows_its_name_not_just_an_icon():
-    """Gevraagd: "Zou je bij de tabbladen ook de namen willen laten zien
-    zodat het helder blijft en niet alleen icoontjes zichtbaar zijn?"
-
-    Home Assistant toont uitsluitend het icoon zodra een view er een
-    heeft - de titel verdwijnt dan volledig. Geen enkele view mag er dus
-    nog een hebben.
-    """
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-
-    for view in data["views"]:
-        assert view.get("title"), f"view zonder titel: {view.get('path')}"
-        assert "icon" not in view, (
-            f"view '{view['title']}' heeft een icoon - dan verbergt Home "
-            "Assistant de naam in de tabbalk"
-        )
-
-
 # --- v1.64.0: het celverschil hangt van de accustand af --------------
 
 

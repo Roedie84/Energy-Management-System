@@ -79,17 +79,3 @@ def test_na_zes_uren_is_er_een_oordeel(make_coordinator, hass, monkeypatch):
     assert oordeel["gemiddelde_afwijking_c"] == 0.4
 
 
-def _pagina(pad):
-    d = yaml.safe_load((Path(pkg.__file__).parent / "dashboard_template.yaml").read_text())
-    return next(v for v in d["views"] if v.get("path") == pad)
-
-
-def test_de_knop_airco_automaat_staat_op_de_landingspagina():
-    assert "switch.woonkamer_energy_management_system_airco_automaat" in str(_pagina("overzicht"))
-
-
-def test_op_klimaat_staat_het_besluit_zonder_schakelfunctie():
-    """Het besluit is daar alleen te lezen; schakelen gebeurt op Overzicht."""
-    klimaat = str(_pagina("detail-klimaat"))
-    assert "airco_besluit" in klimaat
-    assert "airco_automaat" not in klimaat

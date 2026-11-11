@@ -48,9 +48,6 @@ def test_it_produces_valid_svg():
     ET.fromstring(_plaat())
 
 
-
-
-
 def test_no_meter_for_a_fixed_number():
     """Op het voorbeeld staat "Power capacity 413 kW" in een halve
     cirkel. Dat is versiering: een waarde die nooit beweegt hoort geen
@@ -96,7 +93,6 @@ def test_empty_data_does_not_crash():
     ET.fromstring(bouw_scada({}))
 
 
-
 def test_the_canvas_fits_its_content():
     """Alles moet binnen de viewBox vallen, anders wordt de onderbalk
     afgesneden."""
@@ -110,8 +106,6 @@ def test_the_canvas_fits_its_content():
 
 
 # --- v3.18.0: uitlijning en loze ruimte ------------------------------
-
-
 
 
 def test_the_power_block_carries_context():
@@ -199,7 +193,6 @@ def test_the_module_bars_helper_still_works():
 # --- v3.19.0: status per onderwerp, klikbaar -------------------------
 
 
-
 def test_the_reliability_level_is_coloured():
     """Dezelfde schaal als de proefstand en de meetkwaliteit gebruiken,
     dus geen nieuw begrip."""
@@ -245,9 +238,6 @@ def test_empty_topics_render_nothing():
 # --- v3.20.0: één plaat, en nette schaalgrenzen -----------------------
 
 
-
-
-
 def test_everything_still_fits_the_canvas():
     import re
 
@@ -264,9 +254,6 @@ def test_everything_still_fits_the_canvas():
 
 
 # --- v3.21.0: drie kolommen -------------------------------------------
-
-
-
 
 
 def test_the_bottom_bar_spans_the_full_width():
@@ -371,8 +358,6 @@ def test_nothing_falls_outside_the_canvas():
 # --- v3.22.1: bewegende stroompijlen ---------------------------------
 
 
-
-
 def test_the_arrow_thickness_follows_the_power():
     """Bij veel stroom een dikkere pijl - dan zie je in één blik waar de
     energie heen gaat."""
@@ -409,8 +394,6 @@ def test_the_svg_has_no_links():
     assert "xlink" not in plaat
 
 
-
-
 def test_the_plate_names_every_part_of_the_installation():
     """v5.16: een schema in plaats van kolommen. Gevraagd: "ik wil graag
     een professioneel overzicht waar de stroom heen gaat"."""
@@ -418,105 +401,6 @@ def test_the_plate_names_every_part_of_the_installation():
 
     for titel in ("ZONNEPANELEN", "NET", "HUIS", "THUISACCU"):
         assert titel in plaat
-
-def test_the_visual_page_is_a_panel_again():
-    """v3.25.2: teruggezet naar de paneelweergave met alleen de plaat.
-
-    Gemeld: "de Visueel pagina werkt niet correct, graag terugbrengen
-    naar de stand van gisteren." De dashboardcontrole vond niets - 103
-    verwijzingen nagelopen, geen ontbrekende entiteiten of attributen -
-    dus wat er precies misging is niet vast te stellen.
-
-    Dan is teruggaan naar een aantoonbaar werkende stand verstandiger
-    dan blijven sleutelen. De sectie-indeling met de klikbare tegels uit
-    v3.23.0 vervalt daarmee; die kan terugkomen zodra duidelijk is wat er
-    aan de hand was.
-    """
-    import yaml
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
-
-    assert pagina.get("panel") is True
-
-    # v3.25.3: één SVG per markdown-kaart. Twee SVG-blokken in dezelfde
-    # kaart werden als PLATTE TEKST getoond - de markdown-verwerker
-    # herkent het tweede blok dan niet meer als HTML.
-    stapel = pagina["cards"][0]
-    assert stapel["type"] == "vertical-stack"
-    # v5.23: de platen zijn markdown; daaronder mag EEN rij knoppen staan
-    # naar de details (aandachtspunten en reserve-opbouw) - dat is geen
-    # tweede plaat, en de plaat zelf kent geen tikactie.
-    platen = [k for k in stapel["cards"] if k["type"] != "horizontal-stack"]
-    assert all(k["type"] == "markdown" for k in platen)
-
-
-def test_only_the_cockpit_is_shown_on_the_visual_page():
-    """v5.18.6 - gemeld: "nog te groot, en 2 gescheiden velden?"
-
-    Op Visueel stonden twee platen onder elkaar: de cockpit en het blok
-    met VANDAAG, VOORUIT en KOSTEN. Samen pasten ze niet op een scherm, en
-    dan begint het scrollen. De cockpit staat er nu alleen; de sectieplaat
-    blijft beschikbaar als attribuut voor wie hem elders wil tonen.
-    """
-    import yaml
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
-    # v5.23: alleen de kaarten met inhoud - de knoppenrij heeft geen inhoud.
-    inhoud = [k["content"] for k in pagina["cards"][0]["cards"] if "content" in k]
-
-    # v5.19: de cockpitsensor beweegt mee met de metingen.
-    # v5.177.0 (A14): de plaat zelf staat in de EMS-cockpit.
-    assert any("/ems-cockpit" in c for c in inhoud)
-    assert not any("plaat'')" in c for c in inhoud)
-    assert not any("overzichtsecties" in c for c in inhoud)
-
-
-def test_no_card_holds_two_svgs():
-    """De oorzaak van de platte tekst: twee `<svg>`-blokken in dezelfde
-    markdown-kaart. Het eerste wordt als HTML herkend, het tweede niet
-    meer - en dan verschijnt alles als tekst.
-
-    Eén per kaart, en een vertical-stack eromheen zodat ze onder elkaar
-    blijven staan.
-    """
-    import yaml
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-
-    def _kaarten(o):
-        if isinstance(o, dict):
-            if o.get("type") == "markdown" and o.get("content"):
-                yield o["content"]
-            for v in o.values():
-                yield from _kaarten(v)
-        elif isinstance(o, list):
-            for x in o:
-                yield from _kaarten(x)
-
-    for inhoud in _kaarten(data):
-        aantal = sum(
-            1
-            for naam in ("overzichtsplaat", "overzichtsecties", "overzichtstatus")
-            if naam in inhoud
-        )
-        assert aantal <= 1, f"kaart met {aantal} SVG-bronnen: {inhoud[:80]}"
 
 
 # --- v3.25.4: geen SMIL-animatie meer --------------------------------

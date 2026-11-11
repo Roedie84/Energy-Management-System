@@ -190,11 +190,3 @@ def test_de_meetlaag_geeft_de_meerdaagse_afweging(make_coordinator, hass):
     assert "meerdaags" in laag.samenvatting()
 
 
-def test_de_proefstand_toont_de_kaart():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    sjabloon = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text(encoding="utf-8")
-    assert "Meerdaags (schaduw)" in sjabloon
-    assert "''meerdaags'')" in sjabloon

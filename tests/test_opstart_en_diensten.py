@@ -79,54 +79,6 @@ class _Oproep:
 # --- 1. het dashboard klaarzetten ------------------------------------
 
 
-def test_the_dashboard_is_copied_into_the_config_directory(hass, tmp_path):
-    """Zonder deze kopie moet elke gebruiker het dashboard met de hand
-
-    uit de repository halen.
-    """
-    hass.config = _NepConfig(tmp_path)
-
-    pkg._copy_dashboard_template(hass)
-
-    doel = tmp_path / "energy_management_system_dashboard.yaml"
-    assert doel.exists()
-    assert "Energy Management System" in doel.read_text()
-
-
-def test_copying_the_dashboard_overwrites_on_purpose(hass, tmp_path):
-    """Bewuste keuze, en het staat met zoveel woorden in de toelichting:
-
-    handmatige wijzigingen gaan verloren zodat het meegeleverde
-    dashboard de waarheid blijft.
-    """
-    hass.config = _NepConfig(tmp_path)
-    doel = tmp_path / "energy_management_system_dashboard.yaml"
-    doel.write_text("eigen versie")
-
-    pkg._copy_dashboard_template(hass)
-
-    assert doel.read_text() != "eigen versie"
-
-
-def test_an_unwritable_directory_does_not_break_the_start(hass, tmp_path):
-    """Deze routine draait tijdens het opstarten. Een schijf die vol zit
-
-    mag de integratie niet meenemen.
-    """
-    hass.config = _NepConfig(tmp_path / "bestaat_niet" / "diep")
-
-    pkg._copy_dashboard_template(hass)
-
-
-def test_a_missing_template_is_skipped(hass, tmp_path, monkeypatch):
-    hass.config = _NepConfig(tmp_path)
-    monkeypatch.setattr(pkg, "__file__", str(tmp_path / "nep" / "__init__.py"))
-
-    pkg._copy_dashboard_template(hass)
-
-    assert not (tmp_path / "energy_management_system_dashboard.yaml").exists()
-
-
 # --- 2. de achtergrondtekening ---------------------------------------
 
 

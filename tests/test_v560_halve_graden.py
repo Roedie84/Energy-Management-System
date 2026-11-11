@@ -219,12 +219,3 @@ def test_sensor_tabel_oplopend_met_labels(make_coordinator):
     assert attrs["leer_versie"] == c.airco_leer_versie
 
 
-def test_dashboard_gebruikt_de_labels():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    assert "huidige_bucket_label" in tekst
-    assert "{{ g.label }}" in tekst
-    assert "bin van 1 °C" not in tekst

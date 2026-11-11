@@ -152,14 +152,6 @@ def test_een_oude_beurt_wordt_herberekend_uit_het_dagverloop(make_coordinator):
     assert c._herbereken_oude_cyclusbeurten() == 0
 
 
-def test_de_kaart_toont_de_eerlijke_maatstaf():
-    import custom_components.energy_management_system as pkg
-
-    kaart = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    assert "besparing_tov_gemiddeld_eur_totaal" in kaart
-    assert "verschil_tov_goedkoopste_eur_totaal" in kaart
-
-
 # --- 2. het uurprofiel: gemiddelde voor energiesommen ---------------------
 
 

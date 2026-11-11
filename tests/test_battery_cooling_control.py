@@ -382,52 +382,6 @@ def test_sensor_reports_the_current_state(make_coordinator, hass):
     assert sensor.extra_state_attributes["accu_c"] == 48.0
 
 
-def test_cooling_tile_sits_in_the_live_figures_section():
-    """v0.63.124, gevraagd: de accu-koeling verplaatsen naar de tegels
-    van 'Accu, rendement & live cijfers' in plaats van een eigen sectie.
-
-    Als eigen sectie zette de masonry-layout hem linksboven, waar hij
-    een volle kolombreedte innam voor één regel informatie.
-    """
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
-
-    koppen = [
-        card.get("heading")
-        for sectie in overzicht["sections"]
-        for card in sectie.get("cards", [])
-        if card.get("type") == "heading"
-    ]
-    assert "Accu-koeling" not in koppen, "staat nog als eigen sectie"
-
-    doelsectie = next(
-        sectie
-        for sectie in overzicht["sections"]
-        if any(
-            card.get("heading") == "Accu, rendement & live cijfers"
-            for card in sectie.get("cards", [])
-        )
-    )
-    koeltegels = [
-        card
-        for card in doelsectie["cards"]
-        if "accu_koeling" in str(card.get("entity", ""))
-    ]
-    assert len(koeltegels) == 1
-    # Halve breedte, net als de andere tegels ernaast.
-    # v1.17.3: volle sectiebreedte. Secties staan al naast elkaar (drie
-    # op een breed scherm), dus binnen een sectie nog eens opdelen maakte
-    # de tegels een negende van het scherm - te smal voor hun tekst.
-    assert koeltegels[0]["grid_options"]["columns"] == 12
-
-
 # --- v1.73.0: niet koelen wat niet warm is ---------------------------
 
 # Gemeld: "De koeling van de accu is nu wel heel veel aan, is dit
@@ -764,48 +718,6 @@ def test_nonsense_in_the_setting_falls_back():
 
 
 # --- v3.7.0: de tegel zegt wat er aan de hand is ---------------------
-
-
-def test_the_tile_shows_both_temperatures():
-    """Gemeld met een screenshot: "niet actief / Accu-koeling: niet
-    actief" - twee keer hetzelfde en geen enkel getal.
-
-    Terwijl er op dat moment 31,0 °C omvormer tegen 14,1 buiten in de
-    toestand stond. De tegel liet het alleen niet zien.
-    """
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    sjabloon = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-    # De regel van de koeltegel op de landingspagina.
-    regel = next(
-        r
-        for r in sjabloon.splitlines()
-        if "accu_koeling" in r and "°C omvormer" in r
-    )
-    kop = sjabloon.index(regel)
-    blok = sjabloon[kop : kop + 1400]
-
-    assert "buiten_c" in blok
-    assert "delta_c" in blok
-    assert "vermogen_w" in blok
-
-
-def test_the_tile_does_not_repeat_itself():
-    """"niet actief / Accu-koeling: niet actief" - de tweede regel
-    voegde niets toe."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    sjabloon = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    assert "Accu-koeling: {{ st }}" not in sjabloon
 
 
 def test_an_inactive_state_says_why(make_coordinator, hass):

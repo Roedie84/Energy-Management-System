@@ -162,23 +162,6 @@ def test_het_grafiekje_beslaat_altijd_de_hele_dag(make_coordinator, hass):
     assert max(xs) < 1240 + 324 / 3, max(xs)
 
 
-def test_de_plaat_staat_alleen_op_de_pagina_visueel():
-    """v5.18.2 - gemeld: "op de landingpage moet hij weg". De cockpit heeft
-    een eigen pagina; op de landingspagina stond hij dubbel."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    sjabloon = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    overzicht = sjabloon[sjabloon.index("- title: Overzicht") : sjabloon.index("- title: Visueel")]
-    visueel = sjabloon[sjabloon.index("- title: Visueel") :]
-
-    assert "overzichtsplaat" not in overzicht
-    # v5.19: de cockpitsensor, niet het attribuut van de GACS-sensor.
-    # v5.177.0 (A14): verwijst naar de EMS-cockpit, geen plaat-attribuut meer.
-    assert "/ems-cockpit" in visueel and "''plaat''" not in visueel
-
-
 # --- v5.17: de cockpit ---------------------------------------------------
 
 

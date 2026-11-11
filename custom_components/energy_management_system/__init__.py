@@ -63,47 +63,24 @@ NILM_DUPLICATE_SERVICE_SCHEMA = vol.Schema(
 )
 
 
-def _copy_dashboard_template(hass: HomeAssistant) -> None:
-    """Copy the bundled example dashboard to the Home Assistant config
-    directory, always overwriting whatever is there.
+def _verwijder_oude_dashboardkopie(hass: HomeAssistant) -> None:
+    """Ruimt de kopie van het vervallen detaildashboard op (v5.219.0).
 
-    This intentionally always overwrites (unlike a typical "only if
-    missing" safe-provisioning approach) - the person maintaining this
-    integration has explicitly agreed to always feed back any manual
-    dashboard change first, so it can be folded into the bundled
-    template before shipping a new version. If you've made your own
-    changes without reporting them back, they will be lost on the next
-    restart - copy dashboards/energy_management_system_dashboard.yaml
-    from the repository again afterwards if needed.
+    Tot v5.218.0 kopieerde de integratie bij elke start een dashboard met 32
+    detailpagina's naar de configuratiemap. Die pagina's zijn vervallen (Ruud
+    11-11: "Ik heb ze niet gemist"); de cockpit is het enige dashboard. De
+    oude kopie blijft anders voorgoed staan.
 
-    Runs as a blocking file operation, so must be called via
-    hass.async_add_executor_job - never directly on the event loop.
+    Blokkerende bestandsoperatie - alleen aanroepen via
+    hass.async_add_executor_job.
     """
-    destination = Path(hass.config.path(DASHBOARD_FILENAME))
-    source = Path(__file__).parent / "dashboard_template.yaml"
-    if not source.exists():
-        _LOGGER.debug(
-            "Bundled dashboard template not found at %s - skipping "
-            "auto-provisioning",
-            source,
-        )
-        return
-
+    oud = Path(hass.config.path(DASHBOARD_FILENAME))
     try:
-        shutil.copyfile(source, destination)
-        _LOGGER.info(
-            "Copied the example dashboard to %s (always overwritten - "
-            "see the integration's README)",
-            destination,
-        )
+        if oud.is_file():
+            oud.unlink()
+            _LOGGER.info("Oude kopie van het detaildashboard verwijderd: %s", oud)
     except OSError as err:
-        _LOGGER.warning(
-            "Could not copy the example dashboard to %s: %s. You can "
-            "still copy dashboards/%s from the repository manually.",
-            destination,
-            err,
-            DASHBOARD_FILENAME,
-        )
+        _LOGGER.warning("Oude kopie van het detaildashboard niet verwijderd (%s): %s", oud, err)
 
 
 def _copy_overview_background(hass: HomeAssistant) -> None:
@@ -270,19 +247,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(luchtreiniger.async_stop)
     except Exception as err:  # noqa: BLE001
         _LOGGER.warning("Luchtreiniger-meelezen niet gestart: %s", err)
-    await hass.async_add_executor_job(_copy_dashboard_template, hass)
-    # v5.218.0: het detaildashboard zelf aanmelden; de cockpitlinks wijzen
-    # ernaar en zonder aanmelding bestond het niet.
-    try:
-        from .detail_dashboard import registreer_detaildashboard
-
-        uitkomst = registreer_detaildashboard(hass, DASHBOARD_FILENAME)
-        if uitkomst.startswith("niet mogelijk"):
-            _LOGGER.warning("Detaildashboard %s", uitkomst)
-        else:
-            _LOGGER.info("Detaildashboard %s", uitkomst)
-    except Exception as err:  # noqa: BLE001 - het dashboard mag het EMS nooit tegenhouden
-        _LOGGER.warning("Detaildashboard niet aangemeld: %s", err)
+    # v5.219.0: het detaildashboard is vervallen; alleen de oude kopie opruimen.
+    await hass.async_add_executor_job(_verwijder_oude_dashboardkopie, hass)
     await hass.async_add_executor_job(_copy_overview_background, hass)
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))

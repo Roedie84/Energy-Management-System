@@ -374,33 +374,6 @@ def test_the_overview_covers_every_kind(make_coordinator, hass):
     assert all(m["label"] and m["uitleg"] for m in overzicht)
 
 
-def test_a_switch_exists_for_every_kind():
-    """Gevraagd: elke melding moet op het tabblad uit te schakelen
-    zijn."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    for kind, _, _, _, _ in NOTIFICATION_TYPES:
-        assert f"melding_{kind}" in yaml_tekst, kind
-
-
-def test_the_master_switch_is_on_the_tab():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    assert "meldingen_hoofdschakelaar" in yaml_tekst
-
-
 # --- v1.5.1: de laatste drie meldingen ------------------------------
 
 

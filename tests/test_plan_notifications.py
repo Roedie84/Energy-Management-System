@@ -124,17 +124,6 @@ def test_only_the_shortfall_defaults_on():
     assert "plan_verkoop_geblokkeerd" not in standaard
 
 
-def test_each_has_a_switch_on_the_dashboard():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-
-    for soort in ("plan_tekort", "plan_uitstel", "plan_verkoop_geblokkeerd"):
-        assert f"melding_{soort}" in tekst, soort
-
-
 # --- veiligheid ------------------------------------------------------
 
 

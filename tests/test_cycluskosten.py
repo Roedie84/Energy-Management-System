@@ -142,12 +142,3 @@ def test_het_overzicht_staat_in_de_export():
     assert "get_cycluskosten_overzicht" in bron
 
 
-def test_de_kaart_toont_de_cycluskosten():
-    import yaml
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    kaart = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-
-    assert "cycluskosten" in kaart

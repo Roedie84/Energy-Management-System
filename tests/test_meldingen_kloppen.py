@@ -66,32 +66,3 @@ def test_geen_melding_belooft_wat_niet_meer_gebeurt():
             assert belofte not in tekst, (naam, belofte)
 
 
-def test_het_logboek_van_meldingen_staat_nieuwste_bovenaan():
-    """De sensor levert nieuwste-eerst (test_meldingensensor); de kaart
-    draaide ze nog een keer om - al sinds v5.19."""
-    d = yaml.safe_load((BASIS / "dashboard_template.yaml").read_text())
-    v = next(x for x in d["views"] if x.get("path") == "meldingen")
-    kaarten = []
-
-    def loop(k):
-        if isinstance(k, dict):
-            if "meldingen'', ''meldingen" in str(k.get("content", "")) or "'meldingen')" in str(k.get("content", "")):
-                kaarten.append(k["content"])
-            for w in k.values():
-                loop(w)
-        elif isinstance(k, list):
-            for w in k:
-                loop(w)
-
-    loop(v)
-    assert kaarten, "kaart Laatst verstuurd niet gevonden"
-    env = jinja2.Environment()
-    env.globals["state_attr"] = lambda e, a: [
-        {"moment": "2026-09-30T19:25:00+02:00", "titel": "NIEUWSTE", "bericht": "x"},
-        {"moment": "2026-09-30T10:58:00+02:00", "titel": "OUDSTE", "bericht": "y"},
-    ]
-    env.filters["timestamp_custom"] = lambda ts, fmt: str(ts)
-    env.globals["as_timestamp"] = lambda s: s
-    uit = env.from_string(kaarten[0]).render()
-
-    assert uit.index("NIEUWSTE") < uit.index("OUDSTE")

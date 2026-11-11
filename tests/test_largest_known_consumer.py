@@ -136,27 +136,6 @@ def test_the_overview_uses_the_new_source():
     assert "last_heavy_load_source" not in code
 
 
-def _oud_test_card_uses_the_new_attribute():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    kaart = next(
-        card
-        for view in data["views"]
-        for card in view.get("cards") or []
-        if card.get("type") == "picture-elements"
-    )
-    attributen = [e.get("attribute") for e in kaart["elements"]]
-
-    assert "grootste_verbruiker" in attributen
-    assert "heavy_load_source" not in attributen
-
-
 def test_the_label_matches_what_is_shown():
     """Het label beloofde "zwaarste bron" terwijl er iets anders stond;
     tekening en inhoud moeten hetzelfde zeggen.

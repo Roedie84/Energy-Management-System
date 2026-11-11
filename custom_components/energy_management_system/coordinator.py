@@ -1519,7 +1519,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         self.battery_cooling_last_change: datetime | None = None
         # v2.0.6: het dashboardsjabloon, één keer ingelezen bij het
         # opstarten - lezen in de event loop is verboden.
-        self._dashboard_template_cache: str | None = None
         self.battery_cooling_history: list[dict] = []
 
         # Meldingen (v1.2.0). Per soort een aan/uit-stand, het laatste
@@ -2306,11 +2305,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         warning right at startup that clears itself up moments later once
         everything else has caught up.
         """
-        # v2.0.6: het dashboardsjabloon nu inlezen, buiten de event loop.
-        try:
-            await self.async_load_dashboard_template()
-        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
-            _LOGGER.exception("Kon het dashboardsjabloon niet inlezen")
 
         # v3.63.0: de bestandscontrole ook nu, in de uitvoerder.
         #
@@ -8315,161 +8309,16 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         }
 
     def get_dashboard_health(self) -> dict:
-        """Controleert of het dashboard toont wat het hoort te tonen
-        (v1.16.3).
+        """Het detaildashboard is vervallen (v5.219.0); er valt niets na te lopen.
 
-        Gevraagd na een reeks kapotte kaarten: "Had je alles afgevangen
-        met een betere diagnose file?"
-
-        Eerlijk antwoord was nee. Van de veertien problemen op één dag
-        zaten er tien in het DASHBOARD, en de export bevatte alleen
-        sensorwaarden - niet hoe die worden getoond. Elke fout zat in de
-        laag ertussen.
-
-        Deze controle sluit dat gat voor negen van die tien:
-
-        1. verwijst het dashboard naar een entiteit die niet bestaat?
-           (de voorvoegsel-fouten en hernoemde sensoren)
-        2. staat een gebruikte sensor op unknown of unavailable?
-           (de "Onbekend"-kaarten)
-        3. toont een kaart een getal zonder eenheid?
-           (de "1600.0")
-
-        Wat een export níét kan zien: uitlijning, kolombreedte, of een
-        tekst prettig leest. Daar blijven screenshots voor nodig - dat is
-        geen tekortkoming van de export maar een grens ervan.
+        Tot v5.218.0 liep deze controle alle kaarten van het meegeleverde
+        dashboard na op verdwenen en lege entiteiten. Dat dashboard bestaat
+        niet meer (Ruud 11-11: "Ik heb ze niet gemist"); de cockpit heeft
+        een eigen bronnencontrole (`cockpit_bronnen.py`). De sleutel blijft
+        voor de diagnose-export en de reparatiemelding, die bij "niet
+        beschikbaar" niets melden.
         """
-        import re
-
-        sjabloon = self._read_dashboard_template()
-        if not sjabloon:
-            return {"beschikbaar": False}
-
-        # v3.2.0: ALLE domeinen, niet alleen `sensor.`.
-        #
-        # Gemeld met een screenshot van de kostenpagina: vijf van de zes
-        # eurotegels stonden op nul. Ze lazen negen zelfgemaakte
-        # helper-sensoren (`sensor.ems_ontlaadwaarde_*`,
-        # `..._netlaadkosten_*`, `..._accubesparing_*`) die de integratie
-        # nergens aanmaakt.
-        #
-        # Deze controle vond die wél - het waren geen ONTBREKENDE
-        # entiteiten, ze bestonden en gaven nul terug. Maar switches en
-        # buttons werden helemaal niet nagelopen, en een tegel die naar
-        # een verdwenen schakelaar wijst toont "Entiteit niet gevonden"
-        # zonder dat hier iets van te zien was.
-        verwezen = sorted(
-            set(
-                re.findall(
-                    r"\b((?:sensor|switch|button|number|select|binary_sensor)"
-                    r"\.[a-z0-9_]+)",
-                    sjabloon,
-                )
-            )
-        )
-        ontbrekend: list[str] = []
-        leeg: list[str] = []
-        # v5.62: "onbekend" dat normaal is apart. Een knop die nog nooit is
-        # ingedrukt staat op unknown (zijn toestand is het tijdstip van de
-        # laatste druk), en een paar sensoren melden bewust niets zolang er
-        # niets te melden is; de kaarten tonen daar een eigen tekst. Zo
-        # stonden de vier nooit gebruikte waterknoppen, de accubescherming
-        # en de airco-verwachting tussen de "lege" entiteiten - en werden ze
-        # bij een doorlichting voor ontbrekende entiteiten aangezien.
-        normaal_onbekend: list[str] = []
-        for entity_id in verwezen:
-            staat = self.hass.states.get(entity_id)
-            if staat is None:
-                ontbrekend.append(entity_id)
-            elif staat.state in ("unknown", "unavailable"):
-                if staat.state == "unknown" and (
-                    entity_id.startswith("button.")
-                    or entity_id in DASHBOARD_ONBEKEND_IS_NORMAAL
-                ):
-                    normaal_onbekend.append(entity_id)
-                else:
-                    leeg.append(entity_id)
-
-        # v1.19.2, gemeld: kaarten die "Nog geen gegevens" tonen terwijl
-        # de entiteit gewoon bestaat. De controle keek alleen of de
-        # ENTITEIT er was, niet of het ATTRIBUUT dat de kaart opvraagt
-        # bestaat - en juist daar zat het probleem.
-        #
-        # Een sjabloon dat een ontbrekend attribuut opvraagt krijgt None
-        # en toont zijn vangnettekst. Op het scherm is dat niet te
-        # onderscheiden van "nog niets geleerd".
-        # Let op: het sjabloon is met `yaml.dump` weggeschreven (v1.17.1),
-        # waardoor aanhalingstekens op schijf verdubbeld staan ('' in
-        # plaats van '). Eerst normaliseren, anders vindt de zoekactie
-        # niets - precies waar deze controle bij de eerste poging op
-        # stukliep.
-        genormaliseerd = sjabloon.replace("''", "'")
-        gemiste_attributen: list[str] = []
-        for entity_id, attribuut in set(
-            re.findall(
-                r"state_attr\(\s*'(sensor\.[a-z0-9_]+)'\s*,\s*'([a-z0-9_]+)'",
-                genormaliseerd,
-            )
-        ):
-            staat = self.hass.states.get(entity_id)
-            if staat is None:
-                continue
-            if attribuut not in (staat.attributes or {}):
-                gemiste_attributen.append(f"{entity_id} -> {attribuut}")
-
-        return {
-            "beschikbaar": True,
-            "gecontroleerd": len(verwezen),
-            "niet_bestaande_entiteiten": ontbrekend,
-            "lege_entiteiten": leeg,
-            "onbekend_maar_normaal": normaal_onbekend,
-            "ontbrekende_attributen": sorted(gemiste_attributen),
-            "toelichting": (
-                "Een niet-bestaande entiteit toont 'Entiteit niet "
-                "gevonden'; een lege toont 'Onbekend'. Een ontbrekend "
-                "ATTRIBUUT is het lastigst: de kaart toont dan zijn "
-                "vangnettekst, wat op het scherm niet te onderscheiden "
-                "is van 'nog niets geleerd'. 'Onbekend maar normaal': een "
-                "knop die nog nooit is ingedrukt, of een sensor die "
-                "bewust niets meldt (geen ontlaadgrens actief, airco-"
-                "verwachting nog aan het leren); die bestaan gewoon."
-            ),
-        }
-
-    def _read_dashboard_template(self) -> str:
-        """Het meegeleverde dashboardsjabloon, uit het geheugen (v2.0.6).
-
-        Gemeld uit het logboek:
-
-            Detected blocking call to read_text (...) inside the event
-            loop by custom integration 'energy_management_system'
-
-        Een bestand lezen duurt milliseconden, maar in de event loop
-        staat in die tijd ALLES stil - elke andere integratie, elke
-        automatisering. Home Assistant verbiedt dat daarom.
-
-        Het viel op bij het downloaden van de diagnostiek, want die roept
-        `get_dashboard_health` aan. Maar het sjabloon verandert alleen bij
-        een update, dus het hoeft überhaupt maar één keer gelezen te
-        worden: bij het opstarten, buiten de loop.
-        """
-        return self._dashboard_template_cache or ""
-
-    async def async_load_dashboard_template(self) -> None:
-        """Leest het sjabloon één keer, buiten de event loop (v2.0.6)."""
-        from pathlib import Path
-
-        pad = Path(__file__).parent / "dashboard_template.yaml"
-
-        def _lezen() -> str:
-            try:
-                return pad.read_text(encoding="utf-8")
-            except OSError:
-                return ""
-
-        self._dashboard_template_cache = await self.hass.async_add_executor_job(
-            _lezen
-        )
+        return {"beschikbaar": False, "reden": "detaildashboard vervallen (v5.219.0)"}
 
     def get_topic_summaries(self) -> dict:
         """Eén zin per onderwerp: klopt het, of vraagt het aandacht?
@@ -18663,7 +18512,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "const.py",
             "sensor.py",
             "config_flow.py",
-            "dashboard_template.yaml",
             "manifest.json",
             "pv_model.py",
         ):

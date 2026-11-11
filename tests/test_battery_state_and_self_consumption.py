@@ -254,30 +254,3 @@ def test_self_consumption_has_its_own_sensor():
     assert 'SelfConsumptionSensor(coordinator, entry.entry_id)' in bron
 
 
-def test_the_card_points_at_the_new_sensor():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-
-    def zoek(kaarten):
-        for k in kaarten or []:
-            if not isinstance(k, dict):
-                continue
-            if "zelfconsumptieratio" in str(k.get("entity", "")):
-                return True
-            if zoek(k.get("cards")):
-                return True
-        return False
-
-    gevonden = False
-    for view in data["views"]:
-        gevonden = gevonden or zoek(view.get("cards"))
-        for sectie in view.get("sections") or []:
-            gevonden = gevonden or zoek(sectie.get("cards"))
-
-    assert gevonden

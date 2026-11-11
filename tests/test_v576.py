@@ -73,8 +73,3 @@ def test_de_integratie_leest_geen_historie_van_eigen_attributen():
             assert "energy_management_system" not in regel[1], bestand.name
 
 
-def test_geen_kaart_toont_attribuutgeschiedenis():
-    kaart = (PAKKET / "dashboard_template.yaml").read_text(encoding="utf-8")
-    assert "apexcharts" not in kaart
-    for blok in kaart.split("type: history-graph")[1:]:
-        assert "attribute:" not in blok.split("- type:")[0]

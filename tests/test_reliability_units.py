@@ -67,76 +67,7 @@ def test_the_units_come_from_a_known_set(make_coordinator, hass):
     assert not onbekend, f"onbekende eenheid: {onbekend}"
 
 
-def test_the_dashboard_renders_the_unit():
-    """De eenheid moet ook echt op het scherm komen - hem alleen
-    opslaan lost niets op."""
-    pad = WORTEL / "dashboards" / "energy_management_system_dashboard.yaml"
-    data = yaml.safe_load(pad.read_text())
-
-    kaarten = [
-        k
-        for v in data["views"]
-        for sec in (v.get("sections") or [])
-        for k in (sec.get("cards") or [])
-        if "betrouwbaarheid_gegenereerde_data" in str(k.get("content", ""))
-    ]
-
-    assert kaarten
-    assert "eenheid" in kaarten[0]["content"]
-
-
 # --- v1.83.0: en de rest van het dashboard ---------------------------
-
-
-def test_no_numeric_field_on_the_dashboard_lacks_a_unit():
-    """Gevraagd na de eerste reparatie: "Heb je dit nu overal opgelost?"
-
-    Nee - toen niet. De eerste ronde raakte alleen de
-    betrouwbaarheidstabel. Deze toets loopt het HELE dashboard na op
-    velden die een hoeveelheid dragen (kwh, kw, procent, eur, watt) en
-    controleert of er een eenheid achter staat.
-    """
-    import re
-
-    import yaml
-
-    data = yaml.safe_load(
-        (
-            WORTEL / "dashboards" / "energy_management_system_dashboard.yaml"
-        ).read_text()
-    )
-
-    veld = re.compile(
-        r"\{\{[^}]*?\b\w*(kwh|_kw|procent|percent|_eur|_w|watt)\b[^}]*\}\}(.{0,10})",
-        re.I,
-    )
-    eenheid = re.compile(r"\s*(kWh|kW|%|W\b|EUR|€|ct|u\b|uur)")
-    einde = re.compile(r"^\s*(\||$|\n|')")
-
-    # v1.91.0: een tabel waarin de eenheid in de RIJKOP staat en de
-    # kolommen perioden zijn, hoeft hem niet bij elke cel te herhalen.
-    # Dat zou de tabel onleesbaar maken en zegt niets extra.
-    kop_draagt_eenheid = re.compile(r"\(\{\{ x\.eenheid \}\}\)")
-
-    zonder = []
-    for view in data["views"]:
-        secties = view.get("sections") or [{"cards": view.get("cards") or []}]
-        for sectie in secties:
-            for kaart in sectie.get("cards") or []:
-                inhoud = "".join(
-                    str(kaart.get(sleutel) or "")
-                    for sleutel in ("content", "primary", "secondary")
-                )
-                if kop_draagt_eenheid.search(inhoud):
-                    continue
-                for m in veld.finditer(inhoud):
-                    staart = m.group(2)
-                    if einde.match(staart) and not eenheid.match(staart):
-                        zonder.append(
-                            f"{view.get('title')}: {m.group(0)[:50]}"
-                        )
-
-    assert not zonder, zonder
 
 
 def test_every_numeric_sensor_declares_its_unit():

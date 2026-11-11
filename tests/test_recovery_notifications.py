@@ -292,19 +292,6 @@ def test_the_history_is_long_enough_for_a_busy_day(make_coordinator, hass):
     assert NOTIFICATION_HISTORY_LENGTH >= len(NOTIFICATION_TYPES) * 5
 
 
-def test_the_dashboard_shows_the_message():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    assert "m.bericht" in yaml_tekst
-    assert "niet na een bepaalde tijd" in yaml_tekst
-
-
 # --- v1.6.6: welke sensor, en aanlooptijd na een herstart ------------
 
 

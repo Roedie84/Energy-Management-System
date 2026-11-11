@@ -175,24 +175,6 @@ def test_it_is_in_the_export():
     assert "expansion_advice" in bron
 
 
-def test_it_is_on_the_battery_page():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    accu = next(v for v in data["views"] if v["path"] == "detail-accu")
-    kaarten = [k for s in accu["sections"] for k in s.get("cards") or []]
-
-    kaart = next(k for k in kaarten if "uitbreiden" in str(k.get("title", "")).lower())
-
-    assert "vermogensbenutting_procent" in kaart["content"]
-    assert "voorbehoud" in kaart["content"]
-
-
 # --- v1.19.5: de fout die de export zelf aanwees --------------------
 
 

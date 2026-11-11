@@ -120,18 +120,6 @@ def test_the_services_file_is_valid():
         assert "name" in beschrijving or "description" in beschrijving, naam
 
 
-def test_the_dashboard_parses():
-    """Wordt bij elke start naar de configuratiemap gekopieerd en door
-    Home Assistant ingelezen."""
-    import yaml
-
-    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-
-    assert data["views"]
-    for view in data["views"]:
-        assert view.get("title"), view.get("path")
-
-
 def test_the_diagnostics_reach_every_attribute_they_name(hass, make_coordinator):
     """De diagnostiek noemt attributen bij naam. Bestaat er één niet, dan
     faalt het downloaden - en dat merk je pas op het moment dat je hem

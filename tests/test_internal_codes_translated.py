@@ -28,45 +28,7 @@ from tests._coordinator_bron import coordinator_bron
 PAKKET = Path(pkg.__file__).parent
 
 
-def _kaarten():
-    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-    alle = []
-    for view in data["views"]:
-        kaarten = list(view.get("cards") or [])
-        for sectie in view.get("sections") or []:
-            kaarten += sectie.get("cards") or []
-        for kaart in list(kaarten):
-            kaarten += kaart.get("cards") or []
-        alle += kaarten
-    return alle
-
-
-def _kaart_voor(sleutel: str) -> dict:
-    return next(k for k in _kaarten() if sleutel in str(k.get("entity", "")))
-
-
 # --- de vier gevallen ------------------------------------------------
-
-
-def test_the_decision_reason_is_translated():
-    kaart = str(_kaart_voor("last_decision_reason"))
-
-    assert "duur kwartier" in kaart
-    assert "nog geen beslissing" in kaart
-
-
-def test_the_appliance_states_are_translated():
-    for sleutel in ("steelstofzuiger_status", "fietsladers_status"):
-        kaart = str(_kaart_voor(sleutel))
-        assert "wacht op goedkoop blok" in kaart, sleutel
-
-
-def test_the_candidate_count_has_context():
-    """"0" zegt niet waarover het gaat."""
-    kaart = str(_kaart_voor("nilm_onbevestigde_kandidaten"))
-
-    assert "geen nieuwe kandidaten" in kaart
-    assert "te beoordelen" in kaart
 
 
 # --- volledigheid ----------------------------------------------------

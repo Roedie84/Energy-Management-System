@@ -1,3 +1,11 @@
+EMS v5.219.0 - de detailpagina's zijn weg
+
+Installeren: via de Marketplace bijwerken en herstarten. Ververs daarna de cockpit hard (Ctrl+F5).
+
+- Het losse dashboard met 32 detailpagina's is vervallen. De cockpit en het tabblad Jaarafrekening blijven; alle sensoren ook.
+- De knoppen onderaan de cockpit en de pijltjes "Details" op de tegels zijn weg.
+- De oude kopie energy_management_system_dashboard.yaml in je configuratiemap wordt bij de eerstvolgende start verwijderd.
+
 EMS v5.218.0 - de detailpagina's zijn nu echt bereikbaar
 
 Installeren: via de Marketplace bijwerken en herstarten.

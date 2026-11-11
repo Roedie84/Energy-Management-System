@@ -36,7 +36,7 @@ def test_een_kaartsoort():
     assert ".ph { display: flex; align-items: center; gap: 8px; min-height: 28px;" in STIJL  # v5.215.0: chips mogen naar een tweede regel
     assert ".ph h2 { margin: 0; font-size: 13px; font-weight: 600;" in STIJL
     for kop in ('paneelKop("accu", "Accu nu")', 'paneelKop("klok", "Plan vandaag")',
-                'paneelKop("euro", "Geld", "", "detail-besparing")'):
+                'paneelKop("euro", "Geld")'):
         assert kop in JS
 
 

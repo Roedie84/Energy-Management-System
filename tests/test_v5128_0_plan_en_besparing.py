@@ -283,15 +283,6 @@ def test_maand_sensor():
     assert leeg.last_reset is None
 
 
-def test_maand_sensor_op_het_dashboard():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    assert "sensor.woonkamer_energy_management_system_besparing_deze_maand" in tekst
-
-
 # --- Punt 15: bijladen tot vol bij een heel lage prijs ---------------------
 
 

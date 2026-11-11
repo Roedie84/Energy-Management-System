@@ -162,13 +162,6 @@ def test_48_cockpit_abonneert_niet_meer_op_de_maandsensor():
     assert 'geld: ["besparing", "maand",' not in JS
 
 
-def test_48_dashboard_zonder_oude_kaarten():
-    dash = (BRON / "dashboard_template.yaml").read_text(encoding="utf-8")
-    assert "discharge_value_expensive_quarters" not in dash
-    assert "charge_cost_grid_charging" not in dash
-    assert "netladen_maand" in dash and "besparing_totaal_gecorrigeerd_eur" in dash
-
-
 def test_48_oude_sensoren_zeggen_dat_ze_verouderd_zijn():
     from custom_components.energy_management_system.sensor import ChargeCostSensor, DischargeValueSensor
     c = SimpleNamespace(total_charge_cost_eur=1.0, total_discharge_value_eur=2.0)

@@ -84,16 +84,3 @@ def test_de_statussensor_toont_een_zandloper(make_coordinator, hass):
     assert "opstarten" in s.extra_state_attributes
 
 
-def test_het_dashboard_toont_het_opstarten():
-    """De landingskaart: in plaats van aandachtspunten die schijn zijn."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    for pad in (
-        Path(pkg.__file__).parent / "dashboard_template.yaml",
-        Path(pkg.__file__).parents[2] / "dashboards" / "energy_management_system_dashboard.yaml",
-    ):
-        tekst = pad.read_text()
-        assert "Energy Management System is nog aan het opstarten" in tekst, pad
-        assert "mdi:timer-sand" in tekst, pad

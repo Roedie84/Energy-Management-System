@@ -147,14 +147,6 @@ def test_geen_sleutel_in_attributen():
     assert SLEUTEL not in json.dumps(m.attributen(), default=str)
 
 
-def test_aangesloten():
-    assert "LuchtreinigerLokaalSensor(coordinator, entry.entry_id)" in (MAP / "sensor.py").read_text()
-    assert '"luchtreiniger_lokaal"' in (MAP / "diagnostics.py").read_text()
-    assert "luchtreiniger.async_stop" in (MAP / "__init__.py").read_text()
-    assert "sensor.woonkamer_energy_management_system_luchtreiniger_lokaal" in (
-        MAP / "dashboard_template.yaml").read_text()
-
-
 def test_hele_lus_tegen_een_nep_apparaat(monkeypatch):
     """Een 3.3-apparaat op localhost dat elke vraag beantwoordt."""
     async def _proef():

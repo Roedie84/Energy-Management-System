@@ -61,30 +61,6 @@ def test_the_english_translation_is_complete():
     assert not sorted(nl - en)
 
 
-def test_the_version_is_consistent_everywhere():
-    """De cachesleutel van de achtergrondtekening moet meebewegen met de
-    versie, anders blijft een oude tekening in de browser hangen."""
-    versie = json.loads((PAKKET / "manifest.json").read_text())["version"]
-    dashboard = (PAKKET / "dashboard_template.yaml").read_text()
-
-    # v3.17.0: de overzichtsplaat komt niet meer uit een BESTAND maar
-    # live uit de sensor, dus er valt geen browsercache te omzeilen. De
-    # cache-sleutel is daarmee overbodig geworden.
-    assert "?v=" not in dashboard, (
-        "de plaat wordt live opgebouwd; een cache-sleutel wijst op een "
-        "achtergebleven statische afbeelding"
-    )
-    assert f"## v{versie}" in (WORTEL / "CHANGELOG.md").read_text()
-
-
-def test_the_dashboard_copy_is_in_sync():
-    """De kopie in `custom_components` is wat er wordt uitgerold; loopt
-    die achter, dan installeer je een ander dashboard dan je test."""
-    bron = (WORTEL / "dashboards" / "energy_management_system_dashboard.yaml")
-
-    assert bron.read_text() == (PAKKET / "dashboard_template.yaml").read_text()
-
-
 def test_the_svg_copy_is_in_sync():
     bron = WORTEL / "dashboards" / "energy_management_system_overview.svg"
 

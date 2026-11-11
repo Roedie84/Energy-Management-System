@@ -429,19 +429,6 @@ def make_coordinator(hass, coordinator_cls):
 
     def _make(config: dict | None = None):
         c = coordinator_cls(hass, config or {})
-        # v2.0.6: het dashboardsjabloon wordt in bedrijf bij het opstarten
-        # ingelezen, buiten de event loop. Hier meteen vullen, zodat de
-        # tests dezelfde toestand hebben als na een echte start.
-        from pathlib import Path
-
-        import custom_components.energy_management_system as pkg
-
-        pad = Path(pkg.__file__).parent / "dashboard_template.yaml"
-        try:
-            c._dashboard_template_cache = pad.read_text(encoding="utf-8")
-        except OSError:
-            c._dashboard_template_cache = ""
-
         # v3.79.0: de platformcontrole telt de EIGEN entiteiten van de
         # integratie, en die worden in de toetsomgeving niet aangemaakt.
         # Standaard uit; de toetsen die hem nakijken zetten hem zelf aan.

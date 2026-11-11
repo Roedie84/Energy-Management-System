@@ -106,20 +106,3 @@ def test_a_shortfall_quarter_is_flagged(make_coordinator, hass):
     assert '"tekort_kwartieren"' in bron
 
 
-def test_the_summary_shows_the_hard_floor():
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    pagina = next(
-        v for v in data["views"] if v.get("path") == "detail-planning-samenvatting"
-    )
-    kaarten = [k for s in pagina["sections"] for k in s.get("cards") or []]
-    inhoud = " ".join(str(k.get("content", "")) for k in kaarten)
-
-    assert "tekort_kwartieren" in inhoud
-    assert "min_soc_procent_hard" in inhoud

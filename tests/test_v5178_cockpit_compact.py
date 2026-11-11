@@ -116,7 +116,8 @@ def test_alle_knoppen_zichtbaar_en_gedrag_ongewijzigd():
 def test_voet_toont_status_en_meetlog():
     v = _methode("_voet")
     # v5.216.0: de voetregel is kort (versie, fouten, storingen); het meetlog staat op de pagina Gezondheid.
-    assert 'class="links"' in v and "meetlog.state" not in v and "gez.state" in v
+    # v5.219.0: geen links naar detailpagina's meer; die zijn vervallen.
+    assert 'class="links"' not in v and "meetlog.state" not in v and "gez.state" in v
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js niet aanwezig")

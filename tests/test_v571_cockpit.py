@@ -150,12 +150,6 @@ def test_de_integratie_serveert_het_script():
     assert "async_registreer_cockpit" in init
 
 
-def test_overzicht_heeft_een_tegel_naar_de_cockpit():
-    tekst = (PAKKET / "dashboard_template.yaml").read_text(encoding="utf-8")
-    assert "navigation_path: /ems-cockpit" in tekst
-    assert "sensor.woonkamer_energy_management_system_dashboardbronnen" in tekst
-
-
 # --- v5.71.1: niet verspringen tijdens scrollen ------------------------------
 
 
