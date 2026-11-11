@@ -1162,3 +1162,15 @@ laatste ronde: 10-11 06:45, gemeten t/m 10-11 06:45
 - Niet gemeten: kwartierfout 0-1 u, SoC-voorspelling, NILM, MC-Brier (nacht loopt tot 09:00), dagmaximum celverschil volledig (history afgekapt op 1000 regels).
 
 laatste ronde: 11-11 06:45, gemeten t/m 11-11 06:45
+
+## 11-11 12:15 · vanuit de chat (v5.210.0 t/m v5.214.0; geen dagcontrole)
+- **Gebouwd op 11-11 (alle akkoord Ruud, suite 7654 groen):** v5.210.0 Zendure-integratie zelf herladen na 5 min offline (max 1×/uur), prijsverwachting onthouden per kwartier. v5.211.0 snelle zon-correctie stuurt mee (laatste 5 dagen, 0,8-1,2). v5.212.0 live toets: houden/huis getoetst aan het GEMETEN tekort tegen `waarde_inhoud` (0,5 ct, 120 s, max 1 wissel per kwartier). v5.213.0 een rendementsband telt pas vanaf 8 rondes, anders de buurband. v5.214.0 opbouw en meetlat van het verwachte verbruik; wisselregel B11 rekent met `waarde_inhoud`.
+- **Nieuwe meetpunten - vanaf nu elke dagcontrole meenemen en in KPI.csv zetten:**
+  - `waardeplan.herplanningen.live_wissel` en `live_wissel_eur` (sensor explanation, attribuut waardeplan): aantal wissels en geschat voordeel per dag. Nulmeting: 11-11 11:03-11:15 hield de accu vast bij 1,3-1,6 kW netafname tegen 57,3 ct (plan rekende 0,9 kW); ~1 ct per kwartier gemist. Let op pendelen: meer dan 1 wissel per kwartier hoort niet voor te komen.
+  - `accukosten.rendement_per_band` (sensor learned_battery_efficiency): per band `rondes` en `onzekerheid_procentpunt`. Stand 11-11 11:41: ontladen <500 W 100,9 % (29 rondes, ±2,3), 500-1500 W 106,2 % (16, ±2,8), >1500 W 106,9 % (3, ±2,6; was vóór de herstart 101,8 %). Melden zodra >1500 W 8 rondes heeft en zelf gaat meetellen.
+  - `pv_voorspelkwaliteit.plan.snellere_correctie` (sensor zonvoorspelling_ijking): `fout_nu` (zonder) tegen `fout_snel` (met). 11-11: 25 dagen 1,20 → 0,96 kWh/dag; de laatste 9 dagen 0,88 → 0,99 (slechter). Wordt `beter` False over 25 dagen: voorleggen om `PV_SNELLE_CORRECTIE_AAN` uit te zetten.
+  - `waardeplan.verbruiksmeetlat`: fout en afwijking (W) van de verbruiksverwachting voor dit kwartier, 1 uur en 3 uur vooruit. Begint na elke herstart opnieuw.
+  - `waardeplan.vooruit[].verbruik_opbouw`: profiel / omlaag / live / witgoed / verschuiving / klimaat per kwartier.
+  - Dagoverzicht: zin "Zendure-integratie ... zelf herladen (tijden)"; in de HA-log de waarschuwing "herlaadt de Zendure-integratie nu zelf".
+- **Open vraag H-EMS-20 (nieuw):** om 11:08 rekende het plan met 901 W (11 u), 396 W (12 u), 1404 W (13 u), 1096 W (14 u) tegen een uurprofiel van 497/370/788/697 W. Geen witgoed gepland of lopend. Welk deel is live correctie (budget 1,5 kWh), dagtype of klimaat-extra? Uit te lezen met `verbruik_opbouw` bij de eerstvolgende onverwachte verbruiker.
+- Nagerekend met de echte planner: het plan van 11:07 (verkopen 12:30 tegen 57,7 ct, huis op het net 16:00 tegen 59,6 ct) was consistent binnen de banden van dat moment (>1500 W 101,8 %); dat bandcijfer bleek op 3 rondes te rusten.
