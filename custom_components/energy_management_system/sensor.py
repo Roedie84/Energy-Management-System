@@ -86,6 +86,13 @@ VERVALLEN_SENSOREN = (
     "charge_cost",
     "monthly_summary",
     "learned_night_consumption",
+    # v5.221.0: meetmodules van voor het waardeplan; stuurden niets en
+    # stonden niet in de cockpit.
+    "mpc_advisory",
+    "kalman_filtering",
+    "digital_twin",
+    "digital_twin_accuracy",
+    "smart_charging_proef",
 )
 
 
@@ -127,7 +134,6 @@ async def async_setup_entry(
         BatterySavingsSensor(coordinator, entry.entry_id),
         BatteryCoolingSensor(coordinator, entry.entry_id),
         BatteryModuleHealthSensor(coordinator, entry.entry_id),
-        DigitalTwinAccuracySensor(coordinator, entry.entry_id),
         ReliabilityOverviewSensor(coordinator, entry.entry_id),
         GacsAssessmentSensor(coordinator, entry.entry_id),
         # v5.62: de grote tabellen van de zelfbeoordeling, elk apart.
@@ -144,10 +150,7 @@ async def async_setup_entry(
         # v5.139.0: start, eind en voortgang in gewone taal
         DishwasherPlanningSensor(coordinator, entry.entry_id),
         WashingMachinePlanningSensor(coordinator, entry.entry_id),
-        MpcAdvisorySensor(coordinator, entry.entry_id),
         MonteCarloAdvisorySensor(coordinator, entry.entry_id),
-        KalmanFilterAdvisorySensor(coordinator, entry.entry_id),
-        DigitalTwinAdvisorySensor(coordinator, entry.entry_id),
         NilmUnconfirmedCandidatesSensor(coordinator, entry.entry_id),
         NilmConfirmedDevicesSensor(coordinator, entry.entry_id),
         AdvisoryReadinessSensor(coordinator, entry.entry_id),
@@ -1698,57 +1701,6 @@ class WashingMachinePlanningSensor(_WitgoedPlanningSensor):
         super().__init__(coordinator, entry_id, "washing_machine_planning")
 
 
-class MpcAdvisorySensor(ZuinigSchrijven, SensorEntity):
-    """MPC (Model Predictive Control) advisory engine (v0.63.33).
-
-    ADVISORY ONLY - never sends a device command, never overrides the
-    existing decision tree (confirmed explicitly before building this).
-    Shows a projected charge/discharge plan (greedy interval pairing
-    over the available price forecast horizon, pure arbitrage - no
-    household load/PV/reserve modelling) for comparison only.
-
-    Not a RestoreEntity - a fresh plan is computed every tick from live
-    forecast data; a restored stale plan would be actively misleading.
-    """
-
-    _attr_has_entity_name = True
-    _attr_name = "MPC advies (prijsarbitrage-plan)"
-    # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
-    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
-    _attr_icon = "mdi:chart-timeline-variant"
-    _attr_native_unit_of_measurement = "€"
-    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        self._coordinator = coordinator
-        self._attr_unique_id = f"{entry_id}_mpc_advisory"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": DEFAULT_NAME,
-        }
-
-    @property
-    def native_value(self) -> float | None:
-        return self._coordinator.mpc_projected_total_profit_eur
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        return {
-            "geplande_acties": self._coordinator.mpc_planned_actions,
-            "aantal_kwartieren_in_horizon": (
-                self._coordinator.mpc_horizon_quarters_used
-            ),
-            "laatst_berekend": (
-                self._coordinator.mpc_last_computed_at.isoformat()
-                if self._coordinator.mpc_last_computed_at
-                else None
-            ),
-            "note": self._coordinator.mpc_note,
-        }
-
-
 class MonteCarloAdvisorySensor(ZuinigSchrijven, SensorEntity):
     """Monte Carlo advisory engine (v0.63.34).
 
@@ -1836,126 +1788,6 @@ class MonteCarloAdvisorySensor(ZuinigSchrijven, SensorEntity):
             "note": self._coordinator.monte_carlo_note,
             # v5.36: naast de tekortdagen, met wat elk getal meet.
             **self._coordinator.get_monte_carlo_vergelijking(),
-        }
-
-
-class KalmanFilterAdvisorySensor(ZuinigSchrijven, SensorEntity):
-    """Kalman filtering advisory engine (v0.63.35).
-
-    ADVISORY ONLY - a smoothed estimate of three live, naturally noisy
-    signals (available_kwh/SoC, live PV power, live household load)
-    shown alongside their raw sensor readings, never fed into any
-    decision (which keep using their own already-tested smoothing).
-
-    Not a RestoreEntity - each filter's internal state (estimate,
-    uncertainty) already persists naturally in the coordinator instance
-    across ticks; restoring it across a full HA restart would resume
-    filtering from a stale point rather than cleanly re-seeding from the
-    next live reading, and the smoothing converges again within a few
-    ticks regardless.
-    """
-
-    _attr_has_entity_name = True
-    _attr_name = "Kalman filtering (SoC/PV/verbruik)"
-    # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
-    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
-    _attr_icon = "mdi:chart-bell-curve-cumulative"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        self._coordinator = coordinator
-        self._attr_unique_id = f"{entry_id}_kalman_filtering"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": DEFAULT_NAME,
-        }
-
-    @property
-    def native_value(self) -> str:
-        return (
-            "actief"
-            if self._coordinator.kalman_soc_filtered_kwh is not None
-            or self._coordinator.kalman_pv_filtered_w is not None
-            or self._coordinator.kalman_load_filtered_w is not None
-            else "geen data"
-        )
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        return {
-            "soc_gefilterd_kwh": self._coordinator.kalman_soc_filtered_kwh,
-            "soc_ruw_kwh": self._coordinator.kalman_soc_raw_kwh,
-            "pv_gefilterd_w": self._coordinator.kalman_pv_filtered_w,
-            "pv_ruw_w": self._coordinator.kalman_pv_raw_w,
-            "verbruik_gefilterd_w": self._coordinator.kalman_load_filtered_w,
-            "verbruik_ruw_w": self._coordinator.kalman_load_raw_w,
-            # v1.0.7: levert filteren hier eigenlijk iets op? "Alle
-            # filters geconvergeerd" zei alleen dat de onzekerheid was
-            # uitgezakt, niet dat de gefilterde waarde beter is.
-            "levert_filteren_iets_op": (
-                self._coordinator.get_kalman_divergence_status()
-            ),
-            "note": (
-                "Adviserend - een gladgestreken schatting naast de "
-                "ruwe sensorwaarde, nooit meegenomen in enige "
-                "beslissing (die gebruiken hun eigen, al beproefde "
-                "gladstrijkmethode). Proces-/meetruis-parameters zijn "
-                "onderbouwde standaardwaarden, niet empirisch bepaald "
-                "voor deze specifieke installatie. "
-                "'levert_filteren_iets_op' meet per signaal hoeveel "
-                "gefilterd van ruw afwijkt, als percentage van de "
-                "signaalgrootte - is dat verwaarloosbaar, dan valt er met "
-                "filteren niets te winnen."
-            ),
-        }
-
-
-class DigitalTwinAdvisorySensor(ZuinigSchrijven, SensorEntity):
-    """Digital Twin advisory engine (v0.63.36).
-
-    ADVISORY ONLY - simulates forward what the *existing* rule-based
-    logic (via self.last_timeline, already computed for the "Overzicht
-    komende uren" dashboard table) would do to the SoC/financial
-    outcome. Never sends a device command, never overrides the real
-    decision tree it's modelling. Natural comparison point: MPC's
-    theoretical-optimum plan (v0.63.33) vs. this twin's projection of
-    what current rule-based behaviour would actually achieve.
-
-    Not a RestoreEntity - a fresh simulation is run every tick from the
-    live timeline; a restored stale trajectory would be actively
-    misleading.
-    """
-
-    _attr_has_entity_name = True
-    _attr_name = "Digital Twin (gesimuleerde SoC/winst)"
-    # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
-    # v5.173.0: alleen een databaserij bij een echte wijziging (zuinig_schrijven.py).
-    _attr_icon = "mdi:cube-outline"
-    _attr_native_unit_of_measurement = "€"
-    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        self._coordinator = coordinator
-        self._attr_unique_id = f"{entry_id}_digital_twin"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": DEFAULT_NAME,
-        }
-
-    @property
-    def native_value(self) -> float | None:
-        return self._coordinator.digital_twin_projected_profit_eur
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        return {
-            "gesimuleerd_eind_soc_kwh": self._coordinator.digital_twin_final_soc_kwh,
-            "uren_gesimuleerd": self._coordinator.digital_twin_hours_simulated,
-            "traject": self._coordinator.digital_twin_trajectory,
-            "note": self._coordinator.digital_twin_note,
         }
 
 
@@ -2224,7 +2056,7 @@ class AdvisoryReadinessSensor(SensorEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
-    _attr_name = "Advies-gereedheid (10 modules)"
+    _attr_name = "Advies-gereedheid"  # v5.221.0: zonder aantal; drie modules zijn vervallen
     _attr_icon = "mdi:clipboard-check-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -4852,100 +4684,6 @@ class BatteryModuleHealthSensor(ZuinigSchrijven, SensorEntity):
         }
 
 
-class DigitalTwinAccuracySensor(SensorEntity, RestoreEntity):
-    """Gemeten nauwkeurigheid van de Digital Twin (v1.0.1).
-
-    Tot v1.0.0 stond er bij deze module "nauwkeurigheid t.o.v. het
-    daadwerkelijke resultaat wordt niet bijgehouden". Eerlijk, maar het
-    kan wél: de twin voorspelt een SoC, en die is later gewoon na te
-    meten. Dezelfde "leg een voorspelling vast, controleer 'm later"-
-    techniek als de zonvoorspelling-tracker.
-
-    RestoreEntity, en dat is hier geen luxe: er zijn acht afgeronde
-    vergelijkingen nodig voordat er een oordeel volgt, en die worden per
-    uur vastgelegd met een horizon van zes uur. Zonder herstel zou elke
-    herstart de meting terugzetten naar nul en zou het oordeel bij
-    frequent herstarten nooit verschijnen - precies de fout die de
-    NILM-persistentie in v0.63.115 zo lang verborgen hield.
-
-    De toestand is de gemiddelde absolute afwijking in kWh, of leeg
-    zolang er te weinig vergelijkingen zijn.
-    """
-
-    _attr_has_entity_name = True
-    _attr_name = "Digital Twin nauwkeurigheid"
-    # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
-    _attr_icon = "mdi:target-variant"
-    _attr_native_unit_of_measurement = "kWh"
-    # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
-    # oktober: deze sensor had een eenheid maar geen device_class en geen
-    # state_class. Home Assistant bewaart dan alleen de ruwe geschiedenis
-    # (die na de recorder-bewaartermijn verdwijnt) en geen uurstatistieken;
-    # een grafiek over maanden kan dan niet.
-    # Bewust GEEN device_class ENERGY: de toestand is de gemiddelde
-    # absolute afwijking (kWh) tussen voorspelde en gemeten accu-inhoud,
-    # een foutmaat en geen energietotaal. Met ENERGY zou Home Assistant hem
-    # aanbieden in het Energiedashboard en een totaal verwachten; ook
-    # ENERGY_STORAGE (opgeslagen energie) klopt niet. Alleen
-    # state_class measurement: gemiddelde/min/max per uur, eenheid blijft kWh.
-    _attr_state_class = "measurement"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        self._coordinator = coordinator
-        self._attr_unique_id = f"{entry_id}_digital_twin_accuracy"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": DEFAULT_NAME,
-        }
-
-    @property
-    def native_value(self) -> float | None:
-        return self._coordinator.digital_twin_accuracy_mae_kwh
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        status = self._coordinator.get_digital_twin_accuracy_status()
-        return {
-            **status,
-            "openstaande_voorspellingen": len(
-                self._coordinator._digital_twin_pending
-            ),
-            "vergelijkingen": self._coordinator.digital_twin_accuracy_history[-10:],
-            # v5.143.0 (L-EMS-044): fout gesplitst naar wat de tweeling volgde.
-            "kwartierplan_gevolgd": self._coordinator.get_digital_twin_plan_split(),
-            # Volledige lijsten voor het herstel na een herstart - de
-            # "vergelijkingen" hierboven zijn slechts een voorbeeld voor
-            # weergave.
-            "volledige_historie": self._coordinator.digital_twin_accuracy_history,
-            "openstaand": self._coordinator._digital_twin_pending,
-            "note": (
-                "De twin voorspelt de accu-inhoud een aantal uur vooruit; "
-                "op dat moment wordt de voorspelling tegen de werkelijke "
-                "meting gehouden. Een voorspelling die door een herstart "
-                "te laat aan de beurt komt wordt weggegooid in plaats van "
-                "alsnog afgerekend - die zou een fout meten die niets met "
-                "het model te maken heeft. De afwijking wordt afgezet "
-                "tegen de bruikbare accucapaciteit, want 1 kWh betekent "
-                "iets anders bij een kleine dan bij een grote accu."
-            ),
-        }
-
-    @_store_wint
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is None:
-            return
-        historie = last_state.attributes.get("volledige_historie")
-        if isinstance(historie, list) and historie:
-            self._coordinator.digital_twin_accuracy_history = list(historie)
-        openstaand = last_state.attributes.get("openstaand")
-        if isinstance(openstaand, list) and openstaand:
-            self._coordinator._digital_twin_pending = list(openstaand)
-
-
 class ReliabilityOverviewSensor(ZuinigSchrijven, SensorEntity):
     """Alle betrouwbaarheidsoordelen op één plek, in één taal (v1.3.0).
 
@@ -5231,27 +4969,12 @@ class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
             ("proefstand", self._coordinator.get_proefstand),
             # v4.1: alles wat meet en nog niet stuurt, rijp bovenaan.
             ("meet_stuurt_niet", self._coordinator.get_meet_stuurt_niet),
-            # v3.61.0: de proefpagina waarop beide modi naast elkaar
-            # staan, om zelf te beoordelen.
-            (
-                "smart_charging_proef",
-                self._coordinator.get_smart_charging_proefplanning,
-            ),
             ("terugvallen", self._coordinator.get_fallback_overview),
             ("zonstand", self._coordinator.get_sun_position_check),
             ("buitensensor", self._coordinator.get_outdoor_sensor_check),
             ("zelfcontrole", self._coordinator.get_consistency_checks),
             ("rondeduur", self._coordinator.get_tick_performance),
             ("capaciteit", self._coordinator.get_capacity_overview),
-            # v5.20: de oude "overzichtsplaat" wordt hier niet meer gebouwd.
-            # Het dashboard leest sinds v5.19 de plaat van de cockpitsensor;
-            # dit was het traagste onderdeel van deze sensor (85 ms) en werd
-            # voor niets gemaakt.
-            (
-                "overzichtsecties",
-                self._coordinator.get_overview_sections_svg,
-            ),
-            ("overzichtstatus", self._coordinator.get_overview_status_svg),
             ("logboek", self._coordinator.get_event_log),
             ("gezondheid", self._coordinator.get_integration_health),
             ("veroudering", self._coordinator.get_aging_drivers),
@@ -5489,37 +5212,12 @@ def _aanwezigheid_voor_het_dashboard(p):
     return uit
 
 
-def _smart_charging_proef_voor_het_dashboard(p):
-    """Alleen de kwartieren met een tekort: de tabel slaat de andere over."""
-    if not isinstance(p, dict) or "rijen" not in p:
-        return p
-    uit = {k: v for k, v in p.items() if k != "rijen"}
-    uit["rijen"] = [
-        _alleen(
-            r,
-            (
-                "van",
-                "prijs_ct",
-                "zon_kwh",
-                "tekort_kwh",
-                "hoogste_prijs_hierna_ct",
-                "smart_charging_beter",
-                "voordeel_eur",
-            ),
-        )
-        for r in p.get("rijen") or []
-        if isinstance(r, dict) and (r.get("tekort_kwh") or 0) > 0
-    ]
-    return uit
-
-
 _GACS_INKORTEN = {
     "plantoetsing": _plantoetsing_voor_het_dashboard,
     "logboek": _logboek_voor_het_dashboard,
     "proefstand": _proefstand_voor_het_dashboard,
     "nog_niet_bepaald": _nog_niet_bepaald_voor_het_dashboard,
     "aanwezigheid": _aanwezigheid_voor_het_dashboard,
-    "smart_charging_proef": _smart_charging_proef_voor_het_dashboard,
 }
 
 
@@ -5618,7 +5316,6 @@ DASHBOARD_PAGINA_INTERVAL_S = {
 # De toestand is het aantal regels van het eerste attribuut.
 DASHBOARD_PAGINA_SENSOREN = (
     ("kwartierplanning_tabel", "Kwartierplanning", "mdi:table-clock", ("kwartierplanning", "laadplan_gewijzigd", "planvolging"), None),
-    ("smart_charging_proef", "Smart charging proef", "mdi:flask-outline", ("smart_charging_proef",), "rijen"),
     ("logboek", "Logboek", "mdi:notebook-outline", ("logboek",), "regels"),
     ("proefstand", "Proefstand", "mdi:test-tube", ("proefstand",), "kandidaten"),
     ("aanwezigheid", "Aanwezigheid", "mdi:home-account", ("aanwezigheid",), "tijdlijn"),

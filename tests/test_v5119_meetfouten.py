@@ -97,14 +97,6 @@ def test_horizon_grens_12_uur(make_coordinator):
 
 # --- L-EMS-030 -----------------------------------------------------------------
 
-def test_twin_laadt_met_laadrendement(make_coordinator, monkeypatch):
-    c = make_coordinator({})
-    monkeypatch.setattr(type(c), "learned_charge_efficiency_percent", property(lambda s: 85.0))
-    erin, net = c._twin_laadstap(10.0, 2.4)            # 1 u op 2,4 kW
-    assert round(erin, 2) == 2.04 and round(net, 2) == 2.4
-    erin, net = c._twin_laadstap(1.0, 2.4)             # bijna vol
-    assert erin == 1.0 and round(net, 3) == round(1.0 / 0.85, 3)
-
 
 def test_twin_laadfactor_terugval(make_coordinator, monkeypatch):
     c = make_coordinator({})

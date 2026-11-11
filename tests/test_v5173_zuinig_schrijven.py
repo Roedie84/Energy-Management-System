@@ -210,12 +210,12 @@ GEREMD = [
     "BatteryCoolingSensor", "BatteryModuleHealthSensor", "NilmConfirmedDevicesSensor",
     "WaterUsageSensor", "ReliabilityOverviewSensor", "Repetitie2027Sensor",
     "HourlyConsumptionProfileSensor", "PvHourlyBiasSensor", "AircoBesluitSensor",
-    "WeatherEnsembleSensor", "MpcAdvisorySensor", "MonteCarloAdvisorySensor",
-    "KalmanFilterAdvisorySensor", "NilmUnconfirmedCandidatesSensor",
+    "WeatherEnsembleSensor", "MonteCarloAdvisorySensor",
+    "NilmUnconfirmedCandidatesSensor",
     "SelfSufficiencySensor", "SelfConsumptionSensor", "LiveNarrativeSensor",
     "CounterfactualSavingsSensor", "SavingsThisMonthSensor",
     "CounterfactualSavingsTotalSensor", "LivingRoomAircoPredictionSensor",
-    "DigitalTwinAdvisorySensor", "ClimateForecastSensor",
+    "ClimateForecastSensor",
     "ApplianceUsageHoursSensor", "MeetlogSensor",
 ]
 

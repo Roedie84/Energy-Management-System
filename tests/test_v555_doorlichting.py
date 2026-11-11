@@ -29,7 +29,6 @@ class _Coord:
     peak_power_today_w = 2199.04
     living_room_current_temp_c = 21.4
     learned_night_consumption_kw = 0.403
-    digital_twin_accuracy_mae_kwh = 0.512
 
     def _read_corrected_consumption_power(self):
         return 412.36
@@ -45,7 +44,6 @@ def _sensoren():
         "huis": sensor_mod.HouseholdConsumptionSensor(c, "e"),
         "uur": sensor_mod.HourlyConsumptionProfileSensor(c, "e"),
         "klimaat": sensor_mod.ClimateForecastSensor(c, "e"),
-        "twin": sensor_mod.DigitalTwinAccuracySensor(c, "e"),
     }
 
 
@@ -64,14 +62,6 @@ def test_temperatuur_krijgt_statistieken():
     assert s._attr_native_unit_of_measurement == "°C"
 
 
-def test_twin_nauwkeurigheid_is_een_foutmaat_geen_energie():
-    """Gemiddelde absolute afwijking in kWh: measurement, geen ENERGY."""
-    s = _sensoren()["twin"]
-    assert getattr(s, "_attr_device_class", None) is None
-    assert s._attr_state_class == "measurement"
-    assert s._attr_native_unit_of_measurement == "kWh"
-
-
 def test_de_toestanden_zijn_getallen():
     for naam, s in _sensoren().items():
         waarde = s.native_value
@@ -82,11 +72,9 @@ def test_leeg_blijft_none():
     c = _Coord()
     c.living_room_current_temp_c = None
     c.learned_night_consumption_kw = None
-    c.digital_twin_accuracy_mae_kwh = None
     c._read_corrected_consumption_power = lambda: None
     c.learned_hourly_avg_kw = lambda hour: None
     assert sensor_mod.ClimateForecastSensor(c, "e").native_value is None
-    assert sensor_mod.DigitalTwinAccuracySensor(c, "e").native_value is None
     assert sensor_mod.HouseholdConsumptionSensor(c, "e").native_value is None
     assert sensor_mod.HourlyConsumptionProfileSensor(c, "e").native_value is None
 
@@ -95,7 +83,6 @@ def test_attributen_blijven_buiten_de_recorder():
     for cls in (
         sensor_mod.HourlyConsumptionProfileSensor,
         sensor_mod.ClimateForecastSensor,
-        sensor_mod.DigitalTwinAccuracySensor,
     ):
         assert cls._unrecorded_attributes == sensor_mod.GEEN_ATTRIBUTEN_IN_RECORDER
 

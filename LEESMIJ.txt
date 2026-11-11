@@ -1,3 +1,11 @@
+EMS v5.221.0 - oude meetmodules en tekeningen verwijderd
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Weg: het 24-uursplan (MPC), het Kalman-filter, de digitale tweeling, de smart-charging-proef en de overzichtstekeningen. Ze stuurden niets en stonden niet in de cockpit.
+- Vijf sensoren verdwijnen daardoor. De tekortkans in de cockpit blijft.
+- Aan de sturing zelf verandert niets.
+
 EMS v5.220.0 - jaarafrekening met de prijzen van nu, acht oude sensoren weg
 
 Installeren: via de Marketplace bijwerken en herstarten.

@@ -65,24 +65,23 @@ def test_omvallende_adviesstap_slaat_het_besluit_niet_over(make_coordinator, has
     monkeypatch.setattr(mod.dt_util, "now", lambda: DAY0.replace(hour=10))
 
     def kapot(*_a, **_k):
-        raise RuntimeError("mpc stuk")
+        raise RuntimeError("stap stuk")
 
-    c._compute_mpc_plan = kapot
+    # v5.221.0: MPC en de digitale tweeling zijn vervallen; de NILM-stap staat ervoor in de plaats.
+    c._update_nilm_confirmed_devices = kapot
     c._run_monte_carlo_simulation = kapot
     c._update_presence = kapot
-    c._run_digital_twin_simulation = kapot
     _run(c._async_ronde())
 
     assert c._besluit_deze_ronde is True
     assert c.last_reason not in (None, "")
-    assert "ronde:mpc" in c.internal_failures
+    assert "ronde:nilm-apparaten" in c.internal_failures
     assert "ronde:monte carlo" in c.internal_failures
     assert "ronde:aanwezigheid" in c.internal_failures
-    assert "ronde:digitale tweeling" in c.internal_failures
     # De volgende ronde lukt het weer: de vlaggen eraf.
-    del c._compute_mpc_plan
+    del c._update_nilm_confirmed_devices
     _run(c._async_ronde())
-    assert "ronde:mpc" not in c.internal_failures
+    assert "ronde:nilm-apparaten" not in c.internal_failures
 
 
 def test_adviesstappen_in_dezelfde_volgorde():
@@ -92,7 +91,8 @@ def test_adviesstappen_in_dezelfde_volgorde():
     import inspect
 
     bron = inspect.getsource(C._adviesstappen_voor_besluit)
-    assert bron.index("_compute_mpc_plan") < bron.index("_run_monte_carlo") < bron.index("_update_kalman")
+    assert bron.index("_update_appliance_state_machine") < bron.index("_run_monte_carlo")
+    assert "_compute_mpc_plan" not in bron and "_update_kalman" not in bron  # v5.221.0
 
 
 def _rondes_zonder_besluit(c, n, fout=False):

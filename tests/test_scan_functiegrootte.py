@@ -80,13 +80,11 @@ BEVROREN = {
     # B4.4: verhuisd naar de mixin uitleg.py (ongewijzigd, zelfde grens).
     "uitleg.py:_build_explanation": 73,
     "coordinator.py:_build_forecast_timeline": 66,
-    "coordinator.py:_compute_mpc_plan": 83,
     "coordinator.py:_evaluate_new_notifications": 103,
     # B4.7: verhuisd naar de mixin nilm_glue.py (ongewijzigd, zelfde grens).
     "nilm_glue.py:_finalize_nilm_device_day": 71,
     # v3.50.0: +2, de tijdstempels bij de twee schrijvers van
     # `last_soc_percent` in deze functie.
-    "coordinator.py:_update_advisory_readiness": 68,
     "coordinator.py:_update_self_sufficiency_tracking": 67,
     # v5.3: 87 -> 88. Bewust verhoogd, niet weggemoffeld: de functie heeft
     # een echte nieuwe verantwoordelijkheid gekregen (de poort die

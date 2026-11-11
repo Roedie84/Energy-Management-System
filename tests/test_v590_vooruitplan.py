@@ -210,14 +210,3 @@ def test_de_meting_stuurt_niets():
         assert not aanroepen & {"_async_apply_operation", "_async_apply_manual", "async_call"}
 
 
-def test_de_proefstand_draait_ook_na_de_saldering(make_coordinator, hass):
-    """Klaar voor 1 januari: de hele proefstand rekent zonder fout als de
-    saldering voorbij is."""
-    c = make_coordinator({})
-    c._is_salderen_active = lambda now: False
-    meting = {"verschil_eur": 0.3, "verschoven_kwh": 2.0, "kwartieren_anders": 15}
-    c.vooruitplan_history = [{"dag": str(i), "nu": meting, "na_saldering": meting} for i in range(20)]
-
-    namen = {k["naam"]: k for k in c.get_proefstand()["kandidaten"]}
-
-    assert namen["Vooruitplannen over 24 uur"]["status"] == "betrouwbaar"

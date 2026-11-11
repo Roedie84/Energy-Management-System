@@ -34,22 +34,6 @@ def _namen(c):
 # --- de fout van 28 augustus -----------------------------------------
 
 
-def test_a_one_sided_split_is_caught(make_coordinator, hass):
-    """Zestig vergelijkingen, allemaal nacht. Over meerdere dagen horen
-
-    beide voor te komen.
-    """
-    c = make_coordinator({})
-    c.digital_twin_accuracy_history = [
-        {"fout_kwh": 1.0, "met_zon": False} for _ in range(60)
-    ]
-
-    namen = _namen(c)
-
-    # v3.71.0: alleen als de zon ook werkelijk nooit werd vastgelegd.
-    assert "Tweeling: zon wordt nooit vastgelegd" in namen
-
-
 def test_a_balanced_split_is_fine(make_coordinator, hass):
     c = make_coordinator({})
     c.digital_twin_accuracy_history = [
@@ -141,53 +125,10 @@ def test_real_climate_cells_are_fine(make_coordinator, hass):
 # --- en het komt bovenaan te staan -----------------------------------
 
 
-def test_a_finding_lands_in_the_analysis(make_coordinator, hass):
-    """Onderaan een export van 600 kB zou het net zo goed worden
-
-    overgeslagen als de rest - en dat is precies wat er op 28 augustus
-    gebeurde.
-    """
-    c = make_coordinator({})
-    c.digital_twin_accuracy_history = [
-        {"fout_kwh": 1.0, "met_zon": False} for _ in range(60)
-    ]
-
-    analyse = c.get_analyse()
-
-    assert analyse["aantal_fouten"] >= 1
-    assert any(
-        p["onderwerp"] == "Tweeling: zon wordt nooit vastgelegd"
-        for p in analyse["punten"]
-    )
-
-
 def test_a_healthy_system_reports_nothing(make_coordinator, hass):
     c = make_coordinator({})
 
     assert c.get_zelftoets() == []
-
-
-def test_it_would_have_caught_the_export_of_28_august(
-    make_coordinator, hass
-):
-    """De toets die telt: had dit de fout van gisteren gevangen?
-
-    De cijfers komen letterlijk uit de export van 28 augustus 17:58. Ik
-    heb die dag "geen bevindingen" gemeld terwijl dit erin stond.
-    """
-    c = make_coordinator({})
-    c.digital_twin_accuracy_history = [
-        {"fout_kwh": 1.346, "met_zon": False} for _ in range(60)
-    ]
-
-    analyse = c.get_analyse()
-
-    assert analyse["samenvatting"] != "Geen bijzonderheden."
-    punt = next(
-        p for p in analyse["punten"]
-        if p["onderwerp"] == "Tweeling: zon wordt nooit vastgelegd"
-    )
-    assert "60" in punt["wat"]
 
 
 def test_a_sun_value_below_the_threshold_is_not_a_finding(

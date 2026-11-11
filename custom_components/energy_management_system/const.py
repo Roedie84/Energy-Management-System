@@ -2277,25 +2277,6 @@ MEASUREMENT_QUALITY_DEGRADED_THRESHOLD = 50
 # thresholds that used to gate the (now-removed) grid-purchase decision
 # are no longer needed.
 
-# MPC (Model Predictive Control) advisory engine (v0.63.33). Advisory
-# ONLY - computes a projected charge/discharge plan over the available
-# price forecast horizon and exposes it for comparison, but NEVER sends
-# a device command and NEVER overrides the existing, battle-tested
-# decision tree (confirmed explicitly before building this).
-#
-# Algorithm: greedy interval pairing over the full forecast horizon
-# (today + tomorrow, whatever's available) - sort quarters by price,
-# repeatedly match the cheapest remaining quarter with the priciest
-# remaining quarter and allocate a charge/discharge chunk between them
-# (bounded by physical rate and remaining capacity headroom) as long as
-# it clears MPC_MIN_MARGIN_EUR_PER_KWH after efficiency losses. This is
-# a well-known good heuristic for the storage-arbitrage problem, not a
-# true linear-programming solve - no new dependency (e.g. scipy) is
-# introduced for a HACS integration to stay lightweight, and the
-# heuristic's steps stay individually inspectable, unlike an opaque
-# solver's output.
-MPC_HORIZON_HOURS = 48
-MPC_MIN_MARGIN_EUR_PER_KWH = 0.03
 
 # Extra-dip laden op weinig-zon-dagen (v0.63.87, uitgebreid besproken en
 # ontworpen door de gebruiker). Sinds v0.63.77 laadt het systeem tijdens
@@ -2324,35 +2305,6 @@ LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH = 0.03
 MONTE_CARLO_SIMULATIONS = 1000
 MONTE_CARLO_MAX_HOURS = 48
 
-# Kalman filtering advisory engine (v0.63.35). Advisory ONLY - a smoothed
-# estimate shown alongside the raw sensor reading, never fed into any
-# decision (which keep using their own already-tested smoothing, e.g.
-# the median-based consumption correction). Process noise (Q, how much
-# the true value is expected to drift between 5-minute ticks) and
-# measurement noise (R, how noisy the raw sensor reading is believed to
-# be) are heuristic, documented defaults per signal - not empirically
-# characterised against real sensor noise data, since that data doesn't
-# exist for this installation. A higher Q relative to R makes the
-# filter track changes faster (trusts new measurements more); a higher
-# R relative to Q makes it smoother but slower to react.
-KALMAN_SOC_PROCESS_NOISE_KWH2 = 0.0004  # available_kwh drifts modestly tick to tick
-KALMAN_SOC_MEASUREMENT_NOISE_KWH2 = 0.0009
-KALMAN_PV_PROCESS_NOISE_W2 = 2500.0  # live PV can swing quickly (clouds)
-KALMAN_PV_MEASUREMENT_NOISE_W2 = 10000.0
-KALMAN_LOAD_PROCESS_NOISE_W2 = 400.0
-KALMAN_LOAD_MEASUREMENT_NOISE_W2 = 2500.0
-
-# Digital Twin advisory engine (v0.63.36). Advisory ONLY - simulates
-# forward in time what the *existing* rule-based logic would do (using
-# the same primary-expensive-quarter threshold and cheapest-block
-# identification already computed elsewhere), as a complement to MPC's
-# theoretical-optimum plan - the gap between the two shows how much
-# headroom (if any) exists between current behaviour and the arbitrage
-# ceiling. Deliberately a simplification (doesn't replicate SoC-taper,
-# the household floor, or price-priority partial allocation - those
-# live only in the real decision tree, this is a twin, not a full
-# duplicate) - documented plainly wherever the result is shown.
-DIGITAL_TWIN_HORIZON_HOURS = 48
 
 # For each of the last LEARNING_HISTORY_DAYS days that had a detected
 # shortfall, add this many extra percentage points to the dynamic
@@ -3760,47 +3712,6 @@ MIN_BATTERY_POWER_IDLE_W = 25.0
 # zonder dat er iets mis is.
 WATER_VOLUME_AGREEMENT_TOLERANCE = 0.25
 
-# --- Digital Twin: nauwkeurigheidsmeting (v1.0.1) --------------------
-# Tot nu toe stond bij de Digital Twin "nauwkeurigheid t.o.v. het
-# daadwerkelijke resultaat wordt niet bijgehouden" - eerlijk, maar het
-# kan wél: de twin voorspelt een SoC, en die is later gewoon na te meten.
-#
-# Techniek: dezelfde "leg een voorspelling vast, controleer 'm later"
-# aanpak als de zonvoorspelling-tracker. Er wordt niet bij elke tick een
-# voorspelling weggeschreven - dat zou binnen een dag honderden sterk
-# overlappende metingen opleveren die allemaal vrijwel hetzelfde zeggen.
-DIGITAL_TWIN_ACCURACY_HORIZON_HOURS = 6
-
-# Vanaf hoeveel verwachte zon een vergelijking een "dagvergelijking"
-# heet (v3.45.0).
-#
-# De tweelingfout meet twee dingen tegelijk: de simulatie en de
-# zonverwachting. Gemeten op 21 augustus: 's nachts +0,90 kWh gemiddeld,
-# overdag +2,16. Eén getal dat allebei meet, vertelt niet welke van de
-# twee beweegt.
-#
-# Een halve kilowattuur over zes uur is het punt waarop de zon
-# meetelbaar wordt; daaronder is het schemer of nacht en meet je de
-# simulatie zelf.
-DIGITAL_TWIN_ZON_DREMPEL_KWH = 0.5
-DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES = 60
-
-# Een voorspelling die door een herstart of hiaat pas veel te laat wordt
-# afgerekend, zegt niets meer over het moment waarvoor ze bedoeld was.
-DIGITAL_TWIN_ACCURACY_MAX_LATE_MINUTES = 45
-
-# Hoeveel afgeronde vergelijkingen bewaard blijven, en hoeveel er nodig
-# zijn voordat er een oordeel wordt geveld. Zelfde principe als
-# MEASUREMENT_QUALITY_MIN_SAMPLES: liever geen oordeel dan een oordeel
-# op twee metingen.
-DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH = 60
-DIGITAL_TWIN_ACCURACY_MIN_SAMPLES = 8
-
-# De gemiddelde absolute fout wordt afgezet tegen de BRUIKBARE
-# accucapaciteit, niet tegen een vast aantal kWh - een fout van 1 kWh
-# betekent iets heel anders bij een accu van 2 kWh dan bij een van 7,5.
-DIGITAL_TWIN_ACCURACY_GOOD_FRACTION = 0.10
-DIGITAL_TWIN_ACCURACY_USABLE_FRACTION = 0.20
 
 # --- Weather Ensemble: overeenstemmingsmeting (v1.0.2) ---------------
 # De ensemble meldt de ACTUELE bewolking, geen voorspelling - "hoe
@@ -3991,7 +3902,6 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "langere_horizon_history": {"type": "plain"},
     "lange_reserve_history": {"type": "plain"},
     "niet_ontladen_history": {"type": "plain"},
-    "mpc_vergelijking_history": {"type": "plain"},
     "vooruitplan_history": {"type": "plain"},
     "planvolging_dagen": {"type": "plain"},
     # v5.93.1: de beoordeelde kwartieren van vandaag over een herstart -
@@ -4050,7 +3960,6 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_plan_review_dagstand": {"type": "plain"},
     "bedtime_history": {"type": "plain"},
     "battery_cooling_history": {"type": "plain"},
-    "kalman_divergence_history": {"type": "plain"},
     "backyard_sun_exposure_azimuths": {"type": "plain"},
     "weather_source_agreement": {"type": "plain"},
     # v5.152.0 (L-EMS-046): de datum bij elke kwartierwaarneming per bron.
@@ -4093,7 +4002,6 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "airco_ritme": {"type": "plain"},
     # v5.68.2: accumodules (apparaatnaam) zonder melding "loopt uit de pas".
     "battery_module_stil": {"type": "plain"},
-    "digital_twin_accuracy_history": {"type": "plain"},
     "extra_dip_margin_history": {"type": "plain"},
     "fietsladers_charge_duration_history": {"type": "plain"},
     "batterijlader_charge_duration_history": {"type": "plain"},
@@ -4403,13 +4311,9 @@ PERSISTED_CONVERSIES = (
 # nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
 
 
-
-
 # v4.1: dicts met UURSLEUTELS (int). JSON maakt daar tekst van; bij het
 # laden gaan ze terug naar int, anders vindt `learned_hourly_avg_kw(13)`
 # niets meer.
-
-
 
 
 # De opslag wordt vertraagd weggeschreven: een tick kan meerdere velden
@@ -4433,28 +4337,6 @@ PERSISTED_STATE_SAVE_DELAY_SECONDS = 30
 # onder de sprong die direct zonlicht op de behuizing veroorzaakt.
 BACKYARD_TEMP_SPIKE_MIN_DEVIATION_C = 1.5
 
-# --- Kalman: levert filteren hier eigenlijk iets op? (v1.0.7) --------
-# Gevraagd n.a.v. "Kalman filtering — klaar — alle 3 filters
-# geconvergeerd": doen we hier actief iets mee, en wat zou het
-# betekenen als wel?
-#
-# "Geconvergeerd" zegt alleen dat de interne onzekerheid van het filter
-# is uitgezakt - niet dat de gefilterde waarde BETER is dan de ruwe. Er
-# was geen enkel cijfer dat die vraag kon beantwoorden. Deze meting
-# levert dat cijfer: hoeveel wijkt gefilterd af van ruw, over tijd?
-#
-# Is die afwijking verwaarloosbaar, dan is filteren zinloos en is de
-# discussie klaar. Is ze groot, dan pas is de vervolgvraag interessant -
-# en dan nog uitsluitend asymmetrisch (zie README), want een
-# achterlopende SoC-schatting die MEER energie voorspiegelt dan er is,
-# is precies het faalpatroon waar de tekort-reserve tegen beschermt.
-KALMAN_DIVERGENCE_HISTORY_LENGTH = 500
-KALMAN_DIVERGENCE_MIN_SAMPLES = 50
-
-# Onder dit percentage van de typische signaalgrootte is het verschil
-# tussen ruw en gefilterd te klein om er iets aan te hebben.
-KALMAN_DIVERGENCE_NEGLIGIBLE_PERCENT = 1.0
-KALMAN_DIVERGENCE_MEANINGFUL_PERCENT = 5.0
 
 # --- Beslislogica na het einde van saldering (v1.1.0) ----------------
 # Tot en met de salderingsdatum verandert er NIETS: alle logica hieronder

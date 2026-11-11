@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
 from pathlib import Path
 
 import voluptuous as vol
@@ -35,11 +34,9 @@ from .luchtreiniger_lokaal import LuchtreinigerLokaalMeelezer
 _LOGGER = logging.getLogger(__name__)
 
 DASHBOARD_FILENAME = "energy_management_system_dashboard.yaml"
-# v0.63.125: de achtergrondtekening voor de picture-elements-kaart. Moet
-# onder `www/` staan, want dat is de enige map die Home Assistant als
-# statische bestanden serveert (bereikbaar als /local/<naam>).
-BACKGROUND_SOURCE_FILENAME = "overview_background.svg"
-BACKGROUND_TARGET_PATH = "www/energy_management_system_overview.svg"
+#: v5.221.0: de achtergrondtekening van het vervallen dashboard; de kopie
+#: onder `www/` wordt bij de start opgeruimd.
+OUDE_ACHTERGROND_PAD = "www/energy_management_system_overview.svg"
 
 SERVICE_CONFIRM_NILM_DEVICE = "confirm_nilm_device"
 # v2.3.0: een vraag stellen over de eigen gegevens.
@@ -74,58 +71,14 @@ def _verwijder_oude_dashboardkopie(hass: HomeAssistant) -> None:
     Blokkerende bestandsoperatie - alleen aanroepen via
     hass.async_add_executor_job.
     """
-    oud = Path(hass.config.path(DASHBOARD_FILENAME))
-    try:
-        if oud.is_file():
-            oud.unlink()
-            _LOGGER.info("Oude kopie van het detaildashboard verwijderd: %s", oud)
-    except OSError as err:
-        _LOGGER.warning("Oude kopie van het detaildashboard niet verwijderd (%s): %s", oud, err)
-
-
-def _copy_overview_background(hass: HomeAssistant) -> None:
-    """Zet de achtergrondtekening klaar onder `www/` (v0.63.125).
-
-    Home Assistant serveert alleen `<config>/www/` als statische map, via
-    de URL `/local/`. De picture-elements-kaart verwijst daarheen, dus
-    zonder deze kopie zou de kaart een gebroken afbeelding tonen terwijl
-    alle waarden er wél overheen staan - verwarrender dan een lege kaart.
-
-    Maakt `www/` aan als die nog niet bestaat. LET OP: Home Assistant
-    registreert die map alleen bij het opstarten, dus als `www/` hier
-    voor het eerst wordt aangemaakt, is één extra herstart nodig voordat
-    de afbeelding daadwerkelijk geserveerd wordt. Dat staat ook in de
-    README.
-
-    Blokkerende bestandsoperatie - alleen aanroepen via
-    hass.async_add_executor_job.
-    """
-    source = Path(__file__).parent / BACKGROUND_SOURCE_FILENAME
-    if not source.exists():
-        _LOGGER.debug(
-            "Achtergrondtekening niet gevonden op %s - overgeslagen", source
-        )
-        return
-
-    destination = Path(hass.config.path(BACKGROUND_TARGET_PATH))
-    try:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, destination)
-        _LOGGER.info(
-            "Achtergrondtekening voor het dashboard gekopieerd naar %s "
-            "(bereikbaar als /local/%s)",
-            destination,
-            destination.name,
-        )
-    except OSError as err:
-        _LOGGER.warning(
-            "Kon de achtergrondtekening niet naar %s kopiëren: %s. De "
-            "picture-elements-kaart toont dan een gebroken afbeelding; "
-            "kopieer dashboards/%s handmatig naar www/.",
-            destination,
-            err,
-            BACKGROUND_SOURCE_FILENAME,
-        )
+    for naam in (DASHBOARD_FILENAME, OUDE_ACHTERGROND_PAD):
+        oud = Path(hass.config.path(naam))
+        try:
+            if oud.is_file():
+                oud.unlink()
+                _LOGGER.info("Oud bestand van het detaildashboard verwijderd: %s", oud)
+        except OSError as err:
+            _LOGGER.warning("Oud bestand van het detaildashboard niet verwijderd (%s): %s", oud, err)
 
 
 # v4.11: de services die deze integratie registreert, zodat ze met de
@@ -249,7 +202,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.warning("Luchtreiniger-meelezen niet gestart: %s", err)
     # v5.219.0: het detaildashboard is vervallen; alleen de oude kopie opruimen.
     await hass.async_add_executor_job(_verwijder_oude_dashboardkopie, hass)
-    await hass.async_add_executor_job(_copy_overview_background, hass)
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))
     _async_register_nilm_services(hass)

@@ -61,12 +61,6 @@ def test_the_english_translation_is_complete():
     assert not sorted(nl - en)
 
 
-def test_the_svg_copy_is_in_sync():
-    bron = WORTEL / "dashboards" / "energy_management_system_overview.svg"
-
-    assert bron.read_text() == (PAKKET / "overview_background.svg").read_text()
-
-
 def test_every_service_is_registered_and_documented():
     """Een dienst in services.yaml die niet geregistreerd is, verschijnt
     wel in de UI maar doet niets."""

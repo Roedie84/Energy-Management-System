@@ -35565,3 +35565,17 @@ Ruud 11-11 15:48 ("diepgaand onderzoek: getallen, berekeningen, zaken die niet m
 - **Pendelmeting (punt 14)**: `pendel_wh_vandaag` en `pendel_wh_gisteren` overleven een herstart (`p1_pendel_dagen` in de opslag).
 
 Tests: `test_v5220_opruimen_en_prijsniveau.py` (23); vijf testfuncties over de vervallen sensoren verwijderd, vier bijgewerkt.
+
+## v5.221.0 — meetmodules van voor het waardeplan en de tekeningen verwijderd
+
+Ruud 11-11 16:10 ("10 en 11 oppakken"). Vooraf per onderdeel nagelopen wie het leest: niets in de sturing, de cockpit, de dashboards of de automations.
+
+- **MPC (24-uursplan)**: `_compute_mpc_plan`, `_meet_mpc`, de doel-SoC en balans, de sensor "MPC advies" en de kandidaat "Vooruitplannen over 24 uur" in de proefstand.
+- **Kalman-filter**: de drie filters, de afwijkingsmeting en de sensor.
+- **Digitale tweeling**: de simulatie, de nauwkeurigheidsmeting en beide sensoren. `_twin_laadfactor` blijft (het dagarchief rekent ermee).
+- **Smart-charging-proef**: de proefplanning en de sensor.
+- **Overzichtstekeningen (punt 11)**: `overview_svg.py` (1.414 regels), de zes methoden die de tekeningen bouwden, de attributen `overzichtsecties` en `overzichtstatus`, de achtergrondtekening en de kopie naar `www/`. Een oude kopie daar wordt bij de start verwijderd.
+- **Gevolgen elders**: uit de rekenronde vier stappen minder; "Advies-gereedheid" telt de drie vervallen modules niet meer (naam zonder aantal, entity-id ongewijzigd); de zelftoets verliest de tweelingtoets; de diagnose-export 24 velden minder; 21 constanten en 3 bewaarde velden weg. De vijf sensoren worden bij de start uit het register gehaald.
+- **Blijft**: de tekortkans (Monte Carlo, staat in de cockpit), de proefstand met de overige 14 kandidaten en de meldingen daarover (volgt apart: hangt aan "nog niet bepaald" en twee meldingen), de oude sturing als terugval.
+
+In totaal ruim 8.500 regels minder (code en tests). Tests: 17 testbestanden over de vervallen onderdelen verwijderd, 14 bijgewerkt; nieuw `test_v5221_meetmodules_weg.py` (28).

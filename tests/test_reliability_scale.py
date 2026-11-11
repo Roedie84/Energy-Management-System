@@ -194,15 +194,3 @@ def test_every_row_has_a_readable_label(make_coordinator, hass):
         assert rij["label"] and rij["label"] != "?"
 
 
-def test_advisory_modules_appear_in_the_new_language(make_coordinator, hass):
-    """MPC staat op "structureel_beschikbaar"; in de schaal hoort dat
-    "niet toetsbaar" te zijn."""
-    c = make_coordinator({})
-    c.mpc_horizon_quarters_used = 96
-    c._update_advisory_readiness(NOW)
-
-    rij = next(r for r in c.get_reliability_overview() if r["naam"] == "mpc")
-
-    assert rij["niveau"] == RELIABILITY_UNVERIFIABLE
-
-

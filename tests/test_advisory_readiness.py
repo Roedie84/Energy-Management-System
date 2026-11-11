@@ -106,16 +106,6 @@ def test_weather_ensemble_not_configured(make_coordinator, hass):
     )
 
 
-def test_mpc_labelled_structural_not_ready(make_coordinator, hass):
-    coordinator = make_coordinator({})
-    coordinator.mpc_horizon_quarters_used = 96
-    coordinator._update_advisory_readiness(DAY0)
-
-    status = coordinator.advisory_readiness["mpc"]["status"]
-    assert status == "structureel_beschikbaar"
-    assert status != "klaar"
-
-
 def test_monte_carlo_maturity_levels(make_coordinator, hass):
     coordinator = make_coordinator({})
     coordinator._update_advisory_readiness(DAY0)
@@ -125,44 +115,6 @@ def test_monte_carlo_maturity_levels(make_coordinator, hass):
         coordinator.hourly_consumption_profile[h] = [0.3] * 7
     coordinator._update_advisory_readiness(DAY0)
     assert coordinator.advisory_readiness["monte_carlo"]["status"] == "klaar"
-
-
-def test_kalman_not_configured(make_coordinator, hass):
-    coordinator = make_coordinator({})
-    coordinator._update_advisory_readiness(DAY0)
-
-    assert coordinator.advisory_readiness["kalman"]["status"] == "niet_geconfigureerd"
-
-
-def test_kalman_converges_after_many_consistent_updates(make_coordinator, hass):
-    coordinator = make_coordinator(
-        {"available_energy_sensor_entity": "sensor.available_energy"}
-    )
-    for _ in range(50):
-        coordinator._kalman_soc.update(3.0)
-    coordinator._update_advisory_readiness(DAY0)
-
-    assert coordinator.advisory_readiness["kalman"]["status"] in (
-        "klaar",
-        "bijna_klaar",
-    )
-
-
-def test_digital_twin_starts_without_enough_comparisons(make_coordinator, hass):
-    """v1.0.1: de twin heeft nu WEL een nauwkeurigheidsmeting, dus hij
-    begint bij "onvoldoende_data" in plaats van bij het vage
-    "structureel_beschikbaar" - en klimt op zodra er genoeg afgeronde
-    vergelijkingen zijn."""
-    coordinator = make_coordinator({})
-    coordinator.digital_twin_trajectory = [{"start": "x", "mode": "smart", "soc_kwh": 1.0}]
-    coordinator.digital_twin_hours_simulated = 24
-    coordinator._update_advisory_readiness(DAY0)
-
-    entry = coordinator.advisory_readiness["digital_twin"]
-    assert entry["status"] == "onvoldoende_data"
-    assert "vergelijkingen" in entry["reden"]
-    # De simulatieduur blijft zichtbaar naast het nieuwe oordeel.
-    assert "24 uur" in entry["reden"]
 
 
 def test_nilm_not_configured(make_coordinator, hass):
@@ -185,25 +137,6 @@ def test_nilm_maturity_across_devices(make_coordinator, hass):
     coordinator.nilm_confirmed_devices["sensor.b"]["daily_avg_history"] = [1.0] * 30
     coordinator._update_advisory_readiness(DAY0)
     assert coordinator.advisory_readiness["nilm"]["status"] == "klaar"
-
-
-def test_all_ten_modules_always_present(make_coordinator, hass):
-    coordinator = make_coordinator({})
-    coordinator._update_advisory_readiness(DAY0)
-
-    expected = {
-        "kirchhoff",
-        "sluipverbruik",
-        "weather_ensemble",
-        "mpc",
-        "monte_carlo",
-        "kalman",
-        "digital_twin",
-        "nilm",
-        "extra_dip_marge",
-        "temperatuur_regressie",
-    }
-    assert set(coordinator.advisory_readiness.keys()) == expected
 
 
 def test_never_calls_any_hass_service(make_coordinator, hass):
@@ -362,22 +295,6 @@ def test_the_summary_sentence_covers_the_learned_values(
 
     assert "geleerde waarden" in zin
     assert "verzamelt nog" in zin
-
-
-def test_mpc_is_still_marked_as_unverifiable(make_coordinator, hass):
-    """De legenda legde uit waarom MPC niet te meten valt. Die tekst is
-    vervallen, maar het oordeel zelf moet blijven staan."""
-    from custom_components.energy_management_system.const import (
-        RELIABILITY_UNVERIFIABLE,
-    )
-
-    c = make_coordinator({})
-    c.mpc_horizon_quarters_used = 96
-    c._update_advisory_readiness(DAY0)
-
-    rij = next(r for r in c.get_reliability_overview() if r["naam"] == "mpc")
-
-    assert rij["niveau"] == RELIABILITY_UNVERIFIABLE
 
 
 def test_the_readiness_count_is_still_available(make_coordinator, hass):

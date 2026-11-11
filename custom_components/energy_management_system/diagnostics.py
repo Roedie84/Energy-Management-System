@@ -670,13 +670,6 @@ async def async_get_config_entry_diagnostics(
         "handmatige_ingrepen": _veilig(
             "handmatige_ingrepen", coordinator.get_handmatige_ingrepen
         ),
-        # v3.68.0: de energiebalans waar het MPC-plan op rust.
-        "mpc_balans": getattr(coordinator, "mpc_balans", None),
-        # v3.69.0: de doel-SOC per kwartier, achteruit gerekend.
-        "mpc_doel_soc": getattr(coordinator, "mpc_doel_soc", None),
-        "mpc_vergelijking": getattr(
-            coordinator, "mpc_vergelijking_history", None
-        ),
         "config": config,
         "diagnostic_summary": _veilig("get_diagnostic_summary", coordinator.get_diagnostic_summary),
         "missing_optional_features": _veilig("get_missing_optional_features", coordinator.get_missing_optional_features),
@@ -826,17 +819,6 @@ async def async_get_config_entry_diagnostics(
             # v3.52.0: de laagste celspanning en wat bijladen zou kosten.
             "celspanning": _veilig(
                 "celspanning", coordinator.get_celspanning_oordeel
-            ),
-            # v3.56.0: elke ingestelde entiteit, bestaat hij en zegt
-            # hij iets. Drie van de vier correcties van 28 augustus
-            # stonden al in de export, maar niet op een plek waar je ze
-            # zou zien.
-            # v3.58.0: de piek per fase naast die van het totaal.
-            # v3.61.0: beide modi naast elkaar, per kwartier - om zelf
-            # te beoordelen of `smart_charging` iets oplevert.
-            "smart_charging_proefplanning": _veilig(
-                "smart_charging_proefplanning",
-                coordinator.get_smart_charging_proefplanning,
             ),
             "fasepieken": _veilig(
                 "fasepieken", coordinator.get_fasepiek_overzicht
@@ -1163,20 +1145,8 @@ async def async_get_config_entry_diagnostics(
                 coordinator.notifications_master_enabled
             ),
             "sensor_cadence": _veilig("get_sensor_cadence_report", coordinator.get_sensor_cadence_report),
-            "kalman_divergence": _veilig("get_kalman_divergence_status", coordinator.get_kalman_divergence_status),
             "weather_ensemble_agreement": (
                 _veilig("get_weather_ensemble_agreement_status", coordinator.get_weather_ensemble_agreement_status)
-            ),
-            "digital_twin_accuracy": _veilig("get_digital_twin_accuracy_status", coordinator.get_digital_twin_accuracy_status),
-            # v3.45.0: nacht tegenover dag. Eén getal dat de simulatie
-            # en de zonverwachting samen meet, vertelt niet welke van de
-            # twee beweegt.
-            "digital_twin_error_split": _veilig(
-                "get_digital_twin_error_split",
-                coordinator.get_digital_twin_error_split,
-            ),
-            "digital_twin_accuracy_history": (
-                coordinator.digital_twin_accuracy_history
             ),
             "battery_module_live": coordinator.battery_module_live,
             # v5.72 (L-EMS-014): de sprong van een bijna lege module.
@@ -1444,12 +1414,6 @@ async def async_get_config_entry_diagnostics(
             "learned_washing_machine_cycle_duration_minutes": (
                 coordinator.learned_washing_machine_cycle_duration_minutes
             ),
-            "mpc_planned_actions": coordinator.mpc_planned_actions,
-            "mpc_projected_total_profit_eur": (
-                coordinator.mpc_projected_total_profit_eur
-            ),
-            "mpc_horizon_quarters_used": coordinator.mpc_horizon_quarters_used,
-            "mpc_note": coordinator.mpc_note,
             "monte_carlo_median_deficit_kwh": (
                 coordinator.monte_carlo_median_deficit_kwh
             ),
@@ -1484,22 +1448,6 @@ async def async_get_config_entry_diagnostics(
             "tekortsoorten": _veilig(
                 "get_tekortsoorten", coordinator.get_tekortsoorten
             ),
-            "kalman_soc_filtered_kwh": coordinator.kalman_soc_filtered_kwh,
-            "kalman_soc_raw_kwh": coordinator.kalman_soc_raw_kwh,
-            "kalman_pv_filtered_w": coordinator.kalman_pv_filtered_w,
-            "kalman_pv_raw_w": coordinator.kalman_pv_raw_w,
-            "kalman_load_filtered_w": coordinator.kalman_load_filtered_w,
-            "kalman_load_raw_w": coordinator.kalman_load_raw_w,
-            "digital_twin_projected_profit_eur": (
-                coordinator.digital_twin_projected_profit_eur
-            ),
-            "digital_twin_final_soc_kwh": coordinator.digital_twin_final_soc_kwh,
-            "digital_twin_hours_simulated": coordinator.digital_twin_hours_simulated,
-            "digital_twin_note": coordinator.digital_twin_note,
-            "digital_twin_plan_kwartieren": sum(
-                1 for p in coordinator.digital_twin_trajectory or [] if p.get("bron") == "kwartierplan"
-            ),
-            "digital_twin_plan_split": _veilig("get_digital_twin_plan_split", coordinator.get_digital_twin_plan_split),
             "nilm_unconfirmed_candidates": coordinator.nilm_unconfirmed_candidates,
             "nilm_confirmed_devices": coordinator.nilm_confirmed_devices,
             "nilm_rejected_entities": coordinator.nilm_rejected_entities,

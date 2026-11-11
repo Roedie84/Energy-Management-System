@@ -18,10 +18,6 @@ from custom_components.energy_management_system.const import (
     CONSISTENCY_TICK_STALE_MINUTES,
     MIN_BATTERY_POWER_IDLE_W,
 )
-from custom_components.energy_management_system.overview_svg import (
-    ONBEKEND,
-    bouw_scada,
-)
 
 NU = datetime(2026, 9, 24, 13, 40, tzinfo=timezone.utc)
 
@@ -90,41 +86,7 @@ def test_cockpit_en_sensor_zeggen_hetzelfde_over_dezelfde_waarde(
             assert stand.lower() in tekst, (vermogen, stand, tekst)
 
 
-def test_zonder_meting_is_de_accustand_onbekend(make_coordinator, hass):
-    """Niet STANDBY: dat zou een stilstaande accu suggereren."""
-    c = make_coordinator({})
-    c._read_corrected_battery_power = lambda: None
-
-    assert c.accu_stand() is None
-    assert ONBEKEND in bouw_scada({"accustand": None})
-
-
 # --- primaire waarden: 0 is een meting, niets is ONBEKEND ----------------
-
-
-@pytest.mark.parametrize("veld", ["pv_w", "net_w", "huis_w", "accu_w"])
-def test_een_ontbrekende_primaire_waarde_wordt_onbekend(veld):
-    plaat = bouw_scada({veld: None})
-
-    assert ONBEKEND in plaat
-
-
-@pytest.mark.parametrize("veld", ["pv_w", "net_w", "huis_w"])
-def test_een_echte_nul_blijft_een_nul(veld):
-    """'s Nachts is de zon echt 0 W - dat is geen ontbrekende meting."""
-    plaat = bouw_scada({veld: 0.0, "accustand": "STANDBY"})
-
-    # De eenheid staat in een eigen tspan, dus ">0<" is het getal zelf. De
-    # ANDERE velden zijn in deze opzet niet meegegeven en staan terecht op
-    # ONBEKEND; het gaat erom dat DIT veld een nul toont.
-    assert ">0<" in plaat
-
-
-def test_het_net_vertaalt_het_teken_naar_taal():
-    assert "INKOOP" in bouw_scada({"net_w": 620.0})
-    assert "TERUGLEVERING" in bouw_scada({"net_w": -620.0})
-    assert "GEEN UITWISSELING" in bouw_scada({"net_w": 0.0})
-    assert ONBEKEND in bouw_scada({"net_w": None})
 
 
 # --- het huisverbruik: de bestaande, juiste formule ----------------------
@@ -244,12 +206,6 @@ def test_vrij_en_tekort_zijn_allebei_zichtbaar(
 
     assert round(uit["vrij_kwh"], 2) == vrij
     assert round(uit["tekort_kwh"], 2) == tekort
-
-
-def test_een_tekort_staat_op_de_plaat():
-    plaat = bouw_scada({"tekort_kwh": 3.65, "soc": 10.0})
-
-    assert "tekort" in plaat and "3,65" in plaat
 
 
 def test_een_reserve_groter_dan_de_accu_is_geen_aandachtspunt(make_coordinator, hass):
@@ -383,10 +339,6 @@ def test_een_oud_snapshot_telt_niet_meer(make_coordinator, hass):
     assert c.get_besluit_snapshot() == {}
 
 
-def test_zonder_snapshot_is_het_besluit_onbekend():
-    assert ONBEKEND in bouw_scada({"besluit": None})
-
-
 # --- de statusmatrix ------------------------------------------------------
 
 
@@ -470,20 +422,6 @@ def test_een_gezonde_installatie_is_goed(make_coordinator, hass):
     assert "koppelingen 1/1" in regel
 
 
-def test_geen_enkele_lege_waarde_belandt_als_none_op_de_plaat():
-    """Bij het renderen stond er letterlijk "None" in de balk."""
-    plaat = bouw_scada(
-        {
-            "balk": [("VOLGENDE ACTIE", None, "#f4f7fa", None)],
-            "besluit": None,
-            "net_w": None,
-        }
-    )
-
-    assert ">None<" not in plaat
-    assert plaat.count(ONBEKEND) >= 3
-
-
 def test_de_spreiding_is_een_eigenschap_geen_functie(make_coordinator, hass):
     """Gemeld in bedrijf: "1 onderdeel(en) vallen om - overzichtsplaat",
     met in de export: TypeError: 'float' object is not callable.
@@ -511,22 +449,6 @@ def test_de_spreiding_is_een_eigenschap_geen_functie(make_coordinator, hass):
     assert "voorspelling" not in regel
 
 
-def test_de_plaat_komt_er_met_een_zonvolger_erbij(make_coordinator, hass):
-    """Het geval dat in bedrijf omviel: een coordinator MET zonvolger."""
-
-    class Volger:
-        enabled = True
-        deviation_stdev_percent = 12.4
-        deviation_history = [1.0, 2.0]
-
-    c = _gezond(make_coordinator({}), hass)
-    c.solar_tracker = Volger()
-
-    plaat = c.get_overview_svg()
-
-    assert plaat.startswith("<img")
-
-
 @pytest.mark.parametrize(
     "naam,verwacht",
     [
@@ -552,33 +474,6 @@ def test_de_naam_van_het_apparaat_zonder_meetwoord(
     c = make_coordinator({})
 
     assert c.apparaatnaam_zonder_meetwoord(naam) == verwacht
-
-
-def test_de_uitleg_breekt_af_op_een_woord():
-    """Midden in een zin afkappen leest slecht, en juist die zin is de
-    motivatie van het besluit."""
-    from custom_components.energy_management_system.overview_svg import _regels
-
-    zin = (
-        "De accu heeft niet genoeg beschikbare energie (0.00 kWh) om zowel "
-        "het huis te dekken als het dure blok te overbruggen."
-    )
-
-    regels = _regels(zin, 78, 2)
-
-    assert len(regels) == 2
-    assert all(not r.endswith(" ") for r in regels)
-    assert "…" not in " ".join(regels)
-
-
-def test_een_te_lange_zin_krijgt_een_beletselteken_op_de_laatste_regel():
-    from custom_components.energy_management_system.overview_svg import _regels
-
-    regels = _regels(" ".join(["woord"] * 60), 40, 2)
-
-    assert len(regels) == 2
-    assert regels[-1].endswith("…")
-    assert not regels[0].endswith("…")
 
 
 def test_geen_wisseling_in_het_plan_zegt_dat_ook(make_coordinator, hass):
@@ -677,7 +572,6 @@ def test_een_lopend_blok_geeft_geen_reserve_maar_ook_geen_onbekend(
     assert balk["RESERVE"] == "geen blok"
 
 
-
 def test_de_voorspelling_staat_maar_een_keer_op_de_plaat(make_coordinator, hass):
     """Gemeld: "2x voorspelling?" - hij stond in de statusregel en in de
     balk. De statusregel gaat over gezondheid; de spreiding van de
@@ -742,17 +636,6 @@ def test_zonder_reserve_is_alle_beschikbare_energie_vrij(make_coordinator, hass)
     assert uit["tekort_kwh"] == 0.0
 
 
-def test_zonder_reserve_geen_markering_in_de_balk():
-    """Een streepje op 0% zou een reserve van nul suggereren."""
-    from custom_components.energy_management_system.overview_svg import _soc_balk
-
-    zonder = _soc_balk(0, 0, 200, 0.47, None, "#fff", 0.10)
-    met = _soc_balk(0, 0, 200, 0.47, 0.33, "#fff", 0.10)
-
-    assert 'stroke="#f4f7fa"' not in zonder
-    assert 'stroke="#f4f7fa"' in met
-
-
 # --- v5.19.9: de woorden van het besluit --------------------------------
 
 
@@ -796,27 +679,6 @@ def test_de_kaart_noemt_de_ruimte_zoals_de_waarom_regel(make_coordinator, hass):
     c._resterende_laadruimte_kwh = lambda: 3.37
 
     assert c._schema_gegevens()["ruimte_kwh"] == 3.37
-
-
-def test_de_plaat_zegt_ruimte_en_niet_vrij():
-    from custom_components.energy_management_system.overview_svg import bouw_scada
-
-    plaat = bouw_scada({"soc": 61.0, "ruimte_kwh": 3.37, "vrij_kwh": 0.2,
-                        "tekort_kwh": 0.0, "accustand": "LADEN"})
-
-    assert "ruimte 3,4 kWh" in plaat
-    assert "vrij 0,2" not in plaat
-
-
-def test_een_tekort_gaat_voor_de_ruimte():
-    """Staat de accu onder zijn reserve, dan is dat het nieuws."""
-    from custom_components.energy_management_system.overview_svg import bouw_scada
-
-    plaat = bouw_scada({"soc": 15.0, "ruimte_kwh": 7.3, "tekort_kwh": 1.57,
-                        "accustand": "LADEN"})
-
-    assert "tekort 1,57 kWh" in plaat
-    assert "ruimte 7,3" not in plaat
 
 
 def test_de_vaatwasser_telt_mee_als_grootste_verbruiker(make_coordinator, hass):

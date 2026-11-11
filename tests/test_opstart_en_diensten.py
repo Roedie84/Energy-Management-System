@@ -82,38 +82,6 @@ class _Oproep:
 # --- 2. de achtergrondtekening ---------------------------------------
 
 
-def test_the_background_lands_in_the_www_folder(hass, tmp_path):
-    """Home Assistant serveert alleen `<config>/www/` als `/local/`.
-
-    Staat de tekening daar niet, dan toont de kaart een gebroken
-    afbeelding met alle waarden er wél overheen - verwarrender dan een
-    lege kaart.
-    """
-    hass.config = _NepConfig(tmp_path)
-
-    pkg._copy_overview_background(hass)
-
-    gevonden = list((tmp_path / "www").glob("*"))
-    assert gevonden, "niets in www/ terechtgekomen"
-
-
-def test_the_www_folder_is_created_when_missing(hass, tmp_path):
-    hass.config = _NepConfig(tmp_path)
-
-    assert not (tmp_path / "www").exists()
-
-    pkg._copy_overview_background(hass)
-
-    assert (tmp_path / "www").is_dir()
-
-
-def test_a_broken_background_copy_does_not_break_the_start(hass, tmp_path):
-    hass.config = _NepConfig(tmp_path / "www")
-    (tmp_path / "www").write_text("dit is een bestand, geen map")
-
-    pkg._copy_overview_background(hass)
-
-
 # --- 3. de diensten --------------------------------------------------
 
 

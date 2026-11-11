@@ -229,7 +229,6 @@ def _live_groot(make_coordinator):
     c.get_event_log = lambda *a, **k: _logboek()
     c.get_proefstand = lambda *a, **k: _proefstand()
     c.get_presence_overview = lambda *a, **k: _aanwezigheid()
-    c.get_smart_charging_proefplanning = lambda *a, **k: _smart_charging()
     c.get_quarter_plan_compact = lambda *a, **k: _kwartierplanning()
     return c
 
@@ -271,19 +270,6 @@ def test_de_paginas_zijn_klein_behalve_de_twee_kwartiertabellen(make_coordinator
             assert grootte < 30 * 1024, (p._attr_name, grootte)
         else:
             assert grootte < GRENS, (p._attr_name, grootte)
-
-
-def test_de_smart_charging_proef_draagt_alleen_de_getoonde_rijen(make_coordinator, hass):
-    c = _live_groot(make_coordinator)
-
-    proef = _pagina(c, "smart_charging_proef").extra_state_attributes["smart_charging_proef"]
-
-    assert len(proef["rijen"]) == 102  # alleen de kwartieren met een tekort
-    assert set(proef["rijen"][0]) == {
-        "van", "prijs_ct", "zon_kwh", "tekort_kwh",
-        "hoogste_prijs_hierna_ct", "smart_charging_beter", "voordeel_eur",
-    }
-    assert proef["totaal_voordeel_eur"] == 0.04
 
 
 def test_plantoetsing_14_dagen_nieuwste_eerst(make_coordinator, hass):
@@ -366,7 +352,7 @@ def test_de_diagnostiek_heeft_de_volledige_set(make_coordinator, hass):
 
     volledig = m.gacs_volledig(c)
 
-    for sleutel in ("eisen", "overzichtstatus", "meet_stuurt_niet", "kwartierplanning", "logboek", "rekentijd_ms"):
+    for sleutel in ("eisen", "meet_stuurt_niet", "kwartierplanning", "logboek", "rekentijd_ms"):
         assert sleutel in volledig, sleutel
     assert len(volledig["plantoetsing"]["dagen_overzicht"]) == 30
     assert len(volledig["logboek"]["regels"]) == 120

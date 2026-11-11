@@ -181,28 +181,3 @@ def test_cockpit_volgt_de_metingen_wel(make_coordinator, hass, monkeypatch):
     assert s.native_value == "LET OP"
 
 
-def test_de_trage_helft_een_keer_voor_de_eerste_ronde(make_coordinator, hass):
-    c = make_coordinator({})
-    c._cockpit_context = None
-    keren = []
-    echt = c._schema_gegevens
-    c._schema_gegevens = lambda: keren.append(1) or echt()
-
-    c.cockpit_gegevens()
-    c.cockpit_gegevens()
-    c.get_cockpit_svg()
-
-    assert len(keren) == 1
-    # De ronde ververst hem zoals altijd.
-    c.ververs_cockpit_context()
-    assert len(keren) == 2
-
-
-def test_de_plaat_is_dezelfde(make_coordinator, hass):
-    c = make_coordinator({})
-    c.ververs_cockpit_context()
-    gegevens = c.cockpit_gegevens()
-    gegevens["moment"] = "09-10 12:00:00"
-    c.cockpit_gegevens = lambda: dict(gegevens)
-
-    assert c.get_cockpit_svg() == c.get_cockpit_svg(dict(gegevens))
