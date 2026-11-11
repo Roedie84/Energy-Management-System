@@ -35614,3 +35614,13 @@ Ruud 11-11 17:44 ("Alle 5 oppakken").
 - **EUR 2,39 naast EUR 4,26 (punt 5)**: het verschil zit op een dag, de kalibratie van 08-11: hoofdgetal EUR -1,98, kostprijsmodel EUR 0,00. De kalibratieronde keert terug voor de boekhouding; het kostprijsmodel stond die dag stil en zag de lading daarna als een sprong. De overige zes dagen verschillen samen EUR 0,11. Het hoofdgetal is het juiste cijfer. Het kostprijsmodel boekt nu ook tijdens de kalibratie (het EMS laadt sinds v5.194.0 zelf).
 
 Tests: `test_langere_horizon.py` en `test_bijkopen.py` verwijderd, vier testfuncties uit `test_v590_vooruitplan.py`; nieuw `test_v5224_rondeprofiel_en_wezen.py` (10).
+
+## v5.225.0 — wat binnen een ronde niet verandert, één keer rekenen
+
+Uit het profiel van v5.224.0 (11-11 18:09, één ronde onder cProfile, 1.760 ms gemeten waarvan ongeveer de helft meetlast).
+
+- **Wat het profiel liet zien**: `besluit_snapshot` en `planningsmeldingen` zijn zelf niet zwaar; wie van de twee het kwartierplan het eerst vraagt na een nieuw waardeplan, bouwt het (440 ms in het profiel). In die bouw gaat het meeste naar de reserve per kwartier, en daarin naar `bruikbare_capaciteit_kwh`: 290 aanroepen, 305 ms, waarvan 171 ms eigen tijd in `_capaciteitsregels_van_opstelling` - de zwaarste functie van de hele ronde. Verder: de witgoedplanning 735 keer opgehaald (154 ms), de NILM-duplicaten 7 keer berekend (200 ms, 203.000 vergelijkingen).
+- **`_per_ronde`**: een geheugen dat alleen tussen het begin en het einde van `async_update` bestaat. Daarin: de gemeten capaciteit, de geplande witgoedlast en de NILM-duplicaten. Buiten een ronde (knop, service, toets) wordt gerekend zoals voorheen; de uitkomsten zijn dezelfde.
+- Gemeten voor de wijziging (8 rondes): mediaan 672 ms, op de lus 671 ms; fasen: besluit en sturen 792 ms, sensoren bijwerken 28 ms, meetlaag 5 ms.
+
+Tests: `test_v5225_per_ronde.py` (5).

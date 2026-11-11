@@ -11503,7 +11503,10 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         1,9 naar 25,8 kWh en het diepste tekort van 6,3 naar 30,0 kWh.
         """
         totaal = 0.0
-        for regel in self.get_planned_appliance_load().get("apparaten", []):
+        # v5.225.0: de planning hoort bij NU (zie hierboven) en is binnen
+        # een ronde dus voor elk segment dezelfde.
+        gepland = self._per_ronde("gepland_witgoed", self.get_planned_appliance_load)
+        for regel in gepland.get("apparaten", []):
             totaal += witgoed_kwh_in_periode(
                 regel, start, einde, (self.witgoed_profielen or {}).get(regel.get("apparaat")))
         return totaal
@@ -13659,6 +13662,10 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         )
 
     def gemeten_capaciteit_kwh(self) -> float | None:
+        """De gemeten bruikbare capaciteit; per ronde één keer (v5.225.0)."""
+        return self._per_ronde("gemeten_capaciteit", self._bereken_gemeten_capaciteit_kwh)
+
+    def _bereken_gemeten_capaciteit_kwh(self) -> float | None:
         """De GEMETEN bruikbare capaciteit, of None (v3.5.0).
 
         Uit een externe review: "Je leert al rendement en gezondheid. De
@@ -19690,7 +19697,28 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         """Wist de rondecache (v3.99.20). Aan het begin van elke ronde."""
         self._forecast_cache = None
         self._forecast_cache_ronde = now
+        self._ronde_memo = {}  # v5.225.0, zie `_per_ronde`
         self._wacht_op_eerste_ronde = False  # v5.99.8, zie sensor._voor_eerste_ronde
+
+    # v5.225.0: uitkomsten die binnen een ronde niet veranderen. Alleen
+    # gevuld tussen het begin en het einde van `async_update`; daarbuiten
+    # (een knop, een service, een toets) wordt gewoon gerekend.
+    _ronde_memo: dict | None = None
+
+    def _per_ronde(self, sleutel, functie):
+        """Eén keer per ronde rekenen (v5.225.0).
+
+        Uit het profiel van 11-11 18:09: de gemeten capaciteit werd in één
+        ronde 290 keer uitgerekend (171 ms eigen tijd, de zwaarste functie van
+        de ronde), de witgoedplanning 735 keer, de NILM-duplicaten 7 keer
+        (203.000 vergelijkingen).
+        """
+        memo = self._ronde_memo
+        if memo is None:
+            return functie()
+        if sleutel not in memo:
+            memo[sleutel] = functie()
+        return memo[sleutel]
 
     def _get_pv_forecast_entries(self) -> list[tuple[datetime, datetime, float]]:
         """Per ronde één keer gelezen (v3.99.20): 1.425 aanroepen in
@@ -37741,6 +37769,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             #    inlezen van de geschiedenis erin. Dat is de zwaarste
             #    die er is en niet representatief.
             self._noteer_fase("opslag plannen", fase)
+            self._ronde_memo = None  # v5.225.0: buiten de ronde niets onthouden
             if profiel is not None:
                 # Een ronde onder de profiler telt niet mee in de rondeduur.
                 self.rondeprofiel = rondeprofiel_mod.samenvatting(profiel, dt_util.now().isoformat())

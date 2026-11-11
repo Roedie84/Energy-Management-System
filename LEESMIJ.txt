@@ -1,3 +1,9 @@
+EMS v5.225.0 - snellere ronde
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Drie berekeningen die in elke ronde honderden keren werden herhaald, worden nu een keer per ronde gedaan. De uitkomsten zijn dezelfde.
+
 EMS v5.224.0 - rekentijd uitgezocht, oude metingen weg
 
 Installeren: via de Marketplace bijwerken en herstarten.

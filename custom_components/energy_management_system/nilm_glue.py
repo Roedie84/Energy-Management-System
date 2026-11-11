@@ -521,6 +521,13 @@ class NilmMixin:
         return rows
 
     def get_nilm_duplicate_pairs(self) -> list[dict]:
+        """De waarschijnlijke duplicaten; per ronde één keer (v5.225.0)."""
+        per_ronde = getattr(self, "_per_ronde", None)
+        if per_ronde is None:
+            return self._bereken_nilm_duplicate_pairs()
+        return per_ronde("nilm_duplicaten", self._bereken_nilm_duplicate_pairs)
+
+    def _bereken_nilm_duplicate_pairs(self) -> list[dict]:
         """Waarschijnlijke duplicaten onder bevestigde NILM-apparaten
         (v0.63.91, gevonden tijdens een diagnostiek-review: 5
         "Eetkamer lamp"-sensoren deelden een identieke vermogens-
