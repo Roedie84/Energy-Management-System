@@ -1,3 +1,11 @@
+EMS v5.210.0 - Zendure-integratie wordt zelf herladen als de accu offline raakt
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Ziet de Zendure-integratie de accu langer dan vijf minuten als offline, dan herlaadt het EMS die integratie zelf (hooguit een keer per uur). Het dagoverzicht meldt wanneer dat gebeurd is. Helpt het niet, dan komt de gewone melding na tien minuten.
+- De sensor "Prijsverwachting" rekent niet meer bij elke update alles opnieuw uit; Home Assistant blijft daardoor vlot. De getallen zijn dezelfde.
+- Zonvoorspelling: getoetst of sneller bijsturen op de laatste dagen helpt. Dat maakt de voorspelling slechter (de afwijking wisselt per dag van kant), dus het is niet ingevoerd. De toets blijft meelopen op "Zonvoorspelling ijking".
+
 EMS v5.209.0 - accu schiet minder door na een grote lastsprong
 
 Installeren: via de Marketplace bijwerken en herstarten.

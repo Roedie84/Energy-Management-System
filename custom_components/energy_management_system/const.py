@@ -8126,6 +8126,17 @@ ENERGIEBALANS_OORDEEL_VASTHOUDEN_S = 300
 # v5.29: pas melden als de accu zo lang niet aanstuurbaar is. Een losse
 # time-out van de Zendure-integratie herstelt meestal binnen een minuut.
 ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN = 10
+# v5.210.0 (Ruud 11-11, akkoord): ziet de Zendure-integratie de accu als
+# offline, dan herlaadt het EMS die integratie zelf - dat is wat de melding
+# de gebruiker vroeg te doen. Pas na vijf minuten (een losse time-out
+# herstelt vaak vanzelf) en hooguit een keer per uur.
+ZENDURE_HERLAAD_NA_MINUTEN = 5
+ZENDURE_HERLAAD_PAUZE_MINUTEN = 60
+# v5.210.0: terugtoets van een snellere zon-correctie (alleen meten).
+PV_SNELLE_CORRECTIE_DAGEN = 5
+PV_SNELLE_CORRECTIE_MIN = 0.8
+PV_SNELLE_CORRECTIE_MAX = 1.2
+PV_SNELLE_CORRECTIE_MIN_TOETSDAGEN = 5
 
 # v5.31.2: een stand die het EMS zelf al schreef, wordt pas na zoveel seconden
 # opnieuw geschreven. Op 6 oktober stond de select na een herstart op

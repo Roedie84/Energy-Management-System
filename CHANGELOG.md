@@ -35426,3 +35426,14 @@ Gemeld 10-11 16:41 (Ruud): "Ik vind de accusturing net wat oscilleren." Gemeten 
 - Attributen op "P1 regeldoel": `factor`, `ongedempt_w`, `pendel_wh_vandaag`, `pendel_wh_gisteren`. Pendelenergie = per minuut 2 x het kleinste van afname en teruglevering op de echte meter; gewone afname of teruglevering telt niet. Niet bewaard over een herstart.
 
 Tests: `test_v5209_p1_regeldoel_factor.py`.
+
+## v5.210.0 — Zendure-integratie zelf herladen bij offline, prijsverwachting uit de event loop, terugtoets snellere zon-correctie
+
+Verbeterronde 11-11 (Ruud: punten 2 t/m 5 akkoord, punt 1 afgewezen).
+
+- **Zendure offline → zelf herladen.** Op 10-11 rond 19:45 zag de Zendure-integratie de accu als offline; het EMS meldde alleen "herlaad de Zendure-integratie". Nu doet het dat zelf: na `ZENDURE_HERLAAD_NA_MINUTEN` (5) minuten, hooguit eens per `ZENDURE_HERLAAD_PAUZE_MINUTEN` (60), alleen bij deze oorzaak, niet in de leermodus, nooit een herstart. De melding na tien minuten zegt erbij dat herladen niet hielp; het dagoverzicht noemt de tijdstippen.
+- **Prijsverwachting.** `get_prijsverwachting()` bouwde bij elke aanroep alles opnieuw op (twee keer per statusupdate; gemeten 2,5 s in de event loop). Het resultaat wordt nu onthouden tot de verwachting opnieuw is gemaakt of het kwartier omslaat. Uitkomst gelijk.
+- **Snellere zon-correctie: getoetst, stuurt niet.** Terugtoets zonder vooruitkijken op 28-10 t/m 10-11 (planvoorspelling × opgewekt/voorspeld van de vijf dagen ervoor, begrensd 0,8-1,2): fout 0,88 → 0,99 kWh per dag, dus slechter - de afwijking wisselt per dag van kant. Niet ingevoerd; de toets loopt mee als `plan.snellere_correctie` op "Zonvoorspelling ijking".
+- **Zelfconsumptieratio "unknown"**: geen fout. Onder 0,5 kWh dagopwek wordt bewust geen aandeel getoond (v1.16.8). Niets gewijzigd.
+
+Tests: `test_v5210_zendure_herladen_prijscache_pvtoets.py` (12).

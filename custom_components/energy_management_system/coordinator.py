@@ -672,6 +672,12 @@ from .const import (
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
     CONF_BATTERY_CHARGE_ENERGY_SENSOR,
     ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN,
+    ZENDURE_HERLAAD_NA_MINUTEN,
+    ZENDURE_HERLAAD_PAUZE_MINUTEN,
+    PV_SNELLE_CORRECTIE_DAGEN,
+    PV_SNELLE_CORRECTIE_MIN,
+    PV_SNELLE_CORRECTIE_MAX,
+    PV_SNELLE_CORRECTIE_MIN_TOETSDAGEN,
     OPDRACHT_HERHAAL_SECONDEN,
     CONF_COST_ENERGY_SENSOR,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
@@ -7853,6 +7859,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             f"{self.counterfactual_cost_today_eur:.2f} € zonder accu - {zin}"
             # v5.177.0 (B2): wat niet naar de telefoon ging.
             + self._dagoverzicht_meldingen()
+            + self._dagoverzicht_zendure_herladen()
         )
 
     def get_energy_cost_overview(self) -> dict:
@@ -8819,7 +8826,56 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 f"Ook de gecorrigeerde voorspelling waar het plan mee rekent wijkt "
                 f"structureel af: {b:+.1f} % over de laatste {laatste['dagen']} dagen."
             )
-        return {"beschikbaar": True, "laatste_10": laatste, "alles": alles, "duiding": zin}
+        return {
+            "beschikbaar": True, "laatste_10": laatste, "alles": alles, "duiding": zin,
+            "snellere_correctie": EnergyManagementSystemCoordinator._pv_snelle_correctie_toets(rijen),
+        }
+
+    @staticmethod
+    def _pv_snelle_correctie_toets(rijen) -> dict:
+        """Zou een snellere correctie het plan beter maken? Alleen meten (v5.210.0).
+
+        Ruud 11-11 (akkoord: eerst meten): het plan rekende over 30 dagen
+        met 14 % te veel zon. Voorstel was de correctie zwaarder te laten
+        wegen op de laatste dagen. Getoetst zonder vooruit te kijken: per
+        dag de planvoorspelling maal (opgewekt / voorspeld) van de vijf
+        dagen ervoor, begrensd op 0,8-1,2. Op 28-10 t/m 10-11 werd de fout
+        daar groter van (0,88 -> 0,99 kWh per dag): de afwijking wisselt per
+        dag van kant. Daarom stuurt dit niets; de toets blijft meelopen.
+        """
+        n = PV_SNELLE_CORRECTIE_DAGEN
+        nu = snel = bias_nu = bias_snel = 0.0
+        dagen = 0
+        for i in range(n, len(rijen)):
+            vorige = rijen[i - n:i]
+            v_som = sum(x[1] for x in vorige)
+            if v_som <= 0:
+                continue
+            factor = min(PV_SNELLE_CORRECTIE_MAX, max(PV_SNELLE_CORRECTIE_MIN, sum(x[2] for x in vorige) / v_som))
+            v, w = rijen[i][1], rijen[i][2]
+            nu += abs(w - v)
+            snel += abs(w - v * factor)
+            bias_nu += w - v
+            bias_snel += w - v * factor
+            dagen += 1
+        if dagen < PV_SNELLE_CORRECTIE_MIN_TOETSDAGEN:
+            return {"beschikbaar": False, "reden": f"{dagen} dagen getoetst, {PV_SNELLE_CORRECTIE_MIN_TOETSDAGEN} nodig"}
+        beter = snel < nu * 0.95
+        return {
+            "beschikbaar": True,
+            "dagen": dagen,
+            "fout_nu_kwh_per_dag": round(nu / dagen, 2),
+            "fout_snel_kwh_per_dag": round(snel / dagen, 2),
+            "bias_nu_kwh_per_dag": round(bias_nu / dagen, 2),
+            "bias_snel_kwh_per_dag": round(bias_snel / dagen, 2),
+            "beter": beter,
+            "stuurt": False,
+            "duiding": (
+                "Een snellere correctie zou de fout verkleinen - voorleggen."
+                if beter else
+                "Een snellere correctie maakt de voorspelling niet beter; de afwijking wisselt per dag van kant."
+            ),
+        }
 
     @staticmethod
     def _duid_pv_voorspelkwaliteit(gemiddelde_fout: float, dagen: int) -> str:
@@ -46176,7 +46232,32 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             _LOGGER.debug("Ensemble voor de prijsband niet opgehaald", exc_info=True)
             return None
 
+    _prijsverwachting_weergave: tuple | None = None
+
     def get_prijsverwachting(self) -> dict:
+        """De prijsverwachting voor sensor en cockpit, per kwartier onthouden.
+
+        v5.210.0 (Ruud 11-11, akkoord): het bijwerken van de sensor duurde
+        2,5 s in de event loop - de hele opbouw (kwartierreeks, band,
+        terugtoets) liep bij elke aanroep opnieuw, twee keer per
+        statusupdate. De invoer verandert alleen als de verwachting opnieuw
+        is gemaakt (eens per drie uur) of het kwartier omslaat; daartussen
+        volstaat het vorige resultaat. De uitkomst is dezelfde.
+        """
+        pv = self.prijsverwachting
+        sleutel = (
+            id(pv), (pv or {}).get("gemaakt"), (pv or {}).get("fout"),
+            (pv or {}).get("opnieuw_om"), len((pv or {}).get("dagen") or {}),
+            id(self._prijs_keuze), int(dt_util.now().timestamp() // 900),
+        )
+        vorig = self._prijsverwachting_weergave
+        if vorig is not None and vorig[0] == sleutel:
+            return vorig[1]
+        uit = self._bereken_prijsverwachting()
+        self._prijsverwachting_weergave = (sleutel, uit)
+        return uit
+
+    def _bereken_prijsverwachting(self) -> dict:
         from . import prijsverwachting as P
 
         pv = self.prijsverwachting or {}
@@ -47267,7 +47348,73 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # kritieke melding "onderdeel van de integratie faalt" aan, en
         # die zou hier het verkeerde verhaal vertellen.
         self.aansturing_onbereikbaar["reden"] = reden
+        self._zendure_zelf_herladen(reden)
         self._meld_accu_niet_aanstuurbaar()
+
+    _zendure_herladen_om: datetime | None = None
+    _zendure_herladingen: tuple = ()
+
+    def _zendure_zelf_herladen(self, reden: str) -> bool:
+        """Herlaad de Zendure-integratie als die de accu offline ziet (v5.210.0).
+
+        Ruud 11-11 (akkoord): op 10-11 rond 19:45 zag de Zendure-integratie
+        de accu als offline; het EMS meldde alleen "herlaad de
+        Zendure-integratie". Dat doet het nu zelf: na vijf minuten, hooguit
+        een keer per uur, en alleen bij deze ene oorzaak. Niet in de
+        leermodus (die schrijft niets naar de accu) en nooit een herstart.
+        """
+        try:
+            if self.hass is None or self.learning_only:
+                return False
+            if not str(reden or "").startswith("De Zendure-integratie ziet"):
+                return False
+            sinds = self.aansturing_onbereikbaar.get("sinds")
+            if sinds is None:
+                return False
+            nu = dt_util.now()
+            if (nu - datetime.fromisoformat(sinds)).total_seconds() < ZENDURE_HERLAAD_NA_MINUTEN * 60:
+                return False
+            vorige = self._zendure_herladen_om
+            if vorige is not None and (nu - vorige).total_seconds() < ZENDURE_HERLAAD_PAUZE_MINUTEN * 60:
+                return False
+            from homeassistant.helpers import entity_registry as er
+
+            register = er.async_get(self.hass)
+            entry_ids = []
+            for eid in self._zendure_statusentiteiten():
+                regel = register.async_get(eid)
+                entry_id = getattr(regel, "config_entry_id", None)
+                if entry_id and entry_id not in entry_ids:
+                    entry_ids.append(entry_id)
+            if not entry_ids:
+                return False
+            self._zendure_herladen_om = nu
+            self._zendure_herladingen = (*self._zendure_herladingen[-9:], nu.isoformat())
+            for entry_id in entry_ids:
+                self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
+            _LOGGER.warning(
+                "De Zendure-integratie ziet de accu al %d minuten als offline; "
+                "het EMS herlaadt de Zendure-integratie nu zelf.",
+                ZENDURE_HERLAAD_NA_MINUTEN,
+            )
+            return True
+        except Exception:  # noqa: BLE001 - herstellen mag de ronde nooit breken
+            _LOGGER.debug("Zendure-integratie herladen mislukt", exc_info=True)
+            return False
+
+    def _dagoverzicht_zendure_herladen(self) -> str:
+        """Eén zin in het dagoverzicht als er vandaag zelf herladen is (v5.210.0)."""
+        try:
+            vandaag = dt_util.now().date().isoformat()
+            tijden = [t[11:16] for t in self._zendure_herladingen if str(t).startswith(vandaag)]
+        except Exception:  # noqa: BLE001 - tekst mag het overzicht nooit breken
+            tijden = []
+        if not tijden:
+            return ""
+        return (
+            f" De Zendure-integratie zag de accu als offline en is door het EMS "
+            f"zelf herladen ({', '.join(tijden)})."
+        )
 
     def _meld_accu_niet_aanstuurbaar(self) -> None:
         """Eén telefoonmelding als het langer dan tien minuten duurt (v5.29).
@@ -47295,7 +47442,15 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             message=(
                 f"Sinds {moment.strftime('%H:%M')}: "
                 f"{self.aansturing_onbereikbaar.get('reden')} "
-                "Het EMS rekent door, maar stuurt de accu niet aan tot dit "
+                + (
+                    f"Het EMS heeft de Zendure-integratie om "
+                    f"{self._zendure_herladen_om.strftime('%H:%M')} zelf herladen; "
+                    "dat hielp niet. "
+                    if self._zendure_herladen_om is not None
+                    and self._zendure_herladen_om >= moment
+                    else ""
+                )
+                + "Het EMS rekent door, maar stuurt de accu niet aan tot dit "
                 "is opgelost."
             ),
             notification_id="ems_accu_niet_aanstuurbaar",
