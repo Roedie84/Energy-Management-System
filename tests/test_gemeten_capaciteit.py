@@ -166,24 +166,3 @@ def test_de_beschikbare_energie_volgt_ook_elke_ronde(make_coordinator, hass):
 # de tweede niet.
 
 
-def test_de_kandidaat_toont_geen_verschil_van_nul_als_meting(make_coordinator, hass):
-    c = _met_capaciteitssensor(make_coordinator, hass)
-    c.capacity_trend_history = _reeks(181)
-
-    k = c._kandidaat_capaciteit()
-
-    assert k["waarde"] is None
-    assert "nominale" in k["onderbouwing"]
-
-
-def test_met_een_kalibratieregel_telt_hij_wel(make_coordinator, hass):
-    c = _met_capaciteitssensor(make_coordinator, hass)
-    reeks = _reeks(181)
-    reeks[0]["bron"] = "kalibratie"; reeks[0]["capaciteit_kwh"] = 8.2
-    reeks[-1]["bron"] = "kalibratie"; reeks[-1]["capaciteit_kwh"] = 7.9
-    c.capacity_trend_history = reeks
-
-    k = c._kandidaat_capaciteit()
-
-    assert k["waarde"] is not None
-    assert "-0.30" in k["waarde"]

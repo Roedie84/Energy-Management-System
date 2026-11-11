@@ -8,7 +8,7 @@ import time
 import logging
 
 import statistics
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -67,8 +67,6 @@ ATTR_DEVIATION_STDEV_HISTORY = "deviation_stdev_history"
 ATTR_LEARNED_BIAS_PERCENT = "learned_bias_percent"
 ATTR_FORECAST_VALUE_HISTORY = "forecast_value_history"
 ATTR_LEARNED_TYPICAL_FORECAST_KWH = "learned_typical_forecast_kwh"
-ATTR_CONSUMPTION_HISTORY = "history_kw"
-ATTR_SAMPLE_COUNT = "sample_count"
 
 
 #: Sensoren die vervallen zijn; hun registratie wordt bij de start opgeruimd,
@@ -93,6 +91,8 @@ VERVALLEN_SENSOREN = (
     "digital_twin",
     "digital_twin_accuracy",
     "smart_charging_proef",
+    # v5.223.0: de proefstand zelf.
+    "proefstand",
 )
 
 
@@ -4967,9 +4967,6 @@ class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
             ("rendement", self._coordinator.get_efficiency_overview),
             ("prijstoets", self._coordinator.get_price_attribute_check),
             ("besparingscorrectie", self._coordinator.get_savings_correction),
-            ("proefstand", self._coordinator.get_proefstand),
-            # v4.1: alles wat meet en nog niet stuurt, rijp bovenaan.
-            ("meet_stuurt_niet", self._coordinator.get_meet_stuurt_niet),
             ("terugvallen", self._coordinator.get_fallback_overview),
             ("zonstand", self._coordinator.get_sun_position_check),
             ("buitensensor", self._coordinator.get_outdoor_sensor_check),
@@ -5126,7 +5123,10 @@ def _plantoetsing_voor_het_dashboard(p):
             **_alleen(r, ("datum", "oordeel")),
             "zon": _alleen(r.get("zon"), ("voorspeld_kwh", "werkelijk_kwh")),
             "verkocht": _alleen(r.get("verkocht"), ("voorspeld_kwh", "werkelijk_kwh")),
-            "opbrengst": _alleen(r.get("opbrengst"), ("voorspeld_eur", "werkelijk_eur")),
+            # v5.223.0: alleen de gemeten besparing van die dag. De
+            # "voorspelde opbrengst" ernaast telde alleen de verkoopkwartieren
+            # en was er niet mee te vergelijken (-0,76 tegen +3,86 op 10-11).
+            "besparing_werkelijk_eur": (r.get("opbrengst") or {}).get("werkelijk_eur"),
             "laagste_soc": _alleen(
                 r.get("laagste_soc"), ("voorspeld_procent", "werkelijk_procent")
             ),
@@ -5150,42 +5150,6 @@ def _logboek_voor_het_dashboard(l):
             regel["detail"] = str(r["detail"])[:GACS_LOGBOEK_DETAIL_TEKENS]
         regels.append(regel)
     uit["regels"] = regels
-    return uit
-
-
-def _proefstand_voor_het_dashboard(p):
-    if not isinstance(p, dict) or "kandidaten" not in p:
-        return p
-    uit = _alleen(p, ("toelichting", "samenvatting"))
-    kandidaten = []
-    for k in p.get("kandidaten") or []:
-        if not isinstance(k, dict):
-            continue
-        kort = _alleen(
-            k,
-            (
-                "naam",
-                "gereedheid",
-                "waarde",
-                "onderbouwing",
-                "betrouwbaarheid",
-                "zou_veranderen",
-            ),
-        )
-        if "zou_hebben_opgeleverd" in k:
-            kort["zou_hebben_opgeleverd"] = _alleen(
-                k["zou_hebben_opgeleverd"],
-                (
-                    "te_becijferen",
-                    "bedrag_per_dag_eur",
-                    "bedrag_per_jaar_eur",
-                    "dagen",
-                    "toelichting",
-                    "reden",
-                ),
-            )
-        kandidaten.append(kort)
-    uit["kandidaten"] = kandidaten
     return uit
 
 
@@ -5216,7 +5180,6 @@ def _aanwezigheid_voor_het_dashboard(p):
 _GACS_INKORTEN = {
     "plantoetsing": _plantoetsing_voor_het_dashboard,
     "logboek": _logboek_voor_het_dashboard,
-    "proefstand": _proefstand_voor_het_dashboard,
     "nog_niet_bepaald": _nog_niet_bepaald_voor_het_dashboard,
     "aanwezigheid": _aanwezigheid_voor_het_dashboard,
 }
@@ -5318,7 +5281,6 @@ DASHBOARD_PAGINA_INTERVAL_S = {
 DASHBOARD_PAGINA_SENSOREN = (
     ("kwartierplanning_tabel", "Kwartierplanning", "mdi:table-clock", ("kwartierplanning", "laadplan_gewijzigd", "planvolging"), None),
     ("logboek", "Logboek", "mdi:notebook-outline", ("logboek",), "regels"),
-    ("proefstand", "Proefstand", "mdi:test-tube", ("proefstand",), "kandidaten"),
     ("aanwezigheid", "Aanwezigheid", "mdi:home-account", ("aanwezigheid",), "tijdlijn"),
     ("plantoetsing", "Plantoetsing", "mdi:clipboard-text-clock-outline", ("plantoetsing",), "dagen_overzicht"),
     ("perioden", "Perioden", "mdi:calendar-range", ("perioden", "zelfconsumptie"), "perioden"),

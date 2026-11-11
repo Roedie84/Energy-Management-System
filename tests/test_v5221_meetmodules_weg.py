@@ -53,7 +53,7 @@ def test_hun_registratie_wordt_opgeruimd():
 def test_wat_de_cockpit_en_de_dagcontrole_lezen_blijft():
     for klasse in ("MonteCarloAdvisorySensor", "AdvisoryReadinessSensor", "GacsAssessmentSensor", "CockpitSensor"):
         assert hasattr(S, klasse), klasse
-    for sleutel in ("proefstand", "kwartierplanning_tabel", "perioden", "plantoetsing"):
+    for sleutel in ("kwartierplanning_tabel", "perioden", "plantoetsing"):  # v5.223.0: proefstand ook weg
         assert sleutel in {p[0] for p in S.DASHBOARD_PAGINA_SENSOREN}
     assert hasattr(C, "_run_monte_carlo_simulation") and hasattr(C, "_twin_laadfactor")
 

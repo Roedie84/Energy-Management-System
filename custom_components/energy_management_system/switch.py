@@ -11,7 +11,6 @@ from .const import (
     GEEN_ATTRIBUTEN_IN_RECORDER,
     DEFAULT_NAME,
     DOMAIN,
-    HANDMATIG_LAADVERMOGEN_W,
     HANDMATIGE_STAND_LADEN,
     HANDMATIGE_STAND_SMART_CHARGE,
     NOTIFICATION_TYPES,
@@ -35,11 +34,33 @@ def _ruim_pendeldemping_op(hass: HomeAssistant, entry_id: str) -> None:
         pass
 
 
+#: v5.223.0: meldingssoorten die vervallen zijn; hun schakelaar wordt bij de
+#: start uit het register gehaald (anders blijft hij als "niet beschikbaar" staan).
+VERVALLEN_MELDINGSSCHAKELAARS = ("proefstand_rijp", "meet_stuurt_niet")
+
+
+def _ruim_vervallen_schakelaars_op(hass, entry_id: str) -> None:
+    try:
+        from homeassistant.helpers import entity_registry as er
+
+        register = er.async_get(hass)
+    except Exception:  # noqa: BLE001 - opruimen mag het opstarten nooit breken
+        return
+    for soort in VERVALLEN_MELDINGSSCHAKELAARS:
+        try:
+            entity_id = register.async_get_entity_id("switch", DOMAIN, f"{entry_id}_notification_{soort}")
+            if entity_id:
+                register.async_remove(entity_id)
+        except Exception:  # noqa: BLE001
+            continue
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
     _ruim_pendeldemping_op(hass, entry.entry_id)
+    _ruim_vervallen_schakelaars_op(hass, entry.entry_id)
     async_add_entities(
         [
             ForceManualSwitch(coordinator, entry_id=entry.entry_id),
@@ -513,7 +534,6 @@ class VacationModeSwitch(SwitchEntity, RestoreEntity):
     async def async_turn_off(self, **kwargs) -> None:
         self._coordinator.vacation_mode = False
         self.async_write_ha_state()
-
 
 
 class AircoAutomaatSwitch(SwitchEntity, RestoreEntity):

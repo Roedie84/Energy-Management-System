@@ -61,27 +61,6 @@ def test_the_share_is_not_constant(make_coordinator, hass):
     assert round((0.13 - deel) / 0.13, 2) == 0.15
 
 
-def test_the_estimate_uses_the_measured_amount(make_coordinator, hass):
-    """Met het gemeten bedrag komt de doorrekening uit op een realistisch
-    verschil in plaats van een daling van 84%."""
-    c = _coordinator(make_coordinator, hass)
-    c.get_quarter_plan = lambda *a, **k: [
-        {
-            "net_kwh": -1.0,
-            "prijs_ct": 30.0,
-            "cumulatief_eur": 4.16,
-            "zon_kwh": 1.0,
-            "verbruik_kwh": 0.1,
-        }
-        for _ in range(13)
-    ]
-
-    kandidaat = c._kandidaat_na_saldering()
-
-    assert "gemeten" in kandidaat["betrouwbaarheid"].lower()
-    assert "11.1" in kandidaat["betrouwbaarheid"]
-
-
 def test_without_the_bare_field_it_says_so(make_coordinator, hass):
     """Levert het kale veld niets, dan mag er geen exact getal worden
     voorgewend."""

@@ -101,45 +101,6 @@ def test_efficiency_and_wear_are_subtracted(make_coordinator, hass):
     assert r["besparing_later_eur"] < 0.40
 
 
-def test_too_few_measurements_says_so(make_coordinator, hass):
-    c = _coordinator(make_coordinator, hass)
-
-    kandidaat = c._kandidaat_langere_horizon()
-
-    assert kandidaat["waarde"] is None
-    assert str(LANGERE_HORIZON_MIN_METINGEN) in str(
-        kandidaat["zou_hebben_opgeleverd"]["reden"]
-    )
-
-
-def test_with_enough_measurements_it_reports(make_coordinator, hass):
-    c = _coordinator(make_coordinator, hass)
-    c.langere_horizon_history = [
-        {"voordeel_eur_per_kwh": 0.05 if i % 2 else -0.02}
-        for i in range(LANGERE_HORIZON_MIN_METINGEN)
-    ]
-
-    kandidaat = c._kandidaat_langere_horizon()
-
-    assert kandidaat["waarde"] is not None
-    assert kandidaat["zou_hebben_opgeleverd"]["te_becijferen"] is True
-
-
-def test_it_admits_what_it_does_not_know(make_coordinator, hass):
-    """Deze meting weet niet of de accu die kWh straks nog kwijt kan. Op
-    een zomerdag met overschot is vasthouden zinloos - dan is de accu
-    toch vol. Dat hoort erbij te staan."""
-    c = _coordinator(make_coordinator, hass)
-    c.langere_horizon_history = [
-        {"voordeel_eur_per_kwh": 0.05}
-    ] * LANGERE_HORIZON_MIN_METINGEN
-
-    kandidaat = c._kandidaat_langere_horizon()
-
-    assert "vol" in kandidaat["betrouwbaarheid"]
-    assert "niets stuurt" in kandidaat["betrouwbaarheid"]
-
-
 def test_it_steers_nothing():
     """Een kandidaat op de proefstand mag de aansturing niet raken."""
     from pathlib import Path

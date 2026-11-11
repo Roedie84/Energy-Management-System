@@ -79,7 +79,6 @@ from .tijdtekst import tijd_met_dag
 _LOGGER = logging.getLogger(__name__.rsplit(".", 1)[0] + ".coordinator")
 
 
-
 def rolluikstand_procent(toestand, attributen) -> float | None:
     """Stand van een rolluik in procent open (v5.63), of None als onbekend.
 
@@ -98,7 +97,6 @@ def rolluikstand_procent(toestand, attributen) -> float | None:
     except (TypeError, ValueError):
         pass
     return 100.0 if toestand == "open" else 0.0
-
 
 
 def rolluiklabel(gemiddelde_procent: float) -> str:

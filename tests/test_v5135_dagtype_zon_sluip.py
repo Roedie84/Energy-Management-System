@@ -39,16 +39,6 @@ def test_energiesom_rekent_per_dagtype(make_coordinator):
     assert round(zat, 2) == 1.20 and round(maa, 2) == 0.80
 
 
-def test_proefstand_dagtype_stuurt_mee(make_coordinator):
-    c = make_coordinator({})
-    c.daytype_consumption_profile = {
-        **{f"werkdag-{h}": [0.37] * 7 for h in range(24)},
-        **{f"weekend-{h}": [0.40] * 7 for h in range(24)},
-    }
-    k = c._kandidaat_dagtype()
-    assert k["stuurt_sinds"].startswith("v5.135.0")
-
-
 def test_zon_eenzijdig_vanaf_70_procent():
     assert const.SOLAR_EENZIJDIG_AANDEEL == 0.7
 

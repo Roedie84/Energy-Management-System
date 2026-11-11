@@ -183,34 +183,6 @@ def test_only_today_counts_as_later(make_coordinator, hass):
 # --- de kandidaat ----------------------------------------------------
 
 
-def test_the_candidate_waits_for_enough_measurements(
-    make_coordinator, hass
-):
-    c = make_coordinator({})
-    c.niet_ontladen_history = [{"voordeel_ct_per_kwh": 9.0}] * 5
-
-    kandidaat = c._kandidaat_niet_ontladen_bij_lage_prijs()
-
-    assert kandidaat["status"] == "onvoldoende_data"
-    assert str(NIET_ONTLADEN_MIN_METINGEN) in (
-        kandidaat["zou_hebben_opgeleverd"]["reden"]
-    )
-
-
-def test_the_candidate_reports_the_median(make_coordinator, hass):
-    c = make_coordinator({})
-    c.niet_ontladen_history = [
-        {"voordeel_ct_per_kwh": v}
-        for v in ([9.0] * 150 + [-2.0] * 50)
-    ]
-
-    kandidaat = c._kandidaat_niet_ontladen_bij_lage_prijs()
-
-    opbrengst = kandidaat["zou_hebben_opgeleverd"]
-    assert opbrengst["mediaan_voordeel_ct_per_kwh"] == 9.0
-    assert opbrengst["aandeel_gunstig_procent"] == 75.0
-
-
 def test_the_candidate_steers_nothing(make_coordinator, hass):
     """In v1.62.0 stond hier een tak die wel stuurde. Die is
 
@@ -227,14 +199,6 @@ def test_the_candidate_steers_nothing(make_coordinator, hass):
 
     assert "_async_apply_operation" not in bron
     assert "OPTION_SMART_CHARGING" not in bron
-
-
-def test_it_is_on_the_bench(make_coordinator, hass):
-    c = make_coordinator({})
-
-    namen = [k["naam"] for k in c.get_proefstand()["kandidaten"]]
-
-    assert "Niet ontladen bij een lage prijs" in namen
 
 
 # --- alleen bij een werkelijk tekort (v3.61.0) -----------------------

@@ -840,10 +840,6 @@ ENERGY_BRIDGE_SAFETY_MARGIN = 1.15
 # for tonight, plus this buffer", as opposed to a flat SoC percentage.
 DYNAMIC_DISCHARGE_RESERVE_MARGIN = 1.10
 
-# Below this live PV power (W), solar production is considered
-# negligible/noise - above it, we consider the sun "actively producing"
-# for the purpose of not postponing charging (see coordinator.py).
-MIN_ACTIVE_SOLAR_PRODUCTION_W = 50
 
 # For each additional consecutive day (beyond tomorrow) that's expected
 # to have low solar, add this many extra percentage points to the
@@ -1879,16 +1875,6 @@ BACKYARD_TEMP_SPIKE_TOLERANCE_C = 1.0
 # the heating element off mid-cycle, 'finished'/'inactive' are done.
 HOME_CONNECT_ACTIVE_STATES = {"run"}
 
-# Minimum cumulative charged energy (kWh) before computing a new
-# efficiency sample - avoids noisy estimates from tiny amounts of energy
-# where sensor rounding/timing errors dominate.
-MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE = 1.0
-
-# Sanity bounds for a single efficiency sample (%) - outside this range is
-# almost certainly a measurement glitch (e.g. a sensor reset, a missed
-# reading), not a real efficiency value, and gets discarded.
-MIN_PLAUSIBLE_EFFICIENCY_PERCENT = 50.0
-MAX_PLAUSIBLE_EFFICIENCY_PERCENT = 100.0
 
 # --- Rendement per halve slag (v1.32.0) ------------------------------
 # Gevonden in de export van 11 augustus: zeven metingen van 56,4 tot
@@ -2347,10 +2333,6 @@ VERKOOP_MIN_WINST_OUDE_STANDAARD_CT = 10.0
 CONF_VERKOOP_MIN_WINST_GEMIGREERD = "verkoop_min_winst_v5177"
 VERKOOP_NA_BLOK_MIN_WINST_EUR = DEFAULT_VERKOOP_MIN_WINST_CT / 100
 
-# Fallback threshold (kWh) for the emergency low-battery charge trigger,
-# used only when no SoC sensor is configured (SoC% is preferred - see
-# _is_emergency_low_battery). Keeps a small buffer above absolute zero.
-EMERGENCY_LOW_BATTERY_KWH_THRESHOLD = 0.3
 
 # If available energy stays at/above this multiple of what was actually
 # needed while still in a "self-sufficient" window, the reserve looks
@@ -3433,15 +3415,11 @@ TITEL_WORDT_OPGEBOUWD = (
     "device_drift",
     "handmatige_stand",
     "mode_change",
-    "proefstand_rijp",
 )
 
 LOG_PRIORITEITEN = {
     # Kritiek - hier gaat iets mis.
     "interne_fout": LOG_PRIO_KRITIEK,
-    "proefstand_rijp": LOG_PRIO_INFO,
-    # v4.1: de wekelijkse herinnering aan wat meet en niet stuurt.
-    "meet_stuurt_niet": LOG_PRIO_INFO,
     "zelfcontrole": LOG_PRIO_KRITIEK,
     "plan_tekort": LOG_PRIO_KRITIEK,
     "accu_sparen": LOG_PRIO_INFO,
@@ -3932,8 +3910,6 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "discharge_efficiency_history": {"type": "plain"},
     "daytype_consumption_profile": {"type": "plain"},
     "capacity_trend_history": {"type": "plain"},
-    "price_shape_history": {"type": "plain"},
-    "proefstand_ledger": {"type": "plain"},
     "nilm_dismissed_duplicate_pairs": {"type": "plain"},
     "nilm_unconfirmed_candidates": {"type": "plain"},
     "water_source_profiles": {"type": "plain"},
@@ -4232,10 +4208,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "vloer_afgesloten_tot": {"type": "plain"},
     "vloer_bootstrap": {"type": "plain"},
     "_capacity_trend_day_key": {"type": "date"},
-    "_proefstand_doorzet_bij_dagstart": {"type": "plain"},
     # v5.125.0 (L-EMS-033): de reservesprongen overleven een herstart.
     "_reserve_sprongen": {"type": "plain"},
-    "_price_shape_day_key": {"type": "date"},
     "_daily_report_day_key": {"type": "date"},
     "_daily_cost_day_key": {"type": "date"},
     "_grid_charged_today": {"type": "plain"},
@@ -4553,16 +4527,6 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
         "Ruim het apparaat leeg. Klopt de melding niet, dan staat de "
         "vermogensdrempel te hoog of te laag - zie de kaart Apparaten.",
     ),
-    "proefstand_rijp": (
-        "Een proefstandkandidaat heeft genoeg gemeten om een uitspraak te doen.",
-        "Bekijk de proefstandpagina. Aanzetten is een keuze; er gebeurt niets "
-        "vanzelf.",
-    ),
-    "meet_stuurt_niet": (
-        "Er staan metingen klaar die nog niet meesturen.",
-        "Bekijk de kaart 'Meet, stuurt niet' op de proefstandpagina en beslis "
-        "per meting of hij mee mag doen.",
-    ),
     "zelfcontrole": (
         "Een invariant in de integratie klopt niet meer - bijvoorbeeld twee "
         "onderdelen die een verschillende reserve zien.",
@@ -4847,23 +4811,6 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         # bewolkingsinschatting hoort niet stil te veranderen.
         False,
         1440,
-    ),
-    (
-        "proefstand_rijp",
-        "Een kandidaat is klaar om mee te doen",
-        "Wanneer een proefstandkandidaat van 'meet nog' naar 'klaar om mee "
-        "te doen' springt - dus meting én winst zijn allebei becijferd.",
-        True,
-        1440,
-    ),
-    (
-        "meet_stuurt_niet",
-        "Wat meet en nog niet stuurt",
-        "Elke maandagochtend: welke metingen klaar staan om mee te sturen "
-        "en al langer wachten. Niet alleen bij de omslag - zodat het niet "
-        "uit het oog raakt.",
-        True,
-        10080,
     ),
     (
         "zelfcontrole",
@@ -6260,10 +6207,6 @@ WATER_BOILER_NAME_HINTS = ("cv-ketel", "cv ketel", "ketel", "boiler")
 # is een paar watt; warm water vragen tilt hem naar honderden.
 WATER_BOILER_ACTIVE_W = 50.0
 
-# Hoe lang een apparaat vóór of tijdens een watersessie actief moet zijn
-# geweest om als bron te gelden. Een vaatwasser die tien minuten eerder
-# aansloeg, vult nu.
-WATER_SOURCE_MATCH_WINDOW_MINUTES = 10
 
 # Ketel aan: langer dan dit is douchen, korter is tandenpoetsen of
 # handen wassen.
@@ -6989,25 +6932,6 @@ SOLAR_DEFER_LATEST_HOUR = 15
 # de woning; wat ontbreekt wordt in het goedkope blok bijgeladen.
 SOLAR_POOR_DAY_KWH = 5.0
 
-# Ook als de dag zelf genoeg zon geeft, moet er ná de verkoop nog genoeg
-# overblijven om de woning te voeden tot het volgende goedkope blok -
-# mét deze marge. Anders staat de accu straks leeg terwijl het huis aan
-# het net hangt.
-# --- Zelfconsumptie over een venster (v1.90.0) -----------------------
-# Gevraagd: "de zonne-energie van gisteren, opgeslagen in de batterij, is
-# vannacht gebruikt - dat is toch ook zelfconsumptie?"
-#
-# Ja, en de formule telt dat ook zo. Maar de daggrens vertekent: wordt
-# die opgeslagen zon de volgende ochtend verkocht, dan telt de export bij
-# de opwek van die dag terwijl hij bij gisteren hoort.
-#
-# Een week is lang genoeg om dat tegen elkaar weg te laten vallen, en
-# kort genoeg om nog iets over het seizoen te zeggen.
-SELF_CONSUMPTION_WINDOW_DAYS = 7
-
-# Onder deze opwek in het hele venster valt er geen zinnig aandeel te
-# berekenen.
-SELF_CONSUMPTION_MIN_KWH = 1.0
 
 SELL_RESERVE_SAFETY_FACTOR = 1.5
 
@@ -7180,7 +7104,6 @@ PLAN_SHORTFALL_RECOVERY_STABLE_MINUTES = 30.0
 # Alleen de melding; de verkooprem blijft op het actuele aantal.
 PLAN_SHORTFALL_MEDIAAN_MINUTEN = 15.0
 
-PLAN_CHANGE_MIN_QUARTERS = 1
 
 # --- Achterhoeks (v1.24.0) -------------------------------------------
 # Gevraagd: "kan ik door middel van 1 switch alles in het Achterhoeks
@@ -7224,7 +7147,6 @@ ACHTERHOEKS_TITELS = {
     "accu_sparen": "Den accu wödt bewaard veur de dure uren",
     "plan_uitstel": "Zunne opvangen wödt uut-esteld",
     "keuze_achteraf": "Achteraf was dat nie de beste keuze",
-    "meet_stuurt_niet": "Wat met en nog neet stuurt",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
     "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
     "zelfcontrole": "Der klopt wat neet in de sommen",
@@ -7630,10 +7552,6 @@ CELBESCHERMING_VRIJ_KWH = 2.0
 # verschil van 26 augustus was vijf procentpunt, en dat kostte module 1
 # een nacht op 2,71 V. Twee procentpunt vangt dat ruim.
 SPIEGEL_MARGE_INSTELLING_PROCENT = 2.0
-
-# Vermogens lopen in stappen van tientallen watts; honderd watt verschil
-# is een instelling die niet klopt, geen afronding.
-SPIEGEL_MARGE_VERMOGEN_W = 100.0
 
 
 # --- Standaardwaarden voor de Zendure-entiteiten (v3.54.0) -----------
@@ -8048,19 +7966,6 @@ OPDRACHT_HERHAAL_SECONDEN = 600
 # Een vaatwasser verbruikt tijdens het drogen maar een paar watt; zolang het
 # apparaat zelf zegt dat het programma loopt, is de cyclus niet klaar.
 APPARAAT_LOOPT_NOG = frozenset({"run", "pause", "delayedstart", "actionrequired", "aborting"})
-
-
-# v5.62: entiteiten op het dashboard waarvoor "unknown" een gewone toestand
-# is, met een eigen tekst op de kaart. De dashboardcontrole zet ze apart in
-# plaats van tussen de lege entiteiten (knoppen gaan daar altijd heen: hun
-# toestand is het tijdstip van de laatste druk).
-DASHBOARD_ONBEKEND_IS_NORMAAL = frozenset(
-    {
-        # Nog te weinig waarnemingen in dit bakje: "nog niet genoeg
-        # waarnemingen".
-        "sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur",
-    }
-)
 
 
 # --- v5.72 (akkoord Ruud 10-10) ---------------------------------------

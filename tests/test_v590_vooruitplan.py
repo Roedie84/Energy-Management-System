@@ -164,35 +164,6 @@ def test_de_invoer_volgt_het_plan_en_de_nieuwe_waardering(make_coordinator, hass
     assert vooruitplan.vergelijk(**na)["beschikbaar"] is True
 
 
-def test_de_saldering_kandidaat_wordt_becijferd(make_coordinator, hass):
-    c = make_coordinator({})
-    c.get_quarter_plan = lambda *a, **k: [
-        {"net_kwh": -0.5, "prijs_ct": 30.0, "cumulatief_eur": 1.0, "zon_kwh": 0.6, "verbruik_kwh": 0.1}
-    ]
-    c._gemeten_belastingdeel_eur_per_kwh = lambda: 0.111
-    meting = {"verschil_eur": 0.42, "verschoven_kwh": 3.0, "kwartieren_anders": 20}
-    c.vooruitplan_history = [{"dag": str(i), "nu": meting, "na_saldering": meting} for i in range(MPC_MIN_METINGEN)]
-
-    k = c._kandidaat_na_saldering()
-
-    assert k["status"] == "betrouwbaar"
-    assert k["zou_hebben_opgeleverd"]["te_becijferen"] is True
-    assert k["zou_hebben_opgeleverd"]["bedrag_per_dag_eur"] == pytest.approx(0.42)
-    assert k["zou_hebben_opgeleverd"]["mediaan_voordeel_ct_per_kwh"] == pytest.approx(14.0)
-
-
-def test_de_saldering_kandidaat_meldt_hoe_ver_hij_is(make_coordinator, hass):
-    c = make_coordinator({})
-    c.get_quarter_plan = lambda *a, **k: [
-        {"net_kwh": -0.5, "prijs_ct": 30.0, "cumulatief_eur": 1.0, "zon_kwh": 0.6, "verbruik_kwh": 0.1}
-    ]
-    c._gemeten_belastingdeel_eur_per_kwh = lambda: 0.111
-
-    reden = c._kandidaat_na_saldering()["zou_hebben_opgeleverd"]["reden"]
-
-    assert f"0 van {MPC_MIN_METINGEN} dagen" in reden
-
-
 def test_de_meting_stuurt_niets():
     import ast
     import inspect

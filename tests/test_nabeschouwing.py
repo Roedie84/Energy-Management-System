@@ -173,29 +173,6 @@ def test_de_richting_wordt_geteld():
     assert uit["te_veel_ontladen_kwh"] == 0
 
 
-def test_de_kandidaat_zegt_te_hoog_bij_vasthouden(make_coordinator, hass):
-    c = make_coordinator({})
-    c.nabeschouwingen = [
-        {"te_becijferen": True, "kwartieren": 96, "datum": f"2026-09-0{d}",
-         "reserve_als": "verkooppoort",  # v1.0.1: alleen het poortmodel telt
-         "te_veel_vastgehouden_kwh": 1.2, "te_veel_ontladen_kwh": 0.1, "gemist_eur": 0.30}
-        for d in range(1, 5)
-    ]
-
-    k = c._kandidaat_reserve_uit_nabeschouwing()
-
-    assert "te hoog" in k["waarde"]
-    assert k["mag_regelen"] is False
-    assert k["zou_hebben_opgeleverd"]["eur"] == pytest.approx(1.2, abs=0.01)
-
-
-def test_te_weinig_dagen_geen_oordeel(make_coordinator, hass):
-    c = make_coordinator({})
-    c.nabeschouwingen = [{"te_becijferen": True, "kwartieren": 96}]
-
-    assert c._kandidaat_reserve_uit_nabeschouwing()["waarde"] is None
-
-
 # --- v4.2: gemist door de reserve, apart van gemist door de voorspelling
 #
 # "Best mogelijk" kent de zon van morgen. Een deel van het gemiste bedrag
@@ -353,33 +330,6 @@ def test_netladen_haalt_beter_dan_perfect_weg():
     )
     assert uit["accu_leverde_op_eur"] <= uit["had_kunnen_opleveren_eur"] + 0.02
     assert uit["zonder_netladen"]["gemist_eur"] < 0  # de oude meetlat: 'beter dan perfect'
-
-
-def test_de_kandidaat_netarbitrage_telt_over_de_dagen(make_coordinator, hass):
-    """v4.5. Arbitrage is heel vroeg uit de integratie gehaald, uit
-    principe en zonder cijfers. De nabeschouwing rekent nu per dag uit
-    wat het WEL zou hebben opgeleverd - met de prijzen die er waren."""
-    c = make_coordinator({})
-    c.nabeschouwingen = [
-        {"te_becijferen": True, "kwartieren": 96, "datum": f"2026-09-0{d}",
-         "reserve_als": "verkooppoort",  # v1.0.1: alleen het poortmodel telt
-         "netarbitrage_eur": 0.12, "gemist_eur": 0.05}
-        for d in range(1, 6)
-    ]
-
-    k = c._kandidaat_netarbitrage()
-
-    assert k["waarde"] is not None
-    assert k["zou_hebben_opgeleverd"]["eur_totaal"] == pytest.approx(0.60, abs=0.01)
-    assert k["zou_hebben_opgeleverd"]["eur_per_dag"] == pytest.approx(0.12, abs=0.01)
-    assert k["mag_regelen"] is False
-
-
-def test_te_weinig_dagen_geen_oordeel_over_arbitrage(make_coordinator, hass):
-    c = make_coordinator({})
-    c.nabeschouwingen = [{"te_becijferen": True, "kwartieren": 96, "netarbitrage_eur": 0.12}]
-
-    assert c._kandidaat_netarbitrage()["waarde"] is None
 
 
 # --- v4.12: de reserve is een verkooppoort, geen bodem -----------------

@@ -495,8 +495,6 @@ async def async_get_config_entry_diagnostics(
         # v4.1: invarianten tijdens bedrijf - een reserve, de nacht
         # gecontroleerd, padbereik.
         "zelfcontroles": _veilig("get_zelfcontroles", coordinator.get_zelfcontroles),
-        # v4.1: alles wat meet en nog niet stuurt, rijp bovenaan.
-        "meet_stuurt_niet": _veilig("get_meet_stuurt_niet", coordinator.get_meet_stuurt_niet),
         # v4.4: welke vermogenssensor is 's nachts meer gaan gebruiken?
         # v4.7: de nachtlast per apparaat, waar de aanwijzing op rust.
         "nachtlast_per_apparaat": _veilig(
@@ -1001,7 +999,6 @@ async def async_get_config_entry_diagnostics(
             "pending_overview": _veilig(
                 "get_pending_overview", coordinator.get_pending_overview
             ),
-            "proefstand": _veilig("get_proefstand", coordinator.get_proefstand),
             "wear_cost": _veilig(
                 "get_wear_cost_overview", coordinator.get_wear_cost_overview
             ),

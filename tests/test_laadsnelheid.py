@@ -73,17 +73,3 @@ def test_meer_dan_de_laadruimte_telt_niet_mee(make_coordinator, hass):
     assert c.gemiste_zonlading("2026-09-08")["kwh"] == pytest.approx(0.375, abs=0.01)
 
 
-def test_de_kandidaat_rekent_over_de_dagen(make_coordinator, hass):
-    c = make_coordinator({})
-    c.dagverloop = {}
-    c.gemiste_zonlading = lambda dag: {"kwh": 0.8, "kwartieren": 3, "eur": 0.20}
-    c.nabeschouwingen = [
-        {"te_becijferen": True, "kwartieren": 96, "datum": f"2026-09-0{d}"}
-        for d in range(1, 5)
-    ]
-
-    k = c._kandidaat_laadsnelheid()
-
-    assert k["waarde"] is not None
-    assert k["mag_regelen"] is False
-    assert k["zou_hebben_opgeleverd"]["eur_totaal"] == pytest.approx(0.80, abs=0.01)

@@ -86,18 +86,6 @@ def test_te_korte_dag_geeft_een_reden(make_coordinator, hass):
     assert invoer["te_becijferen"] is False and "van de" in invoer["reden"]
 
 
-def test_getters_zonder_gegevens(make_coordinator, hass):
-    c = make_coordinator({})
-    z = c.get_zelfanalyse()
-    assert z["gisteren"] is None and z["kaart_primair"].startswith("€ 0,00")
-    r = c.get_repetitie_2027()
-    assert r["kaart_primair"] == "Generale repetitie 2027" and r["salderen_tot"] == "2026-12-31"
-    p = c.get_prijsverwachting()
-    assert p["beschikbaar"] is False and p["kaart_secundair"] == "nog geen verwachting"
-    namen = [i["naam"] for i in c.get_meet_stuurt_niet()["items"]]
-    assert "Prijsverwachting overmorgen" in namen and "Regels van 2027 (na de saldering)" in namen
-
-
 def test_achterstand_en_wachtrij(make_coordinator, hass):
     import asyncio
 

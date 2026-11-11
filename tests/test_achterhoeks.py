@@ -69,7 +69,6 @@ MEERDERE_BOODSCHAPPEN = {
     "mode_change",
     "device_drift",
     "appliance_cheap_moment",
-    "proefstand_rijp",
 }
 
 

@@ -37,7 +37,6 @@ from .tijdtekst import tijd_met_dag
 HC_TOESTAND = "BSH.Common.Status.OperationState"
 HC_VOORTGANG = "BSH.Common.Option.ProgramProgress"
 HC_EINDTIJD = "BSH.Common.Option.RemainingProgramTime"
-HC_START_OVER = "BSH.Common.Option.StartInRelative"
 HC_ACTIEF_PROGRAMMA = "BSH.Common.Root.ActiveProgram"
 HC_GEKOZEN_PROGRAMMA = "BSH.Common.Root.SelectedProgram"
 

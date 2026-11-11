@@ -221,37 +221,25 @@ def _proefstand_klaar(c, capaciteit=8.64):
     }
 
 
-def test_capaciteitstrend_en_slijtage_tellen_een_herstart_niet(make_coordinator):
+def test_capaciteitstrend_telt_een_herstart_niet(make_coordinator):
+    # v5.223.0: de proefstand is vervallen; de capaciteitstrend heeft een eigen stap.
     bron = make_coordinator({})
     _proefstand_klaar(bron)
     bron.battery_cumulative_discharged_kwh = 800.0
-    bron._update_proefstand(NU)
+    bron._update_capaciteitstrend(NU)
     assert len(bron.capacity_trend_history) == 1
-    assert bron._proefstand_doorzet_bij_dagstart == 800.0
 
     bron.battery_cumulative_discharged_kwh = 803.0
     verse = _herstart(make_coordinator, bron)
     _proefstand_klaar(verse)
-    verse._update_proefstand(NU + timedelta(hours=1))
+    verse._update_capaciteitstrend(NU + timedelta(hours=1))
     # Geen tweede meting voor dezelfde dag.
     assert len(verse.capacity_trend_history) == 1
 
     verse.battery_cumulative_discharged_kwh = 805.0
-    verse._update_proefstand(NU + timedelta(days=1))
-    boeking = verse.proefstand_ledger[-1]
-    # Alleen de doorzet van die dag, niet de levensdoorzet.
-    assert boeking["doorzet_kwh"] == 5.0
-    assert boeking["datum"] == NU.date().isoformat()
-
-
-def test_zonder_beginstand_geen_slijtageboeking(make_coordinator):
-    c = make_coordinator({})
-    _proefstand_klaar(c)
-    c.battery_cumulative_discharged_kwh = 800.0
-    c._proefstand_doorzet_bij_dagstart = None
-    c._boek_proefstand_dag(NU.date())
-    assert all("slijtage_eur" not in b for b in c.proefstand_ledger)
-    assert c._proefstand_doorzet_bij_dagstart == 800.0
+    verse._update_capaciteitstrend(NU + timedelta(days=1))
+    assert len(verse.capacity_trend_history) == 2
+    assert verse.capacity_trend_history[-1]["doorzet_kwh"] == 805.0
 
 
 def test_capaciteitstrend_ook_geen_dubbele_dag_uit_een_oude_opslag(make_coordinator):
@@ -261,15 +249,8 @@ def test_capaciteitstrend_ook_geen_dubbele_dag_uit_een_oude_opslag(make_coordina
     c.capacity_trend_history = [
         {"datum": NU.date().isoformat(), "capaciteit_kwh": 8.64, "doorzet_kwh": 1.0}
     ]
-    c._update_proefstand(NU)
+    c._update_capaciteitstrend(NU)
     assert len(c.capacity_trend_history) == 1
-
-
-def test_prijsvorm_dagsleutel_overleeft_een_herstart(make_coordinator):
-    bron = make_coordinator({})
-    bron._price_shape_day_key = NU.date()
-    verse = _herstart(make_coordinator, bron)
-    assert verse._price_shape_day_key == NU.date()
 
 
 def test_dagrapport_telt_door_na_een_herstart(make_coordinator):

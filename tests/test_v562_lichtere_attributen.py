@@ -227,7 +227,6 @@ def _live_groot(make_coordinator):
     _vul(c)
     c.plan_review_history = [_plan_regel(d) for d in range(1, 31)]
     c.get_event_log = lambda *a, **k: _logboek()
-    c.get_proefstand = lambda *a, **k: _proefstand()
     c.get_presence_overview = lambda *a, **k: _aanwezigheid()
     c.get_quarter_plan_compact = lambda *a, **k: _kwartierplanning()
     return c
@@ -253,7 +252,7 @@ def test_voor_en_na(make_coordinator, hass):
     gacs = _grootte(m.GacsAssessmentSensor(c, "x").extra_state_attributes)
     paginas = {p._attr_name: _grootte(p.extra_state_attributes) for p in _paginas(c)}
 
-    assert voor > 150 * 1024
+    assert voor > 100 * 1024  # v5.223.0: zonder proefstand en proefpagina's (was 150 kB)
     assert gacs < voor / 8
     assert gacs + sum(paginas.values()) < voor * 0.6
 
@@ -280,7 +279,8 @@ def test_plantoetsing_14_dagen_nieuwste_eerst(make_coordinator, hass):
     assert p["dagen"] == 30  # de samenvatting telt nog steeds alles
     assert len(p["dagen_overzicht"]) == 14
     assert p["dagen_overzicht"][0]["datum"] == "2026-09-30"
-    assert "toelichting" not in p["dagen_overzicht"][0]["opbrengst"]
+    # v5.223.0: alleen de gemeten besparing; de onvergelijkbare voorspelling is weg.
+    assert "opbrengst" not in p["dagen_overzicht"][0] and "besparing_werkelijk_eur" in p["dagen_overzicht"][0]
     assert p["dagen_overzicht"][0]["verkocht"] == {"voorspeld_kwh": 3.53, "werkelijk_kwh": 0.74}
 
 
@@ -352,7 +352,7 @@ def test_de_diagnostiek_heeft_de_volledige_set(make_coordinator, hass):
 
     volledig = m.gacs_volledig(c)
 
-    for sleutel in ("eisen", "meet_stuurt_niet", "kwartierplanning", "logboek", "rekentijd_ms"):
+    for sleutel in ("eisen", "kwartierplanning", "logboek", "rekentijd_ms"):
         assert sleutel in volledig, sleutel
     assert len(volledig["plantoetsing"]["dagen_overzicht"]) == 30
     assert len(volledig["logboek"]["regels"]) == 120

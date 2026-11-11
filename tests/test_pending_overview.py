@@ -116,30 +116,6 @@ def test_the_reason_is_carried_over(make_coordinator, hass):
     assert overzicht["wachten"][0]["wat_ontbreekt"] == "0/5 heldere dagen verzameld."
 
 
-def test_the_test_bench_joins_the_list(make_coordinator, hass):
-    c = _coordinator(make_coordinator, [])
-    c.get_proefstand = lambda: {
-        "kandidaten": [
-            {
-                "naam": "Accugezondheid over de tijd",
-                "status": "onvoldoende_data",
-                "betrouwbaarheid": "0 dagmetingen.",
-            },
-            {
-                "naam": "Slijtagekosten per kWh",
-                "status": RELIABILITY_RELIABLE,
-                "betrouwbaarheid": "",
-            },
-        ]
-    }
-
-    overzicht = c.get_pending_overview()
-
-    assert [r["naam"] for r in overzicht["wachten"]] == [
-        "Accugezondheid over de tijd"
-    ]
-
-
 # --- v1.47.0: ingangen die er zijn maar niets leveren ----------------
 
 

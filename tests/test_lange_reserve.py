@@ -89,42 +89,6 @@ def test_a_big_price_gap_is_favourable(make_coordinator, hass):
     assert c.lange_reserve_history[0]["voordeel_eur_per_kwh"] > 0
 
 
-def test_too_few_measurements_says_so(make_coordinator, hass):
-    c, _ = _coordinator(make_coordinator, hass)
-
-    kandidaat = c._kandidaat_lange_reserve()
-
-    assert kandidaat["waarde"] is None
-    assert str(LANGE_RESERVE_MIN_METINGEN) in str(
-        kandidaat["zou_hebben_opgeleverd"]["reden"]
-    )
-
-
-def test_with_enough_measurements_it_reports(make_coordinator, hass):
-    c, _ = _coordinator(make_coordinator, hass)
-    c.lange_reserve_history = [
-        {"extra_kwh": 2.5, "voordeel_eur_per_kwh": -0.05}
-        for _ in range(LANGE_RESERVE_MIN_METINGEN)
-    ]
-
-    kandidaat = c._kandidaat_lange_reserve()
-
-    assert "2.50 kWh extra reserve" in kandidaat["waarde"]
-    assert kandidaat["zou_hebben_opgeleverd"]["aandeel_gunstig_procent"] == 0.0
-
-
-def test_no_difference_is_reported_as_such(make_coordinator, hass):
-    """Ligt het goedkope blok aan het eind van de bekende prijzen, dan
-    verandert er niets - en dan hoort er geen extra reserve te staan."""
-    c, _ = _coordinator(make_coordinator, hass)
-    c.lange_reserve_history = [
-        {"extra_kwh": 0.0, "voordeel_eur_per_kwh": 0.0}
-        for _ in range(LANGE_RESERVE_MIN_METINGEN)
-    ]
-
-    assert c._kandidaat_lange_reserve()["waarde"] == "geen verschil"
-
-
 def test_it_steers_nothing():
     """Gevraagd: "Eerst als meting." Dezelfde route als de
     slijtagekosten (v1.38.0)."""

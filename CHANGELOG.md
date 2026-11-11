@@ -35591,3 +35591,15 @@ Ruud 11-11 16:52 ("Kunnen we alvast wat anders oppakken"). Punten 2, 3 en 4 van 
 - **Punt 7 (oude huisreserve geeft alarm)**: geen wijziging nodig. Sinds v5.203.1 is een verkoop met winst onder de oude reserve al geen stuurfout meer; het aandachtspunt van 11-11 kwam van de nacht naar 4 november (van voor v5.198.0) en valt op 12-11 uit het venster van 7 dagen.
 
 Tests: `test_v5222_periodecijfers.py` (9); `test_self_sufficiency_grid_charge.py` herschreven voor de nieuwe definitie (8).
+
+## v5.223.0 — de proefstand verwijderd, elke stap van de ronde geklokt
+
+Ruud 11-11 17:10 ("Resterende punten eerst oppakken"). Rest van punt 10 en de punten 6, 12 en 13 van het onderzoek.
+
+- **Proefstand (rest van punt 10)**: de 14 kandidaten, `get_proefstand`, `get_meet_stuurt_niet`, het grootboek, de toelating en de twee meldingen ("kandidaat klaar" en de wekelijkse "wat meet en niet stuurt") met hun schakelaars. 30 methoden, ruim 1.680 regels. De sensor Proefstand en de twee schakelaars worden bij de start uit het register gehaald. "Nog niet bepaald" noemt geen kandidaten meer.
+- **Wat bleef, bewust**: `_update_proefstand` hield ook de capaciteitstrend bij (een meting per dag); die heeft nu een eigen stap `_update_capaciteitstrend`, want de accugezondheid rekent ermee. `_opbrengst_accu_per_jaar_eur` blijft voor het uitbreidingsadvies. De prijsvorm per uur (`price_shape_history`) las alleen de proefstand en is weg.
+- **Rekentijd (punt 13)**: elke stap van de ronde krijgt een klok (`_noteer_stapduur`); `rondeduur` toont `zwaarste_ms` (vijf zwaarste onderdelen) en `zonder_klok_ms`. Tot nu toe verklaarde de meting 40 van de 628 ms.
+- **Plantoetsing (punt 6)**: per dag alleen nog de gemeten besparing (`besparing_werkelijk_eur`); de "voorspelde opbrengst" ernaast telde alleen de verkoopkwartieren en was er niet mee te vergelijken.
+- **Dode code (punt 12)**: 14 constanten en 2 methoden zonder enige verwijzing verwijderd. De 173 "ongebruikte" imports in `coordinator.py` blijven: andere modules en tests halen die namen daar op. De overige vondsten van het analyseprogramma hebben tests die ze vastleggen en blijven staan.
+
+Tests: zes testbestanden over de proefstand verwijderd, 37 testfuncties elders; nieuw `test_v5223_proefstand_weg.py` (19).

@@ -1,3 +1,11 @@
+EMS v5.223.0 - proefstand weg, rekentijd per stap gemeten
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De proefstand (14 kandidaten die meerekenden maar niets stuurden) is verwijderd, met de twee meldingen die erbij hoorden.
+- De rekentijd van elke stap wordt nu gemeten, zodat te zien is waar de tijd van een ronde heen gaat.
+- De plantoetsing toont per dag alleen nog de gemeten besparing.
+
 EMS v5.222.0 - cijfers die elkaar tegenspraken rechtgezet
 
 Installeren: via de Marketplace bijwerken en herstarten.

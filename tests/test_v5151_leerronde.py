@@ -89,35 +89,6 @@ from custom_components.energy_management_system.coordinator import (  # noqa: E4
 )
 
 
-def test_wachtende_kandidaat_toont_de_reden():
-    k = {
-        "naam": "Plan gewogen over drie scenario's",
-        "status": "onvoldoende",
-        "waarde": None,
-        "zou_hebben_opgeleverd": {"te_becijferen": False, "reden": "7 van 14 dagen gemeten sinds v5.122.0."},
-        "betrouwbaarheid": "Verwachte kosten over drie zonscenario's. Stuurt niets.",
-    }
-    assert _C._proefstand_wat_ontbreekt(k) == "7 van 14 dagen gemeten sinds v5.122.0."
-
-
-def test_uitgerekende_kandidaat_is_herkenbaar():
-    k = {
-        "naam": "Regressiewoud voor de zonvoorspelling",
-        "status": "indicatief",
-        "waarde": "-13.2% tegen de huidige methode",
-        "zou_hebben_opgeleverd": {"te_becijferen": True, "reden": "Gemiddelde fout 0.21 kWh per uur tegen 0.19 nu, over 15 ongeziene dagen."},
-        "betrouwbaarheid": "Getoetst op dagen die het model niet heeft gezien.",
-    }
-    tekst = _C._proefstand_wat_ontbreekt(k)
-    assert tekst.startswith("Uitgerekend: -13.2%")
-    assert "15 ongeziene dagen" in tekst
-
-
-def test_zonder_reden_blijft_de_omschrijving():
-    k = {"naam": "x", "status": "onvoldoende", "betrouwbaarheid": "Omschrijving.", "zou_hebben_opgeleverd": {}}
-    assert _C._proefstand_wat_ontbreekt(k) == "Omschrijving."
-
-
 # --- L-EMS-047: dagarchief vult ontbrekende kwartieren aan ---------------
 
 from custom_components.energy_management_system import dagarchief as D  # noqa: E402

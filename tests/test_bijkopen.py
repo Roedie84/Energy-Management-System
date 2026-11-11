@@ -96,59 +96,6 @@ def test_efficiency_and_wear_are_charged(make_coordinator, hass):
     assert c.bijkoop_history[0]["laadprijs_nu_eur"] > 0.30
 
 
-def test_too_few_measurements_says_so(make_coordinator, hass):
-    c, _ = _coordinator(make_coordinator, hass)
-
-    assert c._kandidaat_bijkopen()["waarde"] is None
-
-
-def test_with_enough_measurements_it_reports(make_coordinator, hass):
-    c, _ = _coordinator(make_coordinator, hass)
-    c.bijkoop_history = [
-        {"voordeel_eur_per_kwh": 0.08, "voordeel_totaal_eur": 0.08}
-        for _ in range(BIJKOOP_MIN_METINGEN)
-    ]
-
-    k = c._kandidaat_bijkopen()
-
-    assert k["zou_hebben_opgeleverd"]["aandeel_gunstig_procent"] == 100.0
-    assert k["zou_hebben_opgeleverd"]["gemist_voordeel_eur"] > 0
-
-
-def test_the_steering_route_is_recorded(make_coordinator, hass):
-    """Gevraagd: "let op dat het bijladen vanaf het net in de modus
-    manual gebeuren moet, net als het ontladen op dure kwartieren, maar
-    dan laden."
-
-    Dat hoort vastgelegd voordat er iets gebouwd wordt - anders is het
-    over drie maanden weg.
-    """
-    c, _ = _coordinator(make_coordinator, hass)
-    c.bijkoop_history = [
-        {"voordeel_eur_per_kwh": 0.08, "voordeel_totaal_eur": 0.08}
-    ] * BIJKOOP_MIN_METINGEN
-
-    uitleg = c._kandidaat_bijkopen()["betrouwbaarheid"]
-
-    assert "manual" in uitleg
-    assert "POSITIEF" in uitleg
-
-
-def test_it_admits_what_it_cannot_see(make_coordinator, hass):
-    """Deze meting weet niet of er ruimte in de accu was, en of laden de
-    piekbuffer zou verstoren. Dat is precies waarom `smart_charging`
-    niet wordt toegepast."""
-    c, _ = _coordinator(make_coordinator, hass)
-    c.bijkoop_history = [
-        {"voordeel_eur_per_kwh": 0.08, "voordeel_totaal_eur": 0.08}
-    ] * BIJKOOP_MIN_METINGEN
-
-    uitleg = c._kandidaat_bijkopen()["betrouwbaarheid"]
-
-    assert "ruimte in de accu" in uitleg
-    assert "piekbuffer" in uitleg
-
-
 def test_it_steers_nothing():
     from pathlib import Path
 
@@ -219,16 +166,3 @@ def test_a_real_shortfall_is_marked_as_such(make_coordinator, hass):
     assert c.bijkoop_history[0]["soort"] == "tekort"
 
 
-def test_the_candidate_separates_the_two_kinds(make_coordinator, hass):
-    """Zonder dat onderscheid zijn de cijfers later niet te duiden."""
-    c, _ = _coordinator(make_coordinator, hass)
-    c.bijkoop_history = [
-        {"soort": "tekort", "voordeel_eur_per_kwh": 0.08, "voordeel_totaal_eur": 0.08}
-    ] * 10 + [
-        {"soort": "krappe marge", "voordeel_eur_per_kwh": -0.02, "voordeel_totaal_eur": 0.0}
-    ] * 20
-
-    o = c._kandidaat_bijkopen()["zou_hebben_opgeleverd"]
-
-    assert o["bij_echt_tekort"] == 10
-    assert o["bij_krappe_marge"] == 20

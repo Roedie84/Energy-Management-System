@@ -81,22 +81,6 @@ def test_plan_modi_worden_vertaald():
     assert V.PLAN_MODUS["smart_discharging"] == "uitstellen"
 
 
-def test_kandidaat_scenarioplan(make_coordinator):
-    c = make_coordinator({})
-    c.vooruitplan_history = []
-    k = c._kandidaat_scenarioplan()
-    assert k["zou_hebben_opgeleverd"]["te_becijferen"] is False
-    c.vooruitplan_history = [
-        {"dag": f"2026-10-{d:02d}", "scenario": {"verschil_eur": 0.1 * (d % 3), "kwartieren_anders": 5}}
-        for d in range(1, 21)
-    ]
-    k = c._kandidaat_scenarioplan()
-    assert k["zou_hebben_opgeleverd"]["te_becijferen"] is True
-    assert k["zou_hebben_opgeleverd"]["dagen"] == 20
-    namen = [x["naam"] for x in c._bereken_proefstand()["kandidaten"]]
-    assert "Plan gewogen over drie scenario's" in namen
-
-
 # --- punten 4 en 7: meetreeks ---------------------------------------------------
 
 def _verloop(rijen):
