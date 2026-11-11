@@ -1,3 +1,12 @@
+EMS v5.224.0 - rekentijd uitgezocht, oude metingen weg
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Kort na de herstart meet het EMS een ronde in detail, zodat te zien is welke functies de rekentijd kosten. Daarmee wordt de ronde in een volgende versie versneld.
+- De rekentijd is gesplitst in fasen, en in wat Home Assistant zelf ophoudt en wat op de achtergrond rekent.
+- Vijf metingen die alleen de vervallen proefstand voedden zijn verwijderd.
+- De tweede besparingsmaat (kostprijsmodel) telt een kalibratie nu mee. Het hoofdgetal was al juist.
+
 EMS v5.223.0 - proefstand weg, rekentijd per stap gemeten
 
 Installeren: via de Marketplace bijwerken en herstarten.

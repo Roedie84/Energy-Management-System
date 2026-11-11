@@ -96,6 +96,7 @@ EIGEN_SERVICES = (
     "confirm_water_source",
     "accumodule_melding",
     "economische_schaduw_resync",
+    "profiel_ronde",
 )
 
 def migreer_verkoop_min_winst(opties: dict, data: dict | None = None) -> dict | None:
@@ -207,8 +208,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _async_register_nilm_services(hass)
     _async_register_module_service(hass)
     _async_register_schaduw_service(hass)
+    _async_register_profiel_service(hass)
 
     return True
+
+
+def _async_register_profiel_service(hass: HomeAssistant) -> None:
+    """v5.224.0: de eerstvolgende ronde onder de profiler (alleen meten)."""
+    if hass.services.has_service(DOMAIN, "profiel_ronde"):
+        return
+
+    async def _handle(call: ServiceCall) -> None:
+        for key, value in hass.data.get(DOMAIN, {}).items():
+            if isinstance(key, str) and key.endswith("_solar_tracker"):
+                continue
+            if hasattr(value, "vraag_rondeprofiel"):
+                value.vraag_rondeprofiel()
+
+    hass.services.async_register(DOMAIN, "profiel_ronde", _handle, schema=vol.Schema({}))
 
 
 def _async_register_schaduw_service(hass: HomeAssistant) -> None:

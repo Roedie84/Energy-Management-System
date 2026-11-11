@@ -163,3 +163,9 @@ economische_schaduw_resync:
     Zet de virtuele accu's van de economische schaduw (C2 en C0) terug op de
     echte accu-inhoud. Gebeurt nooit vanzelf: daarna begint de vergelijking
     met dezelfde inhoud.
+
+profiel_ronde:
+  name: Ronde onder de profiler
+  description: >-
+    Meet bij de eerstvolgende ronde welke functies de meeste rekentijd kosten.
+    Alleen meten; de uitkomst staat bij de rondeduur (attribuut `profiel`).

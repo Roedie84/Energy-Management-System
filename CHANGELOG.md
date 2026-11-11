@@ -35603,3 +35603,14 @@ Ruud 11-11 17:10 ("Resterende punten eerst oppakken"). Rest van punt 10 en de pu
 - **Dode code (punt 12)**: 14 constanten en 2 methoden zonder enige verwijzing verwijderd. De 173 "ongebruikte" imports in `coordinator.py` blijven: andere modules en tests halen die namen daar op. De overige vondsten van het analyseprogramma hebben tests die ze vastleggen en blijven staan.
 
 Tests: zes testbestanden over de proefstand verwijderd, 37 testfuncties elders; nieuw `test_v5223_proefstand_weg.py` (19).
+
+## v5.224.0 — een ronde onder de profiler, weesmetingen weg, kostprijs boekt door bij kalibratie
+
+Ruud 11-11 17:44 ("Alle 5 oppakken").
+
+- **Rekentijd, punten 1 en 2 (besluit_snapshot 255 ms, planningsmeldingen 147 ms)**: niet versneld, wel meetbaar gemaakt. Dezelfde code kost met een plan uit de rondecache 1 ms (lokaal gemeten); waar de tijd op de echte installatie heen gaat is niet uit de code te lezen. Nieuw `rondeprofiel.py`: de achtste ronde na de start en elke ronde na de service `energy_management_system.profiel_ronde` draait onder cProfile; `rondeduur.profiel` toont de 30 zwaarste functies van de integratie (inclusief wat ze aanroepen) en de 12 zwaarste functies op eigen tijd. Zo'n ronde telt niet mee in de rondeduur.
+- **Rekentijd, punt 3**: de ronde in fasen (`fasen_ms`: besluit en sturen, meetlaag, achtergrondwerk plannen, sensoren bijwerken, opslag plannen), gemeten als rekentijd op de lus. En `lus_mediaan_ms`: `mediaan_ms` is de rekentijd van het hele proces en telt de werkdraden mee, waar het waardeplan rekent; alleen de lus houdt Home Assistant op.
+- **Weesmetingen (punt 4)**: weg zijn `_meet_langere_horizon`, `_meet_vooruitplan`, `_meet_scenarioplan`, `_zon_band_factoren`, `_vooruitplan_invoer`, `_vooruitplan_opbrengst`, `_saldering_opbrengst`, `_meet_bijkopen_bij_tekort`, de velden `langere_horizon_history`, `vooruitplan_history`, `bijkoop_history`, `_eerder_rijpe_kandidaten`, `_laatste_meetherinnering` en zes constanten. Niemand las ze meer sinds de proefstand weg is. Gebleven: `_meet_lange_reserve` (stuurt de reserve en staat in de export) en `_meet_werkelijke_netlading`.
+- **EUR 2,39 naast EUR 4,26 (punt 5)**: het verschil zit op een dag, de kalibratie van 08-11: hoofdgetal EUR -1,98, kostprijsmodel EUR 0,00. De kalibratieronde keert terug voor de boekhouding; het kostprijsmodel stond die dag stil en zag de lading daarna als een sprong. De overige zes dagen verschillen samen EUR 0,11. Het hoofdgetal is het juiste cijfer. Het kostprijsmodel boekt nu ook tijdens de kalibratie (het EMS laadt sinds v5.194.0 zelf).
+
+Tests: `test_langere_horizon.py` en `test_bijkopen.py` verwijderd, vier testfuncties uit `test_v590_vooruitplan.py`; nieuw `test_v5224_rondeprofiel_en_wezen.py` (10).

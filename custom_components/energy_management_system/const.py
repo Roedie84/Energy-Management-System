@@ -907,47 +907,6 @@ PEAK_ALERT_MIN_HOURS_AHEAD = 1.0
 # dun begrip en levert bijladen weinig op.
 PEAK_ALERT_MIN_OF_MEDIAN = 1.15
 
-# --- Vasthouden voor morgen (v2.6.0) ---------------------------------
-# Gevraagd: "Houdt de integratie ook rekening met bijvoorbeeld minder PV
-# energie morgen en daardoor meer te behouden in plaats van
-# terugleveren?"
-#
-# Deels. De reserve kijkt tot het eerstvolgende goedkope blok, en
-# redeneert dan: daar kan ik bijladen. De vraag erachter is een andere:
-# is deze kWh MORGEN meer waard dan wat hij nu opbrengt?
-#
-# Eerst meten, dan pas sturen - dezelfde route als de slijtagekosten.
-# --- Verder vooruitkijken bij de reserve (v3.10.0) -------------------
-# Gevraagd: "Het gaat er mij vooral om dat er niet gewacht wordt tot een
-# duur kwartier om extra bij te laden. De integratie moet ruim vooruit
-# kijken."
-#
-# Terecht. Op 18 augustus rekende de reserve tot 16:45 - het
-# eerstvolgende goedkope blok. Daarna kwam de avondpiek van 37,4 ct, en
-# die telde niet mee bij de vraag hoeveel er in dat blok van 28,9 ct
-# geladen moest worden.
-#
-# Eerst meten wat het verschil zou zijn, dan pas sturen.
-# --- Bijkopen bij een verwacht tekort (v3.11.0) ----------------------
-# Gevraagd: "Maar wat als het rendabel is om bij te kopen wanneer er niet
-# genoeg PV energie is?"
-#
-# Een andere vraag dan arbitrage. Je koopt niet om te verkopen, je koopt
-# om niet LATER duurder te moeten kopen.
-#
-# Zou sturen via `manual` met een POSITIEF vermogen - net zoals het
-# ontladen in dure kwartieren met een negatief vermogen gaat. Maar eerst
-# meten.
-# Hoe dicht bij de ondergrens een planning "krap" heet (v3.24.0).
-#
-# Gevraagd na een dag met 42,9% minder zon: de bijkoop-kandidaat stond op
-# nul metingen omdat hij alleen bij een BECIJFERD tekort mat - en dat was
-# er niet, want de reserve had het opgevangen.
-#
-# Tien procentpunt boven de ondergrens is krap genoeg om te zeggen dat
-# een kWh erbij verschil had gemaakt, en ruim genoeg om niet elke dag af
-# te gaan.
-BIJKOOP_KRAPPE_MARGE_PROCENT = 10.0
 
 # De werkelijke netlading, per ronde gemeten (v3.25.0).
 #
@@ -956,8 +915,6 @@ BIJKOOP_KRAPPE_MARGE_PROCENT = 10.0
 # van het net. Op dagniveau is dat niet scherper te krijgen.
 NETLADING_HISTORY_LENGTH = 400
 
-BIJKOOP_HISTORY_LENGTH = 300
-BIJKOOP_MIN_METINGEN = 30
 
 LANGE_RESERVE_HISTORY_LENGTH = 300
 
@@ -967,8 +924,6 @@ LANGE_RESERVE_HISTORY_LENGTH = 300
 BESTAAT_NIET_STORING_UREN = 24
 LANGE_RESERVE_MIN_METINGEN = 50
 
-LANGERE_HORIZON_HISTORY_LENGTH = 200
-LANGERE_HORIZON_MIN_METINGEN = 20
 
 PV_HOURLY_BIAS_MIN_KWH = 0.10
 
@@ -3877,21 +3832,17 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "nu_laden_omslag": {"type": "plain"},
     "fallback_since": {"type": "plain"},
     "veroudering_history": {"type": "plain"},
-    "langere_horizon_history": {"type": "plain"},
     "lange_reserve_history": {"type": "plain"},
     "niet_ontladen_history": {"type": "plain"},
-    "vooruitplan_history": {"type": "plain"},
     "planvolging_dagen": {"type": "plain"},
     # v5.93.1: de beoordeelde kwartieren van vandaag over een herstart -
     # dag, tijd, stand, oorzaak en accuverschil; geen huisverbruik (v5.28).
     "planvolging_vandaag": {"type": "plain"},
     "handmatige_ingrepen": {"type": "plain"},
     "moduswissels": {"type": "plain"},
-    "bijkoop_history": {"type": "plain"},
     "netlading_vandaag_kwh": {"type": "plain"},
     "netlading_kosten_eur": {"type": "plain"},
     "netlading_history": {"type": "plain"},
-    "_eerder_rijpe_kandidaten": {"type": "plain"},
     "pv_band_history": {"type": "plain"},
     "pv_model_samples": {"type": "plain"},
     "energy_daily_history": {"type": "plain"},
@@ -7665,13 +7616,6 @@ NIET_ONTLADEN_MIN_METINGEN = 200
 # is, en weinig genoeg om het binnen een dag te merken.
 ZELFTOETS_MIN_REEKS = 20
 
-# Hoeveel dagen er gemeten moet zijn voordat de MPC-kandidaat iets zegt
-# (v3.68.0).
-#
-# Eén meting per dag, want beide plannen kijken over dezelfde 24 uur.
-# Veertien dagen dekt twee weekenden en een stuk weersverloop - minder
-# zegt vooral iets over het weer van die week.
-MPC_MIN_METINGEN = 14
 
 
 # Hoeveel er altijd in de accu blijft, ongeacht wat de voorspelling zegt

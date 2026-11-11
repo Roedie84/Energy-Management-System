@@ -577,6 +577,10 @@ VLUCHTIG_MET_REDEN = {
     # herstart komt meestal juist door een nieuwe versie.
     "tick_duration_history": "meet de huidige versie; begint opnieuw",
     "_tick_part_timings": "meet de huidige versie; begint opnieuw",
+    # v5.224.0: fasen, rondeteller en profiel horen bij deze sessie.
+    "_tick_fase_timings": "meet de huidige versie; begint opnieuw",
+    "_rondes_sinds_start": "telt de rondes sinds de start",
+    "rondeprofiel": "een ronde van deze sessie onder de profiler",
     # v2.2.3: wat het inlezen opleverde, blijkt bij elke start opnieuw.
     "energy_history_sources": "blijkt bij elke opstart opnieuw",
     # v3.4.0: versie en bestandsgegevens gelden voor DEZE draaironde.

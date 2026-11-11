@@ -61,13 +61,14 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
-from . import slimme_bronnen, vooruitplan, planvolging, dipplan
+from . import slimme_bronnen, planvolging, dipplan
 from . import thuiskomst as thuiskomst_mod
 from . import witgoedplanning
 from . import witgoedprofiel
 from . import waterkosten
 from . import kalibratie_plan as kalibratie_plan_mod
 from . import salderingspositie as salderingspositie_mod
+from . import rondeprofiel as rondeprofiel_mod
 from .tijdtekst import periode_met_dag, tijd_met_dag
 from .nilm_glue import NilmMixin
 from .const import WAARDEPLAN_VERKOOPVLOER_RESERVE  # v5.203.1
@@ -781,7 +782,6 @@ from .const import (
     SOLAR_CAPTURE_HYSTERESIS_W,
     SOLAR_DEFER_HYSTERESIS_FRACTIE,
     SOLAR_DEFER_SAFETY_FACTOR,
-    MPC_MIN_METINGEN,
     SOLAR_DEFER_TARGET_FULL_HOUR,
     PV_ORIENTATION_MISMATCH_DEGREES,
     PV_SHALLOW_TILT_DEGREES,
@@ -860,14 +860,9 @@ from .const import (
     ACCU_STAP_ZONDER_STROOM_FRACTIE,
     ACCU_STAP_ZONDER_STROOM_MAX_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
-    BIJKOOP_HISTORY_LENGTH,
-    BIJKOOP_KRAPPE_MARGE_PROCENT,
     NETLADING_HISTORY_LENGTH,
-    BIJKOOP_MIN_METINGEN,
     LANGE_RESERVE_HISTORY_LENGTH,
     LANGE_RESERVE_MIN_METINGEN,
-    LANGERE_HORIZON_HISTORY_LENGTH,
-    LANGERE_HORIZON_MIN_METINGEN,
     FEEDIN_PREMIUM_EUR_PER_KWH,
     MELDING_MIN_EPISODE_MINUTEN,
     MELDING_OVERLAPT_MET,
@@ -1301,8 +1296,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         self._fallback_soort: dict[str, str] = {}
         # v1.59.0: wat veroudering versnelt, per dag geteld.
         self.veroudering_history: list[dict] = []
-        # v2.6.0: metingen voor de kandidaat 'vasthouden voor morgen'.
-        self.langere_horizon_history: list[dict] = []
         # v3.10.0: reserve met korte tegenover lange horizon.
         self.lange_reserve_history: list[dict] = []
         # v3.60.0: wat het kost dat de accu bijspringt in een goedkoop
@@ -1310,15 +1303,11 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         self.niet_ontladen_history: list[dict] = []
         # v3.63.0: de uitkomst van de bestandscontrole bij het opstarten.
         self.bestandscontrole: dict = {}
-        # v3.11.0: was bijkopen bij een tekort goedkoper geweest?
-        self.bijkoop_history: list[dict] = []
         # v3.25.0: de WERKELIJKE netlading, per ronde gemeten.
         self.netlading_vandaag_kwh: float = 0.0
         self.netlading_kosten_eur: float = 0.0
         self.netlading_history: list[dict] = []
         self._netlading_laatste_meting: datetime | None = None
-        # v3.12.0: welke kandidaten al als rijp zijn gemeld.
-        self._eerder_rijpe_kandidaten: list[str] = []
         # v2.8.0: waar de werkelijke opwek in de Solcast-band viel.
         self.pv_band_history: list[dict] = []
         # v2.9.0: kenmerken per afgesloten uur, voor het regressiewoud.
@@ -1630,7 +1619,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.vooruitplan_history, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag, self.cyclus_klaar_sinds, self.netmeterdag, self.accu_tellerstanden, self.prijsgeschiedenis, self.prijsverwachting_archief, self.keuzeoordelen, self.repetitie_2027, self.prijsverwachting, self.dagarchief = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], [], {}, [], [], {}, {}, {}, {}, {}, [], [], {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur, self.laadplan_gewijzigd, self.planvolging_dagen, self._planvolging, self._planvolging_kwartieren, self.planvolging_vandaag, self.cyclus_klaar_sinds, self.netmeterdag, self.accu_tellerstanden, self.prijsgeschiedenis, self.prijsverwachting_archief, self.keuzeoordelen, self.repetitie_2027, self.prijsverwachting, self.dagarchief = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}, {}, [], {}, [], [], {}, {}, {}, {}, {}, [], [], {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -1924,6 +1913,11 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # v2.1.1: per onderdeel, om te zien waar de tijd heen gaat.
         # v2.1.1: per onderdeel, om te zien waar de tijd heen gaat.
         self._tick_part_timings: dict[str, list[float]] = {}
+        # v5.224.0: de fasen van de ronde (rekentijd op de lus) en het profiel.
+        self._tick_fase_timings: dict[str, list[float]] = {}
+        self._rondes_sinds_start = 0
+        self._profiel_gevraagd = False
+        self.rondeprofiel: dict = {}
         # v2.2.0: hoe vaak de watchdog een ronde heeft afgedwongen.
         self.watchdog_herstelpogingen: int = 0
         self._unsub_watchdog = None
@@ -12161,65 +12155,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         return uit
 
 
-    def _meet_langere_horizon(self, now: datetime) -> None:
-        """Meet wat een langere horizon zou hebben opgeleverd (v2.6.0).
-
-        Gevraagd: "Houdt de integratie ook rekening met bijvoorbeeld
-        minder PV energie morgen en daardoor meer te behouden in plaats
-        van terugleveren?"
-
-        Deels. De reserve kijkt tot het EERSTVOLGENDE goedkope blok.
-        Ligt dat morgenmiddag, dan telt de nacht en de ochtend mee - maar
-        de reserve redeneert dan: daar kan ik bijladen, dus de zon van
-        morgen hoeft niet vastgehouden.
-
-        De vraag erachter is een andere dan "haal ik de nacht": is deze
-        kWh MORGEN meer waard dan wat hij nu opbrengt? Dat is
-        teruglevering nu tegen vermeden inkoop later.
-
-        Deze kandidaat meet dat en stuurt niets - dezelfde route als de
-        slijtagekosten. Pas als de cijfers het rechtvaardigen mag het
-        meesturen.
-        """
-        prijs_nu = self.huidige_prijs_eur_per_kwh()
-        if prijs_nu is None or not self.is_battery_discharging():
-            return
-
-        # Wat levert een kWh nu op als hij het net op gaat?
-        opbrengst_nu = prijs_nu + FEEDIN_PREMIUM_EUR_PER_KWH
-
-        # En wat zou hij besparen als hij morgen wordt gebruikt in het
-        # duurste kwartier dat we kennen voorbij het goedkope blok?
-        entries = self._get_forecast_entries()
-        blok_einde = self.last_cheap_block_end
-        if not entries or blok_einde is None:
-            return
-        later = [
-            e[2] / PRICE_SCALE_FACTOR for e in entries if e[0] >= blok_einde
-        ]
-        if not later:
-            return
-        duurste_later = max(later)
-
-        # De kWh moet er nog doorheen: rendement en slijtage kosten.
-        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
-        slijtage = (
-            self.get_wear_cost_overview().get("slijtage_ct_per_kwh") or 0.0
-        ) / 100
-        besparing_later = duurste_later * rendement - slijtage
-
-        voordeel = besparing_later - opbrengst_nu
-        self.langere_horizon_history.append(
-            {
-                "moment": now.isoformat(),
-                "opbrengst_nu_eur": round(opbrengst_nu, 4),
-                "besparing_later_eur": round(besparing_later, 4),
-                "voordeel_eur_per_kwh": round(voordeel, 4),
-            }
-        )
-        self.langere_horizon_history = self.langere_horizon_history[
-            -LANGERE_HORIZON_HISTORY_LENGTH:
-        ]
 
     def bereken_bestandscontrole(self) -> dict:
         """Leest de bestanden en vergelijkt de hashes (v3.63.0).
@@ -13298,138 +13233,11 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         }
 
 
-    def _vooruitplan_invoer(self, now: datetime, na_saldering: bool) -> dict | None:
-        """De kwartieren van de planning, klaar voor `vooruitplan` (v5.90).
-
-        Dezelfde kwartieren, dezelfde startstand en dezelfde grenzen als het
-        plan. Per kwartier de nachtreserve van de beslissing: daaronder mag
-        het optimum niet verkopen. Na de saldering is teruglevering alleen
-        het kale tarief plus de premie waard, minus terugleverkosten.
-        """
-        plan = self.get_quarter_plan(now)
-        capaciteit = self._read_sensor_float(self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR))
-        beschikbaar = self.beschikbare_energie_kwh()
-        slijtage = self.get_wear_cost_overview()
-        if not plan or capaciteit is None or beschikbaar is None or not slijtage.get("beschikbaar"):
-            return None
-        bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
-        rendement = (self.learned_battery_efficiency_percent or float(self.instelling(
-            CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT
-        ))) / 100
-        aftrek = (self._gemeten_belastingdeel_eur_per_kwh() + float(self.instelling(
-            CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH) or 0.0)) if na_saldering else 0.0
-        try:
-            entries = self._get_forecast_entries()
-        except Exception:  # noqa: BLE001
-            entries = []
-        cache: dict = {}
-        kwartieren = []
-        for r in plan:
-            moment = dt_util.parse_datetime(r.get("start") or "")
-            prijs = r["prijs_ct"] / 100
-            kwartieren.append({
-                "verbruik_kwh": r["verbruik_kwh"],
-                "zon_kwh": r["zon_kwh"],
-                "import_eur": prijs,
-                "export_eur": prijs - aftrek + FEEDIN_PREMIUM_EUR_PER_KWH,
-                "reserve_kwh": self._planning_reserve_kwh(moment, cache, entries) if moment else 0.0,
-            })
-        slijtage_eur = slijtage["slijtage_ct_per_kwh"] / 100
-        return {
-            "kwartieren": kwartieren,
-            "start_kwh": min(beschikbaar, bruikbaar),
-            "plan_standen_kwh": [r["soc_kwh"] for r in plan],
-            "bruikbaar_kwh": bruikbaar,
-            "laad_kwh": abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)) / 4000,
-            "ontlaad_kwh": abs(self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)) / 4000,
-            "rendement": rendement,
-            "slijtage_eur": slijtage_eur,
-            # wat er aan het eind nog in zit, bespaart later een gewone kWh
-            "eindwaarde_eur": max(0.0, statistics.median(k["import_eur"] for k in kwartieren) - slijtage_eur),
-        }
-
-    def _meet_vooruitplan(self, now: datetime) -> None:
-        """Een keer per dag: het optimum tegen het plan (v5.90).
-
-        Twee keer dezelfde rekensom - met de huidige waardering en met die
-        van na de saldering. De eerste is wat vooruitplannen MET de
-        nachtreserve oplevert; de tweede wat meebewegen met de nieuwe regels
-        waard is. De geschiedenis zelf zegt of vandaag al gemeten is, zodat
-        een herstart geen tweede meting oplevert (zie v3.72.0).
-        """
-        vandaag = now.date().isoformat()
-        if any(r.get("dag") == vandaag for r in self.vooruitplan_history):
-            return
-        meting = {"dag": vandaag}
-        for sleutel, na in (("nu", False), ("na_saldering", True)):
-            invoer = self._vooruitplan_invoer(now, na)
-            uitkomst = vooruitplan.vergelijk(**invoer) if invoer else {}
-            if not uitkomst.get("beschikbaar"):
-                return
-            meting[sleutel] = uitkomst
-        # v5.122.0 (punt 2): het plan gewogen over drie scenario's, alleen gemeten
-        try:
-            scenario = self._meet_scenarioplan(now)
-        except Exception as fout:  # noqa: BLE001 - meten mag de sturing nooit raken
-            scenario = {"beschikbaar": False, "reden": f"{type(fout).__name__}: {fout}"}
-        if scenario.get("beschikbaar"):
-            meting["scenario"] = scenario
-        self.vooruitplan_history = (self.vooruitplan_history + [meting])[-PROEFSTAND_LEDGER_DAYS:]
-
-    def _zon_band_factoren(self) -> list:
-        """Per interval van de zonvoorspelling (start, eind, p10/mediaan, p90/mediaan)."""
-        band = self._pv_band_per_interval()
-        uit = []
-        for start, eind, kwh in self._get_pv_forecast_entries() or []:
-            if start in band and kwh > 0.01:
-                lo, hi = band[start]
-                uit.append((start, eind, max(0.0, lo / kwh), max(0.0, hi / kwh)))
-        return uit
-
-    def _meet_scenarioplan(self, now: datetime) -> dict:
-        """Het scenarioplan tegen de modi van het kwartierplan (v5.122.0).
-
-        Zelfde kwartieren, startstand, grenzen, nachtreserve en waardering als
-        `_vooruitplan_invoer` (huidige regels). Per kwartier de zon in p10,
-        mediaan en p90 uit de Solcast-band (naar rato van de mediaan van dat
-        interval), anders de terugvalfactoren. Stuurt niets.
-        """
-        invoer = self._vooruitplan_invoer(now, False)
-        plan = self.get_quarter_plan(now) or []
-        if not invoer or len(plan) != len(invoer["kwartieren"]):
-            return {"beschikbaar": False, "reden": "geen plan"}
-        factoren = self._zon_band_factoren()
-        kwartieren = []
-        for kw, r in zip(invoer["kwartieren"], plan):
-            moment = dt_util.parse_datetime(r.get("start") or "")
-            f = next((x for x in factoren if moment is not None and x[0] <= moment < x[1]), None)
-            extra = {"zon_p10_kwh": kw["zon_kwh"] * f[2], "zon_p90_kwh": kw["zon_kwh"] * f[3]} if f else {}
-            kwartieren.append({**kw, **extra})
-        uit = vooruitplan.vergelijk_scenarios(
-            kwartieren, invoer["start_kwh"], [r.get("modus") for r in plan], invoer["bruikbaar_kwh"],
-            laad_kwh=invoer["laad_kwh"], ontlaad_kwh=invoer["ontlaad_kwh"],
-            rendement=invoer["rendement"], slijtage_eur=invoer["slijtage_eur"],
-        )
-        uit["met_band_kwartieren"] = sum(1 for k in kwartieren if "zon_p10_kwh" in k)
-        return uit
 
 
-    @staticmethod
-    def _vooruitplan_opbrengst(reeks: list[dict], sleutel: str) -> dict:
-        """De dagmetingen van `_meet_vooruitplan` als proefstandcijfers."""
-        rijen = [r[sleutel] for r in reeks if sleutel in r]
-        winsten = [r["verschil_eur"] for r in rijen]
-        verschoven = sum(r["verschoven_kwh"] for r in rijen)
-        mediaan = statistics.median(winsten) if winsten else 0.0
-        return {
-            "te_becijferen": True,
-            "bedrag_per_dag_eur": round(mediaan, 3),
-            "bedrag_per_jaar_eur": round(mediaan * 365, 2),
-            "dagen": len(rijen),
-            "aandeel_gunstig_procent": round(100 * sum(1 for w in winsten if w > 0.01) / len(winsten), 1) if winsten else None,
-            "metingen": sum(r["kwartieren_anders"] for r in rijen),
-            "mediaan_voordeel_ct_per_kwh": round(100 * sum(winsten) / verschoven, 1) if verschoven > 0.05 else None,
-        }
+
+
+
 
 
     def _meet_niet_ontladen_bij_lage_prijs(self, now: datetime, entries) -> None:
@@ -13636,126 +13444,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             -LANGE_RESERVE_HISTORY_LENGTH:
         ]
 
-    def _meet_bijkopen_bij_tekort(self, now: datetime, entries) -> None:
-        """Was bijkopen goedkoper dan het tekort laten ontstaan?
-        (v3.11.0)
-
-        Gevraagd: "Maar wat als het rendabel is om bij te kopen wanneer
-        er niet genoeg PV energie is?"
-
-        Een andere vraag dan arbitrage. Je koopt niet om te verkopen, je
-        koopt om niet LATER duurder te moeten kopen. Bij een verwacht
-        tekort trekt de woning straks van het net; de vraag is of dat
-        goedkoper is dan nu bijladen.
-
-        De rekensom:
-
-            nu laden = prijs_nu / rendement + slijtage
-            straks   = prijs op het moment van het tekort
-
-        Loopt de PV-opbrengst achter, dan groeit het tekort en verschuift
-        het naar duurdere uren - precies waar deze meting op let.
-
-        ZOU STUREN via `manual` met een POSITIEF vermogen, net zoals het
-        ontladen in dure kwartieren met een negatief vermogen gaat. Maar
-        hij stuurt niets: eerst zien of het loont.
-        """
-        samenvatting = self.get_quarter_plan_summary() or {}
-        # v3.24.0: ook meten bij een DREIGEND tekort.
-        #
-        # Gevraagd na een dag met 42,9% minder zon dan voorspeld: die
-        # kandidaat stond op nul metingen, terwijl het precies zo'n dag
-        # was waarop bijkopen relevant kon zijn.
-        #
-        # De reden: hij mat alleen bij een BECIJFERD tekort in de
-        # planning, en dat was er niet - de reserve had het opgevangen.
-        # Dat is geen fout, maar het betekent wel dat de kandidaat
-        # maandenlang op nul blijft staan tot de reserve een keer
-        # tekortschiet. En dan is er nog niets geleerd.
-        #
-        # Een dreigend tekort telt nu ook: zakt de planning tot dicht bij
-        # de ondergrens, dan had een kWh erbij verschil gemaakt. Dat
-        # wordt apart vastgelegd, zodat later te zien is welke metingen
-        # uit een echt tekort komen en welke uit een krappe marge.
-        if not entries:
-            return
-
-        tekorten = samenvatting.get("tekort_kwartieren") or 0
-        laagste = samenvatting.get("laagste_soc_procent")
-        min_soc = self.effective_min_soc_percent()
-        krap = (
-            laagste is not None
-            and laagste <= min_soc + BIJKOOP_KRAPPE_MARGE_PROCENT
-        )
-        if tekorten <= 0 and not krap:
-            return
-
-        plan = self.get_quarter_plan() or []
-        tekort_regels = [r for r in plan if r.get("tekort")]
-        if not tekort_regels:
-            # Geen becijferd tekort, maar wel een krappe marge: dan
-            # rekenen we met de kwartieren rond het diepste punt. Daar
-            # zou een kWh erbij het verschil hebben gemaakt.
-            if not krap:
-                return
-            met_soc = [
-                r for r in plan if r.get("soc_procent") is not None
-            ]
-            if not met_soc:
-                return
-            diepste = min(met_soc, key=lambda r: r["soc_procent"])
-            tekort_regels = [
-                r
-                for r in met_soc
-                if r["soc_procent"]
-                <= diepste["soc_procent"] + BIJKOOP_KRAPPE_MARGE_PROCENT
-            ]
-            if not tekort_regels:
-                return
-
-        # Wat kost de energie op het moment van het tekort?
-        prijzen_tekort = [
-            r.get("prijs_ct") for r in tekort_regels if r.get("prijs_ct")
-        ]
-        if not prijzen_tekort:
-            return
-        tekortprijs = statistics.median(prijzen_tekort) / 100
-
-        # En wat kost het om die kWh nu in de accu te zetten?
-        prijs_nu = self.huidige_prijs_eur_per_kwh()
-        if prijs_nu is None:
-            return
-        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
-        slijtage = (
-            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
-            or 0.0
-        ) / 100
-        laadprijs = prijs_nu / rendement + slijtage
-
-        # Hoeveel zou er bijgeladen moeten worden? Het tekort in
-        # kwartieren maal het verwachte verbruik per kwartier.
-        tekort_kwh = sum(
-            (r.get("verbruik_kwh") or 0.0) for r in tekort_regels
-        )
-
-        self.bijkoop_history.append(
-            {
-                "moment": now.isoformat(),
-                # v3.24.0: onderscheid tussen een echt en een dreigend
-                # tekort - anders zijn de cijfers later niet te duiden.
-                "soort": "tekort" if tekorten > 0 else "krappe marge",
-                "laagste_soc_procent": laagste,
-                "tekort_kwartieren": tekorten,
-                "tekort_kwh": round(tekort_kwh, 3),
-                "laadprijs_nu_eur": round(laadprijs, 4),
-                "tekortprijs_eur": round(tekortprijs, 4),
-                "voordeel_eur_per_kwh": round(tekortprijs - laadprijs, 4),
-                "voordeel_totaal_eur": round(
-                    (tekortprijs - laadprijs) * tekort_kwh, 3
-                ),
-            }
-        )
-        self.bijkoop_history = self.bijkoop_history[-BIJKOOP_HISTORY_LENGTH:]
 
     def _meet_werkelijke_netlading(self, now: datetime) -> None:
         """Rekent per ronde af wat er van het net de accu in ging
@@ -13896,37 +13584,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         }
 
 
-    def _saldering_opbrengst(self, kosten_vandaag: float) -> dict:
-        """Wat meebewegen met de nieuwe regels oplevert (v5.90).
-
-        Gevraagd: "Opbrengst na de saldering als eerste klaarmaken, want die
-        wordt per 1 januari echt belangrijk."
-
-        Elke dag rekent `_meet_vooruitplan` het plan door onder de waardering
-        van na de saldering, en zoekt met dezelfde nachtreserve het beste
-        laadverloop onder die waardering. Het verschil is wat de sturing
-        oplevert als ze meebeweegt: minder verkopen tegen het kale tarief,
-        meer bewaren voor eigen gebruik in dure kwartieren.
-        """
-        reeks = [r for r in self.vooruitplan_history if "na_saldering" in r]
-        if len(reeks) < MPC_MIN_METINGEN:
-            return {
-                "te_becijferen": False,
-                "reden": (
-                    f"De nieuwe regels kosten vandaag € {kosten_vandaag:.2f} als de "
-                    f"sturing niet meebeweegt. Wat meebewegen oplevert: "
-                    f"{len(reeks)} van {MPC_MIN_METINGEN} dagen doorgerekend."
-                ),
-            }
-        opbrengst = self._vooruitplan_opbrengst(reeks, "na_saldering")
-        opbrengst["reden"] = (
-            "Het beste laadverloop onder de waardering van na de saldering, "
-            "met dezelfde nachtreserve, tegen het plan van vandaag onder "
-            "diezelfde waardering. De regels voor na de saldering staan al "
-            "klaar en gaan op 1 januari vanzelf aan; dit getal zegt hoeveel "
-            "er met meebewegen te halen is."
-        )
-        return opbrengst
     def _gemeten_belastingdeel_eur_per_kwh(self) -> float:
         """Energiebelasting plus BTW per kWh, gemeten (v1.75.0).
 
@@ -15416,6 +15073,25 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         except Exception:  # noqa: BLE001 - meten mag de ronde nooit breken
             pass
 
+    def _noteer_fase(self, naam: str, begonnen: float) -> float:
+        """Rekentijd van een fase van de ronde op de lus (v5.224.0).
+
+        Geeft het nieuwe beginpunt terug. De fasen omvatten de stappen van
+        `onderdelen_ms`; ze staan daarom apart en tellen daar niet bij op.
+        """
+        nu = time.thread_time()
+        try:
+            reeks = self._tick_fase_timings.setdefault(naam, [])
+            reeks.append((nu - begonnen) * 1000)
+            self._tick_fase_timings[naam] = reeks[-TICK_PART_HISTORY_LENGTH:]
+        except Exception:  # noqa: BLE001 - meten mag de ronde nooit breken
+            pass
+        return nu
+
+    def vraag_rondeprofiel(self) -> None:
+        """De eerstvolgende ronde draait onder de profiler (v5.224.0)."""
+        self._profiel_gevraagd = True
+
     def _klok(self, naam: str, functie):
         """Voert `functie` uit en onthoudt hoe lang dat duurde (v2.1.1).
 
@@ -15507,6 +15183,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         wandklok = sorted(r["wandklok_ms"] for r in reeks)
         rekentijd = sorted(r["rekentijd_ms"] for r in reeks)
         mediaan = statistics.median(rekentijd)
+        lus = [r["lus_ms"] for r in reeks if r.get("lus_ms") is not None]
         langzaamste = rekentijd[-1]
         # Bij welke frequentie zou de integratie de helft van de tijd
         # bezig zijn? Dat is de grens waarboven het onverstandig wordt.
@@ -15516,6 +15193,17 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "metingen": len(reeks),
             "mediaan_ms": round(mediaan, 1),
             "langzaamste_ms": round(langzaamste, 1),
+            # v5.224.0: de rekentijd op de lus zelf - dit is wat Home
+            # Assistant ophoudt. `mediaan_ms` telt ook de werkdraden mee.
+            "lus_mediaan_ms": (
+                round(statistics.median(lus), 1) if lus else None
+            ),
+            "lus_langzaamste_ms": round(max(lus), 1) if lus else None,
+            "fasen_ms": {
+                naam: round(statistics.median(waarden), 1)
+                for naam, waarden in self._tick_fase_timings.items() if waarden
+            },
+            "profiel": self.rondeprofiel or {"beschikbaar": False, "reden": "nog geen ronde gemeten"},
             "wandklok_mediaan_ms": round(statistics.median(wandklok), 1),
             "wandklok_langzaamste_ms": round(wandklok[-1], 1),
             # v2.2.0: op het WERKELIJK ingestelde interval, niet op de
@@ -24859,11 +24547,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                     "extra_kwh": r.get("extra_kwh"),
                 }
         return [per_uur[k] for k in sorted(per_uur)]
-
-    # --- Wat meet en niet stuurt (v4.1) --------------------------------
-
-    _laatste_meetherinnering: date | None = None
-
 
     def get_quarter_plan_summary(
         self, now: datetime | None = None, tot: datetime | None = None
@@ -37978,14 +37661,24 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # echte cijfers te beantwoorden.
         begonnen = time.perf_counter()
         rekentijd_begin = time.process_time()
+        lus_begin = time.thread_time()
+        # v5.224.0: eens na de start, en op verzoek, een ronde onder de profiler.
+        self._rondes_sinds_start += 1
+        profiel = None
+        if self._profiel_gevraagd or self._rondes_sinds_start == rondeprofiel_mod.RONDE_NA_START:
+            self._profiel_gevraagd = False
+            profiel = rondeprofiel_mod.start()
         try:
             async with self._lock:
                 self._begin_ronde_cache(dt_util.now())
                 # v5.186.0: met wat ervoor en erna hoort (B16/B18/B21/B27/B29).
+                fase = time.thread_time()
                 await self._async_ronde()
+                fase = self._noteer_fase("besluit en sturen", fase)
                 # v5.28: de meetlaag, NA het besluit en het sturen van de
                 # Zendure. Leest alleen; een fout blijft daarbinnen.
                 self._meetlaag_na_besluit()
+                fase = self._noteer_fase("meetlaag", fase)
                 # v3.99.20: het PV-model in de achtergrond, hooguit eens
                 # per uur. Nooit meer inline.
                 await self.async_ververs_pv_model(dt_util.now())
@@ -37999,6 +37692,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                     self._plan_dagarchief(dt_util.now())
                 except Exception:  # noqa: BLE001
                     _LOGGER.debug("Zelfanalyse of prijsverwachting niet gepland", exc_info=True)
+                self._noteer_fase("achtergrondwerk plannen", fase)
         except Exception as err:  # noqa: BLE001 - must never crash silently
             self.last_error = str(err)
             self.last_error_time = dt_util.now()
@@ -38018,7 +37712,9 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             # `finally` specifically because _async_update_locked has
             # many early `return` points for different decision
             # branches, not one single exit.
+            fase = time.thread_time()
             self._notify_listeners()
+            fase = self._noteer_fase("sensoren bijwerken", fase)
             # v5.48: elke ronde een vertraagde opslag plannen. De tellers
             # van de ronde (kosten, doorzet, opwek, netimport, besparing)
             # planden er zelf geen; Home Assistant bundelt de schrijfacties
@@ -38044,14 +37740,22 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             # 2. Het was de EERSTE ronde na een herstart, met het
             #    inlezen van de geschiedenis erin. Dat is de zwaarste
             #    die er is en niet representatief.
-            self.tick_duration_history.append(
-                {
-                    "wandklok_ms": (time.perf_counter() - begonnen) * 1000,
-                    "rekentijd_ms": (time.process_time() - rekentijd_begin)
-                    * 1000,
-                    "eerste": len(self.tick_duration_history) == 0,
-                }
-            )
+            self._noteer_fase("opslag plannen", fase)
+            if profiel is not None:
+                # Een ronde onder de profiler telt niet mee in de rondeduur.
+                self.rondeprofiel = rondeprofiel_mod.samenvatting(profiel, dt_util.now().isoformat())
+            else:
+                self.tick_duration_history.append(
+                    {
+                        "wandklok_ms": (time.perf_counter() - begonnen) * 1000,
+                        "rekentijd_ms": (time.process_time() - rekentijd_begin)
+                        * 1000,
+                        # v5.224.0: alleen de lus zelf. `rekentijd_ms` telt ook
+                        # de werkdraden mee (het waardeplan rekent daar).
+                        "lus_ms": (time.thread_time() - lus_begin) * 1000,
+                        "eerste": len(self.tick_duration_history) == 0,
+                    }
+                )
             self.tick_duration_history = self.tick_duration_history[
                 -TICK_DURATION_HISTORY_LENGTH:
             ]
@@ -39041,16 +38745,12 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         try:
             # v5.223.0: de capaciteitstrend, die de proefstand bijhield.
             self._klok("capaciteitstrend", lambda: self._update_capaciteitstrend(now))
-            # v2.6.0: en de meting voor "vasthouden voor morgen".
-            self._klok(
-                "langere_horizon", lambda: self._meet_langere_horizon(now)
-            )
 
         except Exception as fout:  # noqa: BLE001
-            _LOGGER.exception("Kon de langere horizon niet meten")
-            self.internal_failures["langere_horizon"] = f"{type(fout).__name__}: {fout}"
+            _LOGGER.exception("Kon de capaciteitstrend niet bijwerken")
+            self.internal_failures["capaciteitstrend"] = f"{type(fout).__name__}: {fout}"
         else:
-            self.internal_failures.pop("langere_horizon", None)
+            self.internal_failures.pop("capaciteitstrend", None)
 
         try:
             self._klok("plantoetsing", lambda: self._update_plan_review(now))
@@ -39489,8 +39189,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             # v5.28: alleen de invoer van deze ronde klaarleggen voor de
             # meetlaag; die draait pas NA het besluit (zie _async_update_data).
             ("meetlaag-invoer", lambda: self._meetlaag_onthoud(now, entries)),
-            # v5.90: optimum MET nachtreserve tegen het plan, nu en na de saldering.
-            ("vooruitplan", lambda: self._meet_vooruitplan(now)),
             # v5.91: het accuvermogen naast het plan van dit kwartier.
             ("planvolging", lambda: self._volg_plan(now)),
             # v3.60.0: wat het kost dat de accu bijspringt in een
@@ -39499,7 +39197,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 "niet ontladen bij lage prijs",
                 lambda: self._meet_niet_ontladen_bij_lage_prijs(now, entries),
             ),
-            ("bijkopen", lambda: self._meet_bijkopen_bij_tekort(now, entries)),
             ("netlading", lambda: self._meet_werkelijke_netlading(now)),
             # v3.45.0: de bewolking doorschuiven naar de zonvoorspelling.
             # Hier in de rondelijst, want de twee functies waar het
@@ -39710,6 +39407,16 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             # elke terugkeer. Hier stond hij dubbel, en twee plekken die
             # hetzelfde veld herstellen is precies de vorm van
             # structuurscan 11.
+            #
+            # v5.224.0: het kostprijsmodel boekt wel door. Sinds v5.194.0
+            # laadt het EMS zelf; de lading van 08-11 stond in het hoofdgetal
+            # (EUR -2,56 die dag) en niet in het kostprijsmodel (EUR 0,00),
+            # dat de hele lading daarna in een keer zag, tegen de prijs van
+            # dat ene moment. Over zeven dagen: EUR 2,39 naast EUR 4,26.
+            try:
+                self._update_battery_cost_basis_and_savings(now, entries)
+            except Exception:  # noqa: BLE001 - boekhouding mag de kalibratie niet breken
+                _LOGGER.debug("Kostprijs tijdens de kalibratie niet bij te werken", exc_info=True)
             self.last_explanation = self._build_explanation()
             return
 
