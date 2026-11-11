@@ -1,3 +1,10 @@
+EMS v5.218.0 - de detailpagina's zijn nu echt bereikbaar
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De knoppen onderaan de cockpit (Planning, Accu, Kosten, ...) openden een dashboard dat niet bestond. Het EMS meldt dat dashboard nu zelf aan bij de start; je hoeft niets in configuration.yaml te zetten.
+- Het dashboard staat niet in de zijbalk en volgt elke release vanzelf.
+
 EMS v5.217.0 - de detailpagina's in gewone Nederlandse opmaak
 
 Installeren: via de Marketplace bijwerken en herstarten.

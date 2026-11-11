@@ -271,6 +271,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as err:  # noqa: BLE001
         _LOGGER.warning("Luchtreiniger-meelezen niet gestart: %s", err)
     await hass.async_add_executor_job(_copy_dashboard_template, hass)
+    # v5.218.0: het detaildashboard zelf aanmelden; de cockpitlinks wijzen
+    # ernaar en zonder aanmelding bestond het niet.
+    try:
+        from .detail_dashboard import registreer_detaildashboard
+
+        uitkomst = registreer_detaildashboard(hass, DASHBOARD_FILENAME)
+        if uitkomst.startswith("niet mogelijk"):
+            _LOGGER.warning("Detaildashboard %s", uitkomst)
+        else:
+            _LOGGER.info("Detaildashboard %s", uitkomst)
+    except Exception as err:  # noqa: BLE001 - het dashboard mag het EMS nooit tegenhouden
+        _LOGGER.warning("Detaildashboard niet aangemeld: %s", err)
     await hass.async_add_executor_job(_copy_overview_background, hass)
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))

@@ -35534,3 +35534,12 @@ Ruud 11-11 13:36 ("Ja graag doen"), vervolg op de audit van de weergave. De 31 d
 - `dashboards/energy_management_system_dashboard.yaml` is gelijk gehouden.
 
 Tests: `test_v5217_dashboard_opmaak.py` (27): elk tekstsjabloon moet gewikkeld zijn, de kopie moet gelijk zijn, en wat de patronen wel en niet raken. `tests/conftest.py` geeft kale jinja-omgevingen het HA-filter `regex_replace`. Vijf bestaande tests bijgewerkt op de nieuwe opmaak; `test_live_narrative_sensor` leunde op de echte datum (binnen 60 dagen voor het einde van de saldering komt er een mededeling achter het verhaal) en is robuust gemaakt.
+
+## v5.218.0 — het detaildashboard meldt zichzelf aan
+
+Ruud 11-11 14:33 ("1 Akkoord"). Gevonden bij het uitrollen van v5.217.0: de cockpit linkt naar `/energy-management-system/<pagina>`, maar dat dashboard bestond niet in Home Assistant. Het bestand werd wel bij elke start naar de configuratiemap gekopieerd; zonder eigen regel in `configuration.yaml` toonde niets het.
+
+- **Nieuw `detail_dashboard.py`**: meldt het gekopieerde bestand aan als YAML-dashboard op `energy-management-system`, op dezelfde manier als Home Assistant dat doet voor `lovelace: dashboards:`. Niet in de zijbalk; de cockpit is de ingang. Staat er al een dashboard op dat pad, dan blijft dat staan.
+- De aanmelding gebeurt direct na het kopieren van het sjabloon en kan de opstart niet tegenhouden; de uitkomst staat in het logboek.
+
+Tests: `test_v5218_detaildashboard.py` (10).
