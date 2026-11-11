@@ -1148,3 +1148,17 @@ laatste ronde: 08-11 09:15 (herleid 09:25), gemeten t/m 08-11 09:00
 - Niet gemeten: kwartierfout 0-1 u (v5.196/197; geen bewaarde kwartiervoorspellingen in de recorder), SoC-voorspelling, NILM, nacht 22-09 compleet (loopt tot 09:00).
 
 laatste ronde: 10-11 06:45, gemeten t/m 10-11 06:45
+
+## 11-11 06:45 · dagcontrole (10-11 06:45 t/m 11-11 06:45; geïnstalleerd v5.209.0 sinds 10-11 16:53)
+- Achteraf (LP, 96 kw, marginaal −11,08 ct, rendement 84,1/100, slijtage 4,22 ct, eind-SoC = werkelijk 100 %): werkelijk € 4,41, optimum € 4,30 → **gemist € 0,11**; zonder accu € 6,09. **0 FOUT.** € 0,06 = knop 'Verkopen uit (vandaag)' 15:36 (Ruud): middagladen 1,06 kWh tegen 55,2 ct (12:30-13:45, gepland voor verkoop op de piek 71-74 ct) werd verliesgevend; € 0,05 PECH: ontladen verspreid over het huis (15:30-19:15) i.p.v. geconcentreerd op 16:30-17:45 (huisverbruik niet te voorspellen).
+- Regels c: geen verliesgevende verkoop (ochtend 3,88 kWh tegen 69,2 ct, terug tegen 37-55 ct); 18:30-18:45 import 0,49 kWh tegen 61,8/61,4 ct terwijl de accu 19:15 nog 0,12 kWh tegen 59,3 ct gaf: < € 0,01; geen vastgehouden lading (leeg 19:15).
+- Loslaten woning-eerst 10-11: ≈ **+€ 0,76** (3,88 kWh verkocht 69,2 ct; avond na leeg 3,19 kWh tegen 51,1 ct).
+- Nachtladen 11-11 9,05 kWh tegen 37,3 ct, zelfde blok als het optimum. Nacht 22-06:45 huis 1,58 kWh (voorlopig); telt als tekortnacht (0,73 kWh), indeling om 09:00.
+- Regeloverschot in 'huis' 15:30-16:45 0,045 kWh/kw (2 lekkwartieren, vlag huis_gaat_voor rood; regel is sinds v5.198 uit); na v5.209.0 0,012/kw. Eén middag, effect v5.209 nog niet vast te stellen.
+- Storingen: Zendure 1× offline 19:45 (accu leeg, geen gevolg); MariaDB 20:06 2× niet bereikbaar (recorder); Zonneplan-kostensensoren 00:03 onbeschikbaar (cache). Push leerlog: 403, 4e dag.
+- PV 10-11 1,79 kWh. Plan-bias 10 d **−7,1 %** (30 d −14,4 %, bron 40 d −15,5 %): buiten ±5 % maar verbetert; 7-dagenwaarde niet beschikbaar in de diagnostics → H-EMS-22 (meten of het plan in 7 d < ±5 % komt).
+- Module 1: 100 % 0,08 V (was 0,09), 0 % 0,04 V, laagste cel 3,06 (anderen 3,07/3,08), SoC laag ≥ −1 %. Geen drempel. Nieuw: bucket 90 % mediaan 0,03 V (anderen 0,01; nulmeting 0,01), piek einde laden 0,17 V → volgen.
+- Schaduw: 1 volle dag van 14 (C2 −0,25 €). Stilstand: 8 wachten, 0 doen. Suite main 7600 groen.
+- Niet gemeten: kwartierfout 0-1 u, SoC-voorspelling, NILM, MC-Brier (nacht loopt tot 09:00), dagmaximum celverschil volledig (history afgekapt op 1000 regels).
+
+laatste ronde: 11-11 06:45, gemeten t/m 11-11 06:45
