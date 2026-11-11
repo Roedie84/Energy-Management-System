@@ -26574,18 +26574,35 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # marge als een eindstand erop. Uit de export van 2 september:
         # laagste 10, eind 51, "Ja" - terwijl het huis tot het bijladen
         # op het laatste kwartier net toe kon.
-        if bodem is not None and laagste is not None and laagste <= bodem:
+        laagste_op_bodem = bodem is not None and laagste is not None and laagste <= bodem
+        eind_op_bodem = bodem is not None and eind is not None and eind <= bodem
+        # v5.215.0: staan beide op de ondergrens, dan één keer zeggen (was
+        # twee keer dezelfde bijzin achter elkaar).
+        if laagste_op_bodem and not eind_op_bodem:
             staart += " - dat is de ondergrens zelf, dus zonder marge"
         if eind is not None:
             staart += f", {eind}% na {uren} uur"
             # v3.95.2: eindigen OP de ondergrens is een ander antwoord
             # dan eindigen met ruimte over.
-            if bodem is not None and eind <= bodem:
-                staart += " - dat is de ondergrens zelf, dus zonder marge"
+            if eind_op_bodem:
+                staart += (
+                    " - allebei de ondergrens zelf, dus zonder marge" if laagste_op_bodem
+                    else " - dat is de ondergrens zelf, dus zonder marge"
+                )
         staart += "."
         if opbrengst is not None:
-            staart += f" EUR {opbrengst} over {uren} uur."
+            # v5.215.0: in euro's met een komma (was "EUR -1.03").
+            bedrag = f"{abs(float(opbrengst)):.2f}".replace(".", ",")
+            staart += f" {'-' if float(opbrengst) < 0 else ''}€ {bedrag} over {uren} uur."
         return f"{kop} {staart}"
+
+    #: v5.215.0: de velden van de moduledrift in gewone woorden.
+    MODULE_DRIFT_NAMEN = {
+        "cel_delta_afwijking_v": "celverschil",
+        "temperatuur_afwijking_c": "temperatuur",
+        "soc_afwijking_percent": "laadstand",
+        "vermogen_afwijking_w": "vermogen",
+    }
 
     def statuskop_zin(self) -> str:
         """De onderregel van de statuskaart (v3.95.3).
@@ -40599,7 +40616,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             for waarschuwing in module.get("waarschuwingen", []):
                 aandachtspunten.append(f"Accumodule {nummer}: {waarschuwing}.")
             if module.get("drift_op"):
-                velden = ", ".join(module["drift_op"])
+                # v5.215.0: leesbare namen (was: "temperatuur_afwijking_c").
+                velden = ", ".join(self.MODULE_DRIFT_NAMEN.get(v, v) for v in module["drift_op"])
                 # v5.175.2: melding uitgezet (dienst `accumodule_melding`) =
                 # bewust geaccepteerd, dus informatief; anders blijft de status
                 # op "Aandacht gewenst" en valt elk nieuw signaal weg.

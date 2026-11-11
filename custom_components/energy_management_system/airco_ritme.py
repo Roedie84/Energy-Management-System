@@ -813,7 +813,7 @@ def verwachting_basis(ritme: dict, van: datetime, tot: datetime) -> dict:
     elif meeste_aan == 0:
         tekst = f"{dagen} dagen gemeten, in deze uren nooit aan"
     else:
-        tekst = f"{dagen} dagen gemeten, hooguit {meeste_aan}x aan in hetzelfde uur"
+        tekst = f"{dagen} dagen gemeten, hooguit {meeste_aan}× aan in hetzelfde uur"
     if met_data and met_data < uren:
         tekst += f"; {uren - met_data} van {uren} uur nog te weinig gemeten"
     return {"dagen": dagen, "uren": uren, "uren_met_data": met_data,

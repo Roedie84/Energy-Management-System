@@ -35486,3 +35486,27 @@ Tests: `test_v5214_verbruiksmeetlat.py` (8).
 Gemeld 11-11 12:57 (Ruud, schermafdruk "Foutje in de weergave?"): in "Prijs en lading" stond de eerste staaf (12:45) op "rust" terwijl de Vooruitblik eronder "12:45-20:45 Huis voeden · nu" toonde. De Vooruitblik en de tegel nemen voor het lopende kwartier het gemeten accuvermogen (0,5 kW ontladen); de staaf en de tijdlijn "Plan vandaag" namen het geplande vermogen (2 W, onder de grens van 50 W = rust). Nu alle vier het gemeten vermogen (`_rijNu`). Alleen weergave.
 
 Tests: `test_v52141_cockpit_lopend_kwartier.py` (3).
+
+## v5.215.0 — audit van de energiecockpit: schoonheidsfouten hersteld
+
+Ruud 11-11 13:05: "Nog meer van dit soort schoonheidsfoutjes? Graag volledige audit." De cockpit is met de live gegevens van 13:06 in een headless browser gerenderd (1400, 900 en 420 px breed, ook met alle uitklappers open) en nagelopen. Alleen weergave en tekst; de sturing is ongewijzigd.
+
+Hersteld in de kaart (`www/ems-cockpit.js`):
+- **Geld**: bij 1260-1700 px kaartbreedte stonden er twee kolommen in een tegel van een derde breed en vielen bedragen en labels over elkaar. Twee kolommen nu alleen als de tegel zelf breed genoeg is (`auto-fit`, 300 px).
+- **Paneelkop**: chips werden afgekapt ("geen verkoop", "318 W :"); ze lopen nu door naar een tweede regel.
+- **Prijs en lading**: het zonvlak dook bij "nu" naar nul (zon_kwh van het lopende kwartier is alleen het restant) en begon schuin vanuit de hoek; nu het vermogen (zon_w) vanaf het eerste kwartier. De prijsas toont ronde getallen (0/20/40/60/80 in plaats van 0/18/35/53/70).
+- **Plan vandaag**: "30 W geen" heet "vrijwel gelijk".
+- "Verwacht in 2027: € 0,34 per dag in 2027" → label "Na de saldering". "net +6,88 €" → "+€ 6,88". "Cockpit vonbekend" → "Cockpit: versie onbekend". Knop "Vakantiestand" brak af midden in het woord → "Vakantie". Laatste douche met de dag erbij als het niet vandaag was.
+- **Huis en apparaten**: alle rijen kregen de hoogte van de hoogste tegel (Airco); rijen nu op eigen hoogte.
+- **Vooruitblik op de telefoon**: Vermogen en Prijs vielen buiten beeld; de tabel schuift nu.
+- **Toelichting zelfanalyse**: "Zelfanalyse: Zelfanalyse · ..." zonder de dubbele naam; datum als 10-11; oorzaak als "door de regel".
+
+Hersteld in de teksten (Python):
+- Aandachtspunt moduledrift: "(temperatuur_afwijking_c)" → "(temperatuur)" (`MODULE_DRIFT_NAMEN`).
+- Waarom-regel: "60.5 ct" → "60,5 ct".
+- Planzin: de bijzin "dat is de ondergrens zelf, dus zonder marge" stond twee keer achter elkaar → één keer ("allebei ..."); "EUR -1.03" → "-€ 1,03".
+- "hooguit 6x aan" → "6×"; "gisteren gemist € -1,50" → "-€ 1,50".
+
+Niet gewijzigd, voorgelegd: zie het rapport in de chat (accu scheelt vandaag, reservetegels, koelingstemperatuur, euro tegen cent in de Vooruitblik, voetregel).
+
+Tests: `test_v5215_cockpit_audit.py` (9); drie bestaande tests bijgewerkt op de nieuwe tekst.

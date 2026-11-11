@@ -432,7 +432,10 @@ def kaart(gisteren: dict | None, dertig: dict) -> dict:
     primair = f"€ {_eu(dertig.get('door_regel_eur') or 0.0)} te verbeteren (30 dagen)"
     delen = ["Zelfanalyse"]
     if gisteren and gisteren.get("te_becijferen"):
-        delen.append(f"gisteren gemist € {_eu(gisteren.get('gemist_eur'))}")
+        gemist = gisteren.get("gemist_eur")
+        # v5.215.0: het minteken vóór het euroteken (was "€ -1,50").
+        min_teken = "-" if isinstance(gemist, (int, float)) and gemist < 0 else ""
+        delen.append(f"gisteren gemist {min_teken}€ {_eu(abs(gemist) if isinstance(gemist, (int, float)) else gemist)}")
     delen.append(punten[0]["tekst"] if punten else "nog geen verbeterpunt")
     regels = []
     for k in (gisteren or {}).get("niet_de_beste") or []:

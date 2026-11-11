@@ -546,9 +546,10 @@ button { font: inherit; }
   min-width: 0; display: flex; flex-direction: column; gap: 12px;
   padding: 16px; border-radius: var(--r); background: var(--kaart); border: 1px solid var(--rand);
 }
-.ph { display: flex; align-items: center; gap: 8px; height: 28px; min-width: 0; color: var(--tekst3); }
+.ph { display: flex; align-items: center; gap: 8px; min-height: 28px; min-width: 0; color: var(--tekst3); }
 .ph h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--tekst); white-space: nowrap; }
-.ph-r { margin-left: auto; display: flex; gap: 8px; justify-content: flex-end; align-items: center; min-width: 0; overflow: hidden; }
+/* v5.215.0: de chips lopen door naar een tweede regel in plaats van afgekapt te worden. */
+.ph-r { margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px 8px; justify-content: flex-end; align-items: center; min-width: 0; }
 .meer { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: var(--r2); border: 1px solid var(--rand); background: transparent; color: var(--tekst3); cursor: pointer; padding: 0; }
 .meer:hover { color: var(--tekst); border-color: var(--rand2); }
 .meer .ic { width: 14px; height: 14px; }
@@ -584,7 +585,9 @@ button { font: inherit; }
 .za-s { font-size: 12px; color: var(--tekst2); overflow-wrap: anywhere; }
 .za-l { margin: 4px 0 0 16px; padding: 0; font-size: 12px; color: var(--tekst2); }
 .za-l i { color: var(--tekst3); }
-.geld-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 24px; align-items: start; }
+/* v5.215.0: twee kolommen alleen als de tegel zelf breed genoeg is (was: vanaf 1260 px
+   kaartbreedte, waar de tegel een derde is en de kolommen over elkaar vielen). */
+.geld-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 0 24px; align-items: start; }
 .geld-r b { white-space: normal; }
 .geld-r b:not(:has(.bij)) { white-space: nowrap; }
 .geld-r.za-blok b { white-space: normal; }
@@ -777,7 +780,7 @@ button { font: inherit; }
 
 /* ---- breedtes ---- */
 @container (min-width: 620px) {
-  .huislijst { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; }
+  .huislijst { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .knoppen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @container (min-width: 820px) {
@@ -789,7 +792,6 @@ button { font: inherit; }
 }
 @container (min-width: 1260px) {
   .hero { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "accu plan geld"; }
-  .geld-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .raster { grid-template-columns: repeat(12, minmax(0, 1fr)); }
   .p-planning, .p-huis { grid-column: span 8; order: 0; }
   .stapel { display: flex; flex-direction: column; gap: 12px; grid-column: span 4; min-width: 0; }
@@ -818,6 +820,8 @@ button { font: inherit; }
   .planvolg .rk { margin-bottom: -4px; }
   .gwrap { grid-template-columns: 28px 1fr 32px; grid-template-rows: 180px 24px; }
   .tabel td, .tabel th { padding-left: 6px; padding-right: 6px; }
+  /* v5.215.0: op een smal scherm vielen Vermogen en Prijs buiten beeld. */
+  .tabel.vb { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tabs button { padding: 0 8px; }
   .ph h2 { overflow: hidden; text-overflow: ellipsis; }
   .kop-mid { padding-left: 0; }
@@ -1034,7 +1038,7 @@ const KNOPPEN = [
   { k: "verkoopUit", n: "Verkopen uit", s: "Vandaag niets verkopen (tot middernacht)", ic: "euro", kl: "var(--rood)" },
   { k: "handLaden", n: "Handmatig laden", s: "Laden met vast vermogen", ic: "accu", kl: "var(--groen)", vraag: true },
   { k: "handSmart", n: "Smart charge", s: "Alleen zon de accu in", ic: "zon", kl: "var(--amber)", vraag: true },
-  { k: "vakantie", n: "Vakantiestand", s: "Minder verbruik verwacht", ic: "vakantie", kl: "var(--blauw)", vraag: true },
+  { k: "vakantie", n: "Vakantie", s: "Minder verbruik verwacht", ic: "vakantie", kl: "var(--blauw)", vraag: true },
   { k: "fietsenOverrule", n: "Fietsen nu laden", s: "Niet wachten op het blok", ic: "fiets", kl: "var(--groen)" },
   { k: "stofzuigerOverrule", n: "Stofzuiger nu laden", s: "Niet wachten op het blok", ic: "stof", kl: "var(--groen)" },
   { k: "meldingenAan", n: "Meldingen", s: "Alle meldingen aan of uit", ic: "bel", kl: "var(--amber)" },
@@ -1921,7 +1925,7 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="${accuK(nu.gepland_accu_w)}"><div class="l">Gepland</div><div class="w">${rw(nu.gepland_accu_w)}</div></div>` +
       `<div class="${accuK(nu.gemeten_accu_w)}"><div class="l">Gemeten nu</div><div class="w">${rw(nu.gemeten_accu_w)}</div></div>` +
       `<div class="${accuK(verschil)}"><div class="l">Verschil</div><div class="w">${verschil == null ? STREEP : watt(Math.abs(verschil))}</div>` +
-      `<div class="s">${hand ? "EMS stuurt niet" : nu.verschil_tekst ? esc(nu.verschil_tekst)
+      `<div class="s">${hand ? "EMS stuurt niet" : nu.verschil_tekst ? esc(nu.verschil_tekst === "geen" ? "vrijwel gelijk" : nu.verschil_tekst)
         : verschil == null || num(nu.gepland_accu_w) == null || num(nu.gemeten_accu_w) == null ? "geen"
         : esc(verschilTekst(num(nu.gepland_accu_w), num(nu.gemeten_accu_w)))}</div></div>` +
       `</div>` +
@@ -1948,7 +1952,9 @@ class EmsCockpitCard extends HTMLElement {
       if (n == null || Math.abs(n) < 50) return "cel";
       return `cel k" style="--k:${gedempt ? "var(--tekst2)" : "var(--amber)"}`;
     };
-    const tekst = nu.zon_verschil_tekst || (d == null ? "onbekend" : Math.abs(d) < 50 ? "geen" : d > 0 ? "meer zon" : "minder zon");
+    // v5.215.0: "30 W geen" las als een fout; onder 50 W heet het "vrijwel gelijk".
+    const ruwTekst = nu.zon_verschil_tekst || (d == null ? "onbekend" : Math.abs(d) < 50 ? "geen" : d > 0 ? "meer zon" : "minder zon");
+    const tekst = ruwTekst === "geen" ? "vrijwel gelijk" : ruwTekst;
     return (
       `<div class="rk">Zon</div>` +
       `<div class="rij3">` +
@@ -2016,8 +2022,10 @@ class EmsCockpitCard extends HTMLElement {
     const prijzen = rijen.map((r) => num(r.prijs_ct));
     const pMax = Math.max(...prijzen, 1);
     const pMin = Math.min(0, ...prijzen);
-    const top = Math.ceil(pMax / 5) * 5;
-    const bodem = pMin < 0 ? Math.floor(pMin / 5) * 5 : 0;
+    // v5.215.0: veelvouden van 20 ct, zodat de vier aslijnen ronde getallen
+    // tonen (was 70/53/35/18).
+    const top = Math.ceil(pMax / 20) * 20;
+    const bodem = pMin < 0 ? Math.floor(pMin / 20) * 20 : 0;
     const bereik = Math.max(top - bodem, 1);
     const n = rijen.length;
     const gezien = new Set();
@@ -2059,11 +2067,15 @@ class EmsCockpitCard extends HTMLElement {
     const ruw = rijen.map((r, i) => ({ t: tijden[i].getTime() + 15 * 60000, soc: num(r.soc_procent) }));
     const lijn = socLive != null && nuX >= 0 && nuX <= 100 ? socLijn(ruw, Date.now(), socLive) : ruw.filter((q) => q.soc != null);
     const socPunten = lijn.map((q) => `${Math.max(0, Math.min(100, tX(q.t))).toFixed(2)},${(100 - q.soc).toFixed(2)}`).join(" ");
-    const zonMax = Math.max(0.05, ...rijen.map((r) => num(r.zon_kwh) || 0));
+    // v5.215.0: de zon als vermogen (zon_w). zon_kwh van het lopende kwartier is
+    // alleen het restant, waardoor het vlak bij "nu" naar nul dook; en het vlak
+    // begint bij het eerste kwartier in plaats van schuin vanuit de hoek.
+    const zonW = (r) => (num(r.zon_w) != null ? Math.max(0, num(r.zon_w)) : (num(r.zon_kwh) || 0) * 4000);
+    const zonMax = Math.max(200, ...rijen.map(zonW));
     const zonPunten =
-      `0,100 ` +
-      rijen.map((r, i) => `${x(i).toFixed(2)},${(100 - ((num(r.zon_kwh) || 0) / zonMax) * 45).toFixed(2)}`).join(" ") +
-      ` 100,100`;
+      `${x(0).toFixed(2)},100 ` +
+      rijen.map((r, i) => `${x(i).toFixed(2)},${(100 - (zonW(r) / zonMax) * 45).toFixed(2)}`).join(" ") +
+      ` ${x(n - 1).toFixed(2)},100`;
     const drempel = num(attr(this._s("uitleg"), "expensive_price_threshold"));
     const drempelY = drempel != null ? 100 - ((drempel * 100 - bodem) / bereik) * 100 : null;
     // v5.183.1: de ondergrens van de accu (leeg = deze laadstand, niet 0 %).
@@ -2425,7 +2437,7 @@ class EmsCockpitCard extends HTMLElement {
       `\u00b7 slijtage ${ct(a.slijtage_ct)} \u00b7 rustverbruik ${fmt(a.rust_kwh, 1)} kWh (\u20ac ${fmt(a.rust_eur, 2)})</div>` +
       tabel + verwacht +
       `<div class="za-s">Datacorrectie op netladen: <b>${ct((num(corr.eur) || 0) * 100)}</b> \u00b7 ${esc(corr.status || "")}</div>`;
-    return this._uitklap("accukosten", `Wat de accu kost en oplevert (40 dagen): net ${fmtTeken(net.marge_eur, 2)} \u20ac`, inhoud);
+    return this._uitklap("accukosten", `Wat de accu kost en oplevert (40 dagen): net ${euroTeken(net.marge_eur)}`, inhoud);
   }
 
   /* ---- huis en apparaten ---- */
@@ -2531,7 +2543,7 @@ class EmsCockpitCard extends HTMLElement {
         const lstD = alsDatum(lst.gestart);
         uit.push(regel("druppel", "Douche",
           `gemiddeld ${fmt(dou.gem_minuten, 0)} min${PUNT}${fmt(dou.gem_liter, 0)} L${PUNT}${euro(dou.gem_eur)} per beurt (${fmt(dou.aantal)}\u00d7 in ${fmt(dou.dagen)} d)`,
-          lstD ? `${esc(klok(lstD))} <span class="leeg">${fmt(lst.duur_minuten, 0)} min${lst.kosten_eur != null ? PUNT + euro(lst.kosten_eur) : ""}</span>` : "",
+          lstD ? `${esc(dagLabel(lstD) + klok(lstD))} <span class="leeg">${fmt(lst.duur_minuten, 0)} min${lst.kosten_eur != null ? PUNT + euro(lst.kosten_eur) : ""}</span>` : "",
           "var(--blauw)"));
       }
       // v5.104.1: wanneer de waterontharder het laatst regenereerde
@@ -2657,7 +2669,7 @@ class EmsCockpitCard extends HTMLElement {
   /* v5.100: zelfanalyse, repetitie 2027 en dagarchief - het kerngetal
      (kaart_primair) zichtbaar, de toelichting (kaart_secundair) ingeklapt. */
   _zelfanalyseRijen() {
-    const regels = [["zelfanalyse", "Zelfanalyse"], ["repetitie", "Verwacht in 2027"], ["dagarchief", "Dagarchief"]]
+    const regels = [["zelfanalyse", "Zelfanalyse"], ["repetitie", "Na de saldering"], ["dagarchief", "Dagarchief"]]
       .map(([k, naam]) => {
         const s = this._s(k);
         if (!s || !attr(s, "kaart_primair")) return "";
@@ -2675,16 +2687,19 @@ class EmsCockpitCard extends HTMLElement {
     const regels = blokken.map(([k, naam]) => {
       const s = this._s(k);
       if (!s || !attr(s, "kaart_secundair")) return "";
-      return `<div class="za-s"><b>${esc(naam)}:</b> ${esc(attr(s, "kaart_secundair"))}</div>`;
+      // v5.215.0: de toelichting begint soms zelf met de naam ("Zelfanalyse: Zelfanalyse \u00b7 ...").
+      const ruw = String(attr(s, "kaart_secundair"));
+      const dubbel = `${naam} \u00b7 `;
+      return `<div class="za-s"><b>${esc(naam)}:</b> ${esc(ruw.startsWith(dubbel) ? ruw.slice(dubbel.length) : ruw)}</div>`;
     }).join("");
     const gisteren = attr(this._s("zelfanalyse"), "gisteren") || {};
     const keuzes = (gisteren.niet_de_beste || []).slice(0, 3).map(
-      (k) => `<li>${esc(k.tekst || "")} <i>${esc(k.oorzaak || "")}</i></li>`
+      (k) => `<li>${esc(k.tekst || "")}${k.oorzaak ? ` <i>\u00b7 door de ${esc(k.oorzaak)}</i>` : ""}</li>`
     ).join("");
     if (!regels && !keuzes) return "";
     return (
       regels +
-      (keuzes ? `<div class="za-s" style="margin-top:6px">Achteraf niet de beste (${esc(gisteren.datum || "")}):</div><ul class="za-l">${keuzes}</ul>` : "")
+      (keuzes ? `<div class="za-s" style="margin-top:6px">Achteraf niet de beste (${esc(/^\d{4}-\d{2}-\d{2}$/.test(gisteren.datum || "") ? `${gisteren.datum.slice(8, 10)}-${gisteren.datum.slice(5, 7)}` : gisteren.datum || "")}):</div><ul class="za-l">${keuzes}</ul>` : "")
     );
   }
 
@@ -2897,7 +2912,7 @@ class EmsCockpitCard extends HTMLElement {
       bruikbaar(gez) ? esc(gez.state) : "",
       bruikbaar(meetlog) ? esc(meetlog.state) : "",
       bijgewerkt ? `Bijgewerkt ${esc(geleden(bijgewerkt) || "")}` : "",
-      `Cockpit v${esc(VERSIE)}`,
+      VERSIE === "onbekend" ? "Cockpit: versie onbekend" : `Cockpit v${esc(VERSIE)}`,
     ].filter(Boolean).join(PUNT);
     return `<nav class="links" aria-label="Detailpagina's">${links}</nav><span class="voetregel">${regel}</span>`;
   }

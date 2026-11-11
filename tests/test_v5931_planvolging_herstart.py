@@ -73,7 +73,7 @@ def test_basis_soms_aan_en_te_weinig_data():
     ritme = {"uurverbruik": {"13": [0.0, 0.3, 0.0, 0.4], "14": [0.0, 0.0, 0.0, 0.0], "15": [0.1]}}
     b = airco_ritme.verwachting_basis(ritme, VAN, TOT)
     assert b["meeste_dagen_aan"] == 2 and b["uren_met_data"] == 2
-    assert "hooguit 2x aan" in b["tekst"] and "2 van 4 uur nog te weinig gemeten" in b["tekst"]
+    assert "hooguit 2× aan" in b["tekst"] and "2 van 4 uur nog te weinig gemeten" in b["tekst"]
 
 
 def test_basis_zonder_data():

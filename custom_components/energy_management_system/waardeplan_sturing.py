@@ -1489,7 +1489,8 @@ class WaardeplanSturingMixin:
         nu = p.get("nu") or {}
         regels = []
         if nu.get("prijs_eur") is not None:
-            regels.append(f"stroom kost dit kwartier {nu['prijs_eur'] * 100:.1f} ct")
+            # v5.215.0: komma als decimaalteken, net als in de rest van de cockpit.
+            regels.append("stroom kost dit kwartier " + f"{nu['prijs_eur'] * 100:.1f}".replace(".", ",") + " ct")
         if p.get("inhoud_kwh") is not None:
             # v5.177.0 (A8): `bruikbaar_kwh` van het plan is de capaciteit
             # boven de ondergrens, niet wat erin zit. "er zit 0,7 kWh in de

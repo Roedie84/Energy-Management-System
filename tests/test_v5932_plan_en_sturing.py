@@ -129,5 +129,5 @@ def test_cockpit_gebruikt_de_woorden():
 
     js = (Path(__file__).resolve().parents[1] / "custom_components" / "energy_management_system"
           / "www" / "ems-cockpit.js").read_text(encoding="utf-8")
-    assert "nu.verschil_tekst ? esc(nu.verschil_tekst)" in js
+    assert "nu.verschil_tekst ? esc(nu.verschil_tekst === \"geen\" ? \"vrijwel gelijk\" : nu.verschil_tekst)" in js
     assert '"andere keuze"' in js

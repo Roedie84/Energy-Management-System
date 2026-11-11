@@ -1,3 +1,12 @@
+EMS v5.215.0 - de cockpit nagelopen op schoonheidsfouten
+
+Installeren: via de Marketplace bijwerken en herstarten. Ververs daarna de cockpit hard (Ctrl+F5).
+
+- Geld: bedragen en labels vielen op een breed scherm over elkaar; dat is opgelost.
+- Prijs en lading: het zonvlak klopt bij "nu" en de prijsas toont ronde getallen.
+- Chips in de paneelkoppen worden niet meer afgekapt; de Vooruitblik schuift op de telefoon.
+- Een reeks kleine tekstfouten: komma's in plaats van punten, euroteken voor het bedrag, geen dubbele woorden, gewone woorden in plaats van interne veldnamen.
+
 EMS v5.214.1 - cockpit: de staaf van nu klopt met de Vooruitblik
 
 Installeren: via de Marketplace bijwerken en herstarten.
