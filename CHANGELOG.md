@@ -35469,3 +35469,14 @@ Ruud 11-11 11:42 (akkoord). Uit de meting van v5.212.0: ontladen >1500 W rust op
 - De getoonde banden (`rendement_per_band`) blijven de gemeten cijfers.
 
 Tests: `test_v5213_band_min_rondes.py` (7).
+
+## v5.214.0 — meetlat en opbouw van het verwachte verbruik; wisselregel op de waarde van de inhoud; twee tests robuust
+
+Ruud 11-11 11:55 ("Alles akkoord"): vijf punten. Punt 1 (live verbruikscorrectie) is eerst uitgezocht; daarvoor was de opbouw hieronder nodig. Punt 4 (opdracht van de dagcontrole) staat buiten de code.
+
+- **Opbouw van het verwachte verbruik** (punt 1 en 3): elke planrij in `waardeplan.vooruit` draagt `verbruik_opbouw` (kWh): `profiel_kwh`, `omlaag_kwh` (minder dan geleerd), `live_kwh` (de live correctie binnen het budget van 1,5 kWh), `witgoed_kwh`, `verschuiving_kwh`, `klimaat_kwh`. Aanleiding: om 11:08 rekende het plan met 901 W (11 u), 396 W (12 u), 1404 W (13 u), 1096 W (14 u) tegen een profiel van 497/370/788/697 W; uit de code alleen was niet te zeggen welk deel uit de live correctie, het dagtype of de airco kwam. Geen wijziging aan de verwachting zelf.
+- **Verbruiksmeetlat** (punt 3, `verbruiksmeetlat.py`): wat het eerste plan van een kwartier verwachtte voor dit kwartier, 1 uur en 3 uur verder, tegen het gemeten gemiddelde (planvolging). `waardeplan.verbruiksmeetlat`: per horizon kwartieren, fout en afwijking in W. Alleen meten; begint na een herstart opnieuw.
+- **Wisselregel bij herplanning** (punt 2, `_midkwartier_voordeel_eur`): het voordeel van een andere stand rekent tegen `waarde_inhoud_eur_per_kwh` van de nieuwe planrij (zoals de live toets), niet meer tegen de eindwaarde van de horizon; zonder die waarde het oude getal. De drempel van 5 ct blijft.
+- **Tests** (punt 5): `test_tijdsbudget_in_de_event_loop` neemt de beste van drie pogingen; `test_zonneplan_cost_comparison.py` draait op een vaste klok (12:00). Beide faalden af en toe in de parallelle suite zonder fout in de code.
+
+Tests: `test_v5214_verbruiksmeetlat.py` (8).

@@ -199,7 +199,9 @@ class EconomischeSchaduwMixin:
             if sleutel is not None and lopend.get("_midk_plan") == sleutel:
                 return
             lopend["_midk_plan"] = sleutel
-            v_eind = self._midkwartier_voordeel_eur(plan, oud)
+            # v5.214.0: productie rekent nu met de waarde van de inhoud; de schaduw
+            # blijft de oude maat (eindwaarde) ernaast leggen.
+            v_eind = es.midkwartier_voordeel(plan, oud, plan.get("eindwaarde_eur_per_kwh"))
             v_marg = es.midkwartier_voordeel(plan, oud, (plan.get("nu") or {}).get("waarde_inhoud_eur_per_kwh"))
             lopend["midk"] = es.midk_bij(lopend.get("midk"), not reden, v_eind, v_marg)
         except Exception:  # noqa: BLE001 - loggen mag de keuze nooit raken

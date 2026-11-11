@@ -22977,6 +22977,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         )
 
         segmenten = []
+        # v5.214.0 (punt 1 en 3): waaruit het verwachte verbruik is opgebouwd (alleen tonen).
+        opbouw = {"profiel_kwh": 0.0, "omlaag_kwh": 0.0, "live_kwh": 0.0, "witgoed_kwh": 0.0, "verschuiving_kwh": 0.0}
         verschuiving_kw = self.regelverschuiving_kw()
         # v5.197.0: minder verbruik dan geleerd telt voor het plan, niet voor de reserve.
         omlaag = None if veilig else self._verbruik_nu_omlaag()
@@ -22994,10 +22996,12 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 return None
 
             basis_kwh = self._vacation_adjusted_kwh(avg_kw * fraction_hours)
+            opbouw["profiel_kwh"] += basis_kwh
             if omlaag is not None:
                 midden = cursor + (segment_end - cursor) / 2
                 afstand = max(0.0, (midden - nu_moment).total_seconds() / 3600)
                 gewicht = max(0.0, 1.0 - afstand / VERBRUIK_NU_VERVAL_UREN)
+                opbouw["omlaag_kwh"] -= basis_kwh * gewicht * (1.0 - omlaag)
                 basis_kwh *= 1.0 - gewicht * (1.0 - omlaag)
             # v1.68.0: ook hier uitdempen. De wandeling naar het diepste
             # tekort loopt tot het goedkope blok - vannacht was dat
@@ -23015,6 +23019,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             ruimte = CONSUMPTION_CORRECTION_MAX_EXTRA_KWH - correctie_extra_totaal
             extra_kwh = self._correctie_uit_budget(max(0.0, min(extra_kwh, ruimte)))
             correctie_extra_totaal += extra_kwh
+            opbouw["live_kwh"] += extra_kwh
             consumption_kwh = basis_kwh + extra_kwh
             # v3.99.3: witgoed erbij, per segment. Gepland witgoed
             # (v1.61.0) zat alleen in de TERUGVAL van de reserve, niet in
@@ -23022,9 +23027,12 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             # als het uurprofiel een gat had. En lopend witgoed zat
             # nergens, sinds v3.99.2 de correctieverhouding niet meer
             # schaalt.
-            consumption_kwh += self.geplande_witgoed_kwh_in_periode(
+            witgoed_kwh = self.geplande_witgoed_kwh_in_periode(
                 cursor, segment_end
             ) + self.lopend_witgoed_kwh_in_periode(cursor, segment_end)
+            opbouw["witgoed_kwh"] += witgoed_kwh
+            opbouw["verschuiving_kwh"] += verschuiving_kw * fraction_hours
+            consumption_kwh += witgoed_kwh
             # v5.20: de verschuiving op de P1-meter. 's Nachts ontlaadt de
             # accu daardoor meer, overdag laadt hij minder - in beide
             # gevallen telt hij als extra verbruik.
@@ -23044,6 +23052,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "extra_kwh": round(correctie_extra_totaal, 3),
             "verhouding": round(consumption_correction_ratio, 3),
         }
+        self._laatste_verbruik_opbouw = opbouw
         return segmenten
 
     def _plan_soc_procent(self, soc_kwh: float, bruikbaar_kwh: float) -> float | None:
@@ -25209,6 +25218,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         vorig = self._planvolging or {}
         if vorig.get("begin") != kwartier.isoformat():
             oordeel = planvolging.sluit_kwartier(vorig.get("gepland"), vorig.get("monsters") or [])
+            self._verbruiksmeetlat_sluit(vorig)  # v5.214.0
             # v5.93.1: na een herstart de beoordeelde kwartieren van vandaag
             # terugzetten (stand, oorzaak en accuverschil; geen huisverbruik).
             if not self._planvolging_kwartieren and self.planvolging_vandaag:

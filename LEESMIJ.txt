@@ -1,3 +1,11 @@
+EMS v5.214.0 - zien waar het verwachte verbruik vandaan komt
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Bij het waardeplan staat per kwartier waaruit het verwachte verbruik is opgebouwd: het geleerde profiel, de bijstelling op wat het huis nu verbruikt, witgoed, de airco.
+- Nieuwe meetlat: hoe ver zat de verbruiksverwachting ernaast, voor dit kwartier, een uur vooruit en drie uur vooruit. Alleen meten.
+- Rekent het plan midden in een kwartier opnieuw, dan weegt het een andere stand tegen wat de lading nu waard is (zelfde maat als de live toets).
+
 EMS v5.213.0 - het plan springt niet meer op drie metingen
 
 Installeren: via de Marketplace bijwerken en herstarten.

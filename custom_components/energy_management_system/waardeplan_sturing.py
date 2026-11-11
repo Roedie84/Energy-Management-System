@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+import statistics
 from datetime import datetime, timedelta, timezone
 from homeassistant.util import dt as dt_util
 from . import (
@@ -357,6 +358,56 @@ class WaardeplanSturingMixin:
             uit = waardeplan_mod.vloeren_gelijktrekken(uit, self._reserve_bodem_kwh(), self._waardeplan_eta_o(now))
         return uit or None
 
+    # --- v5.214.0: opbouw en meetlat van het verwachte verbruik -------------
+
+    _verbruik_opbouw: dict | None = None
+    _verbruiksmeetlat = None
+
+    def _noteer_verbruik_opbouw(self, begin, klimaat_kwh: float) -> None:
+        """Waaruit het verwachte verbruik van dit plankwartier bestaat."""
+        try:
+            deel = dict(getattr(self, "_laatste_verbruik_opbouw", None) or {})
+            deel["klimaat_kwh"] = klimaat_kwh
+            if self._verbruik_opbouw is None or len(self._verbruik_opbouw) > 400:
+                self._verbruik_opbouw = {}
+            self._verbruik_opbouw[begin] = {k: round(v, 3) for k, v in deel.items() if abs(v) >= 0.0005}
+        except Exception:  # noqa: BLE001 - alleen tonen
+            _LOGGER.debug("Verbruiksopbouw niet genoteerd", exc_info=True)
+
+    def _verbruik_opbouw_van(self, begin) -> dict:
+        deel = (self._verbruik_opbouw or {}).get(begin)
+        return {"verbruik_opbouw": deel} if deel else {}
+
+    def _meetlat(self):
+        if self._verbruiksmeetlat is None:
+            from .verbruiksmeetlat import Verbruiksmeetlat
+
+            self._verbruiksmeetlat = Verbruiksmeetlat()
+        return self._verbruiksmeetlat
+
+    def _verbruiksmeetlat_noteer(self, rijen: list) -> dict:
+        """Het eerste plan van een kwartier vastleggen; geeft het overzicht."""
+        try:
+            lat = self._meetlat()
+            if rijen:
+                begin = rijen[0].get("begin")
+                sleutel = begin.isoformat() if hasattr(begin, "isoformat") else str(begin)
+                lat.noteer_plan(sleutel[:16], rijen)
+            return lat.overzicht()
+        except Exception:  # noqa: BLE001 - meten mag het plan nooit raken
+            _LOGGER.debug("Verbruiksmeetlat niet genoteerd", exc_info=True)
+            return {}
+
+    def _verbruiksmeetlat_sluit(self, vorig: dict) -> None:
+        """Het afgelopen kwartier: gemeten gemiddelde huisverbruik erbij."""
+        try:
+            begin = (vorig or {}).get("begin")
+            reeks = [m["huis_w"] for m in (vorig or {}).get("monsters") or [] if m.get("huis_w") is not None]
+            if begin and len(reeks) >= 3:
+                self._meetlat().sluit_kwartier(begin, statistics.fmean(reeks))
+        except Exception:  # noqa: BLE001 - meten mag de ronde nooit raken
+            _LOGGER.debug("Verbruiksmeetlat niet afgesloten", exc_info=True)
+
     def _waardeplan_eta_o(self, now: datetime) -> float:
         """Het ontlaadrendement van het plan (v5.186.0), voor de verkoopvloer;
         1,0 als het (nog) niet te bepalen is."""
@@ -379,7 +430,9 @@ class WaardeplanSturingMixin:
         if segmenten is None:
             return None
         # v5.186.0 (punt 34): ook de klimaat-extra's die de reserve meeneemt.
-        verbruik = sum(v for v, _z in segmenten) + self._klimaat_extra_kwh_in(van, eind)
+        klimaat_kwh = self._klimaat_extra_kwh_in(van, eind)
+        verbruik = sum(v for v, _z in segmenten) + klimaat_kwh
+        self._noteer_verbruik_opbouw(begin, klimaat_kwh)  # v5.214.0
         if self._pv_gat_in(van, eind):  # v5.186.0 (punt 38): geen zon bekend = gat
             return None
         zon = self._estimate_pv_kwh_for_period(van, eind, veilig=False)
@@ -647,9 +700,12 @@ class WaardeplanSturingMixin:
             ],
             "nu": {**nu, "begin": nu["begin"].isoformat() if hasattr(nu["begin"], "isoformat") else nu["begin"]},
             "vooruit": [
-                {**r, "begin": r["begin"].isoformat() if hasattr(r["begin"], "isoformat") else r["begin"]}
+                {**r, "begin": r["begin"].isoformat() if hasattr(r["begin"], "isoformat") else r["begin"],
+                 **self._verbruik_opbouw_van(r["begin"])}
                 for r in res.kwartieren[:24]
             ],
+            # v5.214.0 (punt 3): hoe goed is de verbruiksverwachting van het plan?
+            "verbruiksmeetlat": self._verbruiksmeetlat_noteer(res.kwartieren),
             "verwachte_inhoud_kwh": nu["inhoud_kwh"],
             "balanceren": balans or None,
             # v5.168.0: met welke prijs het plan rekent tijdens de saldering.
@@ -1238,7 +1294,13 @@ class WaardeplanSturingMixin:
         aan het eind van het plan. Zonder die twee: None (dan vasthouden)."""
         nieuw, vorig = plan.get("nu") or {}, oud.get("nu") or {}
         uren_n, uren_o = float(nieuw.get("uren") or 0.0), float(vorig.get("uren") or 0.0)
-        prijs, waarde = nieuw.get("rekenprijs_eur"), plan.get("eindwaarde_eur_per_kwh")
+        # v5.214.0 (Ruud 11-11, punt 2): tegen wat het plan de inhoud NU waard
+        # vindt (zoals de live toets), niet tegen de waarde aan het eind van
+        # de horizon; zonder die waarde het oude getal.
+        prijs = nieuw.get("rekenprijs_eur")
+        waarde = nieuw.get("waarde_inhoud_eur_per_kwh")
+        if waarde is None:
+            waarde = plan.get("eindwaarde_eur_per_kwh")
         if uren_n <= 0 or uren_o <= 0 or prijs is None or waarde is None:
             return None
         rest_oud = float(vorig.get("accu_kwh") or 0.0) * min(1.0, uren_n / uren_o)

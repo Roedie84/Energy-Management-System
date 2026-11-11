@@ -17,7 +17,21 @@ from custom_components.energy_management_system.const import (
     RELIABILITY_RELIABLE,
     RELIABILITY_UNRELIABLE,
 )
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from custom_components.energy_management_system import coordinator as _coordinator_module
 from tests._coordinator_bron import coordinator_bron
+
+
+@pytest.fixture(autouse=True)
+def _midden_op_de_dag(monkeypatch):
+    """v5.214.0: een vaste klok (12:00). De vergelijking zegt vlak na
+    middernacht bewust niets; een test die op de echte of een elders verzette
+    klok leunt, faalde daardoor af en toe."""
+    vast = datetime(2026, 6, 15, 12, 0, tzinfo=timezone(timedelta(hours=2)))
+    monkeypatch.setattr(_coordinator_module.dt_util, "now", lambda *a, **k: vast)
 
 PRIJS = "sensor.zonneplan_current_quarter_hourly_electricity_tariff"
 AFNAME = "sensor.zonneplan_electricity_delivery_costs_today"
