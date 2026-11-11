@@ -56,7 +56,7 @@ def _zin(samenvatting):
             pass
     import inspect
     for naam, f in inspect.getmembers(Coord, inspect.isfunction):
-        if "Nee: {tekorten} kwartier(en) aan het net" in inspect.getsource(f):
+        if "bijladen: {tekorten} kwartier(en) aan het net" in inspect.getsource(f):
             return f(c, samenvatting)
     raise AssertionError("zin niet gevonden")
 
@@ -74,4 +74,4 @@ def test_planzin_zegt_de_ondergrens_een_keer_en_in_euro():
 def test_planzin_met_marge_blijft_zoals_hij_was():
     zin = _zin({"beschikbaar": True, "kwartieren": 104, "verwachte_opbrengst_eur": 0.8, "eind_soc_procent": 51,
                 "min_soc_procent_hard": 10, "laagste_soc_tot_bijladen_procent": 19, "tekort_kwartieren": 0})
-    assert zin == "Ja, geen kwartier zonder accu tot het bijladen. Laagste 19% tot het bijladen, 51% na 26 uur. € 0,80 over 26 uur."
+    assert zin == "Ja, de accu haalt het bijladen: geen kwartier aan het net. Laagste 19% tot het bijladen, 51% na 26 uur. € 0,80 over 26 uur."

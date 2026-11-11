@@ -1834,7 +1834,12 @@ class EmsCockpitCard extends HTMLElement {
     const zonder = num(attr(bes, "tegenfeitelijke_kosten_vandaag_eur"));
     const regel = [
       i >= 0 ? `Netladen <b>${dagLabel(tijden[i])}${klok(tijden[i])}</b>` : "Geen netladen gepland",
-      kosten != null && zonder != null ? `accu scheelt vandaag <b>${euroTeken(zonder - kosten)}</b> tegen geen accu` : "",
+      // v5.216.0 (Ruud 11-11, punt 1): hetzelfde bedrag als de tegel Besparing - met wat
+      // er nog in de accu zit. Het kale verschil (zonder - kosten) las op een dag met
+      // een volle accu als "de accu kost vandaag geld".
+      bruikbaar(bes) && getal(bes) != null
+        ? `<span title="Afgerekend ${kosten != null && zonder != null ? euroTeken(zonder - kosten) : STREEP} plus de waarde van wat er extra in de accu zit">accu ${getal(bes) < 0 ? "kost" : "levert"} vandaag <b>${euroTeken(getal(bes))}</b>${getal(bes) < 0 ? "" : " op"} tegen geen accu</span>`
+        : kosten != null && zonder != null ? `accu scheelt vandaag <b>${euroTeken(zonder - kosten)}</b> tegen geen accu` : "",
     ].filter(Boolean).join(PUNT);
 
     return (
@@ -2205,7 +2210,8 @@ class EmsCockpitCard extends HTMLElement {
     const regels = blokken.map((b) => {
       const lo = b.prijzen.length ? Math.min(...b.prijzen) : null;
       const hi = b.prijzen.length ? Math.max(...b.prijzen) : null;
-      const prijs = lo == null ? STREEP : hi - lo < 0.005 ? eur(lo) : `${eur(lo)}\u2013${fmt(hi, 2)}`;
+      // v5.216.0 (punt 4): in cent, zoals de rest van de cockpit (was euro: 0,57-0,61).
+      const prijs = lo == null ? STREEP : hi - lo < 0.005 ? `${fmt(lo * 100, 0)} ct` : `${fmt(lo * 100, 0)}\u2013${fmt(hi * 100, 0)} ct`;
       const soc = b.socEind == null ? STREEP :
         `<span class="vb-soc"><i style="width:${Math.max(0, Math.min(100, b.socEind))}%;background:${b.kleur}"></i></span>` +
         `${b.socBegin != null ? fmt(b.socBegin) + "\u2192" : ""}${fmt(b.socEind)}%`;
@@ -2295,6 +2301,16 @@ class EmsCockpitCard extends HTMLElement {
     const kansKleur = kans == null ? "" : kans >= 50 ? "var(--rood)" : kans >= 20 ? "var(--oranje)" : "var(--groen)";
     const kwh = (v, dec = 2) => (v == null ? STREEP : `${fmt(v, dec)}<small>kWh</small>`);
 
+    // v5.216.0: uit het plan - de waarde van de lading, wat er verkocht wordt en wanneer de accu leeg is
+    const wpNu = (attr(this._s("uitleg"), "waardeplan") || {}).nu || {};
+    const waardeLading = num(wpNu.waarde_inhoud_eur_per_kwh);
+    const wpRijen = this._planRijen();
+    const wpTijd = planTijden(wpRijen);
+    const verkoopKwh = wpRijen.reduce((som, r, i) =>
+      som + (modus(r.modus).k === "verkopen" && wpTijd[i].getTime() + 15 * 60000 > Date.now() ? Math.max(0, num(r.accu_w) || 0) / 4000 : 0), 0);
+    const leegI = wpRijen.findIndex((r, i) => r.tekort && wpTijd[i].getTime() + 15 * 60000 > Date.now());
+    const leegOm = leegI >= 0 ? `${dagLabel(wpTijd[leegI])}${klok(wpTijd[leegI])}` : null;
+    const pauze = bruikbaar(this._s("verkoop_pauze")) && this._s("verkoop_pauze").state === "on";
     // v5.198.1: het waardeplan beslist over verkopen; de oude verkooptoets niet meer
     const verkoopt = verkoopRij ? `verkoopt ${verkoopRij.van || ""}`.trim() : (mag ? "verkopen mag" : "geen verkoop gepland");
     const rechts = chip(verkoopt, verkoopRij || mag ? "ok" : "") +
@@ -2307,20 +2323,21 @@ class EmsCockpitCard extends HTMLElement {
         "var(--amber)") +
       mini("Nog te komen", kwh(zonRest ?? rest, 1), zonRest != null && rest != null ? `vandaag \u00b7 Solcast ${fmt(rest, 1)}` : "vandaag") +
       mini("Morgen", kwh(morgen, 1), "voorspeld") +
-      mini("Reserve tot blok", kwh(nodig), "nodig voor het huis") +
+      // v5.216.0 (Ruud 11-11, punt 2): de reserve stuurt het verkopen niet meer (v5.198);
+      // hier staat nu wat het plan wel gebruikt.
+      mini("Waarde lading", waardeLading == null ? STREEP : `${fmt(waardeLading * 100, 1)}<small>ct/kWh</small>`, /^marginaal/.test(String((attr(this._s("uitleg"), "waardeplan") || {}).rekenbasis || "")) ? "volgens het plan, zonder belastingdeel" : "wat het plan een kWh in de accu waard vindt") +
       (blokLoopt
         ? mini("Tot het blok", "nu", `laadblok loopt${blokLoopt.eind ? " tot " + blokLoopt.eind : ""}`) +
           mini("Na het blok", STREEP, "volgend blok nog niet bepaald")
         : mini("Tot het blok", kwh(tot), "huis tot het blok") +
           mini("Na het blok", kwh(na), "laadt het blok bij")) +
-      mini("Vrij te verkopen", vrij == null ? STREEP : `${fmt(vrij, 2)}<small>kWh</small>`, naBlokVrij && terug != null ? `waarvan ${fmt(naBlokVrij, 2)} kWh terugladen ${ct(terug)} ct` : toets.verkoop_na_blok_reden ? esc(toets.verkoop_na_blok_reden) : "", vrij ? "var(--oranje)" : "") +
+      mini("Verkoop gepland", `${fmt(verkoopKwh, 1)}<small>kWh</small>`, pauze ? "verkopen staat uit (knop)" : verkoopKwh > 0 ? "uit de accu, in het plan" : "niets in het plan") +
       mini("Kans op tekort", kans == null ? STREEP : `${fmt(kans)}<small>%</small>`, "tot het blok", kansKleur) +
-      mini("Veiligheidsmarge", totaal == null ? STREEP : `${fmtTeken(totaal)}<small>%</small>`, "op de reserve") +
+      mini("Accu leeg om", leegOm || "niet", leegOm ? "volgens het plan" : "binnen het plan") +
       `</div>`;
     const tekortNu = num(attr(tekort, "tekortnacht_tot_nu_kwh"));
     const regels =
       `<div class="rijen vrij">` +
-      (onderdelen.length ? `<span>Marge <b>${onderdelen.map((o) => `${esc(o.naam)} ${fmtTeken(o.procent)}%`).join(PUNT)}</b></span>` : "") +
       `<span>Bewolking <b>${bruikbaar(bew) ? `${fmt(getal(bew))}%${attr(bew, "label") ? PUNT + esc(attr(bew, "label")) : ""}` : STREEP}</b></span>` +
       (nauw != null ? `<span>Zonvoorspelling gisteren <b>${fmtTeken(nauw, 1)}%</b></span>` : "") +
       `<span>Tekortnachten 7 dagen <b>${fmt(getal(tekort))}${tekortNu ? `${PUNT}deze nacht ${fmt(tekortNu, 2)} kWh` : ""}</b></span>` +
@@ -2359,7 +2376,7 @@ class EmsCockpitCard extends HTMLElement {
     const rechts = [
       bruikbaar(koeling)
         ? `<span class="chip ${koelAan ? "ok" : ""}">${icoon("ventilator")}koeling ${koelAan ? "aan" : "uit"}` +
-          `${num(attr(koeling, "accu_c")) != null ? `${PUNT}${fmt(attr(koeling, "accu_c"))}${GRAAD}C` : ""}</span>`
+          `${num(attr(koeling, "accu_c")) != null ? `${PUNT}omvormer ${fmt(attr(koeling, "accu_c"))}${GRAAD}C` : ""}</span>`
         : "",
       rend != null ? chip(`rendement ${fmt(rend, 1)}%`) : "",
       bruikbaar(gez) ? chip(`${fmt(getal(gez))} cycli`) : "",
@@ -2909,8 +2926,8 @@ class EmsCockpitCard extends HTMLElement {
     const bijgewerkt = attr(this._s("cockpit"), "bijgewerkt") || attr(st, "last_successful_update");
     const links = LINKS.map(([n, p]) => `<button type="button" data-nav="${p}">${esc(n)}</button>`).join("");
     const regel = [
-      bruikbaar(gez) ? esc(gez.state) : "",
-      bruikbaar(meetlog) ? esc(meetlog.state) : "",
+      // v5.216.0 (punt 6): alleen versie, fouten en storingen; de rest staat op de pagina Gezondheid.
+      bruikbaar(gez) ? esc(String(gez.state).split(" \u00b7 ").slice(0, 3).join(" \u00b7 ")) : "",
       bijgewerkt ? `Bijgewerkt ${esc(geleden(bijgewerkt) || "")}` : "",
       VERSIE === "onbekend" ? "Cockpit: versie onbekend" : `Cockpit v${esc(VERSIE)}`,
     ].filter(Boolean).join(PUNT);

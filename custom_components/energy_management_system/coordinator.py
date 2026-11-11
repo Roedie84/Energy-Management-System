@@ -16938,7 +16938,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 f"aan het net. Laagste stand "
                 f"{samenvatting.get('laagste_soc_tot_bijladen_procent', '?')}%."
                 if not tekort
-                else f"Nee: {tekort} kwartier(en) aan het net"
+                else f"Nee: de accu is leeg vóór het bijladen, {tekort} kwartier(en) aan het net"
                 + (f", {perioden[0]}." if perioden else ".")
             ),
             "waarden": {"tekort_kwartieren": tekort},
@@ -26564,10 +26564,11 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         tekorten = q.get("tekort_kwartieren") or 0
         if tekorten:
             perioden = ", ".join((q.get("tekort_perioden") or [])[:2])
-            kop = f"Nee: {tekorten} kwartier(en) aan het net"
+            # v5.216.0 (punt 5): zegt wat er aan de hand is (was "Nee: ...", een antwoord zonder de vraag erbij).
+            kop = f"Nee, de accu is leeg vóór het bijladen: {tekorten} kwartier(en) aan het net"
             kop += f" - {perioden}." if perioden else "."
         else:
-            kop = "Ja, geen kwartier zonder accu tot het bijladen."
+            kop = "Ja, de accu haalt het bijladen: geen kwartier aan het net."
 
         staart = f"Laagste {laagste}% tot het bijladen"
         # v3.99.0: de laagste stand OP de ondergrens is net zo goed nul

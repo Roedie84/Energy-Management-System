@@ -35510,3 +35510,16 @@ Hersteld in de teksten (Python):
 Niet gewijzigd, voorgelegd: zie het rapport in de chat (accu scheelt vandaag, reservetegels, koelingstemperatuur, euro tegen cent in de Vooruitblik, voetregel).
 
 Tests: `test_v5215_cockpit_audit.py` (9); drie bestaande tests bijgewerkt op de nieuwe tekst.
+
+## v5.216.0 — cockpit: zes keuzes uit de audit
+
+Ruud 11-11 13:25: "Alle 7 akkoord" (punt 7, de detailpagina's nalopen, volgt apart). Alleen weergave en tekst.
+
+1. **Plan vandaag**: "accu scheelt vandaag −€ 2,24 tegen geen accu" toonde het kale verschil; op een dag met een volle accu las dat als verlies terwijl de tegel Besparing +€ 1,11 gaf. Nu hetzelfde gecorrigeerde bedrag: "accu levert vandaag +€ 1,10 op tegen geen accu" (het kale bedrag in de tooltip).
+2. **Zon, verkopen en reserve**: de tegels "Reserve tot blok", "Vrij te verkopen" en "Veiligheidsmarge" en de regel "Marge" (reserve; stuurt het verkopen sinds v5.198 niet meer) zijn vervangen door wat het plan gebruikt: "Waarde lading" (`waarde_inhoud_eur_per_kwh`), "Verkoop gepland" (kWh uit de planrijen) en "Accu leeg om" (eerste tekortkwartier).
+3. **Accumodules**: de chip zegt "omvormer 15°C" (het is de omvormer, niet de modules van 11-12 °C).
+4. **Vooruitblik**: prijzen in cent ("57–61 ct") zoals de rest van de cockpit.
+5. **Planzin**: "Nee: 13 kwartier(en) aan het net" → "Nee, de accu is leeg vóór het bijladen: 13 kwartier(en) aan het net"; "Ja, geen kwartier zonder accu tot het bijladen." → "Ja, de accu haalt het bijladen: geen kwartier aan het net."
+6. **Voetregel**: alleen versie, fouten en storingen plus "bijgewerkt"; de diagnoseregels staan op de pagina Gezondheid.
+
+Tests: `test_v5216_cockpit_keuzes.py` (5); drie bestaande tests bijgewerkt.

@@ -73,10 +73,11 @@ def test_tabbladen_met_aria_en_onthouden():
 def test_zon_verkopen_en_reserve_alle_getallen_zichtbaar():
     v = JS.split("  _verkoop() {")[1].split("  /* ---- accumodules ---- */")[0]
     zichtbaar = v.split('this._uitklap("zon_reserve"')[0].split("const uitleg =")[0]
-    for tekst in ('mini("Zon vandaag"', 'mini("Nog te komen"', 'mini("Morgen"', 'mini("Reserve tot blok"',
-                  'mini("Tot het blok"', 'mini("Na het blok"', 'mini("Vrij te verkopen"', 'mini("Kans op tekort"',
-                  'mini("Veiligheidsmarge"', "Bewolking", "Zonvoorspelling gisteren", "Tekortnachten 7 dagen",
-                  "Zon opvangen uitstellen", "o.naam"):
+    # v5.216.0: reservetegels vervangen door wat het plan gebruikt; de margeregel is weg.
+    for tekst in ('mini("Zon vandaag"', 'mini("Nog te komen"', 'mini("Morgen"', 'mini("Waarde lading"',
+                  'mini("Tot het blok"', 'mini("Na het blok"', 'mini("Verkoop gepland"', 'mini("Kans op tekort"',
+                  'mini("Accu leeg om"', "Bewolking", "Zonvoorspelling gisteren", "Tekortnachten 7 dagen",
+                  "Zon opvangen uitstellen"):
         assert tekst in zichtbaar, tekst
 
 
@@ -114,7 +115,8 @@ def test_alle_knoppen_zichtbaar_en_gedrag_ongewijzigd():
 
 def test_voet_toont_status_en_meetlog():
     v = _methode("_voet")
-    assert 'class="links"' in v and "meetlog.state" in v and "gez.state" in v
+    # v5.216.0: de voetregel is kort (versie, fouten, storingen); het meetlog staat op de pagina Gezondheid.
+    assert 'class="links"' in v and "meetlog.state" not in v and "gez.state" in v
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js niet aanwezig")

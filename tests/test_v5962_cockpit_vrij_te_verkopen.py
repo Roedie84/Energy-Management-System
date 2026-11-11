@@ -11,5 +11,5 @@ def test_tegel_toont_totaal():
 
 
 def test_deel_na_blok_als_waarvan():
-    assert "waarvan ${fmt(naBlokVrij, 2)} kWh terugladen" in JS
-    assert "toets.verkoop_na_blok_toegepast ? num(toets.verkoop_na_blok_vrij_kwh)" in JS
+    # v5.216.0: de tegel "Vrij te verkopen" is vervangen door "Verkoop gepland" (uit het plan).
+    assert 'mini("Verkoop gepland"' in JS and 'mini("Vrij te verkopen"' not in JS

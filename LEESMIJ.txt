@@ -1,3 +1,11 @@
+EMS v5.216.0 - cockpit: duidelijker cijfers
+
+Installeren: via de Marketplace bijwerken en herstarten. Ververs daarna de cockpit hard (Ctrl+F5).
+
+- "Accu levert vandaag ... op" toont nu hetzelfde bedrag als de tegel Besparing (met wat er nog in de accu zit).
+- In "Zon, verkopen en reserve" staan nu de getallen waar het plan mee werkt: wat de lading waard is, wat er verkocht wordt en wanneer de accu leeg is.
+- De Vooruitblik toont prijzen in cent; de voetregel is kort; de koeling zegt dat het de temperatuur van de omvormer is.
+
 EMS v5.215.0 - de cockpit nagelopen op schoonheidsfouten
 
 Installeren: via de Marketplace bijwerken en herstarten. Ververs daarna de cockpit hard (Ctrl+F5).
