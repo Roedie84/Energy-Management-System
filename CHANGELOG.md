@@ -35635,3 +35635,13 @@ Ruud 11-11 19:58 (akkoord op de vier voorstellen). Gemeten op v5.225.0 (19 ronde
 - **Monte Carlo (4)**: hooguit eens per `MONTE_CARLO_INTERVAL_S` (300 s), en meteen bij een ander goedkoop blok. Was 86.000 trekkingen per ronde.
 
 Tests: `test_v5226_per_ronde_2.py` (7), waaronder het kwartierplan met en zonder geheugen: gelijk.
+
+## v5.227.0 — prijsniveau van de jaarafrekening: mediaan van dagprijzen
+
+Gevonden bij de controle van 11-11 20:31: saldo EUR -529,05 (was EUR 217,34 voor v5.220.0), met factor 3,0 voor afname en voor teruglevering - het plafond.
+
+- **Oorzaak**: de prijs per eenheid was som van de bedragen gedeeld door som van de kWh. De bedragen komen van Zonneplan, de kWh van de P1-meter. In de statistiek van de P1-meter staat in oktober 2025 een sprong: 443 kWh afname tegen 209 bij Zonneplan, 242 kWh teruglevering tegen 32. Daardoor werd vorig jaar 10,8 ct per kWh afname en 3 ct teruglevering; werkelijk 21-24 ct en 26-30 ct.
+- **Nu**: per dag de prijs (bedrag gedeeld door volume), per jaar de mediaan daarvan, en de factor is de verhouding. Een dagprijs buiten 5 ct - EUR 1,50 per kWh (teruglevering vanaf 2 ct, gas 30 ct - EUR 6 per m3) telt niet mee. Een sprongdag verandert de factor niet meer.
+- De fout zat in v5.220.0 t/m v5.226.0 en raakte alleen het verwachte saldo en het termijnadvies van de jaarafrekening, niet de sturing.
+
+Tests: `test_v5220_opruimen_en_prijsniveau.py` +3 (sprong, mediaan, onaannemelijke dagprijs), 1 aangepast.

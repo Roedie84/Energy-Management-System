@@ -1,3 +1,10 @@
+EMS v5.227.0 - jaarafrekening: verwacht saldo rechtgezet
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het verwachte saldo van de jaarafrekening stond sinds v5.220.0 veel te laag (EUR -529). Oorzaak: een sprong in de meterstanden van oktober 2025, waardoor de prijzen van nu drie keer zo hoog leken als vorig jaar. De berekening is nu bestand tegen zulke sprongen.
+- De sturing van de accu is hier niet door geraakt.
+
 EMS v5.226.0 - ronde nog sneller
 
 Installeren: via de Marketplace bijwerken en herstarten.

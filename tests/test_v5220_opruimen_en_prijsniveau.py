@@ -53,10 +53,51 @@ def test_te_weinig_dagparen_laat_de_schatting_zoals_hij_was():
 
 
 def test_factor_is_begrensd():
-    n = ja.prijsniveau(_dagen(prijs_nu=5.0, prijs_oud=0.10), VANDAAG - timedelta(days=1))
+    # v5.227.0: binnen de aannemelijke dagprijzen (5 ct - EUR 1,50)
+    n = ja.prijsniveau(_dagen(prijs_nu=1.40, prijs_oud=0.10), VANDAAG - timedelta(days=1))
     assert n["afname"]["factor"] == ja.PRIJSNIVEAU_MAX
-    n = ja.prijsniveau(_dagen(prijs_nu=0.01, prijs_oud=0.50), VANDAAG - timedelta(days=1))
+    n = ja.prijsniveau(_dagen(prijs_nu=0.06, prijs_oud=0.50), VANDAAG - timedelta(days=1))
     assert n["afname"]["factor"] == ja.PRIJSNIVEAU_MIN
+
+
+# --- v5.227.0: een sprong in de meterstatistiek ------------------------------
+
+
+def test_een_sprong_in_de_kwh_van_vorig_jaar_verandert_de_factor_niet():
+    """Oktober 2025: de P1-statistiek sprong 234 kWh op een dag; met sommen
+    werd vorig jaar 10,8 ct en de factor 3,0 (saldo EUR -529)."""
+    tot = VANDAAG - timedelta(days=1)
+    schoon = ja.prijsniveau(_dagen(prijs_nu=0.33, prijs_oud=0.22), tot)
+    dagen = _dagen(prijs_nu=0.33, prijs_oud=0.22)
+    dagen[date(2025, 10, 20)]["afname_kwh"] += 234.0
+    met_sprong = ja.prijsniveau(dagen, tot)
+
+    assert schoon["afname"]["factor"] == pytest.approx(1.5)
+    assert met_sprong["afname"]["factor"] == pytest.approx(1.5)
+    assert met_sprong["afname"]["vorig_jaar_per_eenheid"] == pytest.approx(0.22)
+    # de sprongdag zelf valt buiten de aannemelijke prijzen en telt niet mee
+    assert met_sprong["afname"]["dagen"] == schoon["afname"]["dagen"] - 1
+
+
+def test_de_mediaan_en_niet_het_gewogen_gemiddelde():
+    tot = VANDAAG - timedelta(days=1)
+    dagen = _dagen(prijs_nu=0.30, prijs_oud=0.20)
+    # vijf dure dagen met veel verbruik trekken een som omhoog, de mediaan niet
+    for i in range(1, 6):
+        dag = VANDAAG - timedelta(days=i)
+        dagen[dag] = {**dagen[dag], "afname_eur": 60 * 0.60, "afname_kwh": 60.0}
+
+    assert ja.prijsniveau(dagen, tot)["afname"]["factor"] == pytest.approx(1.5)
+
+
+def test_een_onaannemelijke_dagprijs_telt_niet_mee():
+    tot = VANDAAG - timedelta(days=1)
+    dagen = _dagen(prijs_nu=0.30, prijs_oud=0.20)
+    dagen[VANDAAG - timedelta(days=3)]["afname_eur"] = 500.0
+
+    n = ja.prijsniveau(dagen, tot)
+    assert n["afname"]["dagen"] == ja.PRIJSNIVEAU_DAGEN - 1
+    assert n["afname"]["factor"] == pytest.approx(1.5)
 
 
 def test_de_rest_van_het_jaar_rekent_met_het_niveau_van_nu():

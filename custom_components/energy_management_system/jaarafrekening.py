@@ -37,6 +37,8 @@ PRIJSNIVEAU_DAGEN = 30
 PRIJSNIVEAU_MIN_DAGEN = 14
 PRIJSNIVEAU_MIN = 0.5
 PRIJSNIVEAU_MAX = 3.0
+# v5.227.0: een dagprijs hierbuiten is een meetfout (EUR per kWh of per m3).
+PRIJS_PER_EENHEID_GRENS = {"afname": (0.05, 1.50), "terug": (0.02, 1.50), "gas": (0.30, 6.00)}
 _NIVEAU_DRAGERS = (("afname", "afname_eur", "afname_kwh"), ("terug", "terug_eur", "terug_kwh"), ("gas", "gas_eur", "gas_m3"))
 MAANDEN = ("jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec")
 
@@ -150,11 +152,18 @@ def prijsniveau(dagen: dict, tot: date) -> dict:
     naar het prijsniveau van de laatste PRIJSNIVEAU_DAGEN dagen. Alleen
     dagparen waarin beide jaren verbruik hadden tellen; bij minder dan
     PRIJSNIVEAU_MIN_DAGEN paren blijft de factor 1 (zoals voorheen).
+
+    v5.227.0: de MEDIAAN van de dagprijzen per jaar, niet som gedeeld door
+    som. De bedragen komen van de leverancier en de kWh van de P1-meter; in
+    oktober 2025 staat er in de statistiek van die meter een sprong (443 kWh
+    afname tegen 209 bij de leverancier, 242 kWh teruglevering tegen 32). Met
+    sommen werd de prijs van vorig jaar 10,8 ct per kWh (werkelijk ~22 ct)
+    en liep de factor tegen het plafond van 3: saldo EUR -529. Een dag met
+    een prijs buiten PRIJS_PER_EENHEID_MIN/MAX telt niet mee.
     """
     uit = {}
     for naam, veld_eur, veld_vol in _NIVEAU_DRAGERS:
-        nu_eur = nu_vol = oud_eur = oud_vol = 0.0
-        paren = 0
+        nu_prijzen, oud_prijzen = [], []
         for i in range(PRIJSNIVEAU_DAGEN):
             dag = tot - timedelta(days=i)
             nu, oud = dagen.get(dag), dagen.get(_dag_in_jaar(dag, dag.year - 1))
@@ -167,20 +176,30 @@ def prijsniveau(dagen: dict, tot: date) -> dict:
                 continue
             if a_vol <= 0 or b_vol <= 0 or a_eur <= 0 or b_eur <= 0:
                 continue
-            paren += 1
-            nu_eur, nu_vol, oud_eur, oud_vol = nu_eur + a_eur, nu_vol + a_vol, oud_eur + b_eur, oud_vol + b_vol
+            a, b = a_eur / a_vol, b_eur / b_vol
+            laag, hoog = PRIJS_PER_EENHEID_GRENS[naam]
+            if not (laag <= a <= hoog and laag <= b <= hoog):
+                continue
+            nu_prijzen.append(a)
+            oud_prijzen.append(b)
+        paren = len(nu_prijzen)
         rij = {"factor": 1.0, "dagen": paren, "toegepast": False}
-        if paren >= PRIJSNIVEAU_MIN_DAGEN and nu_vol > 0 and oud_vol > 0:
-            prijs_nu, prijs_oud = nu_eur / nu_vol, oud_eur / oud_vol
-            if prijs_oud > 0:
-                rij.update({
-                    "factor": round(min(PRIJSNIVEAU_MAX, max(PRIJSNIVEAU_MIN, prijs_nu / prijs_oud)), 3),
-                    "toegepast": True,
-                    "nu_per_eenheid": round(prijs_nu, 4),
-                    "vorig_jaar_per_eenheid": round(prijs_oud, 4),
-                })
+        if paren >= PRIJSNIVEAU_MIN_DAGEN:
+            prijs_nu, prijs_oud = _mediaan(nu_prijzen), _mediaan(oud_prijzen)
+            rij.update({
+                "factor": round(min(PRIJSNIVEAU_MAX, max(PRIJSNIVEAU_MIN, prijs_nu / prijs_oud)), 3),
+                "toegepast": True,
+                "nu_per_eenheid": round(prijs_nu, 4),
+                "vorig_jaar_per_eenheid": round(prijs_oud, 4),
+            })
         uit[naam] = rij
     return uit
+
+
+def _mediaan(waarden: list) -> float:
+    reeks = sorted(waarden)
+    midden = len(reeks) // 2
+    return reeks[midden] if len(reeks) % 2 else (reeks[midden - 1] + reeks[midden]) / 2
 
 
 def _dagkosten(w: dict, dag: date, inst: Instellingen, schatting: bool, niveau: dict | None = None) -> dict:
