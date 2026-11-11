@@ -1,3 +1,11 @@
+EMS v5.226.0 - ronde nog sneller
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De prijzen en het geleerde verbruik per uur worden een keer per ronde ingelezen in plaats van tientallen tot honderden keren.
+- De tekortkans (Monte Carlo) wordt eens per vijf minuten berekend in plaats van elke minuut.
+- De uitkomsten van de planning zijn dezelfde.
+
 EMS v5.225.0 - snellere ronde
 
 Installeren: via de Marketplace bijwerken en herstarten.

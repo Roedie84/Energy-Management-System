@@ -870,6 +870,7 @@ from .const import (
     NEGATIEVE_PRIJS_MIN_MINUTEN,
     NEGATIEVE_PRIJS_UIT_EUR,
     LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH,
+    MONTE_CARLO_INTERVAL_S,
     MONTE_CARLO_SIMULATIONS,
     MONTE_CARLO_MAX_HOURS,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
@@ -3368,6 +3369,27 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         return None
 
     def _get_forecast_entries(
+        self, price_key_override: str | None = None
+    ) -> list[PriceEntry]:
+        """De prijsreeks; per ronde en per prijssleutel één keer ontleed (v5.226.0).
+
+        Profiel 11-11 18:30: 42 keer per ronde ontleed. De bevindingen over
+        de reeks (`prijsreeks_bevindingen`) horen bij de reeks die het laatst
+        is gelezen; bij hergebruik worden ze daarom teruggezet. Elke aanroeper
+        krijgt een eigen lijst.
+        """
+        memo = self._ronde_memo
+        if memo is None:
+            return self._lees_forecast_entries(price_key_override)
+        sleutel = ("prijsreeks", price_key_override)
+        if sleutel not in memo:
+            entries = self._lees_forecast_entries(price_key_override)
+            memo[sleutel] = (entries, getattr(self, "prijsreeks_bevindingen", None))
+        entries, bevindingen = memo[sleutel]
+        self.prijsreeks_bevindingen = bevindingen
+        return list(entries)
+
+    def _lees_forecast_entries(
         self, price_key_override: str | None = None
     ) -> list[PriceEntry]:
         """Read and parse the raw forecast attribute into (start, end, price) tuples.
@@ -19347,6 +19369,12 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         het gemiddelde (energiesom, v5.74).
         """
         soort = "weekend" if moment.weekday() >= 5 else "werkdag"
+        # v5.226.0: 1.461 aanroepen per ronde voor hooguit 48 uitkomsten.
+        return self._per_ronde(
+            ("verbruik_uur", soort, hour), lambda: self._bereken_verbruik_uur_kw(soort, hour)
+        )
+
+    def _bereken_verbruik_uur_kw(self, soort: str, hour: int) -> float | None:
         eigen = (getattr(self, "daytype_consumption_profile", None) or {}).get(f"{soort}-{hour}")
         if eigen and len(eigen) >= DAGTYPE_MIN_WAARNEMINGEN:
             return statistics.mean(eigen)
@@ -35075,6 +35103,24 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             return None
         return total_capacity_kwh * max(0.0, 1 - min_soc_percent / 100)
 
+    _monte_carlo_laatst: tuple | None = None
+
+    def _monte_carlo_op_tijd(self, now: datetime, cheap_block_start: datetime | None) -> None:
+        """De simulatie hooguit eens per MONTE_CARLO_INTERVAL_S (v5.226.0).
+
+        86.000 trekkingen per ronde voor een kans die van het uurprofiel en
+        de zonverwachting afhangt; die veranderen niet per minuut. Een ander
+        goedkoop blok rekent meteen opnieuw.
+        """
+        vorig = self._monte_carlo_laatst
+        if (
+            vorig is not None and vorig[1] == cheap_block_start
+            and 0 <= (now - vorig[0]).total_seconds() < MONTE_CARLO_INTERVAL_S
+        ):
+            return
+        self._monte_carlo_laatst = (now, cheap_block_start)
+        self._run_monte_carlo_simulation(now, cheap_block_start)
+
     def _run_monte_carlo_simulation(
         self, now: datetime, cheap_block_start: datetime | None
     ) -> None:
@@ -38935,7 +38981,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 duration_history_attr="washing_machine_cycle_duration_history",
                 notify_title="🧺 Wasmachine klaar",
             )),
-            ("monte carlo", lambda: self._run_monte_carlo_simulation(now, cheap_block_start)),
+            ("monte carlo", lambda: self._monte_carlo_op_tijd(now, cheap_block_start)),
         )
 
     def _leerstappen_voor_besluit(self, now: datetime, should_postpone_charging: bool) -> list:

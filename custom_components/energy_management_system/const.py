@@ -2244,6 +2244,8 @@ LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH = 0.03
 # already does (_estimate_worst_case_deficit_kwh), producing a
 # probability distribution instead of a single point estimate.
 MONTE_CARLO_SIMULATIONS = 1000
+# v5.226.0: de simulatie hooguit eens per vijf minuten (was elke ronde).
+MONTE_CARLO_INTERVAL_S = 300
 MONTE_CARLO_MAX_HOURS = 48
 
 

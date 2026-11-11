@@ -35624,3 +35624,14 @@ Uit het profiel van v5.224.0 (11-11 18:09, één ronde onder cProfile, 1.760 ms 
 - Gemeten voor de wijziging (8 rondes): mediaan 672 ms, op de lus 671 ms; fasen: besluit en sturen 792 ms, sensoren bijwerken 28 ms, meetlaag 5 ms.
 
 Tests: `test_v5225_per_ronde.py` (5).
+
+## v5.226.0 — prijsreeks en uurverbruik één keer per ronde, Monte Carlo eens per vijf minuten
+
+Ruud 11-11 19:58 (akkoord op de vier voorstellen). Gemeten op v5.225.0 (19 rondes): mediaan 394 ms (was 672), besluit en sturen 387 ms (was 792).
+
+- **Prijsreeks (1)**: `_get_forecast_entries` ontleedde de reeks 42 keer per ronde (149 ms in het profiel). Nu per ronde en per prijssleutel één keer; `prijsreeks_bevindingen` gaat bij hergebruik mee terug en elke aanroeper krijgt een eigen lijst.
+- **Uurverbruik (2)**: `verbruik_uur_kw` 1.461 aanroepen voor hooguit 48 uitkomsten (uur x dagtype); nu één keer per ronde per uitkomst.
+- **Reserve per kwartier (3)**: de reserve werd al hergebruikt (85 kwartieren, 23 berekeningen). De wandeling zelf deelt een budget voor de live correctie over het hele plan en is daarom niet per periode te onthouden; de winst komt hier uit 1 en 2, die in elke wandeling zitten. De gladgestreken verbruikscorrectie blijft per aanroep gerekend: die leest de meting van de lopende ronde.
+- **Monte Carlo (4)**: hooguit eens per `MONTE_CARLO_INTERVAL_S` (300 s), en meteen bij een ander goedkoop blok. Was 86.000 trekkingen per ronde.
+
+Tests: `test_v5226_per_ronde_2.py` (7), waaronder het kwartierplan met en zonder geheugen: gelijk.

@@ -62,7 +62,7 @@ def test_de_ronde_roept_ze_niet_meer_aan():
     bron = inspect.getsource(C._adviesstappen_voor_besluit) + inspect.getsource(C._adviesstappen_na_tijdlijn)
     for weg in ("mpc", "kalman", "digital_twin"):
         assert weg not in bron, weg
-    assert "_run_monte_carlo_simulation" in bron and "_update_advisory_readiness" in bron
+    assert "_monte_carlo_op_tijd" in bron and "_update_advisory_readiness" in bron
 
 
 def test_gereedheid_noemt_de_vervallen_modules_niet():

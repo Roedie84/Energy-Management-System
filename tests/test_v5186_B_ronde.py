@@ -91,7 +91,7 @@ def test_adviesstappen_in_dezelfde_volgorde():
     import inspect
 
     bron = inspect.getsource(C._adviesstappen_voor_besluit)
-    assert bron.index("_update_appliance_state_machine") < bron.index("_run_monte_carlo")
+    assert bron.index("_update_appliance_state_machine") < bron.index("_monte_carlo_op_tijd")
     assert "_compute_mpc_plan" not in bron and "_update_kalman" not in bron  # v5.221.0
 
 
