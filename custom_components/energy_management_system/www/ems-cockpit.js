@@ -1798,7 +1798,8 @@ class EmsCockpitCard extends HTMLElement {
     rijen.forEach((r, i) => {
       const t0 = tijden[i].getTime();
       if (t0 + 15 * 60000 <= nu || t0 >= tot) return;
-      const d = DOEN[doen(r)];
+      // v5.214.1: het lopende kwartier met het gemeten vermogen, net als de Vooruitblik.
+      const d = DOEN[doen(t0 <= nu ? this._rijNu(r) : r)];
       if (tijden[i].getMinutes() === 0) uren.push([segs.length, tijden[i].getHours()]);
       segs.push(
         `<i style="background:${d.kleur}" title="${esc(`${dagLabel(tijden[i])}${r.van}${PUNT}${d.label}` +
@@ -2024,7 +2025,12 @@ class EmsCockpitCard extends HTMLElement {
     const staven = rijen
       .map((r, i) => {
         const m = modus(r.modus);
-        const dk = doen(r);
+        // v5.214.1 (Ruud 11-11 12:57): de staaf van het lopende kwartier stond op
+        // "rust" (plan 2 W) terwijl de Vooruitblik "Huis voeden" zei (gemeten
+        // 0,5 kW). Nu allebei het gemeten vermogen.
+        const t0 = tijden[i].getTime();
+        const lopend = t0 <= Date.now() && t0 + 15 * 60000 > Date.now();
+        const dk = doen(lopend ? this._rijNu(r) : r);
         gezien.add(dk);
         const h = ((prijzen[i] - bodem) / bereik) * 100;
         const tip =

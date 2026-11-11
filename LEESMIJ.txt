@@ -1,3 +1,9 @@
+EMS v5.214.1 - cockpit: de staaf van nu klopt met de Vooruitblik
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- In "Prijs en lading" kon de staaf van het lopende kwartier "rust" tonen terwijl de Vooruitblik eronder "Huis voeden" zei. Staaf en tijdlijn volgen nu ook het gemeten vermogen van de accu.
+
 EMS v5.214.0 - zien waar het verwachte verbruik vandaan komt
 
 Installeren: via de Marketplace bijwerken en herstarten.

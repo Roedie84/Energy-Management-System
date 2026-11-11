@@ -35480,3 +35480,9 @@ Ruud 11-11 11:55 ("Alles akkoord"): vijf punten. Punt 1 (live verbruikscorrectie
 - **Tests** (punt 5): `test_tijdsbudget_in_de_event_loop` neemt de beste van drie pogingen; `test_zonneplan_cost_comparison.py` draait op een vaste klok (12:00). Beide faalden af en toe in de parallelle suite zonder fout in de code.
 
 Tests: `test_v5214_verbruiksmeetlat.py` (8).
+
+## v5.214.1 — cockpit: staaf en tijdlijn van het lopende kwartier volgen het gemeten vermogen
+
+Gemeld 11-11 12:57 (Ruud, schermafdruk "Foutje in de weergave?"): in "Prijs en lading" stond de eerste staaf (12:45) op "rust" terwijl de Vooruitblik eronder "12:45-20:45 Huis voeden · nu" toonde. De Vooruitblik en de tegel nemen voor het lopende kwartier het gemeten accuvermogen (0,5 kW ontladen); de staaf en de tijdlijn "Plan vandaag" namen het geplande vermogen (2 W, onder de grens van 50 W = rust). Nu alle vier het gemeten vermogen (`_rijNu`). Alleen weergave.
+
+Tests: `test_v52141_cockpit_lopend_kwartier.py` (3).
