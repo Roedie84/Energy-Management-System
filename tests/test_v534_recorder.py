@@ -23,7 +23,7 @@ from custom_components.energy_management_system.const import (
 
 ZWAAR = [
     "NilmConfirmedDevicesSensor", "GacsAssessmentSensor",
-    "ReliabilityOverviewSensor", "EnergyBridgeCheckSensor",
+    "ReliabilityOverviewSensor",
     "ClimateForecastSensor", "DigitalTwinAdvisorySensor", "MpcAdvisorySensor",
     "SystemStatusSensor", "BatteryCoolingSensor", "WeatherEnsembleSensor",
     "HourlyConsumptionProfileSensor", "LiveNarrativeSensor",
@@ -31,7 +31,7 @@ ZWAAR = [
     "PvHourlyBiasSensor", "KalmanFilterAdvisorySensor",
     "BatteryModuleHealthSensor", "CounterfactualSavingsSensor",
     "WaterUsageSensor", "DigitalTwinAccuracySensor", "MeldingenSensor",
-    "MonthlySummarySensor", "PvInstallationProfileSensor",
+    "PvInstallationProfileSensor",
 ]
 
 

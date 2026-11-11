@@ -35555,3 +35555,13 @@ Ruud 11-11 15:08 ("In principe kunnen alle detailpagina's weg toch? Ik heb ze ni
 - Sensoren en attributen zijn ongewijzigd; alleen de weergave is weg.
 
 Tests: 15 testbestanden en 205 testfuncties over het dashboardsjabloon verwijderd; nieuw `test_v5219_detaildashboard_weg.py` (7).
+
+## v5.220.0 — prijsniveau in de jaarafrekening, acht sensoren weg, pendelmeting bewaard
+
+Ruud 11-11 15:48 ("diepgaand onderzoek: getallen, berekeningen, zaken die niet meer gebruikt worden") en 15:55 ("Als je zeker bent van je zaak, alles akkoord"). Eerste deel van de vijftien punten; alleen wat aantoonbaar veilig is.
+
+- **Jaarafrekening (punt 1)**: de schatting van de rest van het contractjaar nam de eurobedragen van dezelfde dagen vorig jaar over, en daarmee de prijzen van toen (11-11: EUR 1,22 per m3 gas tegen 1,80 nu; 23 ct per kWh stroom tegen 53 ct afgelopen week). Nieuw `jaarafrekening.prijsniveau()`: per drager (afname, teruglevering, gas) de prijs per eenheid over de laatste 30 dagen gedeeld door die van dezelfde dagen vorig jaar; de bedragen van vorig jaar worden met die factor omgerekend. Minder dan 14 dagparen: factor 1 (zoals voorheen); begrensd op 0,5-3. Attribuut `prijsniveau`; de toelichting in de cockpit noemt de omrekening.
+- **Acht sensoren vervallen (punt 8 en 9)**: Discharge window start, Effective expensive quarters, Simulated action, Energy bridge check, Discharge value, Charge cost, Monthly summary en Learned night consumption. Ze hoorden bij de oude regels (dure kwartieren, laadblok) of noemden zichzelf verouderd; cockpit, dashboards, automations en dagcontrole lazen ze niet. Hun registratie wordt bij de start opgeruimd (`VERVALLEN_SENSOREN`). De tellers erachter blijven in de opslag; de melding "maandoverzicht" blijft.
+- **Pendelmeting (punt 14)**: `pendel_wh_vandaag` en `pendel_wh_gisteren` overleven een herstart (`p1_pendel_dagen` in de opslag).
+
+Tests: `test_v5220_opruimen_en_prijsniveau.py` (23); vijf testfuncties over de vervallen sensoren verwijderd, vier bijgewerkt.

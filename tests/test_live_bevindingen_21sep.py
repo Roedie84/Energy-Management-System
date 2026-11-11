@@ -75,27 +75,6 @@ def test_de_sensor_heeft_een_eenheid():
 # --- 2. unknown ---------------------------------------------------------
 
 
-def test_de_energiebrug_zegt_waarom_hij_leeg_is(make_coordinator, hass):
-    from custom_components.energy_management_system.sensor import EnergyBridgeCheckSensor as EnergyBridgeSensor
-
-    c = make_coordinator({})
-    c.last_has_enough_energy = None
-    s = EnergyBridgeSensor(c, "x")
-
-    assert s.native_value == "geen_blok_in_zicht"
-
-
-def test_de_gesimuleerde_actie_zegt_waarom_hij_leeg_is(make_coordinator, hass):
-    from custom_components.energy_management_system.sensor import SimulatedActionSensor
-
-    c = make_coordinator({})
-    c.last_simulated_action = None
-    c.learning_only = False
-    s = SimulatedActionSensor(c, "x")
-
-    assert s.native_value == "leermodus_uit"
-
-
 # --- 3. het nachtvenster ------------------------------------------------
 
 

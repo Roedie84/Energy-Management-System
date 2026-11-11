@@ -162,13 +162,6 @@ def test_48_cockpit_abonneert_niet_meer_op_de_maandsensor():
     assert 'geld: ["besparing", "maand",' not in JS
 
 
-def test_48_oude_sensoren_zeggen_dat_ze_verouderd_zijn():
-    from custom_components.energy_management_system.sensor import ChargeCostSensor, DischargeValueSensor
-    c = SimpleNamespace(total_charge_cost_eur=1.0, total_discharge_value_eur=2.0)
-    for klasse in (ChargeCostSensor, DischargeValueSensor):
-        assert klasse(c, "e").extra_state_attributes["verouderd"] is True
-
-
 # --- 49: daily_cost_history -----------------------------------------------------
 
 

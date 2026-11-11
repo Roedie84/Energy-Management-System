@@ -30,6 +30,14 @@ VELDEN = ("afname_eur", "terug_eur", "gas_eur", "gas_m3", "afname_kwh", "terug_k
 EB_STROOM_INCL_EUR = 0.11085
 #: Bandbreedte: dit deel van het variabele deel van de schatting.
 BAND_DEEL = 0.25
+#: v5.220.0: de schatting van de rest van het jaar rekent met het prijsniveau
+#: van nu. Per drager: prijs per eenheid over de laatste dagen, gedeeld door
+#: die van dezelfde dagen vorig jaar. Zonder genoeg dagparen: factor 1.
+PRIJSNIVEAU_DAGEN = 30
+PRIJSNIVEAU_MIN_DAGEN = 14
+PRIJSNIVEAU_MIN = 0.5
+PRIJSNIVEAU_MAX = 3.0
+_NIVEAU_DRAGERS = (("afname", "afname_eur", "afname_kwh"), ("terug", "terug_eur", "terug_kwh"), ("gas", "gas_eur", "gas_m3"))
 MAANDEN = ("jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec")
 
 
@@ -132,13 +140,62 @@ def kosten_vandaag(*, afname_eur, terug_eur, gas_eur, vast: dict) -> dict:
     }
 
 
-def _dagkosten(w: dict, dag: date, inst: Instellingen, schatting: bool) -> dict:
-    """De variabele kosten van één dag; bij een schatting met de regels van die dag."""
+def prijsniveau(dagen: dict, tot: date) -> dict:
+    """Hoe duur is het nu tegenover dezelfde dagen vorig jaar? (v5.220.0)
+
+    De schatting nam de eurobedragen van vorig jaar over, en daarmee de
+    prijzen van vorig jaar: op 11-11-2026 rekende ze de rest van het jaar met
+    EUR 1,22 per m3 gas (nu 1,80) en 23 ct per kWh stroom (afgelopen week
+    53 ct). Het verbruik van vorig jaar blijft de basis; de bedragen gaan
+    naar het prijsniveau van de laatste PRIJSNIVEAU_DAGEN dagen. Alleen
+    dagparen waarin beide jaren verbruik hadden tellen; bij minder dan
+    PRIJSNIVEAU_MIN_DAGEN paren blijft de factor 1 (zoals voorheen).
+    """
+    uit = {}
+    for naam, veld_eur, veld_vol in _NIVEAU_DRAGERS:
+        nu_eur = nu_vol = oud_eur = oud_vol = 0.0
+        paren = 0
+        for i in range(PRIJSNIVEAU_DAGEN):
+            dag = tot - timedelta(days=i)
+            nu, oud = dagen.get(dag), dagen.get(_dag_in_jaar(dag, dag.year - 1))
+            if not nu or not oud:
+                continue
+            try:
+                a_vol, b_vol = float(nu.get(veld_vol) or 0.0), float(oud.get(veld_vol) or 0.0)
+                a_eur, b_eur = float(nu.get(veld_eur) or 0.0), float(oud.get(veld_eur) or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if a_vol <= 0 or b_vol <= 0 or a_eur <= 0 or b_eur <= 0:
+                continue
+            paren += 1
+            nu_eur, nu_vol, oud_eur, oud_vol = nu_eur + a_eur, nu_vol + a_vol, oud_eur + b_eur, oud_vol + b_vol
+        rij = {"factor": 1.0, "dagen": paren, "toegepast": False}
+        if paren >= PRIJSNIVEAU_MIN_DAGEN and nu_vol > 0 and oud_vol > 0:
+            prijs_nu, prijs_oud = nu_eur / nu_vol, oud_eur / oud_vol
+            if prijs_oud > 0:
+                rij.update({
+                    "factor": round(min(PRIJSNIVEAU_MAX, max(PRIJSNIVEAU_MIN, prijs_nu / prijs_oud)), 3),
+                    "toegepast": True,
+                    "nu_per_eenheid": round(prijs_nu, 4),
+                    "vorig_jaar_per_eenheid": round(prijs_oud, 4),
+                })
+        uit[naam] = rij
+    return uit
+
+
+def _dagkosten(w: dict, dag: date, inst: Instellingen, schatting: bool, niveau: dict | None = None) -> dict:
+    """De variabele kosten van één dag; bij een schatting met de regels van die dag
+    en (v5.220.0) het prijsniveau van nu."""
     afname = float(w.get("afname_eur") or 0.0)
     terug = float(w.get("terug_eur") or 0.0)
+    gas_factor = 1.0
+    if schatting and niveau:
+        afname *= float((niveau.get("afname") or {}).get("factor") or 1.0)
+        terug *= float((niveau.get("terug") or {}).get("factor") or 1.0)
+        gas_factor = float((niveau.get("gas") or {}).get("factor") or 1.0)
     if schatting and inst.saldering_eind is not None and dag > inst.saldering_eind:
         terug = max(0.0, terug - float(w.get("terug_kwh") or 0.0) * EB_STROOM_INCL_EUR)
-    gas = float(w.get("gas_eur") or 0.0)
+    gas = float(w.get("gas_eur") or 0.0) * gas_factor
     m3 = float(w.get("gas_m3") or 0.0)
     if inst.gas_overstap is not None and dag >= inst.gas_overstap:
         gas, m3 = 0.0, 0.0
@@ -162,7 +219,7 @@ def _netto(s: dict) -> float:
     return s["afname_eur"] - s["terug_eur"] + s["gas_eur"] + s["vast_eur"] - s["eb_eur"]
 
 
-def _loop(dagen: dict, inst: Instellingen, begin: date, eind: date, tot: date):
+def _loop(dagen: dict, inst: Instellingen, begin: date, eind: date, tot: date, niveau: dict | None = None):
     """Loopt het contractjaar door: werkelijk t/m `tot`, daarna de schatting.
 
     Geeft (werkelijk, schatting, per maand netto, ontbrekende vorigjaardagen)."""
@@ -179,7 +236,7 @@ def _loop(dagen: dict, inst: Instellingen, begin: date, eind: date, tot: date):
             vorig = dagen.get(_dag_in_jaar(dag, dag.year - 1))
             if vorig is None:
                 ontbreekt += 1
-            k = _dagkosten(vorig or {}, dag, inst, True)
+            k = _dagkosten(vorig or {}, dag, inst, True, niveau)
             _tel(schatting, k, vast, eb)
         sleutel = (dag.year, dag.month)
         maand_netto[sleutel] = maand_netto.get(sleutel, 0.0) + (
@@ -234,7 +291,8 @@ def bereken(dagen: dict, start: date, vandaag: date, inst: Instellingen) -> dict
     """De hele kaart: stand nu, verwachte afrekening, opbouw, maandreeks en advies."""
     begin, eind = contractjaar(start, vandaag)
     tot = vandaag - timedelta(days=1)          # vandaag is nog niet af
-    werkelijk, schatting, maand_netto, ontbreekt = _loop(dagen, inst, begin, eind, tot)
+    niveau = prijsniveau(dagen, tot)
+    werkelijk, schatting, maand_netto, ontbreekt = _loop(dagen, inst, begin, eind, tot, niveau)
     afschrijvingen = afschrijfdatums(begin, inst.afschrijfdag)
     n_betaald = sum(1 for d in afschrijvingen if d <= vandaag)
     betaald = n_betaald * inst.termijn_eur
@@ -267,6 +325,8 @@ def bereken(dagen: dict, start: date, vandaag: date, inst: Instellingen) -> dict
         "saldering_eind": inst.saldering_eind.isoformat() if inst.saldering_eind else None,
         "gas_overstap": inst.gas_overstap.isoformat() if inst.gas_overstap else None,
         "vorig_jaar_ontbreekt_dagen": ontbreekt,
+        # v5.220.0: waarmee de bedragen van vorig jaar zijn omgerekend
+        "prijsniveau": niveau,
         "aannames": {
             "vastrecht_stroom_mnd": inst.vastrecht_stroom_mnd, "vastrecht_gas_mnd": inst.vastrecht_gas_mnd,
             "netbeheer_stroom_jaar": inst.netbeheer_stroom_jaar, "netbeheer_gas_jaar": inst.netbeheer_gas_jaar,

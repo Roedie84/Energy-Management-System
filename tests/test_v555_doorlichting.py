@@ -44,7 +44,6 @@ def _sensoren():
         "piek": sensor_mod.PeakPowerSensor(c, "e"),
         "huis": sensor_mod.HouseholdConsumptionSensor(c, "e"),
         "uur": sensor_mod.HourlyConsumptionProfileSensor(c, "e"),
-        "nacht": sensor_mod.LearnedNightConsumptionSensor(c, "e"),
         "klimaat": sensor_mod.ClimateForecastSensor(c, "e"),
         "twin": sensor_mod.DigitalTwinAccuracySensor(c, "e"),
     }
@@ -52,7 +51,7 @@ def _sensoren():
 
 def test_vermogenssensoren_krijgen_statistieken():
     s = _sensoren()
-    for naam in ("piek", "huis", "uur", "nacht"):
+    for naam in ("piek", "huis", "uur"):
         assert s[naam]._attr_device_class == "power", naam
         assert s[naam]._attr_state_class == "measurement", naam
         assert s[naam]._attr_native_unit_of_measurement == "W", naam
@@ -87,7 +86,6 @@ def test_leeg_blijft_none():
     c._read_corrected_consumption_power = lambda: None
     c.learned_hourly_avg_kw = lambda hour: None
     assert sensor_mod.ClimateForecastSensor(c, "e").native_value is None
-    assert sensor_mod.LearnedNightConsumptionSensor(c, "e").native_value is None
     assert sensor_mod.DigitalTwinAccuracySensor(c, "e").native_value is None
     assert sensor_mod.HouseholdConsumptionSensor(c, "e").native_value is None
     assert sensor_mod.HourlyConsumptionProfileSensor(c, "e").native_value is None

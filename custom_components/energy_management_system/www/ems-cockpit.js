@@ -3105,7 +3105,17 @@ class EmsJaarafrekeningCard extends HTMLElement {
   _noot(a) {
     const s = a.aannames || {};
     const mist = a.vorig_jaar_ontbreekt_dagen ? ` Van ${a.vorig_jaar_ontbreekt_dagen} resterende dagen ontbreekt het vorige jaar; die tellen als nul.` : "";
-    return `<div class="note">Werkelijk = dagkosten van de leverancier (met saldering) + vaste kosten naar rato. De rest van het contractjaar is geschat met dezelfde dagen een jaar eerder. ` +
+    // v5.220.0: de bedragen van vorig jaar zijn omgerekend naar het prijsniveau van nu
+    const pn = a.prijsniveau || {};
+    const pnDeel = (naam, sleutel) => {
+      const r = pn[sleutel];
+      if (!r || !r.toegepast) return "";
+      const f = Number(r.factor);
+      return `${naam} ${f >= 1 ? "+" : "\u2212"}${Math.abs(Math.round((f - 1) * 100))}%`;
+    };
+    const pnTekst = [pnDeel("stroom", "afname"), pnDeel("teruglevering", "terug"), pnDeel("gas", "gas")].filter(Boolean).join(", ");
+    const niveau = pnTekst ? ` De bedragen van toen zijn omgerekend naar het prijsniveau van de laatste 30 dagen (${pnTekst}).` : "";
+    return `<div class="note">Werkelijk = dagkosten van de leverancier (met saldering) + vaste kosten naar rato. De rest van het contractjaar is geschat met dezelfde dagen een jaar eerder.${niveau} ` +
       `Vaste kosten: vastrecht ${JE(s.vastrecht_stroom_mnd, 2)} + ${JE(s.vastrecht_gas_mnd, 2)} per maand, netbeheer ${JE(s.netbeheer_stroom_jaar)} + ${JE(s.netbeheer_gas_jaar)} per jaar (aan te passen in de EMS-instellingen zodra de jaarafrekening er is).${mist}</div>`;
   }
 }

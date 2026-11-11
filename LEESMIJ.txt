@@ -1,3 +1,11 @@
+EMS v5.220.0 - jaarafrekening met de prijzen van nu, acht oude sensoren weg
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Jaarafrekening: de schatting voor de rest van het jaar rekent met het prijsniveau van de laatste 30 dagen in plaats van de prijzen van vorig jaar. Het verwachte saldo kan daardoor flink veranderen.
+- Acht sensoren van de oude regels zijn weg (o.a. Charge cost, Discharge value, Monthly summary, Energy bridge check). Niets gebruikte ze nog.
+- De pendelmeting van gisteren blijft bewaard na een herstart.
+
 EMS v5.219.0 - de detailpagina's zijn weg
 
 Installeren: via de Marketplace bijwerken en herstarten. Ververs daarna de cockpit hard (Ctrl+F5).

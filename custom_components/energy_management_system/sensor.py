@@ -71,51 +71,59 @@ ATTR_CONSUMPTION_HISTORY = "history_kw"
 ATTR_SAMPLE_COUNT = "sample_count"
 
 
-def _ruim_accubescherming_op(hass: HomeAssistant, entry_id: str) -> None:
-    """Haal de vervallen sensor "Battery protection" uit het register (v5.177.0, A13).
+#: Sensoren die vervallen zijn; hun registratie wordt bij de start opgeruimd,
+#: anders blijft er een wees "niet beschikbaar" staan.
+#: v5.177.0 (A13): battery_protection. v5.220.0: sensoren van de oude regels
+#: (dure kwartieren, laadblok) en de drie die zichzelf "verouderd" noemden;
+#: niets las ze nog. De tellers erachter blijven in de opslag.
+VERVALLEN_SENSOREN = (
+    "battery_protection",
+    "discharge_window_start",
+    "effective_expensive_quarters",
+    "simulated_action",
+    "energy_bridge_check",
+    "discharge_value",
+    "charge_cost",
+    "monthly_summary",
+    "learned_night_consumption",
+)
 
-    Hij toonde het geschaalde verkoopvermogen van de oude dure-kwartierregel;
-    sinds het waardeplan stuurt, wordt dat nooit meer gezet en stond hij
-    altijd op 'unknown' (alleen het attribuut soc_percent). Zonder deze
-    opruiming bleef er een wees "niet beschikbaar" staan.
-    """
+
+def _ruim_vervallen_sensoren_op(hass: HomeAssistant, entry_id: str) -> None:
+    """Haal vervallen sensoren uit het register (zie VERVALLEN_SENSOREN)."""
     try:
         from homeassistant.helpers import entity_registry as er
 
         register = er.async_get(hass)
-        entity_id = register.async_get_entity_id("sensor", DOMAIN, f"{entry_id}_battery_protection")
-        if entity_id:
-            register.async_remove(entity_id)
     except Exception:  # noqa: BLE001 - opruimen mag het opstarten nooit breken
-        pass
+        return
+    for sleutel in VERVALLEN_SENSOREN:
+        try:
+            entity_id = register.async_get_entity_id("sensor", DOMAIN, f"{entry_id}_{sleutel}")
+            if entity_id:
+                register.async_remove(entity_id)
+        except Exception:  # noqa: BLE001
+            continue
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    _ruim_accubescherming_op(hass, entry.entry_id)
+    _ruim_vervallen_sensoren_op(hass, entry.entry_id)
     tracker = hass.data[DOMAIN][f"{entry.entry_id}_solar_tracker"]
 
     entities: list[SensorEntity] = [
         CheapestBlockStartSensor(coordinator, entry.entry_id),
         CurrentPricePerKwhSensor(coordinator, entry.entry_id),
-        DischargeWindowStartSensor(coordinator, entry.entry_id),
-        EffectiveExpensiveQuartersSensor(coordinator, entry.entry_id),
         LastDecisionReasonSensor(coordinator, entry.entry_id),
         SystemStatusSensor(coordinator, entry.entry_id),
         MeldingenSensor(coordinator, entry.entry_id),
-        MonthlySummarySensor(coordinator, entry.entry_id),
         ExplanationSensor(coordinator, entry.entry_id),
-        SimulatedActionSensor(coordinator, entry.entry_id),
-        LearnedNightConsumptionSensor(coordinator, entry.entry_id),
         HourlyConsumptionProfileSensor(coordinator, entry.entry_id),
         PvHourlyBiasSensor(coordinator, entry.entry_id),
         UpcomingTimelineSensor(coordinator, entry.entry_id),
         ExpectedOperationModeSensor(coordinator, entry.entry_id),
-        EnergyBridgeCheckSensor(coordinator, entry.entry_id),
-        DischargeValueSensor(coordinator, entry.entry_id),
-        ChargeCostSensor(coordinator, entry.entry_id),
         BatterySavingsSensor(coordinator, entry.entry_id),
         BatteryCoolingSensor(coordinator, entry.entry_id),
         BatteryModuleHealthSensor(coordinator, entry.entry_id),
@@ -227,7 +235,6 @@ async def async_setup_entry(
         entities.append(PvForecastAccuracySensor(tracker, entry.entry_id))
 
     async_add_entities(entities)
-
 
 
 def _schone_cyclusduren(reeks: list[float]) -> list[float]:
@@ -608,37 +615,6 @@ class CurrentPricePerKwhSensor(_CoordinatorDiagnosticSensor):
         return round(value, 4) if value is not None else None
 
 
-class DischargeWindowStartSensor(_CoordinatorDiagnosticSensor):
-    """Start of tonight's discharging window: the moment today's expensive
-    quarters end, running until the cheapest block begins."""
-
-    _attr_name = "Discharge window start"
-    _attr_icon = "mdi:battery-arrow-down"
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        super().__init__(coordinator, entry_id, "discharge_window_start")
-
-    @property
-    def native_value(self) -> datetime | None:
-        return self._coordinator.last_discharge_start
-
-
-class EffectiveExpensiveQuartersSensor(_CoordinatorDiagnosticSensor):
-    """How many expensive quarters are currently used (possibly reduced
-    from the configured normal count due to a low solar forecast)."""
-
-    _attr_name = "Effective expensive quarters"
-    _attr_icon = "mdi:counter"
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        super().__init__(coordinator, entry_id, "effective_expensive_quarters")
-
-    @property
-    def native_value(self) -> int | None:
-        return self._coordinator.last_effective_expensive_quarters_count
-
-
 class LastDecisionReasonSensor(_CoordinatorDiagnosticSensor):
     """Why the coordinator picked its most recent mode."""
 
@@ -819,141 +795,9 @@ class SystemStatusSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
         }
 
 
-class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
-    """VEROUDERD (v5.186.0): de toestand telt de oude "actieve sturing"
-    (ontladen in dure kwartieren min netlaadkosten). Vervangen door
-    `accukosten.netladen_maand` (sensor geleerd rendement) en de besparing.
-    Entiteit blijft bestaan voor bestaande dashboards; het prijsoverzicht
-    in de attributen is nog actueel.
-
-    Genuine month-over-month trend, on top of the existing rolling
-    7-day self-correction (which only ever looks at the recent past,
-    not whether things are improving release over release).
-
-    State is this month's net result (discharge value minus charge
-    cost) so far; attributes carry the full comparison against last
-    month.
-    """
-
-    _attr_name = "Monthly summary"
-    # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
-    _attr_icon = "mdi:calendar-month-outline"
-    # v5.186.0: "€" zoals de andere geldsensoren (geen state_class, dus geen
-    # langetermijnstatistiek die over de eenheidswissel struikelt).
-    _attr_native_unit_of_measurement = "€"
-    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        super().__init__(coordinator, entry_id, "monthly_summary")
-
-    @property
-    def native_value(self) -> float:
-        net = (
-            self._coordinator.current_month_discharge_value_eur
-            - self._coordinator.current_month_charge_cost_eur
-        )
-        return round(net, 2)
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        c = self._coordinator
-        previous_net = None
-        if (
-            c.previous_month_discharge_value_eur is not None
-            and c.previous_month_charge_cost_eur is not None
-        ):
-            previous_net = round(
-                c.previous_month_discharge_value_eur
-                - c.previous_month_charge_cost_eur,
-                2,
-            )
-        return {
-            # v5.15: gemiddelde in- en verkoopprijzen per periode, incl en
-            # excl btw - ook zonder een diagnostiek-export te downloaden.
-            "prijsoverzicht": self._coordinator.get_prijsoverzicht(),
-            "current_month_discharge_value_eur": round(
-                c.current_month_discharge_value_eur, 2
-            ),
-            "current_month_charge_cost_eur": round(
-                c.current_month_charge_cost_eur, 2
-            ),
-            "current_month_shortfall_days": c.current_month_shortfall_days,
-            "current_month_excess_days": c.current_month_excess_days,
-            "current_month_days_tracked": c.current_month_days_tracked,
-            "previous_month_discharge_value_eur": c.previous_month_discharge_value_eur,
-            "previous_month_charge_cost_eur": c.previous_month_charge_cost_eur,
-            "previous_month_shortfall_days": c.previous_month_shortfall_days,
-            "previous_month_excess_days": c.previous_month_excess_days,
-            "previous_month_days_tracked": c.previous_month_days_tracked,
-            "previous_month_net_eur": previous_net,
-            # v5.186.0: verouderd; de netlaadmarge van nu staat ernaast.
-            **_VEROUDERD_ACTIEVE_STURING,
-            "netladen_maand": _veilig_dict(
-                lambda: (c.get_accukosten() or {}).get("netladen_maand") or {}
-            ),
-        }
-
-    @_store_wint
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is None:
-            return
-        attrs = last_state.attributes
-        try:
-            c = self._coordinator
-            c.current_month_discharge_value_eur = float(
-                attrs.get("current_month_discharge_value_eur", 0.0)
-            )
-            c.current_month_charge_cost_eur = float(
-                attrs.get("current_month_charge_cost_eur", 0.0)
-            )
-            c.current_month_shortfall_days = int(
-                attrs.get("current_month_shortfall_days", 0)
-            )
-            c.current_month_excess_days = int(
-                attrs.get("current_month_excess_days", 0)
-            )
-            c.current_month_days_tracked = int(
-                attrs.get("current_month_days_tracked", 0)
-            )
-            if attrs.get("previous_month_discharge_value_eur") is not None:
-                c.previous_month_discharge_value_eur = float(
-                    attrs["previous_month_discharge_value_eur"]
-                )
-            if attrs.get("previous_month_charge_cost_eur") is not None:
-                c.previous_month_charge_cost_eur = float(
-                    attrs["previous_month_charge_cost_eur"]
-                )
-            if attrs.get("previous_month_shortfall_days") is not None:
-                c.previous_month_shortfall_days = int(
-                    attrs["previous_month_shortfall_days"]
-                )
-            if attrs.get("previous_month_excess_days") is not None:
-                c.previous_month_excess_days = int(
-                    attrs["previous_month_excess_days"]
-                )
-            if attrs.get("previous_month_days_tracked") is not None:
-                c.previous_month_days_tracked = int(
-                    attrs["previous_month_days_tracked"]
-                )
-        except (TypeError, ValueError):
-            pass
-
-
 HA_STATE_MAX_TEKENS = 255
 
 # v5.186.0: de oude "actieve sturing"-sensoren blijven, met deze uitleg.
-_VEROUDERD_ACTIEVE_STURING = {
-    "verouderd": True,
-    "vervangen_door": (
-        "Verouderd: telt de oude regels (ontladen in dure kwartieren, netladen "
-        "bij weinig zon). Zie 'netladen_maand' in de attributen 'accukosten' "
-        "van de sensor geleerd accurendement, en de besparing t.o.v. zonder "
-        "accu-sturing."
-    ),
-}
 
 
 def kort_op_zinsgrens(tekst: str | None, limiet: int = HA_STATE_MAX_TEKENS) -> str | None:
@@ -1060,28 +904,6 @@ class ExplanationSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
         }
 
 
-class SimulatedActionSensor(_CoordinatorDiagnosticSensor):
-    """What the coordinator would have done, while learning_only is on.
-
-    Empty/None when learning_only is off (since commands are actually sent).
-    """
-
-    _attr_name = "Simulated action"
-    _attr_icon = "mdi:flask-outline"
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        super().__init__(coordinator, entry_id, "simulated_action")
-
-    @property
-    def native_value(self) -> str | None:
-        # v5.11: de gesimuleerde actie vult alleen in leermodus. Daarbuiten
-        # stond er `unknown`, en dat ziet eruit als kapot.
-        actie = self._coordinator.last_simulated_action
-        if actie is None and not self._coordinator.learning_only:
-            return "leermodus_uit"
-        return actie
-
-
 class ExpectedOperationModeSensor(_CoordinatorDiagnosticSensor):
     """What the pure price/solar logic currently wants (smart,
     smart_discharging, or manual) - independent of force_manual or
@@ -1101,56 +923,6 @@ class ExpectedOperationModeSensor(_CoordinatorDiagnosticSensor):
     @property
     def native_value(self) -> str | None:
         return self._coordinator.last_expected_mode
-
-
-class EnergyBridgeCheckSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
-    """Does the battery already have enough available energy to bridge
-    the remaining time until the cheapest block, so charging can be
-    postponed (smart_discharging) instead of letting the Zendure charge
-    now (smart)?
-
-    None/unavailable when no available-energy sensor is configured, or
-    outside the relevant window (e.g. currently in an expensive quarter,
-    or the cheap block has already started).
-
-    Also keeps a log of the last transitions (when the decision flipped),
-    so you can review afterwards whether the switch happened at a
-    sensible moment - without needing to watch it live.
-    """
-
-    _attr_name = "Energy bridge check"
-    # v5.34: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
-    _attr_icon = "mdi:battery-clock"
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        super().__init__(coordinator, entry_id, "energy_bridge_check")
-
-    @property
-    def native_value(self) -> str | None:
-        result = self._coordinator.last_has_enough_energy
-        if result is None:
-            # v5.11: niet `unknown` - dat ziet eruit als kapot, terwijl er
-            # gewoon geen goedkoop blok in zicht is om naar te overbruggen.
-            return "geen_blok_in_zicht"
-        return "enough_to_postpone" if result else "top_up_needed"
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        return {
-            "available_kwh": self._coordinator.last_available_kwh,
-            "needed_kwh": self._coordinator.last_needed_kwh_to_bridge,
-            "transition_log": self._coordinator.energy_bridge_transition_log,
-        }
-
-    @_store_wint
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None:
-            log = last_state.attributes.get("transition_log")
-            if isinstance(log, list):
-                self._coordinator.energy_bridge_transition_log = log[-50:]
 
 
 class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
@@ -1333,105 +1105,6 @@ class BatterijladerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             self._coordinator.batterijlader_charge_duration_history = [
                 float(v) for v in duration_history
             ]
-
-
-class DischargeValueSensor(SensorEntity, RestoreEntity):
-    """VEROUDERD (v5.186.0): oude regels "actieve sturing"; zie
-    `accukosten.netladen_maand` en de besparing. Blijft bestaan.
-
-    Cumulative euro value of energy discharged during expensive
-    quarters (energy x price at that exact moment). Persisted across
-    restarts.
-
-    Deliberately NOT called "savings", since that would imply a
-    counterfactual (what would have happened without this integration)
-    that can't be honestly verified. This is the direct monetary value
-    of the discharge/export action itself.
-    """
-
-    _attr_has_entity_name = True
-    _attr_name = "Discharge value (expensive quarters)"
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER  # v5.186.0
-    _attr_icon = "mdi:cash-plus"
-    _attr_native_unit_of_measurement = "€"
-    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    # v5.166.1: monetary staat geen total_increasing toe (HA-waarschuwing);
-    # de som loopt alleen op en reset nooit, dus total telt hetzelfde.
-    _attr_state_class = "total"
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        self._coordinator = coordinator
-        self._attr_unique_id = f"{entry_id}_discharge_value"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": DEFAULT_NAME,
-        }
-
-    @property
-    def native_value(self) -> float:
-        return round(self._coordinator.total_discharge_value_eur, 4)
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        return dict(_VEROUDERD_ACTIEVE_STURING)  # v5.186.0
-
-    @_store_wint
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None:
-            try:
-                self._coordinator.total_discharge_value_eur = float(last_state.state)
-            except (TypeError, ValueError):
-                pass
-
-
-class ChargeCostSensor(SensorEntity, RestoreEntity):
-    """VEROUDERD (v5.186.0): oude regels "actieve sturing"; zie
-    `accukosten.netladen_maand` en de besparing. Blijft bestaan.
-
-    Cumulative euro cost of energy force-charged from the grid during
-    a low-solar cheap block (energy x price at that exact moment).
-    Persisted across restarts.
-    """
-
-    _attr_has_entity_name = True
-    _attr_name = "Charge cost (grid charging)"
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER  # v5.186.0
-    _attr_icon = "mdi:cash-minus"
-    _attr_native_unit_of_measurement = "€"
-    _attr_device_class = SensorDeviceClass.MONETARY  # v5.164.2: bedrag in euro
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    # v5.166.1: monetary staat geen total_increasing toe (HA-waarschuwing);
-    # de som loopt alleen op en reset nooit, dus total telt hetzelfde.
-    _attr_state_class = "total"
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        self._coordinator = coordinator
-        self._attr_unique_id = f"{entry_id}_charge_cost"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": DEFAULT_NAME,
-        }
-
-    @property
-    def native_value(self) -> float:
-        return round(self._coordinator.total_charge_cost_eur, 4)
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        return dict(_VEROUDERD_ACTIEVE_STURING)  # v5.186.0
-
-    @_store_wint
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None:
-            try:
-                self._coordinator.total_charge_cost_eur = float(last_state.state)
-            except (TypeError, ValueError):
-                pass
 
 
 class BatterySavingsSensor(SensorEntity, RestoreEntity):
@@ -4619,105 +4292,6 @@ class ApplianceReadyNotificationSensor(SensorEntity):
         return value or "Geen"
 
 
-class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
-    """Rolling average power (kW) measured during past discharging windows.
-
-    This is also where the learned history is persisted across Home
-    Assistant restarts.
-    """
-
-    # v5.76: attributen niet naar de recorder (zie GEEN_ATTRIBUTEN_IN_RECORDER).
-    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
-
-    _attr_has_entity_name = True
-    # v1.21.5, gemeld: "Tevens een nachtverbruik van 400W? Mijns
-    # inziens moet dit meer zijn, lijkt wel een uurwaarde?"
-    #
-    # De twijfel was terecht, maar anders dan verwacht. Het getal klopt
-    # - het is een VERMOGEN, geen dagtotaal - maar de naam niet: er
-    # wordt gemeten over het ONTLAADVENSTER (vanaf het moment dat de
-    # accu gaat leveren tot het goedkope laadblok), dus avond én nacht
-    # samen.
-    #
-    # Het geleerde uurprofiel laat 's nachts 200-290 W zien en 's avonds
-    # 300-380 W. De 403 W past bij een venster dat zwaarder op de avond
-    # leunt, en dat klopt: 's avonds is de prijs hoog, dus dan ontlaadt
-    # de accu.
-    _attr_name = "Gemiddeld vermogen in het ontlaadvenster"
-    _attr_icon = "mdi:chart-line"
-    _attr_native_unit_of_measurement = "W"
-    # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
-    # oktober: deze sensor had een eenheid maar geen device_class en geen
-    # state_class. Home Assistant bewaart dan alleen de ruwe geschiedenis
-    # (die na de recorder-bewaartermijn verdwijnt) en geen uurstatistieken;
-    # een grafiek over maanden kan dan niet.
-    # De toestand is een vermogen in W (mediaan, int of None).
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_state_class = "measurement"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        self._coordinator = coordinator
-        self._attr_unique_id = f"{entry_id}_learned_night_consumption"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": DEFAULT_NAME,
-        }
-
-    @property
-    def native_value(self) -> float | None:
-        # Stored/learned internally in kW (used for kWh math elsewhere);
-        # displayed in W for readability.
-        value = self._coordinator.learned_night_consumption_kw
-        return round(value * 1000) if value is not None else None
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        return {
-            # v1.21.5: zeggen wat er gemeten wordt, want "403 W" leek te
-            # hoog voor een nacht - terwijl het venster ook de avond
-            # bevat, waar het verbruik hoger ligt.
-            "toelichting": (
-                "Gemiddeld vermogen over het ontlaadvenster: vanaf het "
-                "moment dat de accu gaat leveren tot het goedkope "
-                "laadblok. Dat is avond én nacht samen, dus hoger dan "
-                "het verbruik in de kleine uurtjes alleen."
-            ),
-            ATTR_CONSUMPTION_HISTORY: [
-                round(v, 3) for v in self._coordinator.night_consumption_history
-            ],
-            ATTR_SAMPLE_COUNT: len(self._coordinator.night_consumption_history),
-            "bootstrapped_from_history": self._coordinator.was_bootstrapped_from_history,
-            "first_seen_date": (
-                self._coordinator.first_seen_date.isoformat()
-                if self._coordinator.first_seen_date
-                else None
-            ),
-        }
-
-    @_store_wint
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None:
-            history = last_state.attributes.get(ATTR_CONSUMPTION_HISTORY)
-            if isinstance(history, list):
-                try:
-                    self._coordinator.night_consumption_history = [
-                        float(v) for v in history
-                    ][-LEARNING_HISTORY_DAYS:]
-                except (TypeError, ValueError):
-                    pass
-            first_seen_raw = last_state.attributes.get("first_seen_date")
-            if first_seen_raw:
-                try:
-                    self._coordinator.first_seen_date = date.fromisoformat(
-                        first_seen_raw
-                    )
-                except (TypeError, ValueError):
-                    pass
-
-
 class HourlyConsumptionProfileSensor(ZuinigSchrijven, SensorEntity, RestoreEntity):
     """Learned average power (kW) per hour-of-day (0-23), sampled
     continuously all day every day - so seasons with less predictable
@@ -6450,7 +6024,6 @@ class ZendureLokaalSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):
             return meelezer.attributen()
         except Exception:  # noqa: BLE001 - meelezen mag de sensor niet breken
             return {"modus": "fout bij samenvatten"}
-
 
 
 class LuchtreinigerLokaalSensor(ZuinigSchrijven, _CoordinatorDiagnosticSensor):

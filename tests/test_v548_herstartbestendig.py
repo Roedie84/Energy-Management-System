@@ -123,23 +123,23 @@ def test_oplopende_teller_daalt_niet_door_een_oudere_opslag(make_coordinator):
 
 
 def test_store_wint_laat_een_oplopende_teller_niet_dalen(make_coordinator):
-    from custom_components.energy_management_system.sensor import DischargeValueSensor
+    # v5.220.0: de sensor Discharge value is vervallen; de regel zelf blijft
+    # gelden voor elke oplopende teller en wordt hier los getoetst.
+    from custom_components.energy_management_system.sensor import _store_wint
 
     bron = make_coordinator({})
     bron.total_discharge_value_eur = 10.0
     verse = _herstart(make_coordinator, bron)
 
-    class Toestand:
-        state = "10.75"
-        attributes = {}
+    class Sensor:
+        def __init__(self, coordinator):
+            self._coordinator = coordinator
 
-    sensor = DischargeValueSensor(verse, "x")
+        @_store_wint
+        async def async_added_to_hass(self):
+            self._coordinator.total_discharge_value_eur = 10.75
 
-    async def laatste():
-        return Toestand()
-
-    sensor.async_get_last_state = laatste
-    asyncio.run(sensor.async_added_to_hass())
+    asyncio.run(Sensor(verse).async_added_to_hass())
     assert verse.total_discharge_value_eur == 10.75
 
 

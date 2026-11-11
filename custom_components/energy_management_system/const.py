@@ -4335,6 +4335,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_veroudering_vandaag": {"type": "plain"},
     "_veroudering_day_key": {"type": "date"},
     "laagste_soc_vandaag_procent": {"type": "plain"},
+    # v5.220.0: pendelenergie van vandaag en gisteren overleeft een herstart.
+    "p1_pendel_dagen": {"type": "plain"},
 }
 
 # v5.48: tellers die alleen oplopen. Na een herstart nooit lager dan wat de

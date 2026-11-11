@@ -34,4 +34,5 @@ def test_opnieuw_proberen_binnen_enkele_minuten():
 
 def test_battery_protection_bestaat_niet_meer():
     assert not hasattr(S, "BatteryProtectionSensor")
-    assert hasattr(S, "_ruim_accubescherming_op")
+    # v5.220.0: de opruiming is verbreed naar alle vervallen sensoren.
+    assert "battery_protection" in S.VERVALLEN_SENSOREN and hasattr(S, "_ruim_vervallen_sensoren_op")

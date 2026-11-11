@@ -48004,6 +48004,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         return min(1.0, max(P1_REGELDOEL_FACTOR_MIN, factor))
 
     _p1_pendel_energie_staat: dict | None = None
+    #: v5.220.0: {"dag", "vandaag", "gisteren"}; wordt bewaard (PERSISTED_FIELDS).
+    p1_pendel_dagen: dict | None = None
 
     def _p1_pendel_energie(self, echt_w: float | None, now: datetime) -> dict:
         """Pendelenergie op de echte meter (v5.209.0, diagnose).
@@ -48011,7 +48013,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         Per blok van P1_PENDEL_ENERGIE_BLOK_S: wat in dat blok zowel werd
         afgenomen als teruggeleverd (2 x het kleinste van de twee). Een dag
         zon of een avond afname telt dus niet; heen en weer binnen een
-        minuut wel. Vandaag en gisteren, in Wh. Niet bewaard over een herstart.
+        minuut wel. Vandaag en gisteren, in Wh. Sinds v5.220.0 bewaard over een
+        herstart (Ruud: een herstart mag nooit historie kwijtraken).
         """
         s = self._p1_pendel_energie_staat
         dag = now.date().isoformat()
@@ -48019,6 +48022,15 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             s = {"t": None, "w": None, "blok": None, "imp": 0.0, "exp": 0.0,
                  "dag": dag, "vandaag": 0.0, "gisteren": None}
             self._p1_pendel_energie_staat = s
+            oud = self.p1_pendel_dagen if isinstance(self.p1_pendel_dagen, dict) else {}
+            try:
+                if oud.get("dag") == dag:
+                    s["vandaag"] = float(oud.get("vandaag") or 0.0)
+                    s["gisteren"] = oud.get("gisteren")
+                elif oud.get("dag") == (now.date() - timedelta(days=1)).isoformat():
+                    s["gisteren"] = round(float(oud.get("vandaag") or 0.0), 1)
+            except (TypeError, ValueError):
+                pass
         blok = int(now.timestamp() // P1_PENDEL_ENERGIE_BLOK_S)
         if s["t"] is not None and s["w"] is not None:
             dt_s = min(max((now - s["t"]).total_seconds(), 0.0), P1_PENDEL_ENERGIE_MAX_GAT_S)
@@ -48033,6 +48045,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         if dag != s["dag"]:
             s["gisteren"], s["vandaag"], s["dag"] = round(s["vandaag"], 1), 0.0, dag
         s["blok"], s["t"], s["w"] = blok, now, echt_w
+        self.p1_pendel_dagen = {"dag": s["dag"], "vandaag": round(s["vandaag"], 1), "gisteren": s["gisteren"]}
         return {"pendel_wh_vandaag": round(s["vandaag"], 1), "pendel_wh_gisteren": s["gisteren"]}
 
     _p1_pendel_staat: dict | None = None
