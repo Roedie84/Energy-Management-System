@@ -542,6 +542,37 @@ BAND_NAMEN = ("<500 W", "500-1500 W", ">1500 W")
 #: Een band is betrouwbaar met zoveel kwartieren en zoveel kWh.
 BAND_MIN_KWARTIEREN = 40
 BAND_MIN_KWH = 5.0
+#: v5.213.0 (Ruud 11-11 11:42, akkoord): een band telt in het plan pas
+#: zelfstandig mee vanaf zoveel rondes; daaronder het cijfer van de
+#: naastgelegen band. Gemeten 11-11: ontladen >1500 W op 3 rondes sprong van
+#: 101,8 naar 106,9 % door een verschoven meetvenster en stuurde het plan.
+BAND_MIN_RONDES = 8
+
+
+def band_voor_plan(banden: dict | None) -> list:
+    """Het rendement (fractie of None) per band in BAND_NAMEN-volgorde, voor het plan.
+
+    Een band die niet betrouwbaar is of op minder dan BAND_MIN_RONDES rondes
+    rust, krijgt het cijfer van de dichtstbijzijnde band die dat wel is (bij
+    gelijke afstand de lagere). Zonder zo'n buur: None (het ene getal).
+    Banden zonder veld `rondes` (oude gegevens) tellen zoals voorheen.
+    """
+    eigen = []
+    for naam in BAND_NAMEN:
+        b = (banden or {}).get(naam) or {}
+        rondes = b.get("rondes")
+        goed = (
+            b.get("betrouwbaar") and b.get("rendement_procent")
+            and (rondes is None or rondes >= BAND_MIN_RONDES)
+        )
+        eigen.append(b["rendement_procent"] / 100 if goed else None)
+    uit = []
+    for i, eta in enumerate(eigen):
+        if eta is None:
+            buren = sorted((abs(j - i), j) for j, e in enumerate(eigen) if e is not None)
+            eta = eigen[buren[0][1]] if buren else None
+        uit.append(eta)
+    return uit
 #: Een kwartier telt alleen mee als er minstens dit door de accu ging (kWh).
 #: v5.166.0: niet meer gebruikt door `rendement_per_band` (zie RONDE_*);
 #: blijft staan voor wie er nog naar verwijst.

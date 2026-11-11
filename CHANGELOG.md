@@ -35460,3 +35460,12 @@ Gemeten 11-11 11:03-11:15: het plan rekende dit uur met 0,9 kW verbruik (tekort 
 - Nagerekend met de echte planner: het plan van 11:07 (verkopen 12:30 tegen 57,7 ct, huis op het net om 16:00 tegen 59,6 ct) was binnen deze banden consistent - geen fout.
 
 Tests: `test_v5212_live_toets.py` (12), `test_v5212_band_onzekerheid.py` (4).
+
+## v5.213.0 — een rendementsband telt in het plan pas vanaf 8 rondes
+
+Ruud 11-11 11:42 (akkoord). Uit de meting van v5.212.0: ontladen >1500 W rust op 3 rondes en sprong door een verschoven meetvenster van 101,8 naar 106,9 % (± 2,6); dat cijfer bepaalde vanochtend of het plan verkocht (1200 W) of het huis dekte (1,6 kW).
+
+- `accukosten.band_voor_plan`: een band die niet betrouwbaar is of op minder dan `BAND_MIN_RONDES` (8) rondes rust, rekent in het waardeplan (en de live toets) met het cijfer van de dichtstbijzijnde band die dat wel is; zonder buur het ene getal, zoals voorheen. Stand 11-11: >1500 W rekent met 106,2 % (500-1500 W, 16 rondes).
+- De getoonde banden (`rendement_per_band`) blijven de gemeten cijfers.
+
+Tests: `test_v5213_band_min_rondes.py` (7).

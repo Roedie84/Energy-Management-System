@@ -710,11 +710,8 @@ class WaardeplanSturingMixin:
             uit["rendement_ontladen"] = min(A.ONTLAAD_RENDEMENT_MAX, ontladen / 100)
         banden = alle.get("ontladen") or {}
         grenzen = tuple(A.BANDEN_W) + (math.inf,)
-        rijen = []
-        for grens, naam in zip(grenzen, A.BAND_NAMEN):
-            b = banden.get(naam) or {}
-            eta = b["rendement_procent"] / 100 if b.get("betrouwbaar") and b.get("rendement_procent") else None
-            rijen.append((grens, eta))
+        # v5.213.0: een band op te weinig rondes neemt het cijfer van zijn buur.
+        rijen = list(zip(grenzen, A.band_voor_plan(banden)))
         if any(eta for _g, eta in rijen):
             uit["ontlaadbanden"] = tuple(rijen)
         return uit

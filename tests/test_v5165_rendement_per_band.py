@@ -83,6 +83,7 @@ def test_coordinator_neemt_alleen_betrouwbare_banden(make_coordinator, hass):
         ">1500 W": {"rendement_procent": 91.0, "betrouwbaar": True},
     }}
     banden = c._waardeplan_rendementen(NU)["ontlaadbanden"]
-    assert banden == ((500.0, 0.69), (1500.0, None), (float("inf"), 0.91))
+    # v5.213.0: een onbruikbare band neemt het cijfer van de dichtstbijzijnde bruikbare (was: None)
+    assert banden == ((500.0, 0.69), (1500.0, 0.69), (float("inf"), 0.91))
     c.get_rendement_per_band = lambda now=None: {"ontladen": {}}
     assert "ontlaadbanden" not in c._waardeplan_rendementen(NU)

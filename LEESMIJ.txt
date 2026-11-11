@@ -1,3 +1,9 @@
+EMS v5.213.0 - het plan springt niet meer op drie metingen
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het ontlaadrendement per vermogen (onder 500 W, 500-1500 W, boven 1500 W) bepaalt mee of de accu verkoopt of het huis dekt. Een band die op minder dan acht laad-/ontlaadrondes rust, rekent nu met het cijfer van de band ernaast. Boven 1500 W waren er drie rondes; dat cijfer schommelde vijf procentpunt en stuurde het plan.
+
 EMS v5.212.0 - de accu springt bij als het huis onverwacht veel verbruikt
 
 Installeren: via de Marketplace bijwerken en herstarten.
