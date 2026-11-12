@@ -24126,6 +24126,13 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             # aftrokken (salderingsoverschot); de nacalculatie rekent ermee.
             "korting_ct": round(k * 100, 2) if (k := self._salderingskorting_eur(now)) else None,
         }
+        # v5.228.0 (dagcontrole 12-11): stond de knop "Verkopen uit" aan? Zonder
+        # dit veld was een dag zonder verkoop achteraf niet van een stuurfout
+        # te onderscheiden (11-11: knop 11:08-24:00, alleen uit het logboek).
+        try:
+            regel["verkoop_pauze"] = bool(self.verkoop_pauze_actief(now))
+        except Exception:  # noqa: BLE001 - meten mag de sturing nooit raken
+            regel["verkoop_pauze"] = None
         # v5.167.0 (audit 02-11): de AC-energie van de accu over dit kwartier,
         # uit het accuvermogen (dat op het uur gelijk loopt met de kWh-meter).
         try:

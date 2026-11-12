@@ -1074,6 +1074,8 @@ class WaardeplanSturingMixin:
         self._kwartier_uitvoering = {"kwartier": self._kwartier_sleutel(now), "plan": uitvoerplan, "actie": plan_actie}
         plan["herplanningen"] = {k: v for k, v in (self.waardeplan_herplanningen or {}).items()
                                  if not k.startswith("_")}
+        # v5.228.0: de telling van de vorige dag (live wissels, midkwartier).
+        plan["herplanningen_gisteren"] = self.waardeplan_herplanningen_gisteren
         self.last_waardeplan = plan
         self._update_financial_tracking(now, entries, self.last_reason, discharge_power, charge_power)
         self._update_shortfall_detection(
@@ -1210,6 +1212,7 @@ class WaardeplanSturingMixin:
 
     _kwartier_uitvoering: dict | None = None
     waardeplan_herplanningen: dict | None = None
+    waardeplan_herplanningen_gisteren: dict | None = None
     _zon_herplan_kwartier = None
 
     _STAND_VAN_ACTIE = {
@@ -1313,6 +1316,11 @@ class WaardeplanSturingMixin:
         dag = dt_util.as_local(now).date().isoformat()
         teller = self.waardeplan_herplanningen
         if not isinstance(teller, dict) or teller.get("dag") != dag:
+            # v5.228.0 (dagcontrole 12-11): de telling van de vorige dag bewaren;
+            # om 00:00 was het aantal live wissels van gisteren anders weg.
+            if isinstance(teller, dict) and teller.get("dag"):
+                self.waardeplan_herplanningen_gisteren = {
+                    k: v for k, v in teller.items() if not k.startswith("_")}
             teller = {"dag": dag, "midkwartier": 0, "wissel_tegengehouden": 0,
                       "wissel_toegestaan": 0, "zon_afwijking": 0, "_laatst": {}}
         if sleutel is not None:

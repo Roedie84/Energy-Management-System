@@ -35645,3 +35645,14 @@ Gevonden bij de controle van 11-11 20:31: saldo EUR -529,05 (was EUR 217,34 voor
 - De fout zat in v5.220.0 t/m v5.226.0 en raakte alleen het verwachte saldo en het termijnadvies van de jaarafrekening, niet de sturing.
 
 Tests: `test_v5220_opruimen_en_prijsniveau.py` +3 (sprong, mediaan, onaannemelijke dagprijs), 1 aangepast.
+
+## v5.228.0 — dagverloop weet of de knop "Verkopen uit" aan stond; live wissels van gisteren bewaard
+
+Gevonden bij de dagcontrole van 12-11 06:45. Op 11-11 verkocht de accu niets, terwijl de avondpiek 61-68 ct was (achteraf ~EUR 0,30). Een naspeling van `waardeplan.plan` met de werkelijke prijzen, zon en verbruik verkoopt dan wel op de piek. De verklaring stond alleen in het logboek: de knop "Verkopen uit (vandaag)" was van 11:08 tot middernacht aangezet. Geen stuurfout, wel een meetgat.
+
+- **Dagverloop**: elke kwartierregel krijgt `verkoop_pauze` (true/false; null als het niet te bepalen was). Zo is een dag zonder verkoop achteraf van een stuurfout te onderscheiden.
+- **Herplanningen**: de telling per dag (live wissels met hun geschatte voordeel, midkwartierwissels) werd om middernacht gewist. De vorige dag staat nu in `herplanningen_gisteren` in het waardeplan (sensor Explanation, attribuut `waardeplan`).
+- Alleen meten; de sturing verandert niet.
+
+Tests: `test_v5228_dagcontrole_meetvelden.py` (4).
+
