@@ -178,6 +178,55 @@ class FinancienMixin:
     #: Bewaard: de afgesloten dagen (laatste 14).
     besparing_dagen: list | None = None
 
+    #: Bewaard: de eenmalige correcties op het hoofdgetal die al geboekt zijn.
+    hoofdgetal_correcties: list | None = None
+
+    #: v5.230.0: de stilstand van 08-11-2026 16:16 tot 09-11 05:23. Het EMS
+    #: rekende toen niets; de accu ontlaadde 6,3 kWh naar het huis en die
+    #: opbrengst is nooit geboekt. Uit de meterstatistieken (P1, zon, accu
+    #: per uur, volle prijs): 08-11 EUR -0,95 tegen EUR -2,56 geboekt, 09-11
+    #: EUR 2,51 tegen EUR 2,04. Per dag: (datum, bijboeking in EUR).
+    STILSTAND_0811 = ("stilstand-2026-11-08", 202611, (("2026-11-08", 1.61), ("2026-11-09", 0.47)))
+
+    def _boek_stilstand_0811_bij(self) -> bool:
+        """Boekt de gemiste opbrengst van de stilstand van 08/09-11 eenmalig bij (v5.230.0).
+
+        Alleen waar de dagregel van 08-11 nog het ongecorrigeerde bedrag
+        draagt (EUR -2,56): dat herkent deze ene installatie en deze ene
+        fout. Raakt alleen rapportage: het rauwe totaal, de maandteller en
+        de twee dagregels. Geeft True als er geboekt is.
+        """
+        naam, maandsleutel, dagen = self.STILSTAND_0811
+        gedaan = [c for c in (self.hoofdgetal_correcties or []) if isinstance(c, str)]
+        if naam in gedaan:
+            return False
+        regels = {d.get("datum"): d for d in (self.besparing_dagen or []) if isinstance(d, dict)}
+        eerste = regels.get(dagen[0][0])
+        rauw = eerste.get("rauw_eur") if eerste else None
+        if not isinstance(rauw, (int, float)) or not (-2.60 <= rauw <= -2.50):
+            return False
+        if not isinstance(self.counterfactual_cost_all_time_eur, (int, float)):
+            return False
+        totaal = round(sum(bedrag for _dag, bedrag in dagen), 2)
+        self.counterfactual_cost_all_time_eur += totaal
+        maand = self.besparing_maand if isinstance(self.besparing_maand, dict) else None
+        if self._counterfactual_month_key == maandsleutel:
+            self.counterfactual_cost_current_month_eur = (self.counterfactual_cost_current_month_eur or 0.0) + totaal
+        elif maand and isinstance(maand.get("begin_eur"), (int, float)):
+            # Een latere maand: de beginstand schuift mee, anders telt de
+            # bijboeking in de verkeerde maand.
+            maand["begin_eur"] = maand["begin_eur"] + totaal
+        for dag, bedrag in dagen:
+            regel = regels.get(dag)
+            if not regel:
+                continue
+            for veld in ("rauw_eur", "hoofdgetal_eur"):
+                if isinstance(regel.get(veld), (int, float)):
+                    regel[veld] = regel[veld] + bedrag
+            regel["bijgeboekt_eur"] = bedrag
+        self.hoofdgetal_correcties = gedaan + [naam]
+        return True
+
     def _begin_besparingsdag(self, afsluiting: dict | None) -> None:
         """Inhoud, boekwaarde en kostprijsstand bij het dagbegin (v5.172.0)."""
         self._savings_day_start_available_kwh = self.voorraad_inhoud_kwh()

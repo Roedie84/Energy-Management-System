@@ -36277,6 +36277,13 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # waardoor hij in de DOEN-stapel belandde terwijl er niets te
         # configureren viel.
         self._recompute_measurement_quality()
+        # v5.230.0: eenmalige bijboeking op het hoofdgetal (stilstand 08/09-11).
+        try:
+            if self._boek_stilstand_0811_bij():
+                _LOGGER.warning("Hoofdgetal: EUR 2,08 bijgeboekt voor de stilstand van 08/09-11-2026")
+                self.schedule_persisted_state_save()
+        except Exception:  # noqa: BLE001 - een bijboeking mag het opstarten niet breken
+            _LOGGER.exception("Kon de stilstand van 08-11 niet bijboeken")
         # v5.9: onthouden wat er geladen is, zodat het na de sensoren nog
         # een keer teruggezet kan worden - zie `herstel_de_opslag_na_de_sensoren`.
         # v5.48: pas hier, NA de opschoningen en migraties hierboven.

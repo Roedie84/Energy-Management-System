@@ -1,3 +1,10 @@
+EMS v5.230.0 - besparing: gemiste uren van 8/9 november bijgeboekt
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het EMS stond van 08-11 16:16 tot 09-11 05:23 stil; de accu leverde toen 6,3 kWh aan het huis en dat telde niet mee. Eenmalig EUR 2,08 bijgeboekt (totaal, november en de week).
+- Alleen rapportage; de sturing van de accu verandert niet.
+
 EMS v5.229.0 - maandbesparing overal hetzelfde getal
 
 Installeren: via de Marketplace bijwerken en herstarten.

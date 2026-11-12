@@ -35672,3 +35672,13 @@ Gewijzigd:
 - Alleen rapportage; de sturing verandert niet.
 
 Tests: `test_v5229_maandbesparing.py` (7).
+
+## v5.230.0 — hoofdgetal: stilstand van 08/09-11 eenmalig bijgeboekt
+
+Onderzoek 12-11 (opbrengst van het accuplan), akkoord Ruud 12-11 08:50. Het EMS rekende niets van 08-11 16:16 tot 09-11 05:23 (kalibratie, verholpen in v5.195.1). De accu ontlaadde in die uren 6,3 kWh naar het huis; de lading stond wel in het hoofdgetal, de opbrengst niet.
+
+- Uit de meterstatistieken (P1, zon en accu per uur, volle prijs): 08-11 EUR -0,95 tegen EUR -2,56 geboekt (+1,61), 09-11 EUR 2,51 tegen EUR 2,04 (+0,47). Op de tien andere dagen van 31-10 t/m 11-11 is het verschil tussen meters en EMS hooguit EUR 0,09 per dag.
+- **Eenmalig EUR 2,08 bijgeboekt** op het rauwe totaal, de maandteller van november en de dagregels van 08-11 en 09-11 (`bijgeboekt_eur`). Alleen als de dagregel van 08-11 nog het oude bedrag draagt; daarna vastgelegd in `hoofdgetal_correcties`, dus nooit twee keer.
+- Alleen rapportage; de sturing verandert niet.
+
+Tests: `test_v5230_stilstand_bijboeken.py` (5).

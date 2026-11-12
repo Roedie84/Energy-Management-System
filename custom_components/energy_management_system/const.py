@@ -3920,6 +3920,7 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_kostprijs_dagbegin_eur": {"type": "plain"},
     "sluimer_vandaag": {"type": "plain"},
     "besparing_dagen": {"type": "plain"},
+    "hoofdgetal_correcties": {"type": "plain"},
     "baseline_load_history": {"type": "plain"},
     "climate_forecast_bias_history": {"type": "plain"},
     "climate_rate_history": {"type": "plain"},
