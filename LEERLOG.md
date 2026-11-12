@@ -1186,4 +1186,6 @@ laatste ronde: 11-11 06:45, gemeten t/m 11-11 06:45
 - Stilstand 6 wachten, 0 doen. Storingen: alleen cache-waarschuwingen Zonneplan-kosten 00:02 (bekend) en prijzen uit cache na herstart 20:42.
 - Niet gemeten: live_wissel 11-11 (teller wist om 00:00), SoC-voorspelling, NILM, MC-Brier (nacht loopt tot 09:00).
 
+- Gebouwd **v5.228.0** (alleen meten): dagverloop-veld `verkoop_pauze` per kwartier en `herplanningen_gisteren` (live wissels van de vorige dag). Suite 7109 groen, workflow groen, Marketplace ververst. Push naar GitHub werkte vandaag weer vanuit de geplande taak.
+
 laatste ronde: 12-11 06:45, gemeten t/m 12-11 06:45

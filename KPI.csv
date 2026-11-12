@@ -1425,3 +1425,4 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-12 06:45,DAG,module1_delta_max_dag,0.03,476,"12-11 00:00-06:45 dag_metingen; 00917 0.02, 02093 0.01"
 2026-11-12 06:45,DAG,module1_laagste_cel,3.10,1,"11-11; 00917 3.10, 02093 3.10"
 2026-11-12 06:45,DAG,module1_soc_laag_afwijking_pct,-2,1,"12-11 01:05-03:00 module 1 9 %, andere 11 %"
+2026-11-12 06:45,DAG,ems_tests_main,7109,7121,"v5.228.0, 12 overgeslagen"
