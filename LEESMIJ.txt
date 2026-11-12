@@ -1,3 +1,11 @@
+EMS v5.229.0 - maandbesparing overal hetzelfde getal
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- "Besparing deze maand" stond als sensor op EUR 3,49 en in het periodeoverzicht op EUR 6,02. Het overzicht rekent nu uit dezelfde teller: maand (afgesloten dagen) + vandaag = de sensor.
+- De dagcijfers lopen door tijdens een kalibratie (de dag van 08-11 was halverwege blijven staan).
+- Alleen rapportage; de sturing van de accu verandert niet.
+
 EMS v5.228.0 - meetgegevens voor de dagcontrole
 
 Installeren: via de Marketplace bijwerken en herstarten.

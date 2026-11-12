@@ -35656,3 +35656,19 @@ Gevonden bij de dagcontrole van 12-11 06:45. Op 11-11 verkocht de accu niets, te
 
 Tests: `test_v5228_dagcontrole_meetvelden.py` (4).
 
+
+## v5.229.0 — maandbesparing: periodeoverzicht en sensor uit één bron
+
+Gevonden 12-11 bij het onderzoek naar de opbrengst van het accuplan: de sensor "Besparing deze maand" stond op EUR 3,49 en het periodeoverzicht (maand) op EUR 6,02.
+
+Drie oorzaken:
+- Het overzicht telde de rauwe dagregels op, zonder de voorraad in de accu, omdat niet elke dag van de maand een regel met het hoofdgetal had (die bestaan sinds v5.172.0, 7 van de 11 dagen).
+- De dagregel van 08-11 was blijven staan op de stand van 10:55 (3,3 kWh afname in plaats van 17,6 kWh): de dagstand werd pas na de kalibratietak bijgewerkt en stond dus tijdens de kalibratie stil. Daardoor stond die dag op EUR -0,09 in plaats van EUR -2,56.
+- De sensor telt vandaag mee, het overzicht alleen afgesloten dagen.
+
+Gewijzigd:
+- **Periodeoverzicht**: `vandaag.besparing_eur` is het gecorrigeerde dagcijfer (zoals de dagsensor); `maand.besparing_eur` is de maandteller min vandaag. Dan geldt: maand + vandaag = sensor "Besparing deze maand". De rauwe sommen staan onder `besparing_rauw_eur`; `besparing_bron` zegt waar het maandcijfer vandaan komt. Week, jaar en contractjaar ongewijzigd.
+- **Dagstand**: loopt mee tijdens een kalibratie.
+- Alleen rapportage; de sturing verandert niet.
+
+Tests: `test_v5229_maandbesparing.py` (7).

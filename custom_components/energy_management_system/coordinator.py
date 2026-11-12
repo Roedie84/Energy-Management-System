@@ -29189,6 +29189,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         contract_begin = self._huidig_contractjaar_begin(vandaag)
         if contract_begin is not None:
             perioden["contractjaar"] = _tel(_dagen_vanaf(contract_begin))
+        if not ruw:
+            self._besparing_uit_de_maandteller(perioden, nu)
 
         return {
             "grootheden": [
@@ -29211,6 +29213,55 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 "De langere perioden rusten op afgesloten dagen."
             ),
         }
+
+    def _besparing_uit_de_maandteller(self, perioden: dict, nu: datetime) -> None:
+        """Vandaag en de maand uit dezelfde bron als de besparingssensoren (v5.229.0).
+
+        Gevonden 12-11: de sensor "Besparing deze maand" stond op EUR 3,49 en
+        het periodeoverzicht op EUR 6,02. Het overzicht telde de rauwe
+        dagregels op (zonder de voorraad in de accu, omdat niet elke dag van
+        de maand een regel met het hoofdgetal had), en de dagregel van 08-11
+        was halverwege de dag blijven staan. De sensor telt bovendien vandaag
+        mee, het overzicht niet.
+
+        Nu: vandaag = het gecorrigeerde dagcijfer (zoals de dagsensor), en de
+        maand = de maandteller min vandaag. Dan geldt altijd: maand
+        (afgesloten dagen) + vandaag = sensor "Besparing deze maand". De
+        rauwe sommen blijven staan onder `besparing_rauw_eur`.
+        """
+        try:
+            rauw = self.counterfactual_cost_today_eur - self.actual_cost_today_eur
+            corr = self.get_savings_correction() or {}
+            vandaag_eur = rauw
+            met_voorraad = bool(corr.get("correctie_beschikbaar"))
+            if met_voorraad:
+                vandaag_eur += corr.get("voorraadwaarde_exact_eur") or 0.0
+            if not math.isfinite(vandaag_eur):
+                return
+            rij = perioden.get("vandaag")
+            if isinstance(rij, dict):
+                rij["besparing_rauw_eur"] = round(rauw, 2)
+                rij["besparing_eur"] = round(vandaag_eur, 2)
+                rij["besparing_met_voorraad"] = met_voorraad
+            maand = perioden.get("maand")
+            teller = self.besparing_maand if isinstance(self.besparing_maand, dict) else {}
+            waarde = teller.get("waarde_eur")
+            if (
+                not isinstance(maand, dict)
+                or teller.get("maand") != f"{dt_util.as_local(nu):%Y-%m}"
+                or not isinstance(waarde, (int, float))
+                or not math.isfinite(waarde)
+            ):
+                return
+            afgesloten = round(float(waarde) - vandaag_eur, 2)
+            maand["besparing_eur"] = afgesloten
+            maand["besparing_met_voorraad"] = True
+            maand["besparing_bron"] = "maandteller min vandaag"
+            dagen = (maand.get("dagen_met_waarde") or {}).get("besparing_eur") or maand.get("dagen")
+            if dagen and isinstance(maand.get("gemiddeld_per_dag"), dict):
+                maand["gemiddeld_per_dag"]["besparing_eur"] = round(afgesloten / dagen, 2)
+        except Exception:  # noqa: BLE001 - een rapportagegetal mag het overzicht niet breken
+            _LOGGER.debug("Besparing uit de maandteller niet bepaald", exc_info=True)
 
     def get_self_consumption_overview(self, now: datetime | None = None) -> dict:
         """Zelfconsumptie over dag, week, maand, jaar en contractjaar
@@ -39499,6 +39550,14 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 self._update_battery_cost_basis_and_savings(now, entries)
             except Exception:  # noqa: BLE001 - boekhouding mag de kalibratie niet breken
                 _LOGGER.debug("Kostprijs tijdens de kalibratie niet bij te werken", exc_info=True)
+            # v5.229.0: en de dagstand loopt mee. Die werd verderop in de
+            # ronde bijgewerkt, dus bleef tijdens een kalibratie staan: de
+            # dagregel van 08-11 sloot af met de stand van 10:55 (3,3 kWh
+            # afname in plaats van 17,6 kWh).
+            try:
+                self._onthoud_energiedagstand(now.date())
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Dagstand tijdens de kalibratie niet bij te werken", exc_info=True)
             self.last_explanation = self._build_explanation()
             return
 
