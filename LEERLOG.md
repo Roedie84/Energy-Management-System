@@ -1189,3 +1189,8 @@ laatste ronde: 11-11 06:45, gemeten t/m 11-11 06:45
 - Gebouwd **v5.228.0** (alleen meten): dagverloop-veld `verkoop_pauze` per kwartier en `herplanningen_gisteren` (live wissels van de vorige dag). Suite 7109 groen, workflow groen, Marketplace ververst. Push naar GitHub werkte vandaag weer vanuit de geplande taak.
 
 laatste ronde: 12-11 06:45, gemeten t/m 12-11 06:45
+
+## 12-11 07:35 · vanuit de chat (akkoord Ruud: ontlaadrendement een week meten)
+- **H-EMS-23 een week meten, t/m de dagcontrole van 19-11.** Elke dagcontrole: het rendement van de dag zelf uit de HomeWizard-meter van de accu via het dagverloop (laden: opgeslagen kWh / AC in; ontladen: AC uit / afgenomen kWh uit de SoC), naast wat het plan die dag rekende per band (`accukosten.rendement_per_band`, met `rondes` en `onzekerheid_procentpunt`). Zet in KPI.csv: `accu_ontlaadrendement_dag_pct`, `accu_laadrendement_dag_pct`, `accu_ontlaadrendement_plan_pct` (gewogen naar de kWh per band van die dag) en de ontladen kWh als n. Nulmeting 11-11: laden 86 %, ontladen 91 % (7,07 kWh AC uit), plan 99-105 %.
+- Geen wijziging aan de sturing in deze week. Op 19-11: gemiddelde over de week (gewogen naar kWh), spreiding per dag, en wat een lager ontlaadrendement in euro's per dag scheelt (naspeling van `waardeplan.plan` met het gemeten cijfer). Ligt het gemeten ontlaadrendement over de week meer dan 3 procentpunt onder wat het plan rekent: voorstel met het eurobedrag aan Ruud. Anders: hypothese sluiten.
+- Ook meenemen (ontbrak 12-11): `rondes` per rendementsband (ontladen >1500 W stond 12-11 op 3) en `verbruik_opbouw` bij een onverwachte verbruiker (H-EMS-20).
