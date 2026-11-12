@@ -1174,3 +1174,16 @@ laatste ronde: 11-11 06:45, gemeten t/m 11-11 06:45
   - Dagoverzicht: zin "Zendure-integratie ... zelf herladen (tijden)"; in de HA-log de waarschuwing "herlaadt de Zendure-integratie nu zelf".
 - **Open vraag H-EMS-20 (nieuw):** om 11:08 rekende het plan met 901 W (11 u), 396 W (12 u), 1404 W (13 u), 1096 W (14 u) tegen een uurprofiel van 497/370/788/697 W. Geen witgoed gepland of lopend. Welk deel is live correctie (budget 1,5 kWh), dagtype of klimaat-extra? Uit te lezen met `verbruik_opbouw` bij de eerstvolgende onverwachte verbruiker.
 - Nagerekend met de echte planner: het plan van 11:07 (verkopen 12:30 tegen 57,7 ct, huis op het net 16:00 tegen 59,6 ct) was consistent binnen de banden van dat moment (>1500 W 101,8 %); dat bandcijfer bleek op 3 rondes te rusten.
+
+## 12-11 06:45 · dagcontrole (11-11 06:45 t/m 12-11 06:45; v5.227.0 geïnstalleerd sinds 11-11 20:42)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, rendement van de dag zelf 86/91 %, eind 75 %): werkelijk € 3,62, optimum € 3,30 → **gemist € 0,33**; zonder accu € 5,21. **0 FOUT.** € 0,30 = knop 'Verkopen uit (vandaag)', door een gebruiker aangezet 11:08: geen verkoop op de piek 16:15-19:15 (61-68 ct), accu dekte het huis 11:30-21:30. Replay `waardeplan.plan` (repo-code) met de werkelijke data zonder knop verkoopt 16:15-19:15 op 2,4 kW; met het verkoopverbod was de uitvoering vrijwel optimaal (LP € 3,59). € 0,03 pech (11:00-11:15 0,5 kWh net bij 56-57 ct vóór de knop, plan hield vast voor een verkoop).
+- Regels c: geen verkoop; geen vastgehouden lading (leeg 21:30); lege accu 21:30-03:00 net 37-47 ct, eerder laden was niet goedkoper.
+- Nacht 12-11: 6,54 kWh geladen gem. 35,2 ct (03:00-06:00, zelfde blok als LP), 05:30-06:15 om 06:13 geschrapt, gestopt op 75 %; om 06:45 verkoopt het plan tot ~10:00 tegen 41-45 ct en laadt 10:45 (32,7 ct) en 13:00-15:30 bij (voorlopig).
+- Rendement van de dag zelf (HomeWizard via dagverloop): laden 86 %, ontladen 91 % (7,07 kWh AC uit voor 90 % SoC); plan rekent ontladen 99-105 %. Kleine steekproef → H-EMS-23: ontlaadrendement van het plan > 100 % tegen 91 % gemeten op een hele dag.
+- Regeloverschot 'huis' 11-11 0,0033 kWh/kw (38 kw; nulmeting 10-11 0,045). Pendel gisteren 104,5 Wh maar alleen 20:42-24:00 (herstarts), geen dagwaarde.
+- PV-plan bias 10 d −5,6 % (was −7,1; 30 d −14,8 %), snelle correctie 1,05 → 0,84 kWh/d, beter. Verbruiksmeetlat sinds 20:42: 142/109/88 W (0/1/3 u).
+- Module 1: 100 % 0,06 V (0,09 → 0,08 → 0,06), 0 % 0,04 V (anderen 0,01), 90 % 0,01 V, max vandaag 0,03 V, laagste cel 3,10 (gelijk), SoC laag −2 %. Geen drempel; daalt.
+- Stilstand 6 wachten, 0 doen. Storingen: alleen cache-waarschuwingen Zonneplan-kosten 00:02 (bekend) en prijzen uit cache na herstart 20:42.
+- Niet gemeten: live_wissel 11-11 (teller wist om 00:00), SoC-voorspelling, NILM, MC-Brier (nacht loopt tot 09:00).
+
+laatste ronde: 12-11 06:45, gemeten t/m 12-11 06:45
