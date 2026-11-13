@@ -1194,3 +1194,16 @@ laatste ronde: 12-11 06:45, gemeten t/m 12-11 06:45
 - **H-EMS-23 een week meten, t/m de dagcontrole van 19-11.** Elke dagcontrole: het rendement van de dag zelf uit de HomeWizard-meter van de accu via het dagverloop (laden: opgeslagen kWh / AC in; ontladen: AC uit / afgenomen kWh uit de SoC), naast wat het plan die dag rekende per band (`accukosten.rendement_per_band`, met `rondes` en `onzekerheid_procentpunt`). Zet in KPI.csv: `accu_ontlaadrendement_dag_pct`, `accu_laadrendement_dag_pct`, `accu_ontlaadrendement_plan_pct` (gewogen naar de kWh per band van die dag) en de ontladen kWh als n. Nulmeting 11-11: laden 86 %, ontladen 91 % (7,07 kWh AC uit), plan 99-105 %.
 - Geen wijziging aan de sturing in deze week. Op 19-11: gemiddelde over de week (gewogen naar kWh), spreiding per dag, en wat een lager ontlaadrendement in euro's per dag scheelt (naspeling van `waardeplan.plan` met het gemeten cijfer). Ligt het gemeten ontlaadrendement over de week meer dan 3 procentpunt onder wat het plan rekent: voorstel met het eurobedrag aan Ruud. Anders: hypothese sluiten.
 - Ook meenemen (ontbrak 12-11): `rondes` per rendementsband (ontladen >1500 W stond 12-11 op 3) en `verbruik_opbouw` bij een onverwachte verbruiker (H-EMS-20).
+
+## 13-11 06:45 · dagcontrole (12-11 06:45 t/m 13-11 06:45; v5.230.0 geïnstalleerd sinds 12-11 09:29)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, rendement van de dag 83,5/100 %, start 75 % eind 98 %): werkelijk € 2,46, optimum € 2,36 → **gemist € 0,10, 0 FOUT**. Verschil zit in het middagladen 13:00-15:15 (31-34 ct) voor de avondverkoop 17:15-19:15 (40,8-41,8 ct): bij 83,5 % en 4,22 ct net niet lonend, met de marginale slijtage van het plan wel (model, geen fout). Ochtendverkoop 06:45-10:00 (41-44,5 ct) en nachtladen 01:45-04:45 (~30 ct) gelijk aan het optimum.
+- Regels c: verkoop 41-44 ct teruggekocht 30-34 ct (winst); leeg 19:30-22:15 met net 34-40 ct na verkoop op 40,8-41,8 ct (verkoop was meer waard); geen vastgehouden lading. Verkopen optimaal € 0,18 waard; werkelijk € 0,08 beter dan optimum zonder verkopen.
+- 13-11 plan (voorlopig): verkoopt 07:30-09:15 (43-49 ct), laadt 11:00-14:30 (32-36 ct), verkoopt 16:30-20:45 (45-53 ct). Volle accu om 06:45 houdt bewust vast voor 07:30.
+- H-EMS-23 dag 2: laden 83,5 % (plan 83,3), ontladen 100,8 % op 9,1 kWh >1500 W (plan 101,5). Gat 0,7 pp (11-11: 91 % tegen 99-105). Doorgaan t/m 19-11.
+- PV-plan 10 d −4,7 % (binnen ±5; was −5,6), snelle correctie 0,81 kWh/d. PV 12-11 3,76 kWh. Pendel 223 Wh (pas vanaf herstart 09:29); regeloverschot 'huis' 1 kwartier, niet representatief.
+- Module 1: 100 % 0,06 V (gelijk), 0 % 0,04 V, laagste cel 3,07 V tegen 3,08/3,09 (12-11 19:15, 2,1 kW, 14 %), SoC laag gelijk. Geen drempel.
+- Meldingen zonder grond (→ L-EMS-078/079): 12-11 07:00 push 'accumodule loopt uit de pas' (temperatuur module 1, CUSUM-referentie −1 °C uit de tijd met 00996; sinds de wissel +1..2,5 °C) en 19:11 push 'cel staat te laag' (alle drie modules 3,07-3,10 V onder 2,1 kW bij 14 %).
+- Storingen: geen fouten; cache-waarschuwingen Zonneplan-kosten 00:04 (bekend). Stilstand 7 wachten, 0 doen.
+- Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM, live wissels 12-11. Geen release; suite niet gedraaid (main ongewijzigd sinds v5.230.0, 7121 passed).
+
+laatste ronde: 13-11 06:45, gemeten t/m 13-11 06:45

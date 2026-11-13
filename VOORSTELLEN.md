@@ -558,3 +558,16 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw: vol telt alleen vóór het eerste tekortkwartier; live wist een volle accu de verkoopteller niet zolang er die nacht een tekort loopt; met `WAARDEPLAN_VERKOOPVLOER_RESERVE` uit is winst (verkoop > terugkoop) 'verkocht met winst', verlies blijft planning.
 - Verwacht effect: geen valse LET OP / 'had genoeg moeten hebben' na verkoopavonden. Euro-effect op de sturing 0 (marge telt de soorten gelijk).
 - Meten: nachten na installatie met avondverkoop en tekort → soort verkocht_met_winst of planning (bij verlies), nooit capaciteit als er na vol > 0,25 kWh verkocht is.
+
+## L-EMS-078 · temperatuurdrift module 1 is een gevolg van de modulewissel (classificatie)
+- Status: **open, wacht op akkoord** (13-11 dagcontrole).
+- Onderbouwing: aandachtspunt + push 12-11 07:00 "Accumodule 1 loopt aanhoudend uit de pas (temperatuur)". `temperatuur_afwijking_c` van module 1 is relatief tegen de andere modules; de CUSUM-referentie (−1,0 °C, mediaan van de oudere dagen) komt uit de periode met 00996. Sinds 00996 → 02093 ligt de dagwaarde op +1..+2,5 °C (laatste 3 dagen 2,0/1,5/2,5; drempel v5.194.3 3 °C tegen de referentie → 3,5). Module 1 zelf veranderde niet (absolute temp 11-20 °C, celdelta 0,01 V). v5.68.1 begint alleen de vervangen module opnieuw, niet de relatieve referenties van de andere modules.
+- Bouw: bij een wissel van een apparaat-id de relatieve grootheden (temperatuur-, celdelta- en SoC-afwijking: geschiedenis + CUSUM) van ALLE modules opnieuw laten beginnen; absolute soc_buckets en laagste cel blijven. Let op: ook de celdelta-drift (drift=true) van module 1 hangt aan dezelfde oude referentie.
+- Verwacht effect: geen valse aandachtspunten/pushes na een modulewissel; euro-effect 0. Zonder bouw verdwijnt hij vanzelf als de referentie na ~2 weken naar de nieuwe groep schuift.
+- Meten: na installatie 0 drift-meldingen op temperatuur zolang de dagmediaan < 3 °C van de nieuwe referentie blijft.
+
+## L-EMS-079 · melding 'cel staat te laag' bij gewone spanningsval onder belasting (classificatie)
+- Status: **open, wacht op akkoord** (13-11 dagcontrole).
+- Onderbouwing: push 12-11 19:11 "n Cel steet te lege" (patroon: 2 dagen onder 3,10 V). Gemeten 12-11 19:00-19:15 bij 2,1 kW ontladen en 13-14 %: module 1 3,07, 00917 3,08, 02093 3,09 V; 5 min later in rust weer 3,10-3,19 V. Geen cel lager dan de rest, terwijl de tekst dat zegt. Sinds v5.198.0 ontlaadt het plan vrijwel dagelijks tot 10 % op ~2,1 kW, dus deze melding komt bijna elke avond.
+- Bouw (keuze Ruud): 'aandacht' alleen als de laagste cel ≥ 0,05 V onder de laagste cel van de andere modules ligt, of de dagminimum-meting alleen in rust (< 300 W) tellen. Kritiek (< 3,00 V) en de celbescherming in de sturing blijven ongewijzigd.
+- Verwacht effect: geen avondpush zonder reden; een echt achterblijvende cel blijft gemeld. Euro-effect 0.
