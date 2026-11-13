@@ -1,3 +1,10 @@
+EMS v5.232.0 - nul op de meter: regelkwaliteit per dag
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het EMS houdt per dag bij wat er over de netmeter gaat terwijl de accu het huis volgt, apart met en zonder Quooker (sensor P1 regeldoel, attributen regelkwaliteit_vandaag en _gisteren).
+- Alleen meten; de regeling en de sturing van de accu veranderen niet.
+
 EMS v5.231.0 - luchtreiniger valt niet meer steeds een minuut weg
 
 Installeren: via de Marketplace bijwerken en herstarten.

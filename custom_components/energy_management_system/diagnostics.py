@@ -537,6 +537,8 @@ async def async_get_config_entry_diagnostics(
         "klimaat_wind": _veilig("get_klimaat_wind", coordinator.get_klimaat_wind),
         "klimaat_zon": _veilig("get_klimaat_zon", coordinator.get_klimaat_zon),
         "rolluik_isolatie": _veilig("get_rolluik_isolatie", coordinator.get_rolluik_isolatie),
+        # v5.232.0: nul op de meter, per dag.
+        "regelkwaliteit": _veilig("get_regelkwaliteit", coordinator.get_regelkwaliteit),
         "accumodules": _veilig(
             "get_battery_module_table", coordinator.get_battery_module_table
         ),

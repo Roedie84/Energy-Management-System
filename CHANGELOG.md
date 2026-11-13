@@ -35695,3 +35695,13 @@ Oorzaak: een enkele gemiste vraag (5 s geen antwoord, of het apparaat sluit de v
 - De accusturing is niet geraakt.
 
 Tests: `test_v5231_luchtreiniger_onderbreking.py` (10).
+
+## v5.232.0 — nul op de meter: de regelkwaliteit per dag bijgehouden
+
+Gevraagd door Ruud 13-11 ("Hoe goed is de 0 op de meter regeling?", punt 2 akkoord). Meting 10 t/m 13-11 over 11 regeluren (stand smart, accu ontlaadt en zit niet op zijn maximum): zonder Quooker staat de netmeter gemiddeld op +7 W (0,09 kWh afname); met de Quooker actief +102 W (0,54 kWh, 86 % van de afname). De regelsensor filtert de Quooker-piek bewust weg, en de pulsen (ongeveer 10 s op 2,1 kW) zijn korter dan de reactietijd van de Zendure. Aan de regeling zelf verandert niets (Ruud: alleen meten).
+
+- **Nieuw `regelkwaliteit.py`**: telt per dag, apart voor `rustig` en `quooker` (Quooker aan of korter dan 30 s uit), hoe lang de accu het huis volgde en wat er toen werd afgenomen en teruggeleverd. Loopt mee met elke melding van de netmeter, via "P1 regeldoel".
+- **Waar te zien**: attributen `regelkwaliteit_vandaag` en `regelkwaliteit_gisteren` op de sensor P1 regeldoel; diagnose `regelkwaliteit` met de laatste 14 dagen. Wordt bewaard over een herstart.
+- Alleen meten; een fout in de meting raakt het regeldoel niet.
+
+Tests: `test_v5232_regelkwaliteit.py` (13).

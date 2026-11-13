@@ -44219,6 +44219,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 P1_REGELDOEL_FACTOR_VANAF_W + (abs(waarde) - P1_REGELDOEL_FACTOR_VANAF_W) * factor
             )
         pendel_energie = self._p1_pendel_energie(echt_w, now)
+        self._werk_regelkwaliteit_bij(echt_w, now)
         return {
             "waarde_w": round(waarde, 1) if waarde is not None else None,
             "factor": factor,
@@ -44230,7 +44231,53 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "doel_w": -round(verschuiving, 1) if salderen else P1_DOEL_2027_W,
             "monsters": len(monsters),
             "terugval": "ruwe P1-meter + verschuiving (regelsensor onbeschikbaar)" if terugval else None,
+            # v5.232.0: wat er over de meter gaat terwijl de accu het huis volgt.
+            **self._regelkwaliteit_kort(),
         }
+
+    #: v5.232.0: {"vandaag": .., "dagen": [..]}; wordt bewaard. Zie `regelkwaliteit`.
+    regelkwaliteit: dict | None = None
+    _regelkwaliteit_vorige: dict | None = None
+
+    def _werk_regelkwaliteit_bij(self, echt_w: float | None, now: datetime) -> None:
+        """Telt wat er over de meter gaat terwijl de accu het huis volgt (v5.232.0).
+
+        Loopt mee met elke melding van de netmeter (via "P1 regeldoel").
+        Alleen meten; een fout hier mag het regeldoel nooit raken.
+        """
+        try:
+            from . import regelkwaliteit as rk
+
+            accu_w = self._read_corrected_battery_power()
+            self.regelkwaliteit, self._regelkwaliteit_vorige = rk.verwerk(
+                self.regelkwaliteit, self._regelkwaliteit_vorige,
+                nu_ts=now.timestamp(), dag=dt_util.as_local(now).date().isoformat(),
+                p1_w=echt_w,
+                regelend=echt_w is not None and rk.is_regelend(self.last_expected_mode, accu_w),
+                quooker_w=self._read_sensor_float(self.config.get(CONF_QUOOKER_POWER_SENSOR)),
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Regelkwaliteit niet bijgewerkt", exc_info=True)
+
+    def _regelkwaliteit_kort(self) -> dict:
+        """Vandaag en gisteren voor de attributen van "P1 regeldoel" (elke meting)."""
+        try:
+            from . import regelkwaliteit as rk
+
+            staat = self.regelkwaliteit if isinstance(self.regelkwaliteit, dict) else {}
+            dagen = [d for d in (staat.get("dagen") or []) if isinstance(d, dict)]
+            return {
+                "regelkwaliteit_vandaag": rk.dag_samenvatting(staat.get("vandaag")),
+                "regelkwaliteit_gisteren": rk.dag_samenvatting(dagen[-1]) if dagen else None,
+            }
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def get_regelkwaliteit(self) -> dict:
+        """Vandaag, gisteren en de bewaarde dagen (v5.232.0)."""
+        from . import regelkwaliteit as rk
+
+        return rk.overzicht(self.regelkwaliteit)
 
     def _p1_regeldoel_factor(self) -> float:
         """De versterkingsfactor voor grote afwijkingen (v5.209.0); 1,0 = uit."""
