@@ -72,7 +72,8 @@ class LuchtreinigerStandSelect(SelectEntity):
     @property
     def available(self) -> bool:
         m = self._meelezer
-        return bool(m is not None and m.verbonden and m.stand is not None)
+        # v5.231.0: ook kort na een onderbreking (zie `beschikbaar`).
+        return bool(m is not None and m.beschikbaar and m.stand is not None)
 
     @property
     def current_option(self) -> str | None:

@@ -1,3 +1,10 @@
+EMS v5.231.0 - luchtreiniger valt niet meer steeds een minuut weg
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De stand van de luchtreiniger was 242 keer in twee dagen een minuut onbeschikbaar; automatiseringen die hem dan wilden zetten, faalden. Een korte onderbreking van de verbinding wordt nu overbrugd en het herstel duurt 5 s in plaats van 60 s.
+- De sturing van de accu verandert niet.
+
 EMS v5.230.0 - besparing: gemiste uren van 8/9 november bijgeboekt
 
 Installeren: via de Marketplace bijwerken en herstarten.

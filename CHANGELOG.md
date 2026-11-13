@@ -35682,3 +35682,16 @@ Onderzoek 12-11 (opbrengst van het accuplan), akkoord Ruud 12-11 08:50. Het EMS 
 - Alleen rapportage; de sturing verandert niet.
 
 Tests: `test_v5230_stilstand_bijboeken.py` (5).
+
+## v5.231.0 — luchtreiniger: een korte onderbreking maakt de stand niet meer onbeschikbaar
+
+Gevonden 13-11 bij een rondgang door het HA-logboek: `select.…_luchtreiniger_stand` was van 11 t/m 13-11 242 keer onbeschikbaar (samen 5,8 uur, 12 % van de tijd), telkens ongeveer 60 s. In die minuten faalden de automatiseringen die de stand zetten ("Referenced entities … are missing or not currently available", 39 keer).
+
+Oorzaak: een enkele gemiste vraag (5 s geen antwoord, of het apparaat sluit de verbinding) verbrak de verbinding, en de wachttijd voor opnieuw verbinden werd nooit teruggezet: `_verbinding` eindigt altijd met een fout, dus de regel die de wachttijd op 5 s zette, werd nooit bereikt. Na een paar onderbrekingen stond elk herstel op 60 s.
+
+- **Opnieuw verbinden**: na een verbinding die antwoord gaf weer na 5 s (was oplopend tot 60 s en daar blijven staan).
+- **Beschikbaarheid**: de stand blijft bruikbaar tot 3 minuten na de laatst gelezen waarden; een korte onderbreking verandert de stand van het apparaat niet.
+- **Sturen**: valt een opdracht precies in een onderbreking, dan wacht hij tot 15 s op de nieuwe verbinding in plaats van direct te falen.
+- De accusturing is niet geraakt.
+
+Tests: `test_v5231_luchtreiniger_onderbreking.py` (10).

@@ -59,6 +59,13 @@ LATENTIE_STEEKPROEF = 200
 REACTIE_STEEKPROEF = 200
 REACTIE_MAX_S = 120.0
 MISLUKT_OP_RIJ_GEEN_VERBINDING = 3
+#: v5.231.0: zo lang na de laatste gelezen waarden blijft de stand bruikbaar
+#: als de verbinding even wegvalt (een gemiste vraag, opnieuw verbinden).
+BESCHIKBAAR_MARGE_S = 180.0
+#: v5.231.0: zo lang wacht een stuuropdracht op het opnieuw verbinden.
+WACHT_OP_VERBINDING_S = 15.0
+#: Eerste wachttijd voor opnieuw verbinden; verdubbelt tot WACHT_MAX_S.
+WACHT_BEGIN_S = 5.0
 SCHEMA = 2
 BEVESTIG_S = 5.0
 # Gezien op 11 oktober, in deze volgorde op het apparaat.
@@ -326,6 +333,8 @@ class LuchtreinigerLokaalMeelezer:
         self.dps: dict[str, Any] = {}
         self.dps_t: float | None = None
         self.verbonden = False
+        #: v5.231.0: deze verbinding heeft minstens een antwoord gegeven.
+        self._ronde_gelukt = False
         self._apparaat = None
         self._sleutel: str | None = None
         self._taak: asyncio.Task | None = None
@@ -427,8 +436,22 @@ class LuchtreinigerLokaalMeelezer:
 
     # de lus --------------------------------------------------------------------
 
+    @property
+    def beschikbaar(self) -> bool:
+        """Is de stand bruikbaar? Verbonden, of kort geleden nog gelezen (v5.231.0).
+
+        Gemeten 11 t/m 13-11: de keuzelijst was 242 keer in 48 uur
+        onbeschikbaar (samen 5,8 uur), telkens een minuut of langer na een
+        enkele gemiste vraag. De automatiseringen die de stand zetten of
+        lezen, faalden dan ("entiteit niet beschikbaar"). Een korte
+        onderbreking verandert de stand van het apparaat niet.
+        """
+        if self.verbonden:
+            return True
+        return self.dps_t is not None and 0 <= time.time() - self.dps_t <= BESCHIKBAAR_MARGE_S
+
     async def _lus(self) -> None:
-        wacht = 5.0
+        wacht = WACHT_BEGIN_S
         while True:
             try:
                 if self._apparaat is None and not self._zoek_apparaat():
@@ -447,11 +470,17 @@ class LuchtreinigerLokaalMeelezer:
                     continue
                 self.toestand = None
                 await self._verbinding()
-                wacht = 5.0
+                wacht = WACHT_BEGIN_S
             except asyncio.CancelledError:
                 raise
             except Exception as err:  # noqa: BLE001 - dit mag het EMS nooit raken
                 verwerk_fout(self.tellingen, f"{type(err).__name__}: {err}", time.time())
+                # v5.231.0: `_verbinding` eindigt altijd met een fout, dus de
+                # regel hierboven zette de wachttijd nooit terug: na een paar
+                # onderbrekingen duurde elk herstel 60 s. Gaf de verbinding
+                # antwoord, dan begint het wachten weer kort.
+                wacht = volgende_wachttijd(wacht, self._ronde_gelukt)
+                self._ronde_gelukt = False
                 if self.verbonden:
                     self.tellingen["uitval"] = self.tellingen.get("uitval", 0) + 1
                 self.verbonden = False
@@ -461,6 +490,19 @@ class LuchtreinigerLokaalMeelezer:
                     self._apparaat = None
                 await asyncio.sleep(wacht)
                 wacht = min(wacht * 2, WACHT_MAX_S)
+
+    async def _wacht_op_verbinding(self) -> bool:
+        """Wacht kort op het opnieuw verbinden als de stand nog bruikbaar is (v5.231.0)."""
+        if self.verbonden and self._writer is not None and self._sessie is not None:
+            return True
+        if not self.beschikbaar:
+            return False
+        einde = time.monotonic() + WACHT_OP_VERBINDING_S
+        while time.monotonic() < einde:
+            await asyncio.sleep(0.25)
+            if self.verbonden and self._writer is not None and self._sessie is not None:
+                return True
+        return False
 
     async def _lees_frame(self, reader, timeout: float) -> bytes:
         einde = time.monotonic() + timeout
@@ -529,6 +571,7 @@ class LuchtreinigerLokaalMeelezer:
                     # antwoord - 3.4-apparaten antwoorden soms met opdracht 8.
                     if not beantwoord:
                         beantwoord = True
+                        self._ronde_gelukt = True
                         verwerk_ronde(self.tellingen, nu, (time.monotonic() - verstuurd) * 1000)
                         vergelijk(self.tellingen, self.dps, self._cloud_status(), self.strategie, self.bereik)
                         if self.tellingen["rondes"] % BEWAAR_ELKE_RONDES == 0:
@@ -591,7 +634,7 @@ class LuchtreinigerLokaalMeelezer:
     async def async_zet_stand(self, stand: str) -> bool:
         """De stand zetten over het lokale netwerk. True als het apparaat de
         nieuwe waarde binnen BEVESTIG_S zelf terugmeldt."""
-        if not self.verbonden or self._writer is None or self._sessie is None:
+        if not await self._wacht_op_verbinding():
             raise ConnectionError("geen lokale verbinding met de luchtreiniger")
         dps = opdracht_voor(stand, self.dps, self.strategie)
         versie = self.tellingen.get("versie") or "3.3"
@@ -678,6 +721,11 @@ def bereik_uit(local_strategy: Any) -> dict[str, set]:
             if s.get("status_code") and waarden:
                 uit[str(s["status_code"])] = set(waarden)
     return uit
+
+
+def volgende_wachttijd(wacht: float, ronde_gelukt: bool) -> float:
+    """De wachttijd voor opnieuw verbinden: kort na een verbinding die werkte (v5.231.0)."""
+    return WACHT_BEGIN_S if ronde_gelukt else wacht
 
 
 def stand_uit(dps: dict, strategie: dict[str, str]) -> str | None:
