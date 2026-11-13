@@ -1206,4 +1206,9 @@ laatste ronde: 12-11 06:45, gemeten t/m 12-11 06:45
 - Storingen: geen fouten; cache-waarschuwingen Zonneplan-kosten 00:04 (bekend). Stilstand 7 wachten, 0 doen.
 - Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM, live wissels 12-11. Geen release; suite niet gedraaid (main ongewijzigd sinds v5.230.0, 7121 passed).
 
+## 13-11 notitie uit de chat met Ruud (voor de dagcontrole)
+- v5.231.0: luchtreiniger-stand blijft bruikbaar bij een korte onderbreking (was 242 keer in 48 uur onbeschikbaar); controle 13-11 ~14:10 in de chat.
+- v5.232.0: nieuw meetpunt `regelkwaliteit` (diagnose, 14 dagen; attributen regelkwaliteit_vandaag/_gisteren op sensor P1 regeldoel). Per dag uren regelend, afname en teruglevering, apart `rustig` en `quooker`. Referentie 10 t/m 13-11: rustig +7 W gemiddeld, quooker +102 W. Graag dagelijks meenemen; melden als `rustig` over een dag met minstens 1 regeluur boven +40 W of onder -40 W gemiddeld komt. Het Quooker-filter uitzetten is 13-11 door Ruud afgewezen (niet voorstellen), net als wijzigingen aan de regeling zelf.
+- Afgewezen 13-11: tweede DNS / verbinding meten, MeteoAlarm verwijderen (tablet gebruikt hem), rolluiken als isolatie, boodschappenlijst bij de supermarkt.
+
 laatste ronde: 13-11 06:45, gemeten t/m 13-11 06:45
