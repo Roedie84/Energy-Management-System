@@ -35714,3 +35714,14 @@ Uit de dagcontrole van 13 en 14-11. Aan de sturing van de accu verandert niets; 
 - **"Een cel staat laag" bijna elke avond (L-EMS-079)**: sinds v5.198.0 ontlaadt het plan vrijwel dagelijks tot 10 % op ongeveer 2 kW; dan zakken alle cellen samen onder 3,10 V (12-11 19:11: 3,07 / 3,08 / 3,09 V). Het oordeel krijgt `achterstand_v` (laagste cel tegenover de laagste cel van de andere modules) en `achterblijvend` (vanaf `CELSPANNING_ACHTERSTAND_V` 0,05 V). De patroon-push gaat alleen nog uit bij een achterblijvende cel; het advies zegt anders dat de modules samen zakken. Kritiek (onder 3,00 V) meldt onveranderd altijd, en de celbescherming is niet aangeraakt.
 
 Tests: `test_v5233_modulemeldingen.py` (10).
+
+## v5.234.0 — de airco gaat niet meer uit als iedereen weg is
+
+Gevraagd door Ruud 14-11 ("Eigenlijk wil ik niet meer uitschakelen bij afwezigheid"). Die dag ging de airco om 12:19 uit toen iedereen even weg was en pas om 12:43 weer aan; na thuiskomst wachtte het EMS tot onder de aanzettemperatuur (18,5 °C) terwijl de gewenste temperatuur 21,0 °C is.
+
+- **`airco_sturing.besluit`**: bij "weg" geen "uit" meer. Een airco die het EMS aanzette en die verwarmt, blijft aan ("Niemand thuis: de airco blijft aan."). Staat hij uit, dan zet het EMS hem bij afwezigheid niet aan (ongewijzigd).
+- Ongewijzigd: de vaste uit (22:00), "iedereen slaapt", gas goedkoper en handmatige bediening.
+- Schakelaar `AIRCO_UIT_BIJ_WEG` (False). Zolang die False is, komen kort-weg (v5.69) en uit of 18 °C vasthouden (v5.199.0) niet meer aan bod.
+- Gevolg: bij een lange afwezigheid verwarmt de airco door tot 22:00.
+
+Tests: `test_v5234_airco_weg_blijft_aan.py` (6); `test_airco_sturing.py` aangepast (weg uit de uit-gevallen).

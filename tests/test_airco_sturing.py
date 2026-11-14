@@ -82,7 +82,8 @@ def test_gewenste_temperatuur_nog_niet_geleerd():
     assert "2 van 5" in uit["redenen_tekst"]
 
 
-@pytest.mark.parametrize("aanwezigheid", ["weg", "slaapt", "onbekend", None])
+# v5.234.0: "weg" zet niet meer uit (zie test_v5234_airco_weg_blijft_aan.py).
+@pytest.mark.parametrize("aanwezigheid", ["slaapt", "onbekend", None])
 def test_niemand_thuis_dan_uit_als_het_ems_hem_aanzette(aanwezigheid):
     uit = _besluit(aanwezigheid=aanwezigheid, airco_stand="heat", door_ems_aan=True)
 

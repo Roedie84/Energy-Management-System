@@ -1,3 +1,10 @@
+EMS v5.234.0 - airco niet meer uit bij afwezigheid
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Een airco die verwarmt blijft aan als iedereen weg is. De vaste uit om 22:00 en "iedereen slaapt" blijven.
+- Let op: bij een lange afwezigheid verwarmt hij door tot 22:00.
+
 EMS v5.233.0 - twee accumeldingen zonder grond weg
 
 Installeren: via de Marketplace bijwerken en herstarten.

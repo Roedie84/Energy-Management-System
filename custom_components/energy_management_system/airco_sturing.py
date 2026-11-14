@@ -176,6 +176,15 @@ def in_nachtrust(minuut_nu: int, uit_om_min: int | None, tot_min: int = NACHTRUS
     return uit_om_min <= minuut_nu < tot_min
 
 
+#: v5.234.0 (Ruud 14-11: "Eigenlijk wil ik niet meer uitschakelen bij
+#: afwezigheid"): 14-11 ging hij om 12:19 uit en om 12:43 weer aan, en na
+#: thuiskomst wachtte het EMS tot onder de aanzettemperatuur. False = een airco
+#: die verwarmt blijft aan als iedereen weg is; de vaste uit (22:00) en
+#: 'iedereen slaapt' blijven. Daarmee vervallen kort-weg (v5.69) en uit of
+#: 18 °C vasthouden (v5.199.0) zolang dit False is.
+AIRCO_UIT_BIJ_WEG = False
+
+
 def besluit(
     *,
     woonkamer_c: float | None,
@@ -263,6 +272,16 @@ def besluit(
         stand = {"weg": "niemand thuis", "slaapt": "iedereen slaapt"}.get(
             aanwezigheid or "", "aanwezigheid onbekend"
         )
+        if aanwezigheid == "weg" and not AIRCO_UIT_BIJ_WEG:
+            # v5.234.0 (Ruud 14-11): niet meer uit bij afwezigheid. Een airco
+            # die al verwarmt blijft aan; aanzetten doet het EMS dan niet.
+            redenen.append(stand)
+            if door_ems_aan and airco_stand == "heat":
+                redenen.append("de airco blijft aan tot jullie terug zijn")
+                return _uitkomst(
+                    "niets", "Niemand thuis: de airco blijft aan.", redenen, doel_c, aanzet_c
+                )
+            return _uitkomst("niets", "Niemand thuis.", redenen, doel_c, aanzet_c)
         return uit_of_niets(stand)
     redenen.append("er is iemand thuis")
     if advies != "airco":
