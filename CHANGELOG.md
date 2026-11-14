@@ -35705,3 +35705,12 @@ Gevraagd door Ruud 13-11 ("Hoe goed is de 0 op de meter regeling?", punt 2 akkoo
 - Alleen meten; een fout in de meting raakt het regeldoel niet.
 
 Tests: `test_v5232_regelkwaliteit.py` (13).
+
+## v5.233.0 — twee accumeldingen zonder grond weg (L-EMS-078, L-EMS-079)
+
+Uit de dagcontrole van 13 en 14-11. Aan de sturing van de accu verandert niets; het gaat om twee meldingen.
+
+- **"Accumodule 1 loopt aanhoudend uit de pas (temperatuur)" (L-EMS-078)**: de temperatuur van een module wordt afgezet tegen de andere modules. De referentie van module 1 (-1,0 graad) kwam uit de tijd met 00996; sinds de wissel naar 02093 (07-11) ligt de dagwaarde op +1 tot +2,5 graad terwijl module 1 zelf niet veranderde. v5.68.1 liet alleen de vervangen module opnieuw beginnen. Nu beginnen bij een andere set fabrieksnamen de relatieve grootheden (`cel_delta_afwijking_v`, `temperatuur_afwijking_c`, `soc_afwijking_percent`: geschiedenis, CUSUM en dagmetingen) van ALLE modules opnieuw; de absolute velden blijven. De set wordt bewaard (`battery_module_identiteiten`); de eerste keer na het bijwerken wordt ook opnieuw begonnen, omdat de wissel van 07-11 voor deze versie viel. Een module die even niet meldt telt niet als wissel.
+- **"Een cel staat laag" bijna elke avond (L-EMS-079)**: sinds v5.198.0 ontlaadt het plan vrijwel dagelijks tot 10 % op ongeveer 2 kW; dan zakken alle cellen samen onder 3,10 V (12-11 19:11: 3,07 / 3,08 / 3,09 V). Het oordeel krijgt `achterstand_v` (laagste cel tegenover de laagste cel van de andere modules) en `achterblijvend` (vanaf `CELSPANNING_ACHTERSTAND_V` 0,05 V). De patroon-push gaat alleen nog uit bij een achterblijvende cel; het advies zegt anders dat de modules samen zakken. Kritiek (onder 3,00 V) meldt onveranderd altijd, en de celbescherming is niet aangeraakt.
+
+Tests: `test_v5233_modulemeldingen.py` (10).

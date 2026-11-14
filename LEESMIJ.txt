@@ -1,3 +1,10 @@
+EMS v5.233.0 - twee accumeldingen zonder grond weg
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De melding "accumodule 1 loopt uit de pas (temperatuur)" kwam door de modulewissel van 07-11: de vergelijking met de andere modules begon niet opnieuw. Dat gebeurt nu wel, voor alle modules.
+- De melding "een cel staat laag" kwam bijna elke avond, terwijl alle cellen samen zakten onder belasting. Hij komt nu alleen als een cel 0,05 V of meer achterblijft bij de andere modules. Onder 3,00 V meldt hij altijd.
+
 EMS v5.232.0 - nul op de meter: regelkwaliteit per dag
 
 Installeren: via de Marketplace bijwerken en herstarten.

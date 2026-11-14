@@ -32,6 +32,7 @@ from .const import (
     CELBESCHERMING_START_V,
     CELBESCHERMING_VRIJ_KWH,
     CELSPANNING_AANDACHT_V,
+    CELSPANNING_ACHTERSTAND_V,
     CELSPANNING_DAGEN_VOOR_PATROON,
     CELSPANNING_KRITIEK_V,
     CELSPANNING_VENSTER_UREN,
@@ -699,6 +700,13 @@ class AccuToestandMixin:
         uit["laagste_cel_v"] = laagste
         uit["module"] = module
         uit["per_module"] = {str(m): v for m, v in spanningen}
+        # v5.233.0 (L-EMS-079): blijft deze cel achter bij de andere modules?
+        # Onder belasting zakken alle cellen samen (12-11 19:11 bij 2,1 kW:
+        # 3,07 / 3,08 / 3,09 V); dat is geen achterblijvende cel.
+        anderen = [v for m, v in spanningen if m != module]
+        achterstand = round(min(anderen) - laagste, 3) if anderen else None
+        uit["achterstand_v"] = achterstand
+        uit["achterblijvend"] = achterstand is None or achterstand >= CELSPANNING_ACHTERSTAND_V
 
         # Hoeveel dagen op rij zakte de laagste cel onder de grens?
         dagen = 0
@@ -732,12 +740,21 @@ class AccuToestandMixin:
             )
         elif laagste < CELSPANNING_AANDACHT_V:
             uit["oordeel"] = "aandacht"
-            uit["advies"] = (
-                f"Module {module} staat op {laagste:.2f} V, onder de "
-                f"grens van {CELSPANNING_AANDACHT_V:.2f} V. Niet "
-                "dringend - LiFePO4 heeft geen last van laag staan - maar "
-                "deze cel raakt de afschakelspanning eerder dan de rest."
-            )
+            if uit["achterblijvend"]:
+                uit["advies"] = (
+                    f"Module {module} staat op {laagste:.2f} V, onder de "
+                    f"grens van {CELSPANNING_AANDACHT_V:.2f} V. Niet "
+                    "dringend - LiFePO4 heeft geen last van laag staan - maar "
+                    "deze cel raakt de afschakelspanning eerder dan de rest."
+                )
+            else:
+                uit["advies"] = (
+                    f"De laagste cel staat op {laagste:.2f} V, onder de grens van "
+                    f"{CELSPANNING_AANDACHT_V:.2f} V, maar de andere modules staan "
+                    f"binnen {CELSPANNING_ACHTERSTAND_V:.2f} V daarvan: de spanning "
+                    "zakt bij alle modules samen (belasting of een lege accu), "
+                    "er blijft geen cel achter."
+                )
         else:
             uit["oordeel"] = "ruim"
             uit["advies"] = (
@@ -1157,6 +1174,8 @@ class AccuToestandMixin:
                 * BATTERY_MODULE_SOC_BUCKET_SIZE_PERCENT
             )
 
+        self._herstart_relatief_na_modulewissel(modules)
+
         for module in modules:
             sleutel = str(module["module"])
             # v5.68.1: een vervangen module (andere apparaatnaam, bv. een
@@ -1232,6 +1251,49 @@ class AccuToestandMixin:
 
         self._evaluate_battery_module_warnings(modules)
         self._meld_lage_celspanning()
+
+    #: De grootheden die een module tegen de ANDERE modules afzetten.
+    MODULE_RELATIEVE_VELDEN = ("cel_delta_afwijking_v", "temperatuur_afwijking_c", "soc_afwijking_percent")
+    #: v5.233.0: de fabrieksnamen van de modules bij de laatste meting (bewaard).
+    battery_module_identiteiten: list | None = None
+
+    def _herstart_relatief_na_modulewissel(self, modules: list[dict]) -> bool:
+        """Na een modulewissel beginnen de relatieve grootheden van ALLE modules opnieuw (v5.233.0, L-EMS-078).
+
+        Dagcontrole 13-11: aandachtspunt en push "Accumodule 1 loopt
+        aanhoudend uit de pas (temperatuur)". De afwijking van module 1 is
+        relatief tegen de andere modules; de referentie (-1,0 graad) kwam
+        uit de tijd met 00996. Sinds 00996 -> 02093 ligt de dagwaarde op
+        +1 tot +2,5 graad, terwijl module 1 zelf niet veranderde. v5.68.1
+        liet alleen de vervangen module opnieuw beginnen.
+
+        Bij een andere set fabrieksnamen (zelfde aantal) vervallen de
+        geschiedenis, de CUSUM en de dagmetingen van de relatieve velden
+        bij elke module; de absolute velden blijven. De eerste keer (nog
+        geen bewaarde set) ook: de wissel van 07-11 viel voor deze versie.
+        Een module die even niet meldt (ander aantal) telt niet als wissel.
+        Geeft True als er opnieuw begonnen is.
+        """
+        namen = [m.get("apparaat_id") or m.get("naam") for m in modules]
+        if not namen or not all(namen):
+            return False
+        nu = sorted(str(n) for n in namen)
+        vorige = self.battery_module_identiteiten
+        if isinstance(vorige, list) and sorted(str(n) for n in vorige) == nu:
+            return False
+        opnieuw = not isinstance(vorige, list) or len(vorige) == len(nu)
+        self.battery_module_identiteiten = nu
+        if not opnieuw:
+            return False
+        for staat in (self.battery_module_health or {}).values():
+            if not isinstance(staat, dict):
+                continue
+            for onderdeel in ("geschiedenis", "cusum", "dag_metingen"):
+                deel = staat.get(onderdeel)
+                if isinstance(deel, dict):
+                    for veld in self.MODULE_RELATIEVE_VELDEN:
+                        deel.pop(veld, None)
+        return True
 
     def _finalize_battery_module_day(self) -> None:
         """Sluit de dag af: mediaan per grootheid de geschiedenis in, en
@@ -1519,8 +1581,13 @@ class AccuToestandMixin:
         if not oordeel.get("beschikbaar"):
             return
         kritiek = oordeel["oordeel"] == "kritiek"
+        # v5.233.0 (L-EMS-079): alleen als de cel bij de andere modules
+        # achterblijft. Sinds v5.198.0 ontlaadt het plan vrijwel dagelijks
+        # tot 10 % op ~2 kW; alle cellen zakken dan samen onder 3,10 V en de
+        # push kwam elke avond.
         patroon = (
             oordeel["oordeel"] == "aandacht"
+            and bool(oordeel.get("achterblijvend"))
             and oordeel.get("dagen_onder_grens", 0)
             >= CELSPANNING_DAGEN_VOOR_PATROON
         )

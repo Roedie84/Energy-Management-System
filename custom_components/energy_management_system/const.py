@@ -3811,6 +3811,7 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # v5.102: het dagarchief - één regel per dag, blijvend.
     "dagarchief": {"type": "plain"},
     "battery_module_health": {"type": "plain"},
+    "battery_module_identiteiten": {"type": "plain"},
     "energy_balance_error_history": {"type": "plain"},
     # v5.118.0: wanneer elk monster van de sensor-gezondheid is genomen.
     "energy_balance_sample_tijden": {"type": "plain"},
@@ -7399,6 +7400,9 @@ METING_MAX_LEEFTIJD_MINUTEN = 5.0
 # 6% dat niet liet zien.
 CELSPANNING_AANDACHT_V = 3.10
 CELSPANNING_KRITIEK_V = 3.00
+#: v5.233.0 (L-EMS-079): pas een achterblijvende cel als hij zoveel onder de
+#: laagste cel van de andere modules staat (de push 'cel staat laag').
+CELSPANNING_ACHTERSTAND_V = 0.05
 
 # Hoeveel dagen op rij onder de aandachtsgrens voordat het een patroon
 # heet in plaats van een uitschieter. Twee dagen is genoeg om een
