@@ -1224,4 +1224,7 @@ laatste ronde: 13-11 06:45, gemeten t/m 13-11 06:45
 - Storingen: geen fouten; cache-waarschuwingen Zonneplan 00:03 (bekend), prijzen uit cache na herstart 13-11 12:09. Aandachtspunt 'module 1 temperatuur' staat nog (L-EMS-078). Stilstand 7 wachten, 0 doen.
 - Suite main 7146 groen (12 overgeslagen). Geen release. Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM.
 
+## 14-11 08:30 sessie Ruud: v5.233.0
+- L-EMS-078 en L-EMS-079 gebouwd (accutoestand.py): na een modulewissel beginnen de relatieve grootheden van alle modules opnieuw (eerste keer na update ook); push 'cel staat laag' alleen bij achterstand >= 0,05 V. Suite 7156 groen. Geinstalleerd, wacht op herstart door Ruud. Na de herstart is de geschiedenis van de relatieve velden leeg: de drift-toets heeft weer dagen nodig.
+
 laatste ronde: 14-11 06:45, gemeten t/m 14-11 06:45
