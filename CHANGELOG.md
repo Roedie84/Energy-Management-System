@@ -35725,3 +35725,13 @@ Gevraagd door Ruud 14-11 ("Eigenlijk wil ik niet meer uitschakelen bij afwezighe
 - Gevolg: bij een lange afwezigheid verwarmt de airco door tot 22:00.
 
 Tests: `test_v5234_airco_weg_blijft_aan.py` (6); `test_airco_sturing.py` aangepast (weg uit de uit-gevallen).
+
+## v5.235.0 — langer dan twee uur weg: airco terug naar 18 °C
+
+Akkoord Ruud 14-11, vervolg op v5.234.0 (niet meer uit bij afwezigheid). Zonder deze regel verwarmt de airco bij een hele dag weg door op 21 °C tot de vaste uit.
+
+- **`klimaat._airco_lang_weg_terugzetten`**: na `AIRCO_WEG_TERUGZETTEN_NA_MIN` (120 minuten) afwezigheid zet het EMS een airco die het zelf aanzette en die verwarmt terug naar `AIRCO_WEG_VAST_C` (18 °C). Niet uit: de kamer koelt niet verder af dan 18 °C.
+- **Thuiskomst**: weer naar de gewone temperatuur, via het bestaande pad van v5.199.0 ("Welkom thuis").
+- Handmatige bediening en de vaste uit (22:00) gaan voor. De teller van de afwezigheid begint opnieuw na een herstart.
+
+Tests: `test_v5235_airco_lang_weg_18.py` (7).

@@ -1,3 +1,9 @@
+EMS v5.235.0 - langer dan twee uur weg: airco naar 18 graden
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Is iedereen langer dan twee uur weg, dan gaat de airco terug naar 18 °C (niet uit). Bij thuiskomst weer naar de gewone temperatuur.
+
 EMS v5.234.0 - airco niet meer uit bij afwezigheid
 
 Installeren: via de Marketplace bijwerken en herstarten.

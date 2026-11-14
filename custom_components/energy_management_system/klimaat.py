@@ -2614,7 +2614,7 @@ class KlimaatMixin:
                 self._airco_weg_vast = False
             return uit
         if uit.get("actie") != "uit":
-            return uit
+            return self._airco_lang_weg_terugzetten(now, uit, stand, doel_nu)
         if self._airco_weg_keuze is None:
             self._airco_weg_keuze = self._airco_weg_bereken(now, uit)
         keuze = self._airco_weg_keuze
@@ -2625,6 +2625,33 @@ class KlimaatMixin:
         return dict(uit, actie="verwarmen", doel_c=vast_c, redenen=redenen,
                     redenen_tekst=" · ".join(redenen), weg_keuze=keuze,
                     tekst=f"Niemand thuis: {vast_c:.0f} °C vasthouden tot jullie terug zijn ({keuze['reden']}).")
+
+    def _airco_lang_weg_terugzetten(self, now: datetime, uit: dict, stand: str | None, doel_nu) -> dict:
+        """Langer dan twee uur weg: terug naar 18 °C, niet uit (v5.235.0).
+
+        Akkoord Ruud 14-11. Sinds v5.234.0 blijft de airco aan als iedereen weg
+        is; een hele dag een lege kamer op 21 °C stoken is zonde. Na
+        `AIRCO_WEG_TERUGZETTEN_NA_MIN` afwezigheid zet het EMS een airco die
+        het zelf aanzette terug naar `AIRCO_WEG_VAST_C`; de kamer koelt dan
+        niet verder af. Bij thuiskomst weer naar de gewone temperatuur (het
+        bestaande pad van `_airco_weg_ronde`). De teller begint opnieuw na een
+        herstart.
+        """
+        vast_c = airco_sturing.AIRCO_WEG_VAST_C
+        sinds = getattr(self, "_weg_sinds", None)
+        if (
+            airco_sturing.AIRCO_UIT_BIJ_WEG or sinds is None
+            or uit.get("actie") != "niets" or stand != "heat" or not self.airco_door_ems
+            or doel_nu is None or float(doel_nu) <= vast_c + 0.05
+            or (now - sinds).total_seconds() < airco_sturing.AIRCO_WEG_TERUGZETTEN_NA_MIN * 60
+        ):
+            return uit
+        self._airco_weg_vast = True
+        uren = airco_sturing.AIRCO_WEG_TERUGZETTEN_NA_MIN / 60
+        redenen = list(uit.get("redenen") or []) + [f"langer dan {uren:g} uur weg: terug naar {vast_c:.0f} °C"]
+        return dict(uit, actie="verwarmen", doel_c=vast_c, redenen=redenen,
+                    redenen_tekst=" · ".join(redenen),
+                    tekst=f"Niemand thuis sinds {uren:g} uur: terug naar {vast_c:.0f} °C tot jullie terug zijn.")
 
     def _airco_weg_bereken(self, now: datetime, uit: dict) -> dict:
         try:

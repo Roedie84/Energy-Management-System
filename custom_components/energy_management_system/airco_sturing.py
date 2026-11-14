@@ -565,6 +565,9 @@ def verwarm_op_zonoverschot(
 
 #: De temperatuur waarop het EMS het huis vasthoudt als dat goedkoper is.
 AIRCO_WEG_VAST_C = 18.0
+#: v5.235.0 (akkoord Ruud 14-11): na zoveel minuten afwezigheid gaat een airco
+#: die aan bleef (v5.234.0) terug naar AIRCO_WEG_VAST_C.
+AIRCO_WEG_TERUGZETTEN_NA_MIN = 120
 #: Afkoeling van de woonkamer per uur per °C verschil met buiten (gemeten
 #: 08/09-11: 21 -> 16,5 °C in een nacht).
 AIRCO_WEG_AFKOEL_PER_UUR = 0.042
