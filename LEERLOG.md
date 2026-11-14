@@ -1212,3 +1212,16 @@ laatste ronde: 12-11 06:45, gemeten t/m 12-11 06:45
 - Afgewezen 13-11: tweede DNS / verbinding meten, MeteoAlarm verwijderen (tablet gebruikt hem), rolluiken als isolatie, boodschappenlijst bij de supermarkt.
 
 laatste ronde: 13-11 06:45, gemeten t/m 13-11 06:45
+
+## 14-11 06:45 · dagcontrole (13-11 06:45 t/m 14-11 06:45; v5.232.0 geïnstalleerd sinds 13-11 12:09)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, rendement van de dag 83,8/100 %, start 98 % eind 38 %): werkelijk € 0,62, optimum € 0,57 → **gemist € 0,05, 0 FOUT**; zonder accu € 2,55. Verkoop 07:30-09:15 (43-49 ct), laden 10:45-13:30 (32-35 ct) tot 100 %, verkoop 16:30-20:45 (45-53 ct) tot 10 % = vrijwel het LP-schema; verschil zit in randkwartieren (07:30, 10:45, 17:00, 19:45, 20:45).
+- Regels c: verkopen 43-53 ct, terugkoop 32-35 ct (winst); leeg 21:15-04:00 met net 35-44 ct na verkoop op 45,7-46,3 ct (verkoop 1,9 ct/kWh meer waard dan dekken om 21:00); 15:00-15:15 2,4 kW net bij volle accu (38 ct) bewust vastgehouden voor 45-53 ct; geen vastgehouden lading. Loslaten woning-eerst: +€ 0,34.
+- Nacht 14-11 (voorlopig): 2,36 kWh geladen 04:00-05:30 gem. 34,8 ct, plan verkoopt 07:30-09:15 (41-44 ct) en laadt 10:30-12:30 (33-34 ct) bij. Met vlakke 4,22 ct slijtage en 83 % ongeveer break-even (−2 tot +0,2 ct/kWh); met de marginale slijtage van het plan positief (model, v5.54). Eindoordeel morgen.
+- H-EMS-23 dag 3: laden 82,9 %, ontladen 97,6 % op 12,1 kWh (plan 100,5). Gewogen 3 dagen 97,0 % tegen plan ~100,8 → gat 3,8 pp; doorgaan t/m 19-11.
+- Verbruiksmeetlat sinds 13-11 12:09 (75 kw): dit kwartier fout 456 W (+363 te hoog), 1 u 252 (+92), 3 u 207 (+74). Het lopende kwartier zit verder ernaast dan 3 u vooruit (12-11 ook al: 142/109/88). **H-EMS-24 (nieuw):** verwachting van het lopende kwartier blijft na een grote last te hoog (v5.196/v5.197 live correctie?). Uitlezen met `verbruik_opbouw` van het nu-kwartier na de volgende oven/wasmachine; euro-effect nog onbekend (uitvoering volgt P1).
+- PV-plan 10 d −1,3 % (binnen ±5; was −4,7), snelle correctie 0,85 kWh/d. PV 13-11 5,96 kWh. Pendel 638,8 Wh over ~12 uur (vanaf herstart 12:09; 12-11 223 Wh vanaf 09:29); regelkwaliteit rustig 0,28 regeluur +8,1 W (te kort voor oordeel); regeloverschot 'huis' 2 kwartieren.
+- Module 1: 100 % 0,07 V (0,06 → 0,07; nulmeting 0,09), 0 % 0,04 V, max vandaag 0,03 V, laagste cel 3,06 tegen 3,08/3,09 V (13-11 ~20:48, ~2 kW, ~14 %), SoC laag 9 % tegen 10/12 %. Geen drempel. Push 'cel staat te laag' 13-11 20:48 opnieuw zonder achterblijvende cel (L-EMS-079).
+- Storingen: geen fouten; cache-waarschuwingen Zonneplan 00:03 (bekend), prijzen uit cache na herstart 13-11 12:09. Aandachtspunt 'module 1 temperatuur' staat nog (L-EMS-078). Stilstand 7 wachten, 0 doen.
+- Suite main 7146 groen (12 overgeslagen). Geen release. Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM.
+
+laatste ronde: 14-11 06:45, gemeten t/m 14-11 06:45
