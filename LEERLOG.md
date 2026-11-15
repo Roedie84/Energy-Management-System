@@ -1228,3 +1228,17 @@ laatste ronde: 13-11 06:45, gemeten t/m 13-11 06:45
 - L-EMS-078 en L-EMS-079 gebouwd (accutoestand.py): na een modulewissel beginnen de relatieve grootheden van alle modules opnieuw (eerste keer na update ook); push 'cel staat laag' alleen bij achterstand >= 0,05 V. Suite 7156 groen. Geinstalleerd, wacht op herstart door Ruud. Na de herstart is de geschiedenis van de relatieve velden leeg: de drift-toets heeft weer dagen nodig.
 
 laatste ronde: 14-11 06:45, gemeten t/m 14-11 06:45
+
+## 15-11 06:45 · dagcontrole (14-11 06:45 t/m 15-11 06:45; v5.235.0 geïnstalleerd, herstart 14-11 ~19:03)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, rendement van de dag 79,6/97,7 %, start 38 % eind 10 %): werkelijk € 2,77, optimum € 2,73 → **gemist € 0,04, 0 FOUT**; zonder accu € 3,52. Middagladen 10:15-14:15 (33-35 ct) tot 94 % en avondverkoop 16:30-19:15 (44-46 ct) = LP-schema; verschil in ochtendverkoop 07:15-08:15 en randkwartieren.
+- Eindoordeel nacht 14-11: 2,36 kWh netladen 04:00-05:30 (34,8 ct) verkocht 07:15-09:15 (41-44 ct): met vlakke 4,22 ct en 80-83 % circa −€ 0,05 tot −0,07; met de marginale slijtage van het plan positief (model, v5.54). Geen fout.
+- Regels c: avondverkoop 44-46 ct, leeg 20:15 met net 37-40 ct (verkoop meer waard); 14:30-15:15 net 36-40 ct bij 94 % vastgehouden voor 41-46 ct; geen vastgehouden lading. Loslaten woning-eerst: +€ 0,02.
+- Nacht 15-11 (voorlopig): niet geladen (28-35 ct), terecht: plan laadt 08:45-13:45 9,3 kWh tegen 24-26 ct, verkoopt 15:30-15:45 en 17:00-17:45 (36-37 ct). Leeg 10 % sinds 20:15.
+- H-EMS-23 dag 4: laden 79,6 %, ontladen 97,7 % op 8,95 kWh (plan gewogen 102,0: 500-1500 W 105,2, >1500 W 100,5). 4 dagen ~97,2 tegen ~101,3 → gat ~4 pp; doorgaan t/m 19-11.
+- PV-plan 10 d −5,5 % (net buiten ±5; was −1,3) door 14-11 (3,24 kWh, push 'zon minder dan verwacht'); snelle correctie 0,86 kWh/d. Volgen, nog geen structurele afwijking.
+- Pendel 243 Wh (pas vanaf herstart 19:03). Regelkwaliteit rustig 0,65 u −14 W (<1 u). Verbruiksmeetlat sinds herstart (rustig) 63/61/49 W; H-EMS-24 wacht op een grote last.
+- Module 1: 100 % 0,07 V, 0 % 0,04 V, max vandaag 0,01 V, laagste cel 3,11 tegen 3,11/3,12 V, SoC laag gelijk. Geen drempel; push 'module loopt uit de pas' 14-11 07:01 was vóór v5.233.0 (L-EMS-078), 19:34 hersteld.
+- Storingen: geen; cache-waarschuwingen Zonneplan 00:03 en prijzen uit cache na herstart (bekend). Stilstand 7 wachten, 0 doen. Suite main 7168 groen (12 overgeslagen). Geen release.
+- Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM.
+
+laatste ronde: 15-11 06:45, gemeten t/m 15-11 06:45
