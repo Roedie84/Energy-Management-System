@@ -35735,3 +35735,19 @@ Akkoord Ruud 14-11, vervolg op v5.234.0 (niet meer uit bij afwezigheid). Zonder 
 - Handmatige bediening en de vaste uit (22:00) gaan voor. De teller van de afwezigheid begint opnieuw na een herstart.
 
 Tests: `test_v5235_airco_lang_weg_18.py` (7).
+
+## v5.236.0 — prijsverwachting: wat een gemiste keuze kost
+
+Ruud 16-11: "Hoe goed is het prijs vooruitzicht momenteel?" en daarna "Ja graag uitzoeken" (waarom de goedkoopste uren slecht geraden worden: 1,7 van de 4). Onderzoek op de uurprijzen van 13-10 t/m 11-11:
+
+- Het goedkoopste blok wisselt tussen middag (20 van de 30 dagen) en nacht (5 dagen volledig, de rest gemengd); vanaf 09-11 was het de nacht.
+- Het dal is vlak: de uren op rang 5-8 zijn gemiddeld 2,4 ct duurder dan de goedkoopste vier, begin november rond 1 ct. De gemiddelde afwijking van het model (3,9 ct) is groter dan dat verschil; welke vier uren "de goedkoopste" zijn is dus gevoelig voor kleine fouten.
+- Een vaste dagvorm (gemiddelde van 21 dagen) raakt 2,5 van de 4 en betaalt 1,7 ct te veel; op een dag met het dal 's nachts 4,1 ct, anders 0,6 ct.
+
+Het aantal geraakte uren zegt daarom weinig. Nieuw, alleen meten:
+
+- **`vergelijk`**: `goedkoopste_meerprijs_eur` (de echte prijs op de vier uren die de verwachting als goedkoopst aanwees, min die op de vier echt goedkoopste) en `duurste_gemist_eur` (hetzelfde aan de dure kant).
+- **`beoordeel`** (live en terugtoets, d1 t/m d7): `goedkoopste_meerprijs_ct`, `duurste_gemist_ct` en beide ook voor "zoals gisteren"; **`dagrij`**: per dag.
+- Te zien in de attributen `nauwkeurigheid_live` en `backtest_21_dagen` van de sensor Prijsverwachting. De verwachting zelf en de sturing veranderen niet.
+
+Tests: `test_v5236_prijs_meerprijs.py` (6).

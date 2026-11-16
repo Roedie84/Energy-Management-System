@@ -308,7 +308,15 @@ def vergelijk(verwacht: dict, echte_prijzen: dict) -> dict | None:
     volgorde_e = sorted(range(len(paren)), key=lambda i: paren[i][1])
     top_v, top_e = set(volgorde_v[-4:]), set(volgorde_e[-4:])
     bodem_v, bodem_e = set(volgorde_v[:4]), set(volgorde_e[:4])
+    # v5.236.0: wat een gemiste keuze KOST. "Geraakt" telt uren, maar in een
+    # vlak dal (16-11: rang 5-8 gemiddeld 2,4 ct boven de goedkoopste vier,
+    # in november ~1 ct) kost een gemist uur bijna niets. Meerprijs = de echte
+    # prijs op de vier uren die de verwachting als goedkoopst aanwees, min die
+    # op de vier echt goedkoopste; gemist = hetzelfde aan de dure kant.
+    echt_op = lambda uren: statistics.fmean(paren[i][1] for i in uren)  # noqa: E731
     return {
+        "goedkoopste_meerprijs_eur": round(echt_op(bodem_v) - echt_op(bodem_e), 4),
+        "duurste_gemist_eur": round(echt_op(top_e) - echt_op(top_v), 4),
         "datum": verwacht.get("datum"),
         "gemiddelde_afwijking_eur": round(statistics.fmean(fout), 4),
         "verwacht_gemiddeld_eur": round(statistics.fmean(p[0] for p in paren), 4),
@@ -383,6 +391,9 @@ def dagrij(u: dict) -> dict:
         "duurste_geraakt": m["duurste_uren_geraakt"],
         "goedkoopste_geraakt": m["goedkoopste_uren_geraakt"],
     }
+    if m.get("goedkoopste_meerprijs_eur") is not None:      # v5.236.0
+        rij["goedkoopste_meerprijs_ct"] = round(m["goedkoopste_meerprijs_eur"] * 100, 2)
+        rij["duurste_gemist_ct"] = round(m["duurste_gemist_eur"] * 100, 2)
     if r:
         rij["zonder_bijstelling_ct"] = round(r["gemiddelde_afwijking_eur"] * 100, 2)
     return rij
@@ -395,7 +406,17 @@ def beoordeel(uitkomsten: list[dict]) -> dict:
     mae_m = statistics.fmean(u["model"]["gemiddelde_afwijking_eur"] for u in uitkomsten)
     mae_n = statistics.fmean(u["naief"]["gemiddelde_afwijking_eur"] for u in uitkomsten)
     winst = (1 - mae_m / mae_n) * 100 if mae_n > 0 else None
+
+    def _ct(wie: str, veld: str) -> float | None:
+        waarden = [u[wie][veld] for u in uitkomsten if u[wie].get(veld) is not None]
+        return round(statistics.fmean(waarden) * 100, 2) if waarden else None
+
     return {
+        # v5.236.0: de kosten van een gemiste keuze, model en 'zoals gisteren'
+        "goedkoopste_meerprijs_ct": _ct("model", "goedkoopste_meerprijs_eur"),
+        "goedkoopste_meerprijs_zoals_gisteren_ct": _ct("naief", "goedkoopste_meerprijs_eur"),
+        "duurste_gemist_ct": _ct("model", "duurste_gemist_eur"),
+        "duurste_gemist_zoals_gisteren_ct": _ct("naief", "duurste_gemist_eur"),
         "dagen": len(uitkomsten),
         "afwijking_model_ct": round(mae_m * 100, 2),
         "afwijking_zoals_gisteren_ct": round(mae_n * 100, 2),

@@ -1,3 +1,9 @@
+EMS v5.236.0 - prijsverwachting: wat een gemiste keuze kost
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De prijsverwachting meet nu niet alleen hoeveel goedkope en dure uren ze raakt, maar ook wat een gemiste keuze in centen kost. Alleen meten; de verwachting en de sturing veranderen niet.
+
 EMS v5.235.0 - langer dan twee uur weg: airco naar 18 graden
 
 Installeren: via de Marketplace bijwerken en herstarten.
