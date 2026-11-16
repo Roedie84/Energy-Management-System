@@ -1241,4 +1241,17 @@ laatste ronde: 14-11 06:45, gemeten t/m 14-11 06:45
 - Storingen: geen; cache-waarschuwingen Zonneplan 00:03 en prijzen uit cache na herstart (bekend). Stilstand 7 wachten, 0 doen. Suite main 7168 groen (12 overgeslagen). Geen release.
 - Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM.
 
-laatste ronde: 15-11 06:45, gemeten t/m 15-11 06:45
+## 16-11 06:45 · dagcontrole (15-11 06:45 t/m 16-11 06:45; v5.235.0 geïnstalleerd, HA-herstart 15-11 ~13:23)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, rendement van de dag 86,0/98,9 %, start 10 % eind 98 %): werkelijk € 3,86, optimum € 3,81 → **gemist € 0,05, 0 FOUT**. Verschil alleen randkwartieren (laden 08:45-09:15 26 ct tegen 12:45-13:15 25 ct; nachtladen 01:45/02:45 tegen 04:15-04:45, < 1 ct verschil; verkoop 15:15/16:00 tegen 16:15/16:30).
+- Laden 08:45-13:00 8,74 kWh AC (gem. 24,6 ct) tot 99 %, verkoop 15:00-18:45 5,81 kWh uit de accu (2,95 kWh naar het net, gem. 35,7 ct) tot 31 %; 31 % vastgehouden 18:00-23:30 bij 29-34 ct voor de ochtend van 16-11 (37-41 ct): eerder ontladen en 's nachts bijladen (26 ct / 86 % + slijtage) kost meer → goed. Loslaten woning-eerst: +€ 0,05 (optimum zonder verkopen € 3,91).
+- Regels c: geen verkoop met verlies (35,7 ct tegen terugkoop 26/0,86 + 4,22 ≈ 34,4 ct), geen import duurder dan later accugebruik, leeg 06:45-08:30 bij 27-29 ct (nacht 15-11 al beoordeeld), geen vastgehouden lading.
+- Nacht 16-11 (voorlopig): 23:45 en 01:45-04:45 6,91 kWh geladen bij 26-27 ct tot 98 %; vandaag 37-46 ct → terecht.
+- H-EMS-23 dag 5: laden 86,0 % (blok 10→99 % 88,0, nacht 31→98 % 83,8), ontladen 98,9 % op 5,81 kWh (plan per band 100,3-105,1). Gat ontladen ~3 pp, in lijn met dag 1-4; doorgaan t/m 19-11.
+- PV-plan 10 d **−7,0 %** (was −5,5 / −1,3), MAE 29,3 %; 14-11 en 15-11 te hoog (ochtendverwachting 5,93/3,36 en 1,69/0,94 kWh). Euro-effect deze dagen ~0 (gemist € 0,04/0,05). Volgen; bij nog 2 dagen buiten ±5 % de oorzaak per uur uitzoeken.
+- Verbruik: ochtendverwachting 15-11 9,82 kWh tegen 14,3 kWh na 09:00 (−31 %; 14-11 11,01/14,29). Meetlat sinds herstart (70 kw): dit kwartier 240 W (+101), 1 u 166 (+21), 3 u 161 (+22) → H-EMS-24 voor de 3e keer: lopend kwartier zit verder ernaast dan 1-3 u vooruit.
+- Pendel 63,4 Wh (vanaf herstart 13:23); 15-11 0 regeluren en 0 kwartieren stand 'huis' (accu alleen laden/verkopen/houden) → regeloverschot en regelkwaliteit niet te meten; 'regelkwaliteit_gisteren' toont daarom bewust 14-11.
+- Module 1: 100 % 0,07 V (3e dag gelijk), 0 % 0,04 V, max vandaag 0,05 V tegen 0,02/0,02 (bij laden tot 98 %), laagste cel 15-11 3,20 tegen 3,19/3,20 V, SoC laag 9-10 tegen 11/10 %. Geen drempel.
+- Storingen: geen; cache-waarschuwingen Zonneplan (bekend), prijzen uit cache na herstart. Eenmalig 'system_status took 0.501 s' (15-11 ~22:51). Stilstand 7 wachten, 0 doen. Suite main 7168 groen (12 overgeslagen). Geen release.
+- Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM.
+
+laatste ronde: 16-11 06:45, gemeten t/m 16-11 06:45
