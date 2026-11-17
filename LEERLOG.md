@@ -1255,3 +1255,18 @@ laatste ronde: 14-11 06:45, gemeten t/m 14-11 06:45
 - Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM.
 
 laatste ronde: 16-11 06:45, gemeten t/m 16-11 06:45
+
+## 17-11 06:45 · dagcontrole (16-11 06:45 t/m 17-11 06:45; v5.236.0 geïnstalleerd, HA-herstart 16-11 ~22:25)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, rendement 86/100 %, start 98 % eind 65 %): werkelijk € 2,35, optimum € 2,31 → **gemist € 0,04, 0 FOUT**; zonder accu € 3,28 (zonder voorraadcorrectie). Verschil alleen randkwartieren (verkoop 09:00 41,7 ct en 20:15 41,8 ct; nachtladen 03:00 tegen 05:15).
+- 98 % vastgehouden 06:45-16:30 bij net 36-41 ct, verkocht 16:45-20:15 3,19 kWh naar het net (gem. 44,7 ct) tot 12 %: de ontlaadsnelheid (~2,04 kW) bindt, het LP doet hetzelfde → goed. Loslaten woning-eerst: +€ 0,06.
+- Regels c: geen verkoop met verlies (44,7 ct tegen terugkoop 33,8 ct/0,87); leeg 20:30-03:00 bij 35-41 ct na verkoop op 41,8-46 ct (verkoop meer waard); geen import duurder dan later accugebruik; geen vastgehouden lading.
+- Nacht 17-11 (voorlopig): 03:00-05:15 5,35 kWh geladen bij 33,8 ct tot 66 %; vandaag 35-42,7 ct, geen verkoop gepland (tekort voorzien). Met vlakke slijtage ~break-even, met marginale slijtage positief. Eindoordeel morgen.
+- H-EMS-23 dag 6: laden 87,3 %, ontladen ~101 % (SoC-resolutie). In lijn met dag 1-5; doorgaan t/m 19-11.
+- PV-plan 10 d **−9,6 %** (−1,3 → −5,5 → −7,0 → −9,6; 4e dag buiten ±5 %), 30 d −12,9 %; ochtendverwachting 7 d −21 % (16-11 2,79 tegen 1,58). plan_review: 24 van 30 dagen minder zon dan voorspeld. Snelle correctie helpt (fout 1,01 → 0,91 kWh/d). Euro-effect deze dagen ~0 (gemist ≤ € 0,05/d). Oorzaak per uur niet uitgezocht: de planvoorspelling per uur wordt niet per dag bewaard (alleen het geleerde uurprofiel, 07-09 en 16-18 u 0,44-0,63).
+- Verbruik 16-11 ochtendverwachting 10,89 tegen 11,74 kWh (−7 %; was −31 %).
+- Pendel 16-11 197,6 Wh (bewaard over herstart); regelkwaliteit rustig 0,46 u −23,5 W; regeloverschot stand 'huis' 0,011 kWh/kw (5 kw, te weinig).
+- Module 1: 100 % 0,07 V (4e dag gelijk), 0 % 0,04 V, max vandaag 0,03 V, laagste cel 3,11 tegen 3,11/3,12 V, SoC laagste stand 11 tegen 12/13 %. Geen drempel.
+- Storingen: geen; Zonneplan-sensoren onbeschikbaar na herstart 22:25 tot ~00:00 (cache, bekend), nu weer actueel. Stilstand 6 wachten, 0 doen. Suite 7174 groen (12 overgeslagen). Geen release.
+- Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM.
+
+laatste ronde: 17-11 06:45, gemeten t/m 17-11 06:45
