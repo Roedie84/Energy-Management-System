@@ -35751,3 +35751,14 @@ Het aantal geraakte uren zegt daarom weinig. Nieuw, alleen meten:
 - Te zien in de attributen `nauwkeurigheid_live` en `backtest_21_dagen` van de sensor Prijsverwachting. De verwachting zelf en de sturing veranderen niet.
 
 Tests: `test_v5236_prijs_meerprijs.py` (6).
+
+## v5.237.0 — zonverwachting van het plan per uur bewaard (alleen meten)
+
+Ruud 17-11 ("Wel gaan bewaren voor betere resultaten?"). De dagcontrole meldde dat de voorspelling waar het plan mee rekent over 10 dagen 9,6 % te hoog zat en opliep (−1,3 → −5,5 → −7,0 → −9,6 %), maar kon de uren niet aanwijzen: de plantoetsing bewaarde alleen het dagtotaal.
+
+- **Momentopname (08:00)**: bewaart naast het dagtotaal de verwachte zon per uur (`verwachte_zon_per_uur_kwh`, uit dezelfde plankwartieren) en noteert daarna op elke uurgrens de dagteller van de opwek (`pv_uurstanden`). Staat in de momentopname zelf, die al wordt bewaard: herstartbestendig.
+- **Afsluiten van de dag**: `zon.per_uur` in de plantoetsing, voorspeld tegen opgewekt per uur vanaf de opname. Een uur waarvan de grens is gemist (HA lag eruit) valt weg in plaats van de buren te vervuilen.
+- **Rapport**: `plan.per_uur` in de kwaliteit van de zonvoorspelling: per uur dagen, voorspeld, opgewekt, verschil en afwijking over de laatste 10 dagen met uurcijfers, plus het uur met het grootste verschil (oordeel vanaf 3 dagen).
+- Nieuwe module `zon_per_uur.py` (zonder Home Assistant). De voorspelling en de sturing veranderen niet. De eerste dag met uurcijfers is de eerste volle dag na de herstart.
+
+Tests: `test_v5237_zon_per_uur.py` (12).

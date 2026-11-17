@@ -1,3 +1,9 @@
+EMS v5.237.0 - zonverwachting van het plan per uur bewaard
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De plantoetsing bewaart nu per dag ook per uur wat het plan aan zon verwachtte en wat er is opgewekt. Daarmee is te zien in welke uren de verwachting te hoog of te laag zit. Alleen meten; de verwachting en de sturing veranderen niet.
+
 EMS v5.236.0 - prijsverwachting: wat een gemiste keuze kost
 
 Installeren: via de Marketplace bijwerken en herstarten.

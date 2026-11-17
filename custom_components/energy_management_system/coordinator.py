@@ -98,6 +98,7 @@ from .klimaat import rolluikstand_procent, rolluiklabel  # noqa: F401 - re-expor
 from .klimaat import KlimaatMixin
 from . import panelen_bedekt as panelen_bedekt_mod
 from . import koude_accu as koude_accu_mod
+from . import zon_per_uur as zon_per_uur_mod
 from .legacy_sturing import LegacySturingMixin
 from .uitleg import UitlegMixin
 from .accutoestand import AccuToestandMixin
@@ -8567,6 +8568,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             )
         return {
             "beschikbaar": True, "laatste_10": laatste, "alles": alles, "duiding": zin,
+            "per_uur": zon_per_uur_mod.kwaliteit(geschiedenis),  # v5.237.0
             "snellere_correctie": EnergyManagementSystemCoordinator._pv_snelle_correctie_toets(
                 EnergyManagementSystemCoordinator._pv_plan_rijen(geschiedenis, ruw=True)
             ),
@@ -23327,6 +23329,10 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 "verwachte_opbrengst_eur": samenvatting.get("verwachte_opbrengst_eur"),
                 "verwachte_zon_kwh": samenvatting.get("zon_kwh"),
                 "zon_snelle_factor": round(self._pv_snelle_factor(), 4),  # v5.211.0
+                # v5.237.0: per uur, en de dagteller op elke uurgrens.
+                "verwachte_zon_per_uur_kwh": samenvatting.get("zon_per_uur_kwh") or {},
+                "opname_uur": now.hour,
+                "pv_uurstanden": {},
                 "verwacht_verbruik_kwh": samenvatting.get("verbruik_kwh"),
                 "verwachte_import_kwh": samenvatting.get("import_kwh"),
                 "verwachte_export_kwh": samenvatting.get("export_kwh"),
@@ -23334,6 +23340,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 "tekort_kwartieren": samenvatting.get("tekort_kwartieren"),
                 "verkoopkwartieren": samenvatting.get("verkoopkwartieren"),
             }
+
+        self._noteer_pv_uurstand(now)  # v5.237.0
 
         # De laagste stand van vandaag zelf bijhouden; die valt niet
         # achteraf te reconstrueren zonder de recorder te bevragen.
@@ -23350,6 +23358,33 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 or soc < self.laagste_soc_vandaag_procent
             ):
                 self.laagste_soc_vandaag_procent = soc
+
+    @staticmethod
+    def _plan_zon_per_uur(plan) -> dict:
+        """De verwachte zon van de plankwartieren per (lokaal) uur (v5.237.0)."""
+        rijen = []
+        for regel in plan or []:
+            begin = dt_util.parse_datetime(regel.get("start") or "")
+            if begin is None:
+                continue
+            rijen.append((dt_util.as_local(begin).hour, regel.get("zon_kwh")))
+        return zon_per_uur_mod.plan_per_uur(rijen)
+
+    def _noteer_pv_uurstand(self, now: datetime) -> None:
+        """De dagteller van de opwek bij het begin van elk uur, in de
+        momentopname zelf (die wordt bewaard, dus herstartbestendig)."""
+        opname = self.plan_snapshot
+        if not opname or opname.get("datum") != now.date().isoformat():
+            return
+        if "pv_uurstanden" not in opname:
+            return  # opname van voor v5.237.0: geen uurverwachting om naast te leggen
+        standen = opname.get("pv_uurstanden") or {}
+        if str(now.hour) in standen:
+            return
+        opname["pv_uurstanden"] = zon_per_uur_mod.noteer_stand(
+            standen, now.hour, self.pv_production_today_kwh
+        )
+        self.schedule_persisted_state_save()
 
     def _finish_plan_review(self, now: datetime) -> None:
         """Zet het plan van de afgelopen dag naast wat er werkelijk
@@ -23456,6 +23491,16 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "verkoopkwartieren_voorspeld": plan["verkoopkwartieren"],
         }
         regel["oordeel"] = self._beoordeel_plan_review(regel)
+        try:  # v5.237.0: voorspeld tegen opgewekt per uur (alleen meten)
+            per_uur = zon_per_uur_mod.vergelijk(
+                plan.get("verwachte_zon_per_uur_kwh"), plan.get("pv_uurstanden"),
+                plan.get("opname_uur"), plan.get("pv_bij_opname_kwh"),
+                eindstand.get("pv", self.pv_production_today_kwh),
+            )
+            if per_uur:
+                regel["zon"]["per_uur"] = per_uur
+        except Exception:  # noqa: BLE001 - een meting mag de toetsing nooit breken
+            _LOGGER.debug("Zon per uur niet vastgelegd", exc_info=True)
 
         self.plan_review_history.append(regel)
         if len(self.plan_review_history) > PLAN_REVIEW_HISTORY_DAYS:
@@ -24704,6 +24749,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "beschikbaar": True,
             "kwartieren": len(plan),
             "zon_kwh": round(sum(r["zon_kwh"] for r in plan), 2),
+            # v5.237.0: dezelfde zon per uur, voor de plantoetsing per uur.
+            "zon_per_uur_kwh": self._plan_zon_per_uur(plan),
             "verbruik_kwh": round(sum(r["verbruik_kwh"] for r in plan), 2),
             "import_kwh": round(
                 sum(r["net_kwh"] for r in plan if r["net_kwh"] > 0), 2
