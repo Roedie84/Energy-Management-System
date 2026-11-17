@@ -58,6 +58,23 @@ class Instellingen:
     gas_nieuw_vastrecht_mnd: float = 8.33
     gas_nieuw_korting_jaar: float = 210.0
     gas_nieuw_termijn_eur: float | None = None
+    # v5.238.0: het termijnbedrag is in de loop van het contractjaar gewijzigd.
+    termijn_vorig_eur: float | None = None  # het bedrag tot de wijziging
+    termijn_gewijzigd: date | None = None   # eerste dag met het nieuwe bedrag
+
+
+def termijn_op(inst: "Instellingen", afschrijf: date) -> float:
+    """Het termijnbedrag van een afschrijving (v5.238.0).
+
+    Ruud 17-11: "Heb mijn maandbedrag vanaf nu bijgesteld naar 90 euro". Met
+    een enkel bedrag zou de kaart doen alsof er sinds april 90 is betaald
+    (7 x 90 = 630 in plaats van 490). Afschrijvingen voor de wijziging tellen
+    met het vorige bedrag.
+    """
+    if (inst.termijn_vorig_eur is not None and inst.termijn_gewijzigd is not None
+            and afschrijf < inst.termijn_gewijzigd):
+        return inst.termijn_vorig_eur
+    return inst.termijn_eur
 
 
 def _dag_in_jaar(dag: date, jaar: int) -> date:
@@ -269,7 +286,7 @@ def _reeks(begin: date, tot: date, inst: Instellingen, maand_netto: dict, afschr
     rijen, betaald, kosten = [], 0.0, 0.0
     for i, afschrijf in enumerate(afschrijvingen):
         eerste = _maand_plus(begin, i)
-        betaald += inst.termijn_eur
+        betaald += termijn_op(inst, afschrijf)
         kosten += maand_netto.get((eerste.year, eerste.month), 0.0)
         rijen.append({
             "maand": MAANDEN[eerste.month - 1],
@@ -314,12 +331,19 @@ def bereken(dagen: dict, start: date, vandaag: date, inst: Instellingen) -> dict
     werkelijk, schatting, maand_netto, ontbreekt = _loop(dagen, inst, begin, eind, tot, niveau)
     afschrijvingen = afschrijfdatums(begin, inst.afschrijfdag)
     n_betaald = sum(1 for d in afschrijvingen if d <= vandaag)
-    betaald = n_betaald * inst.termijn_eur
+    gedaan = [termijn_op(inst, d) for d in afschrijvingen if d <= vandaag]
+    betaald = sum(gedaan)
+    delen: list[list] = []  # [[aantal, bedrag], ...] in volgorde, voor de kaart
+    for bedrag in gedaan:
+        if delen and delen[-1][1] == bedrag:
+            delen[-1][0] += 1
+        else:
+            delen.append([1, bedrag])
     kosten_nu = _netto(werkelijk)
     rest = _netto(schatting)
     verwacht = kosten_nu + rest
     band = BAND_DEEL * abs(schatting["afname_eur"] + schatting["gas_eur"] - schatting["terug_eur"])
-    saldo = 12 * inst.termijn_eur - verwacht      # + = terug
+    saldo = sum(termijn_op(inst, d) for d in afschrijvingen) - verwacht      # + = terug
     volgende = next((d for d in afschrijvingen if d > vandaag), None)
     return {
         "contractjaar_begin": begin.isoformat(),
@@ -328,6 +352,9 @@ def bereken(dagen: dict, start: date, vandaag: date, inst: Instellingen) -> dict
         "dag_aandeel": round(((vandaag - begin).days + 1) / ((eind - begin).days + 1), 3),
         "termijn_eur": inst.termijn_eur,
         "termijnen_betaald": n_betaald,
+        "betaald_delen": delen,
+        "termijn_vorig_eur": inst.termijn_vorig_eur,
+        "termijn_gewijzigd": inst.termijn_gewijzigd.isoformat() if inst.termijn_gewijzigd else None,
         "volgende_afschrijving": volgende.isoformat() if volgende else None,
         "betaald_eur": round(betaald, 2),
         "werkelijk_eur": round(kosten_nu, 2),

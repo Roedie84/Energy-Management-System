@@ -3022,9 +3022,13 @@ class EmsJaarafrekeningCard extends HTMLElement {
     const laag = Number(a.band_laag_eur), hoog = Number(a.band_hoog_eur);
     const band = `bandbreedte ${JS_(laag)}${JE(laag)} \u2013 ${JS_(hoog)}${JE(hoog)} ${terug ? "terug" : ""}`;
     const volgende = a.volgende_afschrijving ? ` \u00b7 volgende \u00b1 ${JD2(a.volgende_afschrijving)}` : "";
+    // v5.238.0: het termijnbedrag kan in de loop van het jaar gewijzigd zijn.
+    const delen = Array.isArray(a.betaald_delen) && a.betaald_delen.length
+      ? a.betaald_delen.map((d) => `${d[0]} \u00d7 ${JE(d[1])}`).join(" + ")
+      : `${a.termijnen_betaald} \u00d7 ${JE(a.termijn_eur)}`;
     return `<div class="hero">` +
       `<div class="k big${terug ? "" : " min"}"><div class="l">Verwacht bij jaarafrekening</div><div class="v ${terug ? "groen" : "rood"}">${JE(saldo)} ${terug ? "terug" : "bijbetalen"}</div><div class="s">${band}</div></div>` +
-      `<div class="k"><div class="l">Betaald</div><div class="v">${JE(a.betaald_eur)}</div><div class="s">${a.termijnen_betaald} \u00d7 ${JE(a.termijn_eur)}${volgende}</div></div>` +
+      `<div class="k"><div class="l">Betaald</div><div class="v">${JE(a.betaald_eur)}</div><div class="s">${delen}${volgende}</div></div>` +
       `<div class="k"><div class="l">Werkelijk tot nu</div><div class="v">${JS_(a.werkelijk_eur)}${JE(a.werkelijk_eur)}</div><div class="s">stroom + gas + vast \u2212 korting</div></div>` +
       `<div class="k"><div class="l">Stand nu</div><div class="v ${stand >= 0 ? "groen" : "rood"}">${JE(stand)} ${stand >= 0 ? "tegoed" : "tekort"}</div><div class="s">als je vandaag zou afrekenen</div></div>` +
       `</div>`;

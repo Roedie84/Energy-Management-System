@@ -8190,6 +8190,9 @@ BESPARING_VERGELIJK_DAGEN = 7
 # een vaste prijs (input_number.gasprijs_vast_contract).
 CONF_JAAR_TERMIJN_EUR = "jaar_termijn_eur"
 CONF_JAAR_AFSCHRIJFDAG = "jaar_afschrijfdag"
+# v5.238.0: termijnbedrag gewijzigd in de loop van het contractjaar.
+CONF_JAAR_TERMIJN_VORIG_EUR = "jaar_termijn_vorig_eur"
+CONF_JAAR_TERMIJN_GEWIJZIGD = "jaar_termijn_gewijzigd"
 CONF_JAAR_VASTRECHT_STROOM_MND = "jaar_vastrecht_stroom_eur_mnd"
 CONF_JAAR_VASTRECHT_GAS_MND = "jaar_vastrecht_gas_eur_mnd"
 CONF_JAAR_NETBEHEER_STROOM_JAAR = "jaar_netbeheer_stroom_eur_jaar"

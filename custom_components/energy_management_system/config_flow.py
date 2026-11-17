@@ -145,6 +145,8 @@ from .const import (
     CONF_JAAR_NETBEHEER_GAS_JAAR,
     CONF_JAAR_NETBEHEER_STROOM_JAAR,
     CONF_JAAR_TERMIJN_EUR,
+    CONF_JAAR_TERMIJN_GEWIJZIGD,
+    CONF_JAAR_TERMIJN_VORIG_EUR,
     CONF_JAAR_VASTRECHT_GAS_MND,
     CONF_JAAR_VASTRECHT_STROOM_MND,
     CONF_JAAR_VERMINDERING_EB_JAAR,
@@ -332,6 +334,14 @@ def _validate_input(user_input: dict) -> dict[str, str]:
         except (TypeError, ValueError):
             errors[CONF_GAS_OVERSTAP_DATUM] = "invalid_date"
 
+    # v5.238.0: datum waarop het termijnbedrag wijzigde.
+    gewijzigd = user_input.get(CONF_JAAR_TERMIJN_GEWIJZIGD)
+    if gewijzigd:
+        try:
+            date.fromisoformat(str(gewijzigd))
+        except (TypeError, ValueError):
+            errors[CONF_JAAR_TERMIJN_GEWIJZIGD] = "invalid_date"
+
     kosten = user_input.get(CONF_FEEDIN_COST_EUR_PER_KWH)
     if kosten not in (None, ""):
         try:
@@ -376,6 +386,7 @@ def _jaarafrekening_velden(defaults: dict) -> dict:
     """v5.188.0: termijn, afschrijfdag, vaste kosten en de gasoverstap voor de jaarafrekening."""
     getallen = (
         (CONF_JAAR_TERMIJN_EUR, DEFAULT_JAAR_TERMIJN_EUR, 1000, 1),
+        (CONF_JAAR_TERMIJN_VORIG_EUR, 0, 1000, 1),
         (CONF_JAAR_AFSCHRIJFDAG, DEFAULT_JAAR_AFSCHRIJFDAG, 31, 1),
         (CONF_JAAR_VASTRECHT_STROOM_MND, DEFAULT_JAAR_VASTRECHT_STROOM_MND, 100, 0.01),
         (CONF_JAAR_VASTRECHT_GAS_MND, DEFAULT_JAAR_VASTRECHT_GAS_MND, 100, 0.01),
@@ -387,6 +398,9 @@ def _jaarafrekening_velden(defaults: dict) -> dict:
         vol.Optional(sleutel, default=defaults.get(sleutel, standaard)): _bedrag(maximum, stap)
         for sleutel, standaard, maximum, stap in getallen
     }
+    velden[vol.Optional(CONF_JAAR_TERMIJN_GEWIJZIGD, default=_as_text(defaults.get(CONF_JAAR_TERMIJN_GEWIJZIGD)))] = (
+        selector.TextSelector()
+    )
     velden[vol.Optional(CONF_GAS_OVERSTAP_DATUM, default=_as_text(defaults.get(CONF_GAS_OVERSTAP_DATUM)))] = (
         selector.TextSelector()
     )

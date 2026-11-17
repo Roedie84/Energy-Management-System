@@ -1,3 +1,9 @@
+EMS v5.238.0 - jaarafrekening: termijnbedrag gewijzigd in de loop van het jaar
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De jaarafrekening kan nu rekenen met een termijnbedrag dat halverwege het contractjaar is aangepast: wat al betaald is telt met het oude bedrag, de rest met het nieuwe.
+
 EMS v5.237.0 - zonverwachting van het plan per uur bewaard
 
 Installeren: via de Marketplace bijwerken en herstarten.

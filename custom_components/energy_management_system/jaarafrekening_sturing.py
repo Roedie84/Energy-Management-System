@@ -30,6 +30,8 @@ from .const import (
     CONF_JAAR_NETBEHEER_GAS_JAAR,
     CONF_JAAR_NETBEHEER_STROOM_JAAR,
     CONF_JAAR_TERMIJN_EUR,
+    CONF_JAAR_TERMIJN_GEWIJZIGD,
+    CONF_JAAR_TERMIJN_VORIG_EUR,
     CONF_JAAR_VASTRECHT_GAS_MND,
     CONF_JAAR_VASTRECHT_STROOM_MND,
     CONF_JAAR_VERMINDERING_EB_JAAR,
@@ -175,6 +177,8 @@ class JaarafrekeningMixin:
             gas_nieuw_vastrecht_mnd=_getal(c.get(CONF_GAS_NIEUW_VASTRECHT_MND), DEFAULT_GAS_NIEUW_VASTRECHT_MND),
             gas_nieuw_korting_jaar=_getal(c.get(CONF_GAS_NIEUW_KORTING_JAAR), DEFAULT_GAS_NIEUW_KORTING_JAAR),
             gas_nieuw_termijn_eur=termijn_gas,
+            termijn_vorig_eur=_getal(c.get(CONF_JAAR_TERMIJN_VORIG_EUR), None) or None,  # 0 = niet gewijzigd
+            termijn_gewijzigd=_datum(c.get(CONF_JAAR_TERMIJN_GEWIJZIGD)),
         )
 
     def _jaarafrekening_kwartier(self, now: datetime) -> None:

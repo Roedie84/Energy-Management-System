@@ -35762,3 +35762,14 @@ Ruud 17-11 ("Wel gaan bewaren voor betere resultaten?"). De dagcontrole meldde d
 - Nieuwe module `zon_per_uur.py` (zonder Home Assistant). De voorspelling en de sturing veranderen niet. De eerste dag met uurcijfers is de eerste volle dag na de herstart.
 
 Tests: `test_v5237_zon_per_uur.py` (12).
+
+## v5.238.0 — jaarafrekening: termijnbedrag gewijzigd in de loop van het jaar
+
+Ruud 17-11: "Heb mijn maandbedrag vanaf nu bijgesteld naar 90 euro". De kaart kende één termijnbedrag voor het hele contractjaar; 90 invullen zou doen alsof er sinds april 7 × 90 = € 630 is betaald in plaats van € 490.
+
+- Twee nieuwe instellingen (Jaarafrekening): `jaar_termijn_vorig_eur` (het bedrag tot de wijziging, 0 = niet gewijzigd) en `jaar_termijn_gewijzigd` (eerste dag met het nieuwe bedrag).
+- **`jaarafrekening.termijn_op`**: afschrijvingen vóór die dag tellen met het vorige bedrag. Betaald, de maandreeks, het verwachte saldo (som van de twaalf echte termijnen) en het termijnadvies rekenen daarmee.
+- Kaart "Betaald": toont de opbouw, bijvoorbeeld "7 × € 70 + 1 × € 90". Nieuwe velden `betaald_delen`, `termijn_vorig_eur`, `termijn_gewijzigd`.
+- In een volgend contractjaar geldt vanzelf alleen het nieuwe bedrag.
+
+Tests: `test_v5238_termijn_gewijzigd.py` (7).
