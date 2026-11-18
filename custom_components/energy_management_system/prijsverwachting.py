@@ -925,6 +925,15 @@ def _gevoeligheid(coefs: list[float], opzet: dict | None = None) -> dict:
         # het kenmerk is prijs x 10: de coefficient is het deel dat doorwerkt
         uit["deel_van_gisteren"] = round(coefs[i] * 10, 3)
         uit["deel_van_vorige_week"] = round(coefs[i + 1] * 10, 3)
+        i += 2
+    if opzet and opzet.get("kort"):  # v5.239.0
+        uit["deel_van_laatste_dag_gemiddeld"] = round(coefs[i] * 10, 3)
+        uit["deel_van_laatste_drie_dagen"] = round(coefs[i + 1] * 10, 3)
+        i += 2
+    if opzet and opzet.get("kracht"):  # v5.239.0: van windstil naar vol vermogen
+        uit["windproductie_nl_ct_vol_vermogen"] = round(coefs[i] * 100, 2)
+        uit["windproductie_buurlanden_ct_vol_vermogen"] = round(coefs[i + 1] * 100, 2)
+        uit["windproductie_verre_buren_ct_vol_vermogen"] = round(coefs[i + 2] * 100, 2)
     return uit
 
 

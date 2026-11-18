@@ -1,3 +1,11 @@
+EMS v5.239.0 - prijsmodel beter, en geen netladen op een krappe verwachting
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het prijsmodel krijgt twee uitbreidingen (sneller meebewegend prijsniveau, verwachte windproductie). De dagelijkse terugtoets gebruikt ze alleen als ze aantoonbaar beter zijn.
+- De accu laadt niet meer uit het net voor een dag waarvan de prijzen nog niet bekend zijn, tenzij dat ook loont als de eigen verwachting haar gebruikelijke fout te hoog zit.
+- Nieuw gemeten: hoe goed de aangenomen prijs voor na de horizon uitkwam.
+
 EMS v5.238.0 - jaarafrekening: termijnbedrag gewijzigd in de loop van het jaar
 
 Installeren: via de Marketplace bijwerken en herstarten.

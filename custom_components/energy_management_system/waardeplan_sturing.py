@@ -12,6 +12,7 @@ import statistics
 from datetime import datetime, timedelta, timezone
 from homeassistant.util import dt as dt_util
 from . import (
+    eindprijs_toets as eindprijs_toets_mod,
     salderingspositie as salderingspositie_mod,
     waardeplan as waardeplan_mod,
 )
@@ -36,6 +37,11 @@ from .const import (
     PLAN_SPAREN_LEEG_KWH,
     PRICE_SCALE_FACTOR,
     TEKORT_LEEG_MARGE_PROCENT,
+    WAARDEPLAN_EINDPRIJS_MARGE_AAN,
+    WAARDEPLAN_EINDPRIJS_MARGE_MAX_EUR,
+    WAARDEPLAN_EINDPRIJS_MARGE_MIN_DAGEN,
+    WAARDEPLAN_EINDPRIJS_MARGE_MIN_EUR,
+    WAARDEPLAN_EINDPRIJS_MARGE_TERUGVAL_EUR,
     WAARDEPLAN_EINDPRIJS_UREN,
     WAARDEPLAN_HERREKEN_AFWIJKING_KWH,
     WAARDEPLAN_INHAAL_FACTOR,
@@ -497,9 +503,45 @@ class WaardeplanSturingMixin:
             return None
         prijzen.sort()
         p75 = prijzen[min(len(prijzen) - 1, int(round(0.75 * (len(prijzen) - 1))))]
+        self._eindprijs_toets_bijwerken(kwartieren, eind, tot, p75)  # v5.239.0 (alleen meten)
         if any(k.prijs_incl_eur is not None for k in kwartieren) and self._is_salderen_active(eind):
             p75 -= max(0.0, self._salderingskorting_eur(eind))
         return p75
+
+    def _eindprijs_toets_bijwerken(self, kwartieren: list, eind: datetime, tot: datetime, p75: float) -> None:
+        """v5.239.0: de aangenomen eindprijs (incl. belasting) eens per dag
+        vastleggen en afsluiten zodra de echte prijzen er zijn. Alleen meten."""
+        try:
+            nu = kwartieren[0].begin
+            staat = self.eindprijs_toets or {}
+            datum = dt_util.as_local(eind).date().isoformat()
+            nieuw = eindprijs_toets_mod.noteer(staat, datum, eind, tot, p75)
+            if nieuw.get("open"):
+                echt = eindprijs_toets_mod.uurprijzen(
+                    (k.begin, k.inkoop_eur if k.prijs_incl_eur is None else k.prijs_incl_eur) for k in kwartieren
+                )
+                nieuw = eindprijs_toets_mod.sluit(nieuw, echt, nu)
+            if nieuw != staat:
+                self.eindprijs_toets = nieuw
+                self.schedule_persisted_state_save()
+        except Exception:  # noqa: BLE001 - meten mag het plan nooit raken
+            _LOGGER.debug("Eindprijstoets niet bijgewerkt", exc_info=True)
+
+    def _waardeplan_eindprijs_marge(self) -> float:
+        """v5.239.0 (akkoord Ruud 18-11): de gebruikelijke fout van de
+        prijsverwachting een dag vooruit (live gemeten), als marge voor
+        netladen dat alleen op die verwachting leunt. Tussen 2 en 8 ct; zonder
+        genoeg gemeten dagen de vaste terugval."""
+        if not WAARDEPLAN_EINDPRIJS_MARGE_AAN:
+            return 0.0
+        try:
+            d1 = (((self.prijsverwachting or {}).get("live") or {}).get("d1")) or {}
+            fout = d1.get("afwijking_model_ct")
+            if isinstance(fout, (int, float)) and (d1.get("dagen") or 0) >= WAARDEPLAN_EINDPRIJS_MARGE_MIN_DAGEN:
+                return min(WAARDEPLAN_EINDPRIJS_MARGE_MAX_EUR, max(WAARDEPLAN_EINDPRIJS_MARGE_MIN_EUR, fout / 100))
+        except Exception:  # noqa: BLE001
+            pass
+        return WAARDEPLAN_EINDPRIJS_MARGE_TERUGVAL_EUR
 
     def bereken_waardeplan(self, now: datetime, entries) -> dict:
         """Het waardeplan van nu (v5.158.0) - zie waardeplan.py.
@@ -654,6 +696,9 @@ class WaardeplanSturingMixin:
             zon_export_afdwingbaar=True,
             # v5.177.0 (A10): de waarde aan het eind uit de prijsverwachting.
             eindprijs_eur=self._waardeplan_eindprijs(kwartieren),
+            # v5.239.0: netladen dat alleen op die verwachting leunt moet de
+            # gebruikelijke fout ervan goedmaken.
+            eindprijs_marge_eur=self._waardeplan_eindprijs_marge(),
             **self._waardeplan_rendementen(now),
         )
 
@@ -690,6 +735,12 @@ class WaardeplanSturingMixin:
             # vullen (vangnet); hoort 0 te zijn.
             "vangnet_kwartieren": sum(1 for r in res.kwartieren if r.get("vangnet")),
             "eindprijs_bron": "prijsverwachting" if accu.eindprijs_eur is not None else "75e percentiel plan",
+            # v5.239.0: marge op netladen voor na de horizon, hoe vaak die
+            # ingreep, en de toets van de eindprijs zelf (alleen meten).
+            "eindprijs_marge_eur": round(accu.eindprijs_marge_eur, 4) if accu.eindprijs_eur is not None else None,
+            "netladen_op_verwachting_geweigerd_kwartieren": int(
+                getattr(res, "netladen_verwachting_geweigerd", 0) or 0),
+            "eindprijs_toets": eindprijs_toets_mod.overzicht(self.eindprijs_toets),
             "verkoopmarge_eur": accu.verkoopmarge_eur,
             # v5.165.0: de datacorrectie op netladen en de rendementen.
             "netlaadmarge_eur": accu.netlaadmarge_eur,

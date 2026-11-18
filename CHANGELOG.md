@@ -35773,3 +35773,19 @@ Ruud 17-11: "Heb mijn maandbedrag vanaf nu bijgesteld naar 90 euro". De kaart ke
 - In een volgend contractjaar geldt vanzelf alleen het nieuwe bedrag.
 
 Tests: `test_v5238_termijn_gewijzigd.py` (7).
+
+## v5.239.0 — prijsmodel: sneller niveau, windproductie, en geen netladen op een krappe verwachting
+
+Ruud 18-11: "Hoe goed is het eigen prijsmodel?" (live: 3,9 ct ernaast een dag vooruit, 4,5 ct twee dagen vooruit; de hoogte is het zwakke punt, de duurste uren raakt het goed) en daarna "Kunnen we het prijsmodel beter maken?" - "Alle 3". Aanleiding: het plan hield de accu op 71 % en laadde de avond erna voor 35-36 ct bij, alleen op de eigen verwachting voor de dag daarna (piek 50 ct, nodig 46).
+
+**1. Prijsniveau beweegt sneller mee (model).** Nieuwe opzet `vertraging_ver_gas_kort`: naast het weekniveau het daggemiddelde van de laatste bekende dag en van de laatste drie (`Context.niveau_kort`). Niets uit de toekomst; zonder die dagen telt het weekniveau.
+
+**3. Verwachte windproductie (model).** Publieke productieverwachtingen reiken maar een dag vooruit, en van die dag zijn de echte prijzen al bekend. Daarom rekent het model de windverwachting van Open-Meteo zelf om met een vermogenscurve (`prijsmodel.windkracht`: niets onder 11 km/u, kubisch tot vol vermogen bij 45 km/u, uit boven 90 km/u) voor Nederland, de buurlanden en de verre buren. Opzetten `vertraging_ver_gas_kracht` en `vertraging_ver_gas_kort_kracht`.
+
+De dagelijkse terugtoets in Home Assistant kiest zoals altijd: een uitbreiding wint alleen als ze minstens 1 % beter scoort dan `vertraging_ver_gas` (`UITBREIDING_WINST`), anders blijft het bestaande model. De scores van alle acht opzetten staan in `opzet_scores_ct` van de sensor Prijsverwachting; de gevoeligheid toont de nieuwe kenmerken. Op synthetische reeksen: 1,5 tot 3 % beter; de terugtoets van acht opzetten duurt ~2,3 s (buiten de event loop).
+
+**2. Geen netladen op een krappe verwachting (sturing, akkoord Ruud).** Nieuwe toets `waardeplan.netladen_op_verwachting`: na de laatste ontlading in het plan kan een netlading alleen nog naar de eindwaarde, en die komt uit de prijsverwachting. Zo'n lading mag alleen als ze ook loont wanneer de verwachte eindprijs haar gebruikelijke fout te hoog zit. De marge is de live gemeten afwijking een dag vooruit (`Accu.eindprijs_marge_eur`, 2-8 ct, 4 ct onder de 14 gemeten dagen). Bewaren, zon opslaan, ontladen en laden voor een piek binnen de gepubliceerde prijzen veranderen niet. Nagespeeld op de prijzen van 18/19-11: zonder marge 2,1 kWh bijladen en 1,6 kWh verkopen voor samen EUR 0,002 planwinst; met marge geen van beide.
+
+**Meten.** `eindprijs_toets.py`: de aangenomen eindprijs wordt eens per dag vastgelegd en afgesloten zodra de echte prijzen van die uren er zijn. In het attribuut `waardeplan`: `eindprijs_toets` (dagen, gemiddeld verschil, gemiddelde fout, laatste zeven), `eindprijs_marge_eur` en `netladen_op_verwachting_geweigerd_kwartieren`.
+
+Tests: `test_v5239_prijsmodel_en_eindprijs.py` (19).

@@ -165,6 +165,11 @@ class Accu:
     #: v5.177.0 (A10): de (reken)prijs per kWh voor de uren direct na de
     #: horizon, uit de prijsverwachting. None = 75e percentiel van het plan.
     eindprijs_eur: float | None = None
+    #: v5.239.0 (akkoord Ruud 18-11, "Alle 3", punt 2): zoveel moet een
+    #: netlading die alleen voor de uren NA de horizon is (dus op de
+    #: prijsverwachting leunt) beter zijn dan de eindwaarde - de gebruikelijke
+    #: fout van die verwachting. 0 = uit. Zie `netladen_op_verwachting`.
+    eindprijs_marge_eur: float = 0.0
     #: v5.181.2 (g): mag het plan uit de accu verkopen in een kwartier met
     #: zonoverschot? Verkopen zet de accu handmatig en dan gaat de zon mee het
     #: net op. De huis-eerst-regel (v5.179.1) verbiedt zon terugleveren; daar
@@ -212,6 +217,8 @@ class Uitkomst:
     #: v5.186.0 (punt 14): in zoveel kwartieren is zon terugleveren geweigerd
     #: (huis eerst); was een losse herberekening in de sturing.
     zon_export_geweigerd: int = 0
+    #: v5.239.0: in zoveel kwartieren is netladen op de prijsverwachting geweigerd.
+    netladen_verwachting_geweigerd: int = 0
 
 
 def _kosten_stap(verbruik, zon, inkoop, teruglever, b, accu: Accu, teruglever_accu=None):
@@ -1149,6 +1156,45 @@ def netladen_voor_zonoverloop(rijen: list[dict], kwartieren: list[Kwartier], acc
     return sorted(uit)
 
 
+def netladen_op_verwachting(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu) -> list[int]:
+    """Netladen dat alleen op de prijsverwachting leunt (v5.239.0).
+
+    Ruud 18-11: het plan liet de accu op 71 % staan en laadde de avond erna
+    voor 35-36 ct weer vol, alleen omdat de eigen verwachting voor de dag
+    daarna (nog niet gepubliceerd) een piek van 50 ct gaf; nodig was 46 ct.
+    Die verwachting zit gemiddeld 4-5 ct naast de echte prijs.
+
+    Na de laatste ontlading in het plan kan een netlading nergens anders meer
+    heen dan de eindwaarde. Zo'n lading mag alleen als ze ook nog loont
+    wanneer de verwachte eindprijs de marge te hoog blijkt. Zodra er een
+    lading is die dat niet haalt, gaan alle kwartieren na de laatste
+    ontlading die het evenmin halen dicht (anders schuift de lading elke
+    ronde een kwartier op). Bewaren en zon opslaan blijven ongemoeid: dat kost
+    niets en houdt de keuze open tot de echte prijzen er zijn.
+    """
+    marge = accu.eindprijs_marge_eur or 0.0
+    if accu.eindprijs_eur is None or marge <= 0 or not rijen:
+        return []
+    eta_l, eta_o = rendementen(accu)
+    huis_w = median(k.verbruik_kwh / (getattr(k, "uren", 0.25) or 0.25) for k in kwartieren) * 1000
+    grens = eindwaarde(kwartieren, accu, eta_o) - marge * ontlaadrendement(huis_w, accu, eta_o)
+    laatste = -1
+    for t, r in enumerate(rijen):
+        if r.get("actie") in ("huis", "verkopen") and (r.get("accu_kwh") or 0.0) < -EPS_KWH:
+            laatste = t
+
+    def te_duur(t: int) -> bool:
+        k = kwartieren[t]
+        if k.inkoop_eur < 0:
+            return False     # een negatieve prijs verdient zelf al
+        return (k.inkoop_eur + accu.netlaadmarge_eur) / (eta_l * max(k.laad_factor, 0.05)) > grens
+
+    staart = range(laatste + 1, len(rijen))
+    if not any(rijen[t].get("actie") == "laden_net" and te_duur(t) for t in staart):
+        return []
+    return [t for t in staart if te_duur(t)]
+
+
 def _zon_export_voor_tekort(rijen: list[dict], leeg_kwh: float = 0.01) -> list[int]:
     """De terugleverkwartieren vóór het huis met een lege accu aan het net komt
     (v5.179.1, zie `zon_export_laat_huis_tekort`); leeg = er is geen."""
@@ -1178,6 +1224,8 @@ def _overtredingen(rijen: list[dict], kwartieren: list[Kwartier], accu: Accu,
         uit["netladen_voor_zonoverloop"] = set(netladen_voor_zonoverloop(rijen, kwartieren, accu))
     if accu.bewaarmarge_eur:
         uit["te_duur_bewaard"] = set(te_duur_bewaard(rijen, kwartieren, accu))
+    if accu.eindprijs_marge_eur and accu.eindprijs_eur is not None:
+        uit["netladen_op_verwachting"] = set(netladen_op_verwachting(rijen, kwartieren, accu))
     if accu.zon_export_afdwingbaar:
         # v5.186.0 (punt 14): was `_waardeplan_huis_eerst` in de sturing - die
         # zette terugleveren en verkopen bij zon voor de hele horizon uit en
@@ -1194,6 +1242,7 @@ _VLAG_VAN = {
     "zon_export_zonder_overschot": "geen_zon_export",
     "zon_export_laat_huis_tekort": "geen_zon_export",
     "netladen_voor_zonoverloop": "geen_netladen",
+    "netladen_op_verwachting": "geen_netladen",
 }
 
 
@@ -1202,6 +1251,8 @@ _GROEPEN = (
     ("zinloze_verkopen", "verkopen_voor_huis"),
     ("te_duur_bewaard", "zon_export_zonder_overschot", "zon_export_laat_huis_tekort"),
     ("netladen_voor_zonoverloop",),
+    # v5.239.0: als laatste - eerst moet vaststaan wat het plan zelf ontlaadt.
+    ("netladen_op_verwachting",),
 )
 
 
@@ -1223,6 +1274,7 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     werk = basis
     res = _plan(werk, accu)
     vlaggen: dict[str, set] = {v: set() for v in set(_VLAG_VAN.values())}
+    op_verwachting: set = set()
     rondes = 1
     limiet = False
     while res.beschikbaar:
@@ -1240,6 +1292,8 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
                 if kwartieren_ - voorstel[vlag]:
                     nieuw = True
                     voorstel[vlag] |= kwartieren_
+                    if soort == "netladen_op_verwachting":
+                        op_verwachting |= kwartieren_
             if nieuw:
                 break
         if not nieuw:
@@ -1259,6 +1313,7 @@ def plan(kwartieren: list[Kwartier], accu: Accu) -> Uitkomst:
     res.rondes = rondes
     res.rondelimiet = limiet
     res.zon_export_geweigerd = len(vlaggen["geen_zon_export"])
+    res.netladen_verwachting_geweigerd = len(op_verwachting & vlaggen["geen_netladen"])
     if res.beschikbaar:
         over = _overtredingen(res.kwartieren, werk, accu)
         res.resterend = {soort: len(s) for soort, s in over.items() if s}

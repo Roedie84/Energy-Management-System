@@ -3790,6 +3790,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # de generale repetitie 2027.
     "prijsgeschiedenis": {"type": "plain"},
     "prijsverwachting_archief": {"type": "plain"},
+    # v5.239.0: de aangenomen eindprijs van het waardeplan tegen de echte (alleen meten).
+    "eindprijs_toets": {"type": "plain"},
     # v5.113.2: de laatste prijsreeks, voor een storing bij de prijsbron.
     "prijs_forecast_cache": {"type": "plain"},
     # v5.116.0: storingen van de prijsbron en het begin van een lopende.
@@ -7497,6 +7499,16 @@ WAARDEPLAN_WEG_AANDACHT_MINUTEN = 30
 # v5.177.0 (A10): zoveel uur na de horizon telt de prijsverwachting voor de
 # waarde van wat er aan het eind in de accu zit (75e percentiel).
 WAARDEPLAN_EINDPRIJS_UREN = 12
+# v5.239.0 (akkoord Ruud 18-11, punt 2): netladen dat alleen voor de uren na
+# de horizon is, leunt op de eigen prijsverwachting. Het mag alleen als het
+# ook loont wanneer die verwachting haar gebruikelijke fout te hoog zit: de
+# live gemeten afwijking een dag vooruit (3,9 ct op 18-11), tussen 2 en 8 ct;
+# met minder dan 14 gemeten dagen 4 ct.
+WAARDEPLAN_EINDPRIJS_MARGE_AAN = True
+WAARDEPLAN_EINDPRIJS_MARGE_MIN_EUR = 0.02
+WAARDEPLAN_EINDPRIJS_MARGE_MAX_EUR = 0.08
+WAARDEPLAN_EINDPRIJS_MARGE_TERUGVAL_EUR = 0.04
+WAARDEPLAN_EINDPRIJS_MARGE_MIN_DAGEN = 14
 # v5.177.0 (A13): was de weerentiteit bij het opstarten nog niet geladen, dan
 # na zoveel minuten opnieuw (in plaats van een ERROR en 30 minuten wachten).
 WEER_OPNIEUW_MINUTEN = 2

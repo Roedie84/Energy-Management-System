@@ -1421,6 +1421,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
 
         self.plan_snapshot: dict | None = None
         self.plan_review_history: list[dict] = []
+        self.eindprijs_toets: dict = {}  # v5.239.0
         self.laagste_soc_vandaag_procent: float | None = None
         self._plan_review_day_key = None
         # v1.74.0: de dagstand van de laatste tick, om bij de dagwissel

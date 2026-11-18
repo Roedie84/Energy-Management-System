@@ -47,7 +47,41 @@ OPZETTEN: dict[str, dict] = {
     "vertraging_ver": {"vertraging": True, "per_dag": True, "ver": True, "gasniveau": False},
     "vertraging_gas": {"vertraging": True, "per_dag": True, "ver": False, "gasniveau": True},
     "vertraging_ver_gas": {"vertraging": True, "per_dag": True, "ver": True, "gasniveau": True},
+    # v5.239.0 (Ruud 18-11: "Kunnen we het prijsmodel beter maken?" - "Alle 3"):
+    # `kort` = het prijsniveau beweegt sneller mee (het daggemiddelde van de
+    # laatste bekende dag en van de laatste drie, naast het weekniveau);
+    # `kracht` = de verwachte windproductie uit een vermogenscurve in plaats
+    # van alleen windsnelheid en het kwadraat ervan. Elk een uitbreiding van
+    # `vertraging_ver_gas`: hij wint alleen als hij aantoonbaar beter is.
+    "vertraging_ver_gas_kort": {"vertraging": True, "per_dag": True, "ver": True, "gasniveau": True,
+                                "kort": True, "uitbreiding_van": "vertraging_ver_gas"},
+    "vertraging_ver_gas_kracht": {"vertraging": True, "per_dag": True, "ver": True, "gasniveau": True,
+                                  "kracht": True, "uitbreiding_van": "vertraging_ver_gas"},
+    "vertraging_ver_gas_kort_kracht": {"vertraging": True, "per_dag": True, "ver": True, "gasniveau": True,
+                                       "kort": True, "kracht": True, "uitbreiding_van": "vertraging_ver_gas"},
 }
+#: v5.239.0: een uitbreiding moet zoveel beter zijn dan het model waar hij op
+#: voortbouwt (anders wisselt de keuze van dag tot dag op ruis).
+UITBREIDING_WINST = 0.99
+#: v5.239.0: het daggemiddelde over zoveel bekende dagen als kort niveau.
+KORT_DAGEN = 3
+#: v5.239.0: vermogenscurve van een windturbine op 100 m (km/u): onder de
+#: inschakelsnelheid niets, kubisch tot het nominale vermogen, daarboven vol,
+#: boven de stormgrens uit. Publieke productieverwachtingen reiken maar een
+#: dag vooruit (daar zijn de echte prijzen al van bekend); dit rekent de
+#: weersverwachting van Open-Meteo zelf om, tot een week vooruit.
+WIND_IN_KMH = 11.0
+WIND_NOMINAAL_KMH = 45.0
+WIND_STORM_KMH = 90.0
+
+
+def windkracht(kmh: float) -> float:
+    """Deel van het nominale vermogen (0-1) bij deze windsnelheid op 100 m."""
+    if kmh is None or kmh <= WIND_IN_KMH or kmh >= WIND_STORM_KMH:
+        return 0.0
+    if kmh >= WIND_NOMINAAL_KMH:
+        return 1.0
+    return (kmh ** 3 - WIND_IN_KMH ** 3) / (WIND_NOMINAAL_KMH ** 3 - WIND_IN_KMH ** 3)
 #: Zonder terugtoets (vlak na een herstart, voor de eerste toets klaar is).
 STANDAARD_OPZET = "vertraging"
 #: Zo ver vooruit wordt getoetst en verwacht.
@@ -106,6 +140,17 @@ class Context:
                 break
         self._niveau[laatste] = uit
         return uit
+
+    def niveau_kort(self, laatste: date, dagen: int = 1) -> float | None:
+        """Het daggemiddelde over de `dagen` dagen tot en met `laatste`
+        (v5.239.0); None als er te weinig uren zijn."""
+        tot, n = 0.0, 0
+        for i in range(dagen):
+            s = self.dagsom.get(laatste - timedelta(days=i))
+            if s:
+                tot += s[0]
+                n += s[1]
+        return tot / n if n >= 20 else None
 
     def niveau_strikt(self, laatste: date) -> float | None:
         """Precies `niveau_voor(prijzen, laatste + 1)` van v5.100 (zonder terugval)."""
@@ -193,6 +238,14 @@ def rij(sleutel: str, k: int, w: dict | None, ctx: Context, opzet: dict,
         gisteren = ctx.per_uur.get((bekend, lok.hour), niveau)
         week = ctx.per_uur.get((d - timedelta(days=7), lok.hour), gisteren)
         uit += [gisteren * 10.0, week * 10.0]
+    if opzet.get("kort"):
+        # v5.239.0: zonder kort niveau telt het weekniveau in zijn plaats
+        dag1 = ctx.niveau_kort(bekend, 1)
+        dag3 = ctx.niveau_kort(bekend, KORT_DAGEN)
+        uit += [(niveau if dag1 is None else dag1) * 10.0, (niveau if dag3 is None else dag3) * 10.0]
+    if opzet.get("kracht"):
+        buur = w.get("wind_buur", w["wind"])
+        uit += [windkracht(w["wind"]), windkracht(buur), windkracht(w.get("wind_ver", buur))]
     if opzet["per_dag"] and k >= 3:
         uit.append(k / 7.0)
     uit += [1.0 if lok.hour == u else 0.0 for u in range(1, 24)]
@@ -484,6 +537,15 @@ def kies_opzet(prijzen: dict, weer: dict, gas: dict | None = None,
     beste = min(scores, key=scores.get)
     if "basis" in scores and beste != "basis" and scores[beste] > scores["basis"] * 0.99:
         beste = "basis"
+    # v5.239.0: een uitbreiding wint alleen met een echte verbetering.
+    for _ in range(len(OPZETTEN)):
+        ouder = OPZETTEN[beste].get("uitbreiding_van")
+        if not ouder or ouder not in scores or scores[beste] <= scores[ouder] * UITBREIDING_WINST:
+            break
+        zonder = {n: s_ for n, s_ in scores.items() if not OPZETTEN[n].get("uitbreiding_van")}
+        beste = min(zonder, key=zonder.get) if zonder else ouder
+        if "basis" in scores and beste != "basis" and scores[beste] > scores["basis"] * 0.99:
+            beste = "basis"
     return {"opzet": beste, "scores": {n: round(s, 3) for n, s in scores.items()},
             "per_opzet": rapport, "reden": None,
             "backtest": oordeel_v5100(toetsen[beste], 2),
