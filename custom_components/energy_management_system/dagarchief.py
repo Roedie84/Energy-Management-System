@@ -467,6 +467,18 @@ def _periode_van(dag: date, soort: str) -> tuple[str, str, date, date]:
     return str(dag.year), str(dag.year), date(dag.year, 1, 1), date(dag.year, 12, 31)
 
 
+def _dag_vorig_jaar(dag: date, soort: str) -> date | None:
+    """Dezelfde dag een jaar eerder (v5.241.0): voor een week 364 dagen terug
+    (dan valt de weekdag gelijk), voor een maand of jaar dezelfde datum;
+    29 februari heeft geen tegenhanger."""
+    if soort == "week":
+        return dag - timedelta(days=JAAR_DAGEN)
+    try:
+        return dag.replace(year=dag.year - 1)
+    except ValueError:
+        return None
+
+
 def per_periode(archief: dict, soort: str, vandaag: date | None = None, aantal: int | None = None) -> list[dict]:
     """Totalen per week, maand of jaar uit het dagarchief (v5.240.0).
 
@@ -479,7 +491,8 @@ def per_periode(archief: dict, soort: str, vandaag: date | None = None, aantal: 
     if soort not in ("week", "maand", "jaar"):
         return []
     groepen: dict[str, dict] = {}
-    for datum, r in sorted((archief.get("dagen") or {}).items()):
+    alle = archief.get("dagen") or {}
+    for datum, r in sorted(alle.items()):
         if r.get("v") is None:
             continue
         try:
@@ -488,8 +501,22 @@ def per_periode(archief: dict, soort: str, vandaag: date | None = None, aantal: 
             continue
         sleutel, label, van, tot = _periode_van(dag, soort)
         g = groepen.setdefault(sleutel, {"periode": sleutel, "label": label, "van": van.isoformat(),
-                                         "tot": tot.isoformat(), "dagen": 0, "_pg": [], "_t": []})
+                                         "tot": tot.isoformat(), "dagen": 0, "_pg": [], "_t": [],
+                                         "_vj": [0, 0.0, 0.0, 0.0, 0.0]})
         g["dagen"] += 1
+        # v5.241.0 (Ruud 19-11: "Ik wil zien hoeveel ik t.o.v. vorig jaar heb
+        # verbruikt"): alleen dagen die in beide jaren gemeten zijn, zodat een
+        # lopende periode of een gat de vergelijking niet scheeftrekt.
+        toen_dag = _dag_vorig_jaar(dag, soort)
+        toen = alle.get(toen_dag.isoformat()) if toen_dag else None
+        if toen and toen.get("v") is not None:
+            vj = g["_vj"]
+            vj[0] += 1
+            vj[1] += r["v"]
+            vj[2] += toen["v"]
+            if r.get("gd") is not None and toen.get("gd") is not None:
+                vj[3] += r["gd"]
+                vj[4] += toen["gd"]
         for kort, lang in _SOM:
             if r.get(kort) is not None:
                 g[lang] = g.get(lang, 0.0) + r[kort]
@@ -508,6 +535,17 @@ def per_periode(archief: dict, soort: str, vandaag: date | None = None, aantal: 
         rij["lopend"] = bool(lopend)
         rij["prijs_gem_ct"] = round(sum(g["_pg"]) / len(g["_pg"]), 1) if g["_pg"] else None
         rij["temp_c"] = round(sum(g["_t"]) / len(g["_t"]), 1) if g["_t"] else None
+        n_vj, nu_vj, toen_vj, gd_nu, gd_toen = g["_vj"]
+        if n_vj:
+            rij["vorig_jaar"] = {
+                "dagen": n_vj,
+                "verbruik_kwh": round(toen_vj, 2),
+                "verbruik_zelfde_dagen_kwh": round(nu_vj, 2),
+                "verschil_kwh": round(nu_vj - toen_vj, 2),
+                "verschil_procent": _procent(nu_vj, toen_vj),
+                # kouder of warmer verklaart een deel: graaddagen nu min toen
+                "graaddagen_verschil": round(gd_nu - gd_toen, 1) if (gd_nu or gd_toen) else None,
+            }
         if rij.get("verbruik_kwh") and rij.get("zon_kwh") is not None and rij.get("teruglevering_kwh") is not None:
             # eigen zon in het huis / verbruik, zoals de cockpit zelfvoorziening telt
             eigen = max(0.0, rij["zon_kwh"] - rij["teruglevering_kwh"])

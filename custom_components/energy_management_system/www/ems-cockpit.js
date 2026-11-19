@@ -2724,7 +2724,7 @@ class EmsCockpitCard extends HTMLElement {
     const kleur = (v) => (v != null && v >= 0 ? "var(--groen)" : "var(--oranje)");
     const tabel = rijen.length
       ? `<div class="tabelvak"><table class="tabel"><thead><tr><th>Periode</th><th class="r">Dagen</th>` +
-        `<th class="r">Verbruik</th><th class="r">Zon</th><th class="r">Afname</th><th class="r">Terug</th>` +
+        `<th class="r">Verbruik</th><th class="r">Vorig jaar</th><th class="r">Verschil</th><th class="r">Zon</th><th class="r">Afname</th><th class="r">Terug</th>` +
         `<th class="r">Kosten</th><th class="r">Accu</th><th class="r">Prijs</th><th class="r">Zelf</th></tr></thead><tbody>` +
         rijen.map((r) => {
           const vol = num(r.dagen) === num(r.dagen_mogelijk);
@@ -2732,8 +2732,19 @@ class EmsCockpitCard extends HTMLElement {
           const bereik = soort === "week" ? ` <i class="bij">${dm(r.van)} \u2013 ${dm(r.tot)}</i>` : "";
           const titel = `Geladen ${kwh(r.accu_geladen_kwh)} kWh, ontladen ${kwh(r.accu_ontladen_kwh)} kWh; zonder accu ${euro(r.kosten_zonder_accu_eur)}` +
             (num(r.temp_c) == null ? "" : `; gemiddeld ${fmt(r.temp_c, 1)} \u00b0C`);
+          // v5.241.0: verbruik tegen dezelfde dagen een jaar eerder
+          const vj = r.vorig_jaar || {};
+          const deels = num(vj.dagen) != null && num(vj.dagen) < num(r.dagen);
+          const vjTitel = num(vj.dagen) == null ? "Vorig jaar niet in het archief"
+            : `${fmt(vj.dagen)} dagen in beide jaren: nu ${kwh(vj.verbruik_zelfde_dagen_kwh)} kWh, toen ${kwh(vj.verbruik_kwh)} kWh` +
+              (num(vj.graaddagen_verschil) == null ? "" : `; ${fmt(Math.abs(num(vj.graaddagen_verschil)), 0)} graaddagen ${num(vj.graaddagen_verschil) > 0 ? "kouder" : "warmer"}`);
+          const pct = num(vj.verschil_procent);
+          const vjCel = num(vj.verbruik_kwh) == null ? STREEP : kwh(vj.verbruik_kwh) + (deels ? `<i class="bij">${fmt(vj.dagen)} d</i>` : "");
+          const pctCel = pct == null ? STREEP
+            : `<span style="color:${pct > 0 ? "var(--oranje)" : "var(--groen)"}">${pct > 0 ? "+" : ""}${fmt(pct, 1)}%</span>`;
           return `<tr title="${esc(titel)}"><td>${esc(r.label || r.periode)}${bereik}</td><td class="r">${dagen}</td>` +
-            `<td class="r">${kwh(r.verbruik_kwh)}</td><td class="r">${kwh(r.zon_kwh)}</td><td class="r">${kwh(r.netafname_kwh)}</td>` +
+            `<td class="r">${kwh(r.verbruik_kwh)}</td><td class="r" title="${esc(vjTitel)}">${vjCel}</td>` +
+            `<td class="r" title="${esc(vjTitel)}">${pctCel}</td><td class="r">${kwh(r.zon_kwh)}</td><td class="r">${kwh(r.netafname_kwh)}</td>` +
             `<td class="r">${kwh(r.teruglevering_kwh)}</td><td class="r">${euro(r.kosten_eur)}</td>` +
             `<td class="r" style="color:${kleur(num(r.accu_opbrengst_eur))}">${euroTeken(r.accu_opbrengst_eur)}</td>` +
             `<td class="r">${num(r.prijs_gem_ct) == null ? STREEP : fmt(r.prijs_gem_ct, 1)}</td>` +
@@ -2744,7 +2755,8 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="vb-kop"><span class="vb-knoppen">${knoppen}</span>` +
       `<span class="vb-bereik">kWh \u00b7 kosten stroom zonder vaste kosten \u00b7 prijs in ct/kWh</span></div>` +
       tabel +
-      `<div class="za-s">Accu = wat de accu opleverde (kosten zonder accu min de echte kosten). Zelf = eigen zon in het huis als deel van het verbruik. ` +
+      `<div class="za-s">Vorig jaar = het verbruik op dezelfde dagen een jaar eerder (alleen dagen die in beide jaren gemeten zijn); Verschil = nu tegen toen. ` +
+      `Accu = wat de accu opleverde (kosten zonder accu min de echte kosten). Zelf = eigen zon in het huis als deel van het verbruik. ` +
       `Een periode met minder dagen dan mogelijk mist metingen.</div>`
     );
   }

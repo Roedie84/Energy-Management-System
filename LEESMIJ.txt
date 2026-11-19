@@ -1,3 +1,9 @@
+EMS v5.241.0 - archief: verbruik tegen vorig jaar
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De tabel "Archief per week, maand en jaar" toont per periode het verbruik op dezelfde dagen een jaar eerder en het verschil in procenten.
+
 EMS v5.240.0 - dagarchief per week, maand en jaar
 
 Installeren: via de Marketplace bijwerken en herstarten.

@@ -35807,3 +35807,12 @@ Ruud 19-11 (bij de regel Dagarchief in de cockpit): "Kunnen we hiervoor ook een 
 - Alleen weergave; er wordt niets extra opgeslagen. Rekentijd voor tien jaar archief ruim onder 0,25 s (getoetst).
 
 Tests: `test_v5240_archief_perioden.py` (9).
+
+## v5.241.0 — archief: verbruik tegen vorig jaar
+
+Ruud 19-11 (direct na v5.240.0): "Ik wil zien hoeveel ik t.o.v. vorige jaar heb verbruikt".
+
+- **`dagarchief.per_periode`**: per week, maand en jaar `vorig_jaar` met het verbruik op dezelfde dagen een jaar eerder, het verbruik van nu op diezelfde dagen, het verschil in kWh en procent, en het verschil in graaddagen (kouder of warmer). Alleen dagen die in beide jaren gemeten zijn tellen, zodat de lopende maand tegen dezelfde dagen van vorig jaar staat en een gat de vergelijking niet scheeftrekt. Een week vergelijkt met 364 dagen eerder (zelfde weekdagen); een maand en een jaar met dezelfde datum.
+- **Cockpit**, tabel "Archief per week, maand en jaar": kolommen "Vorig jaar" (kWh) en "Verschil" (procent; meer verbruik oranje, minder groen). Aanwijzen toont het aantal vergeleken dagen, beide bedragen en hoeveel graaddagen kouder of warmer het was.
+
+Tests: `test_v5240_archief_perioden.py` (+5, samen 14).

@@ -102,3 +102,55 @@ def test_cockpit_toont_het_archief():
     assert "_archiefPerioden()" in js and 'data-archief="' in js
     assert '"Archief per week, maand en jaar"' in js
     assert all(ord(c) < 128 for c in js)
+
+
+# --- v5.241.0: verbruik tegen vorig jaar ------------------------------------
+
+def _twee_jaar():
+    a = {"dagen": {}}
+    for i in range(30):   # november 2025: 10 kWh per dag, kouder
+        a["dagen"][(date(2025, 11, 1) + timedelta(days=i)).isoformat()] = {"v": 10.0, "gd": 12.0}
+    for i in range(18):   # november 2026 t/m de 18e: 11 kWh per dag
+        a["dagen"][(date(2026, 11, 1) + timedelta(days=i)).isoformat()] = {"v": 11.0, "gd": 10.0}
+    return a
+
+
+def test_lopende_maand_vergelijkt_dezelfde_dagen():
+    m = D.per_periode(_twee_jaar(), "maand", date(2026, 11, 19))[-1]
+    vj = m["vorig_jaar"]
+    assert m["verbruik_kwh"] == 198.0
+    assert vj["dagen"] == 18 and vj["verbruik_kwh"] == 180.0 and vj["verbruik_zelfde_dagen_kwh"] == 198.0
+    assert vj["verschil_kwh"] == 18.0 and vj["verschil_procent"] == 10.0
+    assert vj["graaddagen_verschil"] == -36.0   # dit jaar warmer
+
+
+def test_week_vergelijkt_dezelfde_weekdagen():
+    a = _twee_jaar()
+    w = D.per_periode(a, "week", date(2026, 11, 19))[-2]   # wk 46: ma 9 t/m zo 15-11-2026
+    assert w["periode"] == "2026-W46" and w["vorig_jaar"]["dagen"] == 7
+    assert w["vorig_jaar"]["verbruik_kwh"] == 70.0 and w["vorig_jaar"]["verschil_procent"] == 10.0
+    # 364 dagen terug: maandag 9-11-2026 hoort bij maandag 10-11-2025
+    assert D._dag_vorig_jaar(date(2026, 11, 9), "week") == date(2025, 11, 10)
+    assert D._dag_vorig_jaar(date(2026, 11, 9), "week").weekday() == 0
+
+
+def test_jaar_en_ontbrekend_vorig_jaar():
+    a = _twee_jaar()
+    jaren = D.per_periode(a, "jaar", date(2026, 11, 19))
+    assert "vorig_jaar" not in jaren[0]            # 2024 staat niet in het archief
+    assert jaren[1]["vorig_jaar"]["dagen"] == 18 and jaren[1]["vorig_jaar"]["verschil_procent"] == 10.0
+    assert D._dag_vorig_jaar(date(2024, 2, 29), "maand") is None
+
+
+def test_gat_in_vorig_jaar_telt_alleen_de_gedeelde_dagen():
+    a = _twee_jaar()
+    del a["dagen"]["2025-11-05"]
+    a["dagen"]["2025-11-06"] = {"gd": 12.0}    # geen meting
+    vj = D.per_periode(a, "maand", date(2026, 11, 19))[-1]["vorig_jaar"]
+    assert vj["dagen"] == 16 and vj["verbruik_kwh"] == 160.0 and vj["verbruik_zelfde_dagen_kwh"] == 176.0
+
+
+def test_cockpit_toont_vorig_jaar():
+    js = (BASIS / "www" / "ems-cockpit.js").read_text()
+    assert "Vorig jaar</th>" in js and "Verschil</th>" in js and "r.vorig_jaar" in js
+    assert all(ord(c) < 128 for c in js)
