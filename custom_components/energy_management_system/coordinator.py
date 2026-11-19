@@ -17687,17 +17687,35 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # die uitvalt haalt elke dag omlaag; één goede dag spreekt dat
         # tegen. Met één goede dag en te weinig voor 'twee soorten dagen'
         # (v4.15) is het eerlijke oordeel: nog niet te zeggen.
-        if not spreiding and goed:
+        # v5.239.1: een dag die de ANDERE kant op ver ernaast zit, spreekt een
+        # verschuiving net zo goed tegen als een dag die klopt. Gemeld 19-11
+        # 00:00 (melding solar_underperforming, controle 19-11): de laatste
+        # 5 dagen -51,5 / -53,6 / -43,4 / -29,3 / +41,0 %, mediaan -43,4 ->
+        # "structureel lager ... en dat geldt voor élke dag". Op 18-11
+        # leverden de panelen 41 % MEER dan voorspeld; vervuiling of een
+        # uitgevallen streng haalt elke dag omlaag.
+        tegen = [
+            v for v in recent
+            if abs(v) > SOLAR_DAG_GOED_PERCENT and (v > 0) != (drift > 0)
+        ]
+        if not spreiding and (goed or tegen):
+            tegen_tekst = (
+                f" en {len(tegen)} de andere kant op (meer dan "
+                f"{SOLAR_DAG_GOED_PERCENT:.0f}% {'hoger' if drift < 0 else 'lager'})"
+                if tegen
+                else ""
+            )
             return {
                 "soort": "wisselend",
                 "status": RELIABILITY_INSUFFICIENT,
                 "reden": (
                     f"De laatste {len(recent)} dagen wisselen: {len(goed)} "
-                    f"binnen {SOLAR_DAG_GOED_PERCENT:.0f}% en {len(ver_mis)} "
-                    f"meer dan {SOLAR_DAG_VER_MIS_PERCENT:.0f}% ernaast "
-                    f"(mediaan {recente_mediaan:.1f}%). Een dag die klopt "
-                    "past niet bij vervuiling of een uitgevallen streng; "
-                    "voor 'twee soorten dagen' zijn het er nog te weinig."
+                    f"binnen {SOLAR_DAG_GOED_PERCENT:.0f}%{tegen_tekst} en "
+                    f"{len(ver_mis)} meer dan {SOLAR_DAG_VER_MIS_PERCENT:.0f}% "
+                    f"ernaast (mediaan {recente_mediaan:.1f}%). Een dag die "
+                    "klopt of de andere kant op wijkt past niet bij vervuiling "
+                    "of een uitgevallen streng; voor 'twee soorten dagen' zijn "
+                    "het er nog te weinig."
                 ),
                 "drift_percent": round(drift, 1),
                 "recente_afwijking_percent": round(recente_mediaan, 1),

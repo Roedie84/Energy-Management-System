@@ -35789,3 +35789,10 @@ De dagelijkse terugtoets in Home Assistant kiest zoals altijd: een uitbreiding w
 **Meten.** `eindprijs_toets.py`: de aangenomen eindprijs wordt eens per dag vastgelegd en afgesloten zodra de echte prijzen van die uren er zijn. In het attribuut `waardeplan`: `eindprijs_toets` (dagen, gemiddeld verschil, gemiddelde fout, laatste zeven), `eindprijs_marge_eur` en `netladen_op_verwachting_geweigerd_kwartieren`.
 
 Tests: `test_v5239_prijsmodel_en_eindprijs.py` (19).
+
+## v5.239.1 — zonmelding: een dag de andere kant op is tegenbewijs
+
+Dagcontrole 19-11: om 00:00 ging de melding `solar_underperforming` ("☀️ Zonopbrengst wijkt structureel af", niet verstuurd door de stille uren) met de tekst "De laatste 5 dagen liggen structureel 43 procentpunt lager dan de geleerde bias (0.0%), en dat geldt voor élke dag - geen goede dag ertussen. Dat wijst op een verandering aan de installatie". De reeks was -51,5 / -53,6 / -43,4 / -29,3 / **+41,0** %: op 18-11 leverden de panelen 41 % méér dan Solcast voorspelde. `get_solar_forecast_health` keek alleen naar dagen binnen 10 % ('goed') als tegenbewijs (v5.148.0); een dag die ver de andere kant op zat telde als 'ver ernaast' en dus als bevestiging.
+
+Nu telt een dag die meer dan 10 % de andere kant op wijkt (`tegen`) net als een goede dag: oordeel 'wisselend' (nog niet te zeggen), geen melding, met in de reden hoeveel dagen de andere kant op zaten. Een echte verschuiving (alle dagen aan dezelfde kant) blijft gemeld. Alleen de beoordeling; de zonvoorspelling, de eigen correctie en de sturing veranderen niet. 4 nieuwe tests (`test_v5239_1_zon_andere_kant.py`).
+
