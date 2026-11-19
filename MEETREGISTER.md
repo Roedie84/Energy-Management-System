@@ -37,7 +37,7 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 ## Nog te bouwen (toegezegd, geen meting)
 | Wat | Stand |
 |---|---|
-| Ontdekking uitbreiden (Ruud 19-11: 'zeer uitgebreid'): regel 'Nieuw gevonden' in de cockpit; ja/nee in de melding die een voorstel zelf instelt; tweede omvormer, tweede accu en laadpaal herkennen; verdwenen apparaten melden | v5.247.0 + v5.248.0 (19-11): cockpitregel, omvormer/accu/laadpaal en verdwenen apparaten staan; alleen de ja/nee-knoppen in de melding nog te bouwen (wacht op een keuze van Ruud wat 'ja' per soort doet) |
+| Ontdekking van nieuwe apparaten (Ruud 19-11: 'zeer uitgebreid') | COMPLEET: v5.247.0 (basis), v5.248.0 (cockpit, omvormer/accu/laadpaal, verdwenen), v5.249.0 (knoppen in de melding). Na de herstart de eerste ronde nakijken; de knoppen zijn nog niet met een echte melding geprobeerd |
 | Alinea PENDELEN uit de opdracht van de dagcontrole halen | bij de eerstvolgende aanpassing van die opdracht |
 
 ## Afgesloten
