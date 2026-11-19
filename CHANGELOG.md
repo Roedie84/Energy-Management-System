@@ -35871,3 +35871,13 @@ Ruud 19-11: "als iets niet wordt gebruikt kan het eruit". De proef uit v3.97.0 m
 - De sturing is ongewijzigd.
 
 Tests: `test_powercalc_proef.py` vervalt; `test_v5245_powercalc_proef_weg.py` (3).
+
+## v5.246.0 — GACS-eisenspiegel eruit
+
+Ruud 19-11: "als iets niet wordt gebruikt kan het eruit". De spiegel langs de vier GACS-eisen (v1.10.0) geldt niet voor een woning en werd door niets gelezen (niet in de cockpit, alleen in de diagnose).
+
+- `get_gacs_assessment` geeft alleen nog de verbetermogelijkheden; `eisen`, `van_toepassing` en `toelichting` zijn weg, net als `GACS_REQUIREMENTS`. Dat scheelt per opbouw ook het betrouwbaarheidsoverzicht dat alleen voor de eisen werd uitgerekend.
+- De sensor "GACS-zelfbeoordeling" BLIJFT: hij draagt de gegevens waar de cockpit op draait (waarom nu, verkooptoets, reservemarge, zon vandaag, uitstelplan) en zijn toestand is het aantal verbetermogelijkheden. Alleen de naam is nog historisch.
+- De sturing is ongewijzigd.
+
+Tests: `test_gacs_assessment.py` vijf toetsen op de eisen vervallen, een nieuwe erbij.

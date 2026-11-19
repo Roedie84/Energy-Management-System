@@ -590,7 +590,6 @@ from .const import (
     NOTIFICATION_HISTORY_LENGTH,
     NOTIFICATION_RECOVERY_KINDS,
     GACS_EFFICIENCY_ADVICE_PERCENT,
-    GACS_REQUIREMENTS,
     GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
     PLAN_SHORTFALL_ALERT_MIN_QUARTERS,
     PLAN_SHORTFALL_RECOVERY_STABLE_MINUTES,
@@ -17504,89 +17503,15 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         return adviezen
 
     def get_gacs_assessment(self) -> dict:
-        """Zelfbeoordeling tegen de vier functionele GACS-eisen
-        (v1.10.0).
+        """De verbetermogelijkheden voor de sensor (v1.10.0).
 
-        Nadrukkelijk GEEN nalevingsbewijs: voor een woning geldt de
-        verplichting niet - die geldt voor utiliteitsgebouwen zonder
-        woonfunctie boven 290 kW verwarmings- of koelvermogen. Dit is een
-        spiegel: hoe verhoudt deze integratie zich tot wat het Besluit
-        Bouwwerken Leefomgeving functioneel eist?
+        v5.246.0 (Ruud 19-11: "als iets niet wordt gebruikt kan het eruit"):
+        de spiegel langs de vier GACS-eisen is weg. Die verplichting geldt
+        niet voor een woning en niets las de uitkomst. Wat overblijft is wat
+        wel gebruikt wordt: de lijst met concrete verbetermogelijkheden.
+        De naam blijft, omdat sensor en diagnose hem zo aanroepen.
         """
-        adviezen = self.get_improvement_suggestions()
-        overzicht = self.get_reliability_overview()
-        betrouwbaar = sum(
-            1 for r in overzicht if r["niveau"] == RELIABILITY_RELIABLE
-        )
-
-        invulling = {
-            "monitoring": {
-                "status": RELIABILITY_RELIABLE,
-                "hoe": (
-                    "Elke vijf minuten worden verbruik, opwek, accustand en "
-                    "prijs gemeten; de accu wordt op basis daarvan "
-                    "aangestuurd. Het beslislogboek legt elke tick vast."
-                ),
-            },
-            "efficiency": {
-                "status": (
-                    RELIABILITY_RELIABLE
-                    if betrouwbaar >= 5
-                    else RELIABILITY_INDICATIVE
-                ),
-                "hoe": (
-                    f"{betrouwbaar} van de {len(overzicht)} gemeten "
-                    "grootheden zijn als betrouwbaar beoordeeld. De "
-                    "Kirchhoff-balanscheck toetst of de metingen onderling "
-                    "kloppen, en drift-detectie spoort verliezen op bij "
-                    "apparaten, accumodules en de zonvoorspelling."
-                ),
-            },
-            "advies": {
-                "status": (
-                    RELIABILITY_RELIABLE if adviezen else RELIABILITY_INDICATIVE
-                ),
-                "hoe": (
-                    f"{len(adviezen)} concrete verbetermogelijkheid(en) "
-                    "afgeleid uit de eigen metingen."
-                    if adviezen
-                    else (
-                        "Op dit moment geen verbetermogelijkheden gevonden - "
-                        "dat kan betekenen dat alles goed staat, of dat er "
-                        "nog te weinig is gemeten."
-                    )
-                ),
-            },
-            "interoperabiliteit": {
-                "status": RELIABILITY_RELIABLE,
-                "hoe": (
-                    "Werkt samen met thuisaccu, omvormer, slimme meter, "
-                    "prijsleverancier, weerdiensten en klimaatinstallatie - "
-                    "van verschillende fabrikanten, via Home Assistant."
-                ),
-            },
-        }
-
-        return {
-            "van_toepassing": False,
-            "toelichting": (
-                "De GACS-verplichting geldt niet voor woningen. Zij geldt "
-                "voor utiliteitsgebouwen zonder woonfunctie met een "
-                "verwarmings- of koelinstallatie boven 290 kW (vanaf 2030: "
-                "70 kW). Deze beoordeling is een spiegel, geen "
-                "nalevingsbewijs."
-            ),
-            "eisen": [
-                {
-                    "sleutel": sleutel,
-                    "eis": titel,
-                    "uitleg": uitleg,
-                    **invulling[sleutel],
-                }
-                for sleutel, titel, uitleg in GACS_REQUIREMENTS
-            ],
-            "verbetermogelijkheden": adviezen,
-        }
+        return {"verbetermogelijkheden": self.get_improvement_suggestions()}
 
     def get_solar_forecast_health(self) -> dict:
         """Klopt de zonvoorspelling nog, of is er iets veranderd aan de

@@ -352,8 +352,10 @@ def test_de_diagnostiek_heeft_de_volledige_set(make_coordinator, hass):
 
     volledig = m.gacs_volledig(c)
 
-    for sleutel in ("eisen", "kwartierplanning", "logboek", "rekentijd_ms"):
+    # v5.246.0: de GACS-eisenspiegel is eruit; de verbetermogelijkheden blijven.
+    for sleutel in ("verbetermogelijkheden", "kwartierplanning", "logboek", "rekentijd_ms"):
         assert sleutel in volledig, sleutel
+    assert "eisen" not in volledig
     assert len(volledig["plantoetsing"]["dagen_overzicht"]) == 30
     assert len(volledig["logboek"]["regels"]) == 120
     bron = (MAP / "diagnostics.py").read_text(encoding="utf-8")

@@ -1,3 +1,9 @@
+EMS v5.246.0 - GACS-eisenspiegel eruit
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De vergelijking met vier eisen die niet voor een woning gelden is verwijderd. De cockpit en de sturing zijn ongewijzigd.
+
 EMS v5.245.0 - Powercalc-proef eruit
 
 Installeren: via de Marketplace bijwerken en herstarten.

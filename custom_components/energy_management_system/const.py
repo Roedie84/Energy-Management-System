@@ -5872,32 +5872,6 @@ PLAUSIBILITY_RULES = (
 # Besluit Bouwwerken Leefomgeving?
 #
 # Die vier eisen, letterlijk uit de wettekst samengevat:
-GACS_REQUIREMENTS = (
-    (
-        "monitoring",
-        "Verbruik permanent controleren, bijhouden, analyseren én bijsturen",
-        "Het systeem moet het energieverbruik continu volgen en er ook "
-        "daadwerkelijk op kunnen ingrijpen.",
-    ),
-    (
-        "efficiency",
-        "Energie-efficiëntie toetsen en rendementsverliezen opsporen",
-        "Niet alleen meten wat er gebeurt, maar ook beoordelen of het goed "
-        "gaat en verliezen herkennen.",
-    ),
-    (
-        "advies",
-        "De beheerder informeren over verbetermogelijkheden",
-        "De zwakste eis voor de meeste systemen: melden dát er iets is, is "
-        "iets anders dan vertellen wat je eraan kunt doen.",
-    ),
-    (
-        "interoperabiliteit",
-        "Communiceren en samenwerken met andere bouwsystemen",
-        "Met opslag, zonnepanelen, laadpalen en installaties van andere "
-        "fabrikanten.",
-    ),
-)
 
 # Drempels waarboven een verbetervoorstel de moeite waard is. Bewust
 # terughoudend: een lijst met twintig adviezen leest niemand, en dan is
