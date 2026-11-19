@@ -35850,3 +35850,14 @@ Ruud 19-11: proefdraaien voor 2027 (einde saldering 31-12). De dagelijkse genera
 - Toets op de jaarwissel: het kwartier van 31-12 23:45 rekent met de saldering, dat van 01-01 00:00 met de volle inkoopprijs, het kale teruglevertarief en de accuprijs zonder zonnebonus.
 
 Tests: `test_v5243_repetitie_waardeplan.py` (7).
+
+## v5.244.0 — deed de accu zelf wat het EMS opdroeg? (alleen meten)
+
+Ruud 19-11: "Zendure lokaal aansturen", stap a. De opdrachtcontrole (v3.87.0) kijkt of de entiteit van de Zendure-integratie de opgedragen waarde draagt; dat zegt niet of de accu het ook deed. Nu wordt een opgedragen handmatig vermogen na de wachttijd (90 s) vergeleken met de eigen lezing van de accu. De sturing is ongewijzigd en gebruikt de uitkomst niet.
+
+- Nieuw `opdracht_accu.py` (zuiver): gevolgd (binnen max(150 W, 15 %)), niet_gevolgd, kan_niet (accu vol of leeg), onbekend (geen verse eigen lezing). Alleen als de accu nog in de handmatige stand hoort te staan.
+- Tellingen per dag (30 dagen) en de laatste afwijkingen, bewaard bij de tellingen van het lokale meelezen (overleeft een herstart).
+- Zichtbaar: attribuut `opdrachten_gevolgd` op de sensor "Zendure lokaal meelezen" en `accu_zelf` in de opdrachtcontrole (diagnose).
+- De bewakingstoets "de sturing leest de meelezer alleen via de terugval" staat nu twee extra leesplekken toe die alleen tellen, en bewaakt dat de uitkomst nergens voor sturing wordt gebruikt.
+
+Tests: `test_v5244_opdracht_accu.py` (12).

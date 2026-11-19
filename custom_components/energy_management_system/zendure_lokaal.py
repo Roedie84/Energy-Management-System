@@ -1466,6 +1466,9 @@ class ZendureLokaalMeelezer:
         uit["accu"] = self.afgeleid
         uit["relaisschakelingen"] = relais_samenvatting(self.tellingen)
         uit["omzetrendement"] = rendement_samenvatting(self.tellingen)
+        # v5.244.0: deed de accu zelf wat het EMS opdroeg (stap a)?
+        from . import opdracht_accu
+        uit["opdrachten_gevolgd"] = opdracht_accu.overzicht(self.tellingen.get("opdracht_accu"))
         uit["reactiesnelheid"] = reactie_samenvatting(
             self.tellingen.get("reactie") or {}, INTERVAL.total_seconds()
         )

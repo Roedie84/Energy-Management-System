@@ -138,8 +138,17 @@ def test_de_sturing_leest_alleen_via_de_terugval():
     """v5.82: de coordinator leest de meelezer op precies één plek: de
     terugval bij een onbeschikbare Zendure-entiteit. Zie test_v582.py."""
     coord = coordinator_bron()
-    assert coord.count('getattr(self, "zendure_lokaal", None)') == 1
+    # v5.244.0: twee plekken erbij die alleen TELLEN (deed de accu wat er
+    # stond?) en niets aan de sturing teruggeven. De sturing zelf leest nog
+    # steeds alleen via de terugval.
+    assert coord.count('getattr(self, "zendure_lokaal", None)') == 3
     assert "meelezer.vervanging(entity_id)" in coord
+    for meting in ("_accu_volgde_opdracht", "_opdracht_accu_overzicht"):
+        stuk = coord.split(f"    def {meting}(")[1].split("\n    def ")[0]
+        assert 'getattr(self, "zendure_lokaal", None)' in stuk
+    # de uitkomst van de meting wordt nergens gebruikt om te sturen
+    assert coord.count("self._accu_volgde_opdracht(") == 1
+    assert "= self._accu_volgde_opdracht(" not in coord
 
 
 def test_ronde_vangt_elke_fout_af():

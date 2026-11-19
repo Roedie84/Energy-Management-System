@@ -41218,6 +41218,9 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             if wachttijd < OPDRACHT_BEVESTIGING_SECONDEN:
                 continue
             del self._openstaande_opdrachten[entity_id]
+            # v5.244.0: deed de accu zelf wat er stond? (alleen meten)
+            if opdracht.get("wat") == "handmatig vermogen":
+                self._accu_volgde_opdracht(opdracht, now)
 
             staat = self.hass.states.get(entity_id)
             if staat is None or staat.state in ("unavailable", "unknown"):
@@ -41259,6 +41262,36 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 notification_id="ems_opdracht_niet_aangekomen",
                 kind="opdracht_niet_aangekomen",
             )
+
+    def _accu_volgde_opdracht(self, opdracht: dict, now: datetime) -> str | None:
+        """Vergelijkt een opgedragen handmatig vermogen met de eigen lezing van
+        de accu (v5.244.0, stap a van 'Zendure lokaal'). Alleen tellen."""
+        try:
+            from . import opdracht_accu, zendure_lokaal as zl
+
+            meelezer = getattr(self, "zendure_lokaal", None)
+            if meelezer is None:
+                return None
+            # alleen als de accu nog in de handmatige stand hoort te staan
+            select = self.hass.states.get(self.config.get(CONF_OPERATION_SELECT) or "")
+            if select is None or select.state != OPTION_MANUAL:
+                return None
+            laatste = getattr(meelezer, "laatste", None) or {}
+            gemeten = zl.netto_ac(laatste.get("apparaat") or {})
+            t = getattr(meelezer, "laatste_t", None)
+            leeftijd = (time.monotonic() - t) if t is not None else None
+            soc = self.accustand_procent()
+            uitkomst = opdracht_accu.beoordeel(
+                opdracht.get("verwacht"), gemeten, leeftijd, soc,
+                self.effective_min_soc_percent(), self._bovengrens_procent(),
+            )
+            tellingen = meelezer.tellingen.setdefault("opdracht_accu", opdracht_accu.leeg())
+            opdracht_accu.noteer(tellingen, uitkomst, dag=now.date().isoformat(), moment=now.isoformat(),
+                                 verwacht_w=opdracht.get("verwacht"), gemeten_w=gemeten, soc=soc)
+            return uitkomst
+        except Exception:  # noqa: BLE001 - meten mag de ronde nooit raken
+            _LOGGER.debug("Opdracht tegen de eigen lezing niet beoordeeld", exc_info=True)
+            return None
 
     _opdracht_mislukt_reeks: dict | None = None
 
@@ -43544,6 +43577,12 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             ),
         }
 
+    def _opdracht_accu_overzicht(self) -> dict:
+        from . import opdracht_accu
+
+        meelezer = getattr(self, "zendure_lokaal", None)
+        return opdracht_accu.overzicht((getattr(meelezer, "tellingen", None) or {}).get("opdracht_accu"))
+
     def get_opdrachtcontrole(self) -> dict:
         """Hoe vaak kwamen de opdrachten aan? (v3.87.0)"""
         g = self.opdracht_bevestigingen
@@ -43556,6 +43595,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             ),
             "openstaand": len(self._openstaande_opdrachten),
             "laatste_mislukking": g.get("laatste_mislukking"),
+            # v5.244.0: deed de accu zelf wat er stond (eigen lezing)?
+            "accu_zelf": self._opdracht_accu_overzicht(),
             "toelichting": (
                 "Elke opdracht aan de accu wordt na "
                 f"{OPDRACHT_BEVESTIGING_SECONDEN} seconden nagekeken. "

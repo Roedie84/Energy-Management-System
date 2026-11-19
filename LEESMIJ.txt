@@ -1,3 +1,9 @@
+EMS v5.244.0 - meten of de accu zelf doet wat het EMS opdraagt
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Elk opgedragen laad- of ontlaadvermogen wordt nu vergeleken met wat het EMS de accu zelf ziet doen. Alleen meten; de sturing is ongewijzigd. Te zien op de sensor Zendure lokaal meelezen (opdrachten_gevolgd).
+
 EMS v5.243.0 - de repetitie voor 2027 rekent ook met het waardeplan
 
 Installeren: via de Marketplace bijwerken en herstarten.
