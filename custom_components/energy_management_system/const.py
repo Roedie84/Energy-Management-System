@@ -4082,7 +4082,6 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_vermogensgrens_gezien_today": {"type": "plain"},
     "_shortfall_detected_today": {"type": "plain"},
     "_excess_detected_today": {"type": "plain"},
-    "powercalc_paren": {"type": "plain"},
     "notification_enabled": {"type": "plain"},
     "notification_last_sent": {"type": "plain"},
     "_notification_history_last": {"type": "plain"},
@@ -6228,26 +6227,6 @@ PRESENCE_MIN_OBSERVATIONS = 3
 # minuten stilte die daarna nodig zijn om terug te vallen.
 #
 # Twintig minuten: ruim boven een wc-bezoek, ruim onder het opstaan.
-# Powercalc-proef (v3.97.0).
-#
-# Gevraagd: "Deze integratie heb ik ook, kunnen we daar nog wat mee" -
-# met sensoren als `sensor.eetkamer_lamp_3_power`.
-#
-# Powercalc MEET niet, het SCHAT uit een profielbibliotheek. Zo'n getal
-# in de reserve stoppen zou dezelfde fout zijn als `available_kwh` en
-# `gemeten_kwh`. Waar het wel iets kan opleveren is het residu voor
-# NILM: verlichting is continu wisselende ruis, en die eruit halen maakt
-# een apparaatstart duidelijker zichtbaar.
-#
-# Of dat werkt, is te meten - en daarom staat het hier als proef.
-POWERCALC_MIN_METINGEN = 200
-POWERCALC_PAREN_LENGTE = 600
-
-# Hoeveel rustiger het residu moet zijn voordat het de moeite waard
-# heet. Vijf procent minder spreiding is binnen deze aantallen niet van
-# toeval te onderscheiden.
-POWERCALC_MIN_WINST_FRACTIE = 0.10
-
 PRESENCE_NIGHT_INTERRUPTION_MINUTES = 20.0
 
 # Hoeveel stilte er na een nacht nodig is voordat het weg heet

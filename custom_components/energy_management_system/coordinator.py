@@ -617,9 +617,6 @@ from .const import (
     PRESENCE_HISTORY_WEEKS,
     PRESENCE_MIN_OBSERVATIONS,
     PRESENCE_NIGHT_END_HOUR,
-    POWERCALC_MIN_METINGEN,
-    POWERCALC_MIN_WINST_FRACTIE,
-    POWERCALC_PAREN_LENGTE,
     PRESENCE_MORNING_AWAY_MINUTES,
     PRESENCE_NIGHT_INTERRUPTION_MINUTES,
     PRESENCE_NIGHT_START_HOUR,
@@ -1098,15 +1095,6 @@ class _ChronologicalValueTracker:
         return self._current
 
 
-_POWERCALC_TOELICHTING = (
-    "Powercalc SCHAT vermogen uit een profielbibliotheek; het meet niet. "
-    "Deze proef vraagt niet of die schatting klopt, maar of aftrekken "
-    "helpt: wordt het residu (gemeten min geschat) rustiger dan het "
-    "gemeten totaal zelf? Zo ja, dan is verlichtingsruis eruit gehaald en "
-    "wordt een apparaatstart beter zichtbaar voor de NILM-herkenning. Zo "
-    "nee, dan voegt de schatting ruis toe en is aftrekken schadelijk. "
-    "Stuurt niets."
-)
 
 
 def koppeling_hapert(regel: dict) -> bool:
@@ -6530,9 +6518,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         self.weerbron_helderheid_paren: dict[str, list[list[float]]] = {}
         # v3.99.0: hoogste ontlaadvermogen vandaag, per stand.
         self._max_ontlaad_w_vandaag: dict[str, float] = {}
-        # v3.97.0, per exemplaar sinds v3.99.1: (gemeten huisverbruik,
-        # geschat vermogen) per ronde. Stond als lijst op de klasse.
-        self.powercalc_paren: list[list[float]] = []
         # v3.98.1: per bakje de dagen waarop gemeten is. Zonder dit is uit
         # de export niet te zien of zestig metingen één dag of tien dagen
         # beslaan.
@@ -17850,25 +17835,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # invoegvolgorde getoond, met een kop bij elke wisseling.
         # v3.94.0: en de heldere-hemel-ijklijn, met zijn eigen oordeel
         # over de vraag of er al iets mee te sturen valt.
-        # v3.97.0: en de Powercalc-proef.
-        powercalc = self.get_powercalc_proef()
-        if powercalc.get("beschikbaar"):
-            voeg_toe(
-                "Adviesmodules",
-                "Powercalc als NILM-hulp",
-                {
-                    "niveau": powercalc["status"],
-                    "reden": powercalc["wat_ontbreekt"]
-                    or (
-                        f"Verklaart {powercalc['aandeel_procent']}% van het "
-                        f"huisverbruik en maakt het residu "
-                        f"{powercalc['winst_procent']}% rustiger."
-                    ),
-                },
-                powercalc.get("aandeel_procent"),
-                "%",
-            )
-
         ijking = self.get_helderheid_ijking()
         voeg_toe(
             "Adviesmodules",
@@ -23987,130 +23953,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         if informatief:
             delen.append(f"{len(informatief)} informatief")
         return " en ".join(delen) + ". Tik voor alle details."
-
-    # --- Powercalc-proef (v3.97.0) -----------------------------------
-
-    def powercalc_sensoren(self) -> list[str]:
-        """Welke vermogenssensoren komen van Powercalc?
-
-        Herkend aan het attribuut `source_entity`, dat Powercalc op elke
-        sensor zet die het maakt. De NAAM zegt niets - een
-        `sensor.eetkamer_lamp_3_power` is niet van een echte meter te
-        onderscheiden, en die twee door elkaar halen zou een schatting
-        als meting laten tellen.
-
-        Alleen vermogen, geen energie: naast elke `_power` staat een
-        `_energy` in kWh, en die bij watts optellen levert onzin op.
-        """
-        uit = []
-        # `async_all()` zonder domeinfilter: de nep-hass in de toetsen
-        # kent dat argument niet, en filteren op het voorvoegsel doet
-        # hetzelfde.
-        for staat in self.hass.states.async_all():
-            if not str(staat.entity_id).startswith("sensor."):
-                continue
-            if not staat.entity_id.endswith("_power"):
-                continue
-            if staat.attributes.get("source_entity") is None:
-                continue
-            uit.append(staat.entity_id)
-        return sorted(uit)
-
-    def powercalc_geschat_vermogen_w(self) -> float | None:
-        """Het geschatte vermogen van alles wat Powercalc kent.
-
-        None als er geen enkele sensor is - liever niets dan nul, want
-        nul leest als "verlichting uit".
-        """
-        sensoren = self.powercalc_sensoren()
-        if not sensoren:
-            return None
-        totaal = 0.0
-        for entity_id in sensoren:
-            waarde = self._read_sensor_float(entity_id)
-            if waarde is not None:
-                totaal += waarde
-        return round(totaal, 1)
-
-    def _update_powercalc_proef(self, now: datetime) -> None:
-        """Eén paar per ronde: wat de meter zag en wat Powercalc schatte."""
-        geschat = self.powercalc_geschat_vermogen_w()
-        if geschat is None:
-            return
-        gemeten = self._read_corrected_consumption_power()
-        if gemeten is None:
-            return
-        self.powercalc_paren.append([round(gemeten, 1), geschat])
-        self.powercalc_paren = self.powercalc_paren[-POWERCALC_PAREN_LENGTE:]
-        self.schedule_persisted_state_save()
-
-    def get_powercalc_proef(self) -> dict:
-        """Maakt Powercalc het residu rustiger? (v3.97.0)
-
-        De vraag die ertoe doet is niet of de schatting klopt, maar of
-        aftrekken helpt. Is de spreiding van (gemeten - geschat) kleiner
-        dan die van het gemeten totaal zelf, dan neemt de schatting ruis
-        weg. Is hij groter, dan voegt ze ruis toe en is aftrekken
-        schadelijk.
-
-        `mag_regelen` is een OORDEEL. Deze functie zet niets aan.
-        """
-        paren = [p for p in (self.powercalc_paren or []) if len(p) == 2]
-        if len(paren) < POWERCALC_MIN_METINGEN:
-            return {
-                "beschikbaar": bool(paren),
-                "status": RELIABILITY_INSUFFICIENT,
-                "metingen": len(paren),
-                "metingen_nodig": POWERCALC_MIN_METINGEN,
-                "sensoren": len(self.powercalc_sensoren()),
-                "mag_regelen": False,
-                "wat_ontbreekt": (
-                    f"{len(paren)} van de {POWERCALC_MIN_METINGEN} metingen. "
-                    "Er komt er een per ronde bij zolang er zowel een "
-                    "Powercalc-schatting als een gemeten huisverbruik is."
-                ),
-                "toelichting": _POWERCALC_TOELICHTING,
-            }
-
-        gemeten = [p[0] for p in paren]
-        residu = [p[0] - p[1] for p in paren]
-        spreiding_gemeten = statistics.pstdev(gemeten)
-        spreiding_residu = statistics.pstdev(residu)
-        winst = (
-            (spreiding_gemeten - spreiding_residu) / spreiding_gemeten
-            if spreiding_gemeten
-            else 0.0
-        )
-        rustiger = winst >= POWERCALC_MIN_WINST_FRACTIE
-        gemiddeld_gemeten = statistics.mean(gemeten)
-        aandeel = (
-            100 * statistics.mean([p[1] for p in paren]) / gemiddeld_gemeten
-            if gemiddeld_gemeten
-            else None
-        )
-        return {
-            "beschikbaar": True,
-            "status": RELIABILITY_RELIABLE if rustiger else RELIABILITY_INDICATIVE,
-            "metingen": len(paren),
-            "sensoren": len(self.powercalc_sensoren()),
-            "aandeel_procent": round(aandeel, 1) if aandeel is not None else None,
-            "spreiding_gemeten_w": round(spreiding_gemeten, 1),
-            "spreiding_residu_w": round(spreiding_residu, 1),
-            "winst_procent": round(100 * winst, 1),
-            "residu_rustiger": rustiger,
-            "mag_regelen": False,
-            "wat_ontbreekt": (
-                None
-                if rustiger
-                else (
-                    "Het residu wordt niet rustiger van de schatting "
-                    f"({round(100 * winst, 1)}% tegen de vereiste "
-                    f"{100 * POWERCALC_MIN_WINST_FRACTIE:.0f}%). Aftrekken "
-                    "zou dan ruis toevoegen in plaats van wegnemen."
-                )
-            ),
-            "toelichting": _POWERCALC_TOELICHTING,
-        }
 
     def get_lange_horizon_effect(self) -> dict:
         """Wat heeft de lange horizon werkelijk opgeleverd? (v3.99.18)
@@ -39353,7 +39195,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             ("helderheid-ijklijn", lambda: self._update_helderheid_ijklijn(now)),
             ("panelen-bedekt", lambda: self._update_panelen_bedekt(now)),
             ("koude-laden", lambda: self._update_koude_laden(now)),
-            ("powercalc-proef", lambda: self._update_powercalc_proef(now)),
             ("meldingen", lambda: self._evaluate_new_notifications(now)),
             # v5.31: schaduw - leert, stuurt niets.
             ("grootverbruikers", lambda: self._leer_grootverbruikers(now)),

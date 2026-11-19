@@ -1,3 +1,9 @@
+EMS v5.245.0 - Powercalc-proef eruit
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Een oude proef die niets aanstuurde en waar nooit een besluit op volgde, is verwijderd. De sturing is ongewijzigd.
+
 EMS v5.244.0 - meten of de accu zelf doet wat het EMS opdraagt
 
 Installeren: via de Marketplace bijwerken en herstarten.

@@ -1080,7 +1080,6 @@ async def async_get_config_entry_diagnostics(
             # v3.94.0: de heldere-hemel-ijklijn en wat hij over de
             # weerbronnen zegt. Inclusief `mag_regelen` - het oordeel of
             # er genoeg bewijs ligt om ermee te gaan sturen.
-            # v3.97.0: verklaart Powercalc een stuk van het huisverbruik?
             # v3.99.19: het verloop per kwartier en wat de accu het best
             # had kunnen doen.
             "dagverloop": _veilig("dagverloop", lambda: coordinator.dagverloop),
@@ -1119,9 +1118,6 @@ async def async_get_config_entry_diagnostics(
             # v3.99.18: wat de lange horizon werkelijk opleverde.
             "lange_horizon_effect": _veilig(
                 "get_lange_horizon_effect", coordinator.get_lange_horizon_effect
-            ),
-            "powercalc_proef": _veilig(
-                "get_powercalc_proef", coordinator.get_powercalc_proef
             ),
             "helderheid_ijking": _veilig(
                 "get_helderheid_ijking", coordinator.get_helderheid_ijking

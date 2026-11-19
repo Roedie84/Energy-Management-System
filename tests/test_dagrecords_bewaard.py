@@ -51,18 +51,3 @@ def test_de_sensorroute_bewaart_de_extra_velden(make_coordinator, hass):
 
     assert samen[0]["vermogensgrens"] is True
     assert samen[0]["max_ontlaad_w"] == {"handmatig": 1580, "slim": 1940}
-
-
-def test_powercalc_paren_zijn_per_exemplaar(make_coordinator, hass):
-    """Gevonden bij dezelfde doorlichting: `powercalc_paren = []` stond
-
-    als klasse-attribuut - een lijst die alle coordinators delen. In
-    v3.99.0 was diezelfde fout al gevangen voor `_max_ontlaad_w_vandaag`
-    en toen over het hoofd gezien voor dit veld uit v3.97.0.
-    """
-    a = make_coordinator({})
-    b = make_coordinator({})
-
-    a.powercalc_paren.append([1.0, 2.0])
-
-    assert b.powercalc_paren == []

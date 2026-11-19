@@ -35861,3 +35861,13 @@ Ruud 19-11: "Zendure lokaal aansturen", stap a. De opdrachtcontrole (v3.87.0) ki
 - De bewakingstoets "de sturing leest de meelezer alleen via de terugval" staat nu twee extra leesplekken toe die alleen tellen, en bewaakt dat de uitkomst nergens voor sturing wordt gebruikt.
 
 Tests: `test_v5244_opdracht_accu.py` (12).
+
+## v5.245.0 — Powercalc-proef eruit
+
+Ruud 19-11: "als iets niet wordt gebruikt kan het eruit". De proef uit v3.97.0 mat of het aftrekken van Powercalc-schattingen het residu voor de apparaatherkenning rustiger maakt. Er is nooit een besluit op gevolgd en niets gebruikte de uitkomst.
+
+- Weg: `get_powercalc_proef`, `_update_powercalc_proef` (liep elke ronde mee), `powercalc_sensoren`, `powercalc_geschat_vermogen_w`, de reeks `powercalc_paren` in de opslag, de regel "Powercalc als NILM-hulp" bij de adviesmodules en `powercalc_proef` in de diagnose.
+- Blijft: losse Powercalc-sensoren tellen nog als sluipverbruiker (v5.135.1).
+- De sturing is ongewijzigd.
+
+Tests: `test_powercalc_proef.py` vervalt; `test_v5245_powercalc_proef_weg.py` (3).
