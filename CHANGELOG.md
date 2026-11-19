@@ -35816,3 +35816,12 @@ Ruud 19-11 (direct na v5.240.0): "Ik wil zien hoeveel ik t.o.v. vorige jaar heb 
 - **Cockpit**, tabel "Archief per week, maand en jaar": kolommen "Vorig jaar" (kWh) en "Verschil" (procent; meer verbruik oranje, minder groen). Aanwijzen toont het aantal vergeleken dagen, beide bedragen en hoeveel graaddagen kouder of warmer het was.
 
 Tests: `test_v5240_archief_perioden.py` (+5, samen 14).
+
+## v5.241.1 — archief: kosten en accu met het aantal dagen erbij
+
+Gezien in de echte cijfers na v5.240.0: 2026 toonde EUR -12,61 kosten bij 321 dagen. Kosten en accu-opbrengst staan alleen bij de dagen uit de eigen meetlog (48 dagen); de rest komt uit de statistiek van Home Assistant en heeft alleen kWh.
+
+- `per_periode`: `kosten_dagen` en `accu_dagen` (op hoeveel dagen het bedrag slaat).
+- Cockpit: achter het bedrag het aantal dagen als dat minder is dan de periode, met uitleg onder de tabel.
+
+Tests: `test_v5240_archief_perioden.py` (+1, samen 15).

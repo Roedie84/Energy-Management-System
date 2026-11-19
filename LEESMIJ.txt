@@ -1,3 +1,9 @@
+EMS v5.241.1 - archief: kosten en accu met het aantal dagen erbij
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Kosten en accu-opbrengst in het archief tonen op hoeveel dagen ze slaan (die cijfers zijn er pas sinds de eigen meetlog).
+
 EMS v5.241.0 - archief: verbruik tegen vorig jaar
 
 Installeren: via de Marketplace bijwerken en herstarten.

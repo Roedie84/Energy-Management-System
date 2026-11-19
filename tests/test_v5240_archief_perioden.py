@@ -154,3 +154,19 @@ def test_cockpit_toont_vorig_jaar():
     js = (BASIS / "www" / "ems-cockpit.js").read_text()
     assert "Vorig jaar</th>" in js and "Verschil</th>" in js and "r.vorig_jaar" in js
     assert all(ord(c) < 128 for c in js)
+
+
+def test_kosten_alleen_van_de_dagen_die_ze_hebben():
+    """Live 19-11: 2026 toonde EUR -12,61 kosten over 321 dagen, maar alleen
+    de dagen uit de meetlog hebben kosten (v5.241.1)."""
+    a = {"dagen": {}}
+    for i in range(30):
+        regel = {"v": 10.0}
+        if i >= 20:
+            regel.update(k=2.0, b=0.5)
+        a["dagen"][(date(2026, 10, 1) + timedelta(days=i)).isoformat()] = regel
+    m = D.per_periode(a, "maand", date(2026, 11, 19))[0]
+    assert m["dagen"] == 30 and m["kosten_dagen"] == 10 and m["accu_dagen"] == 10
+    assert m["kosten_eur"] == 20.0 and m["accu_opbrengst_eur"] == 5.0
+    js = (BASIS / "www" / "ems-cockpit.js").read_text()
+    assert "deel(r.kosten_dagen, r)" in js and "deel(r.accu_dagen, r)" in js

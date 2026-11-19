@@ -520,6 +520,12 @@ def per_periode(archief: dict, soort: str, vandaag: date | None = None, aantal: 
         for kort, lang in _SOM:
             if r.get(kort) is not None:
                 g[lang] = g.get(lang, 0.0) + r[kort]
+        # v5.241.1: kosten en accu-opbrengst staan alleen bij de dagen uit de
+        # meetlog; het aantal erbij, anders lijkt een deel het hele bedrag.
+        if r.get("k") is not None:
+            g["kosten_dagen"] = g.get("kosten_dagen", 0) + 1
+        if r.get("b") is not None:
+            g["accu_dagen"] = g.get("accu_dagen", 0) + 1
         if r.get("pg") is not None:
             g["_pg"].append(r["pg"])
         if r.get("t") is not None:

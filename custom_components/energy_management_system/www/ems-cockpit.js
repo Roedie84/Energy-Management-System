@@ -2722,6 +2722,7 @@ class EmsCockpitCard extends HTMLElement {
     const dm = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || "") ? `${d.slice(8, 10)}-${d.slice(5, 7)}` : "");
     const kwh = (v) => (num(v) == null ? STREEP : fmt(v, num(v) >= 100 ? 0 : 1));
     const kleur = (v) => (v != null && v >= 0 ? "var(--groen)" : "var(--oranje)");
+    const deel = (n, r) => (num(n) != null && num(n) < num(r.dagen) ? `<i class="bij">${fmt(n)} d</i>` : "");
     const tabel = rijen.length
       ? `<div class="tabelvak"><table class="tabel"><thead><tr><th>Periode</th><th class="r">Dagen</th>` +
         `<th class="r">Verbruik</th><th class="r">Vorig jaar</th><th class="r">Verschil</th><th class="r">Zon</th><th class="r">Afname</th><th class="r">Terug</th>` +
@@ -2745,8 +2746,9 @@ class EmsCockpitCard extends HTMLElement {
           return `<tr title="${esc(titel)}"><td>${esc(r.label || r.periode)}${bereik}</td><td class="r">${dagen}</td>` +
             `<td class="r">${kwh(r.verbruik_kwh)}</td><td class="r" title="${esc(vjTitel)}">${vjCel}</td>` +
             `<td class="r" title="${esc(vjTitel)}">${pctCel}</td><td class="r">${kwh(r.zon_kwh)}</td><td class="r">${kwh(r.netafname_kwh)}</td>` +
-            `<td class="r">${kwh(r.teruglevering_kwh)}</td><td class="r">${euro(r.kosten_eur)}</td>` +
-            `<td class="r" style="color:${kleur(num(r.accu_opbrengst_eur))}">${euroTeken(r.accu_opbrengst_eur)}</td>` +
+            // v5.241.1: kosten en accu alleen van de dagen die ze hebben
+            `<td class="r">${kwh(r.teruglevering_kwh)}</td><td class="r">${euro(r.kosten_eur)}${deel(r.kosten_dagen, r)}</td>` +
+            `<td class="r" style="color:${kleur(num(r.accu_opbrengst_eur))}">${euroTeken(r.accu_opbrengst_eur)}${deel(r.accu_dagen, r)}</td>` +
             `<td class="r">${num(r.prijs_gem_ct) == null ? STREEP : fmt(r.prijs_gem_ct, 1)}</td>` +
             `<td class="r">${num(r.zelfvoorziening_procent) == null ? STREEP : fmt(r.zelfvoorziening_procent) + "%"}</td></tr>`;
         }).join("") + `</tbody></table></div>`
@@ -2757,7 +2759,7 @@ class EmsCockpitCard extends HTMLElement {
       tabel +
       `<div class="za-s">Vorig jaar = het verbruik op dezelfde dagen een jaar eerder (alleen dagen die in beide jaren gemeten zijn); Verschil = nu tegen toen. ` +
       `Accu = wat de accu opleverde (kosten zonder accu min de echte kosten). Zelf = eigen zon in het huis als deel van het verbruik. ` +
-      `Een periode met minder dagen dan mogelijk mist metingen.</div>`
+      `Een periode met minder dagen dan mogelijk mist metingen; staat er een aantal dagen achter een bedrag, dan is het bedrag alleen van die dagen (kosten en accu zijn er pas sinds de eigen meetlog).</div>`
     );
   }
 
