@@ -1,3 +1,9 @@
+EMS v5.243.0 - de repetitie voor 2027 rekent ook met het waardeplan
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De dagelijkse proef voor 2027 laat nu ook zien wat het plan dat echt stuurt onder de regels van 2027 oplevert (sensor repetitie 2027, velden waardeplan_...). Alleen meten.
+
 EMS v5.242.0 - energiecockpit compacter
 
 Installeren: via de Marketplace bijwerken en herstarten; daarna de browser verversen (Ctrl+F5).

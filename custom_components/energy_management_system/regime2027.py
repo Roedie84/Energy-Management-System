@@ -177,6 +177,47 @@ def best_mogelijk(kwartieren: list[Kwartier], *, begin_kwh: float, capaciteit_kw
     return v[min(n - 1, max(0, int(round(begin_kwh / stap_kwh))))]
 
 
+def waardeplan_2027(kwartieren: list[Kwartier], *, begin_kwh: float, capaciteit_kwh: float,
+                    laad_kw: float, ontlaad_kw: float, eta: float, slijtage: float) -> dict | None:
+    """De dag nagespeeld met het waardeplan en het tarief van 2027 (v5.243.0).
+
+    Het waardeplan stuurt sinds v5.158; `regels_2027` speelt de oudere regels
+    na. Dit rekent dezelfde dag met het plan dat op 1 januari echt stuurt, met
+    de gemeten zon en het gemeten verbruik van die dag (kennis van de dag
+    zelf, net als "best mogelijk") en dezelfde afrekening als de andere
+    kolommen. None als het plan er niet uitkomt.
+    """
+    from datetime import datetime, timedelta
+
+    from . import waardeplan as W
+
+    if not kwartieren or capaciteit_kwh <= 0:
+        return None
+    t0 = datetime(2027, 1, 2)
+    kws = [
+        W.Kwartier(t0 + timedelta(minutes=15 * i), max(0.0, k.huis_kwh), max(0.0, k.pv_kwh),
+                   k.import_eur, k.export_eur)
+        for i, k in enumerate(kwartieren)
+    ]
+    accu = W.Accu(inhoud_kwh=max(0.0, min(begin_kwh, capaciteit_kwh)), bruikbaar_kwh=capaciteit_kwh,
+                  laden_kw=laad_kw, ontladen_kw=ontlaad_kw, rendement=eta * eta, slijtage_eur=slijtage)
+    try:
+        uitkomst = W.plan(kws, accu)
+    except Exception:  # noqa: BLE001 - meten mag de dagafsluiting nooit raken
+        return None
+    rijen = uitkomst.kwartieren if uitkomst.beschikbaar else []
+    if len(rijen) != len(kwartieren):
+        return None
+    kosten = 0.0
+    uit_kwh = 0.0
+    for k, r in zip(kwartieren, rijen):
+        ontladen = max(0.0, -(r.get("accu_kwh") or 0.0))      # AC uit de accu
+        uit_kwh += ontladen
+        kosten += _netkosten(_begrensd(r.get("net_kwh") or 0.0, k), k) + ontladen * slijtage
+    eind = max(0.0, rijen[-1].get("inhoud_kwh") or 0.0)
+    return {"kosten_eur": kosten - _restwaarde(eind, kwartieren, eta), "eind_kwh": eind, "uit_accu_kwh": uit_kwh}
+
+
 def repetitie(kwartieren: list[Kwartier], *, begin_kwh: float, eind_kwh: float, capaciteit_kwh: float,
               laad_kw: float, ontlaad_kw: float, rendement: float, slijtage_eur_per_kwh: float = 0.0,
               verschuiving_kw: float = 0.0) -> dict:
@@ -205,6 +246,10 @@ def repetitie(kwartieren: list[Kwartier], *, begin_kwh: float, eind_kwh: float, 
     best = best_mogelijk(bruikbaar, **arg)
     if best is not None:
         best += begin_waarde
+    # v5.243.0: dezelfde dag met het waardeplan (dat echt stuurt)
+    plan27 = waardeplan_2027(bruikbaar, **arg)
+    if plan27 is not None:
+        plan27["kosten_eur"] += begin_waarde
     teruggeleverd_uit_accu = sum(
         min(max(0.0, k.accu_kwh), max(0.0, k.accu_kwh - max(0.0, k.huis_kwh - k.pv_kwh))) for k in bruikbaar
     )
@@ -222,6 +267,14 @@ def repetitie(kwartieren: list[Kwartier], *, begin_kwh: float, eind_kwh: float, 
         # laadde het EMS die dag uit het net, dan kan de nagespeelde dag er
         # iets onder uitkomen. Nooit negatief tonen.
         "regels_laten_liggen_eur": round(max(0.0, regels["kosten_eur"] - best), 2) if best is not None else None,
+        # v5.243.0: het waardeplan onder het tarief van 2027. Het plan mag ook
+        # uit het net laden en kan daardoor onder "best mogelijk" uitkomen
+        # (dat laadt alleen uit overschot): dan blijft er niets liggen.
+        "waardeplan_2027_eur": round(plan27["kosten_eur"], 2) if plan27 else None,
+        "accu_levert_op_waardeplan_2027_eur": round(zonder - plan27["kosten_eur"], 2) if plan27 else None,
+        "waardeplan_laat_liggen_eur": (round(max(0.0, plan27["kosten_eur"] - best), 2)
+                                       if plan27 and best is not None else None),
+        "waardeplan_uit_accu_kwh": round(plan27["uit_accu_kwh"], 2) if plan27 else None,
         "anders_dan_nu_kwartieren": regels["anders_dan_nu_kwartieren"],
         "uit_accu_teruggeleverd_kwh": round(teruggeleverd_uit_accu, 2),
         "gemiddelde_export_ct": round(sum(k.export_eur for k in bruikbaar) / len(bruikbaar) * 100, 1),
@@ -307,6 +360,10 @@ def samenvatting(dagen: list[dict], laatste: int = 30) -> dict:
         oordeel = "klaar voor 2027: de regels halen het grootste deel van wat er te halen is"
     else:
         oordeel = "de regels van 2027 laten nog geld liggen; zie de dagen met het grootste verschil"
+    # v5.243.0: het waardeplan over dezelfde dagen
+    wp = [d for d in goed if d.get("accu_levert_op_waardeplan_2027_eur") is not None]
+    wp_opbrengst = round(sum(d["accu_levert_op_waardeplan_2027_eur"] for d in wp), 2) if wp else None
+    wp_liggen = [d["waardeplan_laat_liggen_eur"] for d in wp if d.get("waardeplan_laat_liggen_eur") is not None]
     slechtste = sorted((d for d in goed if d.get("regels_laten_liggen_eur") is not None),
                        key=lambda d: -d["regels_laten_liggen_eur"])[:3]
     return {
@@ -318,6 +375,10 @@ def samenvatting(dagen: list[dict], laatste: int = 30) -> dict:
         "gemist_aandeel_procent": round(aandeel, 1) if aandeel is not None else None,
         # v5.186.0: gedeeld door de dagen MET een waarde.
         "per_dag_2027_eur": round(opbrengst / met_opbrengst, 2) if opbrengst is not None else None,
+        "waardeplan_dagen": len(wp),
+        "accu_levert_op_waardeplan_2027_eur": wp_opbrengst,
+        "waardeplan_per_dag_2027_eur": round(wp_opbrengst / len(wp), 2) if wp else None,
+        "waardeplan_laat_liggen_eur": round(sum(wp_liggen), 2) if wp_liggen else None,
         "slechtste_dagen": [{"datum": d.get("datum"), "laten_liggen_eur": d["regels_laten_liggen_eur"]} for d in slechtste],
         "oordeel": oordeel,
         # v5.121.0 (punt 3): wat de extra teruglevering op de P1-meter in 2027 kost

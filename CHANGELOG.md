@@ -35839,3 +35839,14 @@ Gevraagd door Ruud (19-11): compacter, dubbelingen weg. Alleen weergave; geen ge
 - Dubbelingen weg: accustand in de kop, huisverbruik in de kop van "Huis en apparaten", de plantekst bij "volgens plan".
 
 Tests: zes cockpittoetsen bijgewerkt naar het nieuwe ontwerp; in een echte browser getekend op 1440 en 420 px.
+
+## v5.243.0 — repetitie 2027 speelt ook het waardeplan na
+
+Ruud 19-11: proefdraaien voor 2027 (einde saldering 31-12). De dagelijkse generale repetitie speelde alleen de oudere regels van 2027 na, terwijl het waardeplan sinds v5.158 stuurt. Alleen meten; de sturing is ongewijzigd.
+
+- `regime2027.waardeplan_2027`: dezelfde dag nagespeeld met het waardeplan en het tarief van 2027 (gemeten zon en verbruik van de dag, dezelfde afrekening als de andere kolommen).
+- Repetitie per dag: `waardeplan_2027_eur`, `accu_levert_op_waardeplan_2027_eur`, `waardeplan_laat_liggen_eur`, `waardeplan_uit_accu_kwh`. Samenvatting: `waardeplan_dagen`, `accu_levert_op_waardeplan_2027_eur`, `waardeplan_per_dag_2027_eur`, `waardeplan_laat_liggen_eur`.
+- Komt het plan er niet uit of faalt het, dan blijft de kolom leeg en staan de bestaande kolommen er gewoon.
+- Toets op de jaarwissel: het kwartier van 31-12 23:45 rekent met de saldering, dat van 01-01 00:00 met de volle inkoopprijs, het kale teruglevertarief en de accuprijs zonder zonnebonus.
+
+Tests: `test_v5243_repetitie_waardeplan.py` (7).
