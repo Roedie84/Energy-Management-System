@@ -1096,6 +1096,7 @@ async def async_get_config_entry_diagnostics(
             # v5.100: zelfanalyse, prijsverwachting en de generale repetitie 2027.
             "zelfanalyse": _veilig("get_zelfanalyse", coordinator.get_zelfanalyse),
             "keuzeoordelen": _veilig("keuzeoordelen", lambda: coordinator.keuzeoordelen),
+            "ontdekking": _veilig("get_ontdekking", coordinator.get_ontdekking),
             "prijsverwachting": _veilig("get_prijsverwachting", coordinator.get_prijsverwachting),
             # v5.114.0: welke bronnen gebufferd worden en welke nu uit de buffer komen
             "bronbuffer": _veilig("bronbuffer", lambda: coordinator._bronbuffer.overzicht()),

@@ -35881,3 +35881,17 @@ Ruud 19-11: "als iets niet wordt gebruikt kan het eruit". De spiegel langs de vi
 - De sturing is ongewijzigd.
 
 Tests: `test_gacs_assessment.py` vijf toetsen op de eisen vervallen, een nieuwe erbij.
+
+## v5.247.0 — nieuwe apparaten herkennen
+
+Ruud 19-11: "stel ik sluit nu een extra accu, een nieuwe lamp, een extra airco aan". Tot nu toe moest het EMS dat met de hand verteld worden. Afspraak: wat alleen gemeten wordt voegt het EMS zelf toe en meldt het; wat gestuurd wordt vraagt het eerst; een schakelaar wordt nooit vanzelf schakelbaar (koelkasten en vriezers).
+
+- Nieuw `ontdekking.py` (zuiver) en een ronde eens per tien minuten (niet tijdens het opstarten): vergelijkt wat er in Home Assistant bestaat met wat het EMS al kende.
+- **Accumodule** (`sensor.ab3000_<nr>_soc_level/power/max_temp/max_vol/min_vol`): zijn alle vijf de sensoren er, dan komt de module vanzelf in de vijf modulelijsten van de instellingen (achteraan, bestaande volgorde blijft). Onvolledig: wachten en melden wat ontbreekt. Een verdwenen module wordt niet verwijderd.
+- **Airco/thermostaat, deur-/raamsensor, bewegingssensor**: melding "wacht op jouw akkoord"; het EMS gaat er niets mee doen tot het is ingesteld.
+- **Vermogens- en energiemeting, schakelaar/stekker, lamp**: gemeld; een schakelaar wordt nooit vanzelf schakelbaar.
+- De eerste keer geldt alles wat er al is als bekend (geen stortvloed), behalve een accumodule die het EMS nog niet kent.
+- Melding "Nieuw apparaat gevonden" (soort `ontdekking`, staat standaard aan; een regel per apparaat, hetzelfde niet twee keer), logboek in `ontdekking_log` (bewaard) en `ontdekking` in de diagnose (`get_ontdekking`).
+- In de leermodus wordt niets toegepast. De sturing is ongewijzigd.
+
+Tests: `test_v5247_ontdekking.py` (14).

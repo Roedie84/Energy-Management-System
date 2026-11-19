@@ -1238,6 +1238,9 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # Eén veld, want de functiegrootte-ratel van v3.35.0 laat
         # `__init__` niet verder groeien.
         self.aansturing_onbereikbaar: dict = {"reden": None, "sinds": None}
+        # v5.247.0: wat het EMS al van Home Assistant kent (None = nog nooit gekeken) en wat er nieuw gevonden is.
+        self.ontdekking_bekend: list | None = None
+        self.ontdekking_log: list = []
         # v3.50.0: wanneer elk gespiegeld veld voor het laatst uit zijn
         # sensor is gevuld. Zonder tijdstempel is een waarde van een
         # minuut oud niet te onderscheiden van een van vijf uur.
@@ -6767,6 +6770,97 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             if staat is not None and staat.state == "on":
                 verwarmt = True
         return (min(temps) if temps else None), verwarmt
+
+    # --- nieuwe apparaten herkennen (v5.247.0) ---------------------------
+
+    ONTDEKKING_INTERVAL_S = 600.0
+
+    def _ontdekking_inventaris(self) -> list[dict]:
+        """Wat er nu in Home Assistant bestaat, met platform en apparaatnaam."""
+        from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+        register = er.async_get(self.hass)
+        apparaten = dr.async_get(self.hass)
+        uit = []
+        for staat in self.hass.states.async_all():
+            regel = register.async_get(staat.entity_id)
+            apparaat = apparaten.async_get(regel.device_id) if regel is not None and regel.device_id else None
+            uit.append({
+                "entity_id": staat.entity_id,
+                "device_class": staat.attributes.get("device_class"),
+                "naam": staat.attributes.get("friendly_name"),
+                "platform": regel.platform if regel is not None else None,
+                "apparaat": (apparaat.name_by_user or apparaat.name) if apparaat is not None else None,
+            })
+        return uit
+
+    def _ontdekking_pas_modules_toe(self, nieuwe: list[dict]) -> bool:
+        """Zet nieuwe accumodules in de instellingen (alleen meten). True als het gelukt is."""
+        from . import ontdekking
+
+        lijsten = ontdekking.instellingen_met_modules(self.config, nieuwe)
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            self.hass.config_entries.async_update_entry(entry, options={**dict(entry.options or {}), **lijsten})
+            self.config = {**self.config, **lijsten}
+            return True
+        return False
+
+    def _update_ontdekking(self, now: datetime) -> None:
+        """Eens per tien minuten: is er iets nieuws in Home Assistant?"""
+        from . import ontdekking
+
+        nu = time.monotonic()
+        vorige = getattr(self, "_ontdekking_laatst", None)
+        if vorige is not None and nu - vorige < self.ONTDEKKING_INTERVAL_S:
+            return
+        if self._opstart_stuurstil():
+            return  # tijdens het opstarten bestaan nog niet alle entiteiten
+        self._ontdekking_laatst = nu
+        try:
+            inventaris = self._ontdekking_inventaris()
+        except Exception:  # noqa: BLE001 - zonder registers valt er niets te vergelijken
+            _LOGGER.debug("Ontdekking: Home Assistant niet uit te lezen", exc_info=True)
+            return
+        uitkomst = ontdekking.beoordeel(inventaris, self.config, getattr(self, "ontdekking_bekend", None))
+        bevindingen = uitkomst["bevindingen"]
+        toe = [b["module"] for b in bevindingen if b.get("actie") == ontdekking.AUTOMATISCH and b.get("module")]
+        if toe and not self.learning_only:
+            try:
+                gelukt = self._ontdekking_pas_modules_toe(toe)
+            except Exception:  # noqa: BLE001 - dan blijft het bij melden
+                _LOGGER.warning("Nieuwe accumodule niet in de instellingen gezet", exc_info=True)
+                gelukt = False
+            if not gelukt:
+                for b in bevindingen:
+                    if b.get("module"):
+                        b["actie"] = ontdekking.VOORSTEL
+                        b["uitleg"] = "Kon niet vanzelf worden toegevoegd; voeg de module toe bij de instellingen."
+        for b in bevindingen:
+            b.pop("module", None)
+        oud = list(getattr(self, "ontdekking_log", None) or [])
+        nieuw_log = ontdekking.log_bij(oud, bevindingen, now.isoformat())
+        nieuw = nieuw_log[len(oud):] if len(nieuw_log) >= len(oud) else []
+        self.ontdekking_bekend = uitkomst["bekend"]
+        self.ontdekking_log = nieuw_log
+        if nieuw:
+            self._dispatch_notification(
+                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                title="EMS: nieuw apparaat gevonden",
+                message=ontdekking.bericht(nieuw),
+                notification_id="ems_ontdekking",
+                kind="ontdekking",
+            )
+
+    def get_ontdekking(self) -> dict:
+        """Wat het EMS aan nieuwe apparaten vond en wat het ermee deed (v5.247.0)."""
+        log = list(getattr(self, "ontdekking_log", None) or [])
+        return {
+            "bekende_entiteiten": len(getattr(self, "ontdekking_bekend", None) or []),
+            "gevonden": len(log),
+            "wacht_op_akkoord": [r for r in log if r.get("actie") == "wacht op jouw akkoord"][-10:],
+            "laatste": log[-10:],
+            "regel": "Meten voegt het EMS zelf toe; sturen alleen na akkoord; een schakelaar wordt nooit vanzelf schakelbaar.",
+        }
 
     def _update_koude_laden(self, now: datetime) -> None:
         """Meet per kwartier wat er bij koude cellen echt geladen wordt."""
@@ -39120,6 +39214,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             ("helderheid-ijklijn", lambda: self._update_helderheid_ijklijn(now)),
             ("panelen-bedekt", lambda: self._update_panelen_bedekt(now)),
             ("koude-laden", lambda: self._update_koude_laden(now)),
+            ("ontdekking", lambda: self._update_ontdekking(now)),
             ("meldingen", lambda: self._evaluate_new_notifications(now)),
             # v5.31: schaduw - leert, stuurt niets.
             ("grootverbruikers", lambda: self._leer_grootverbruikers(now)),

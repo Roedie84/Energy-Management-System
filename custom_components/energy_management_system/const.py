@@ -3423,6 +3423,7 @@ LOG_PRIORITEITEN = {
     # stilzwijgend teruggedraaid te worden om een grens te halen.
     "opdracht_niet_aangekomen": LOG_PRIO_KRITIEK,
     "accu_niet_aanstuurbaar": LOG_PRIO_AANDACHT,
+    "ontdekking": LOG_PRIO_AANDACHT,  # v5.247.0
     "installatie_onvolledig": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
@@ -3911,6 +3912,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "panelen_bedekt": {"type": "plain"},
     # v5.191.0 (L-EMS-073): laden bij koude cellen - metingen en verwarmingsperiodes.
     "koude_laden": {"type": "plain"},
+    # v5.247.0: wat het EMS al van Home Assistant kent, en wat er nieuw gevonden is.
+    "ontdekking_bekend": {"type": "plain"},
+    "ontdekking_log": {"type": "plain"},
     "reserve_daily_records": {"type": "plain"},
     # v5.72 (L-EMS-014): gemeten sprongen als een module bijna leeg is.
     "module_leeg_sprongen": {"type": "plain"},
@@ -4502,6 +4506,11 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
         "Kopieer alle bestanden uit de laatste levering opnieuw en herstart. "
         "De melding noemt welke bestanden afwijken.",
     ),
+    "ontdekking": (
+        "Er is een nieuw apparaat in Home Assistant gevonden dat het EMS raakt.",
+        "Wat alleen gemeten wordt is al toegevoegd. Staat er 'wacht op jouw "
+        "akkoord', zeg dan in de chat of het EMS het moet meenemen.",
+    ),
     "opdracht_niet_aangekomen": (
         "De accu staat na een opdracht nog in de oude stand. Meestal een "
         "cloudkoppeling die traag is, soms een apparaat dat niet reageert.",
@@ -4792,6 +4801,15 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "een vergeten bestand de nieuwe manier om het mis te laten gaan.",
         True,
         1440,
+    ),
+    (
+        "ontdekking",
+        "Nieuw apparaat gevonden",
+        "Wanneer er in Home Assistant een apparaat bij komt dat het EMS "
+        "raakt: een accumodule, een airco, een meetstekker, een sensor. "
+        "Meten gaat vanzelf; sturen alleen na akkoord.",
+        True,
+        30,
     ),
     (
         "opdracht_niet_aangekomen",
@@ -7122,6 +7140,7 @@ ACHTERHOEKS_TITELS = {
     "prijsstijging_handmatig": "De stroom wordt duurder",
     "leermodus_lang_aan": "De leermodus steet nog an",
     "opdracht_niet_aangekomen": "De accu luusterde neet",
+    "ontdekking": "Ne nieuw apparaat evonden",
     "accu_niet_aanstuurbaar": "De accu is neet te stuurn",
     "installatie_onvolledig": "De installatie is neet compleet",
     # v3.93.1: GEEN vaste titel meer voor "appliance_ready".

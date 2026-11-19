@@ -1,3 +1,9 @@
+EMS v5.247.0 - nieuwe apparaten worden herkend
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Sluit je een extra accumodule aan, dan neemt het EMS hem zelf op in de bewaking en krijg je een melding. Een nieuwe airco of sensor wordt gemeld en pas gebruikt na jouw akkoord. Een stekker wordt nooit vanzelf schakelbaar.
+
 EMS v5.246.0 - GACS-eisenspiegel eruit
 
 Installeren: via de Marketplace bijwerken en herstarten.

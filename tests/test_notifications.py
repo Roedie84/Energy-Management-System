@@ -163,6 +163,9 @@ def test_only_the_pre_existing_kinds_default_to_on():
     standaard_aan = {k for k, _, _, aan, _ in NOTIFICATION_TYPES if aan}
 
     assert standaard_aan == {
+        # v5.247.0: "nieuw apparaat gevonden" - door Ruud zelf gevraagd (19-11) en
+        # zeldzaam (alleen als er echt iets bij komt), dus geen ruis.
+        "ontdekking",
         # v1.23.4: "Accu haalt de nacht mogelijk niet" staat standaard
         # aan, net als vakantie_beweging en om dezelfde reden: hij vuurt
         # alleen als er werkelijk iets misgaat. De twee andere
