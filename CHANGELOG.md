@@ -35906,3 +35906,15 @@ Ruud 19-11: de herkenning van nieuwe apparaten "zeer uitgebreid" maken. Drie van
 - De sturing is ongewijzigd.
 
 Tests: `test_v5247_ontdekking.py` (+8, samen 22).
+
+## v5.249.0 — antwoorden op "nieuw apparaat gevonden" vanaf de telefoon
+
+Ruud 19-11 (akkoord op alle vier de keuzes): een nieuwe bewegingssensor of deur-/raamsensor krijgt een melding met knoppen.
+
+- **Bewegingssensor:** "Telt mee voor aanwezigheid" of "Nee".
+- **Deur- of raamsensor:** "Telt mee voor aanwezigheid", "Raam bij de airco" of "Nee".
+- Een ja zet de sensor in de bijbehorende instelling van het EMS (`presence_motion_sensor_entities` of `airco_raam_entities`); je krijgt een bevestiging. Een tweede tik doet niets meer; een nee wijst af en verandert niets.
+- **Geen knop** voor airco, omvormer, thuisaccu en laadpaal: die vragen maatwerk en worden via de chat ingesteld.
+- In de leermodus wordt niets geschreven. De sturing zelf is ongewijzigd; alleen wat jij met een knop toevoegt telt daarna mee.
+
+Tests: `test_v5247_ontdekking.py` (+8, samen 30).

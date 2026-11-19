@@ -6798,12 +6798,54 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         """Zet nieuwe accumodules in de instellingen (alleen meten). True als het gelukt is."""
         from . import ontdekking
 
-        lijsten = ontdekking.instellingen_met_modules(self.config, nieuwe)
+        return self._ontdekking_zet_instelling(ontdekking.instellingen_met_modules(self.config, nieuwe))
+
+    def _ontdekking_zet_instelling(self, lijsten: dict) -> bool:
+        """Schrijft lijsten in de instellingen van het EMS. True als het gelukt is."""
         for entry in self.hass.config_entries.async_entries(DOMAIN):
             self.hass.config_entries.async_update_entry(entry, options={**dict(entry.options or {}), **lijsten})
             self.config = {**self.config, **lijsten}
             return True
         return False
+
+    def _ontdekking_stuur(self, titel: str, bericht: str, knoppen: list[dict] | None = None, tag: str = "") -> None:
+        """Een melding naar de telefoon, met knoppen als die er zijn (v5.249.0)."""
+        dienst = str(self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE) or "")
+        domein, _, naam = dienst.partition(".")
+        if domein != "notify" or not naam:
+            return
+        gegevens: dict = {"title": titel, "message": bericht}
+        extra: dict = {}
+        if knoppen:
+            extra["actions"] = knoppen
+        if tag:
+            extra["tag"] = tag
+        if extra:
+            gegevens["data"] = extra
+        try:
+            self.hass.async_create_task(self.hass.services.async_call("notify", naam, gegevens))
+        except Exception:  # noqa: BLE001 - een melding mag de ronde nooit raken
+            _LOGGER.warning("Melding over een nieuw apparaat niet verstuurd", exc_info=True)
+
+    def ontdekking_antwoord(self, actie: str) -> dict | None:
+        """Een tik op een knop in de melding (v5.249.0). None = niet van het EMS."""
+        from . import ontdekking
+
+        gelezen = ontdekking.lees_actie(actie)
+        if gelezen is None:
+            return None
+        nummer, keuze = gelezen
+        uit = ontdekking.verwerk_antwoord(getattr(self, "ontdekking_log", None), self.config, nummer, keuze)
+        if not uit.get("gedaan"):
+            return uit
+        if uit.get("instelling"):
+            if self.learning_only or not self._ontdekking_zet_instelling(uit["instelling"]):
+                return {"gedaan": False, "reden": "de instelling kon niet worden geschreven", "log": uit["log"]}
+        self.ontdekking_log = uit["log"]
+        self._ontdekking_stuur("EMS: ingesteld" if uit.get("instelling") else "EMS: niet meegenomen",
+                               uit.get("tekst") or "", tag=f"ems_ontdekking_{nummer}")
+        self._notify_listeners()
+        return uit
 
     def _update_ontdekking(self, now: datetime) -> None:
         """Eens per tien minuten: is er iets nieuws in Home Assistant?"""
@@ -6846,6 +6888,14 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         nieuw = nieuw_log[len(oud):] if len(nieuw_log) >= len(oud) else []
         self.ontdekking_bekend = uitkomst["bekend"]
         self.ontdekking_log = nieuw_log
+        # v5.249.0: wat een knop heeft, gaat als eigen melding met die knoppen.
+        met_knop = [r for r in nieuw if ontdekking.knoppen(r)]
+        nieuw = [r for r in nieuw if not ontdekking.knoppen(r)]
+        for r in met_knop:
+            self._ontdekking_stuur(
+                "EMS: nieuw apparaat gevonden",
+                f"{r.get('naam')} ({r.get('soort')}). Wat moet het EMS ermee doen?",
+                ontdekking.knoppen(r), tag=f"ems_ontdekking_{r.get('id')}")
         if nieuw:
             self._dispatch_notification(
                 notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),

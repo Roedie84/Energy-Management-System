@@ -235,3 +235,90 @@ def test_cockpit_toont_nieuw_gevonden():
     js.encode("ascii")
     from custom_components.energy_management_system import sensor
     assert "nieuw_gevonden" in sensor.GACS_DASHBOARD_SLEUTELS
+
+
+# --- v5.249.0: knoppen in de melding ---------------------------------------
+
+
+def _log_met(soort, entiteiten, naam="Sensor gang"):
+    return O.log_bij([], [{"soort": soort, "naam": naam, "actie": O.VOORSTEL, "uitleg": "x", "entiteiten": entiteiten}], "t")
+
+
+def test_knoppen_per_soort():
+    beweging = _log_met("bewegingssensor", ["binary_sensor.pir_gang"])[0]
+    raam = _log_met("deur- of raamsensor", ["binary_sensor.raam_bad"])[0]
+    airco = _log_met("airco of thermostaat", ["climate.zolder"])[0]
+    assert [k["title"] for k in O.knoppen(beweging)] == ["Telt mee voor aanwezigheid", "Nee"]
+    assert [k["title"] for k in O.knoppen(raam)] == ["Telt mee voor aanwezigheid", "Raam bij de airco", "Nee"]
+    assert O.knoppen(airco) == []          # airco, omvormer, accu en laadpaal: geen knop
+    assert O.knoppen(_log_met("laadpaal", ["switch.lader"])[0]) == []
+    assert O.lees_actie(O.knoppen(raam)[1]["action"]) == (1, "raam")
+    assert O.lees_actie("IETS_ANDERS") is None and O.lees_actie("EMS_ONTDEKKING_1_wissen") is None
+
+
+def test_ja_zet_de_sensor_in_de_juiste_lijst():
+    log = _log_met("deur- of raamsensor", ["binary_sensor.raam_bad", "sensor.raam_bad_batterij"])
+    config = {"airco_raam_entities": ["binary_sensor.raam_wk"], "presence_motion_sensor_entities": ["binary_sensor.pir"]}
+    uit = O.verwerk_antwoord(log, config, 1, "raam")
+    assert uit["gedaan"] and uit["instelling"] == {"airco_raam_entities": ["binary_sensor.raam_wk", "binary_sensor.raam_bad"]}
+    assert uit["log"][0]["actie"] == "ingesteld: raam bij de airco"
+    # de tweede tik doet niets meer
+    assert O.verwerk_antwoord(uit["log"], config, 1, "aanwezig")["gedaan"] is False
+
+
+def test_nee_wijst_af_en_verandert_niets():
+    uit = O.verwerk_antwoord(_log_met("bewegingssensor", ["binary_sensor.pir_gang"]), {}, 1, "nee")
+    assert uit["gedaan"] and uit["instelling"] == {} and uit["log"][0]["actie"] == O.AFGEWEZEN
+
+
+def test_verkeerde_keuze_of_onbekend_nummer_doet_niets():
+    log = _log_met("bewegingssensor", ["binary_sensor.pir_gang"])
+    assert O.verwerk_antwoord(log, {}, 1, "raam")["gedaan"] is False        # 'raam' hoort niet bij beweging
+    assert O.verwerk_antwoord(log, {}, 9, "aanwezig")["gedaan"] is False
+    # een airco kan nooit via een knop worden ingesteld
+    assert O.verwerk_antwoord(_log_met("airco of thermostaat", ["climate.zolder"]), {}, 1, "aanwezig")["gedaan"] is False
+
+
+def test_antwoord_op_de_coordinator(make_coordinator, hass):
+    c = _coordinator(make_coordinator, [], {"presence_motion_sensor_entities": ["binary_sensor.pir"]})
+    c.ontdekking_log = _log_met("bewegingssensor", ["binary_sensor.pir_gang"])
+    geschreven, verstuurd = [], []
+    c._ontdekking_zet_instelling = lambda lijsten: geschreven.append(lijsten) or True
+    c._ontdekking_stuur = lambda titel, bericht, knoppen=None, tag="": verstuurd.append((titel, bericht))
+    assert c.ontdekking_antwoord("iets van een andere app") is None
+    uit = c.ontdekking_antwoord("EMS_ONTDEKKING_1_aanwezig")
+    assert uit["gedaan"] and geschreven == [{"presence_motion_sensor_entities": ["binary_sensor.pir", "binary_sensor.pir_gang"]}]
+    assert verstuurd and verstuurd[0][0] == "EMS: ingesteld"
+    assert c.get_ontdekking()["wacht_op_akkoord"] == []
+    # nog een keer tikken schrijft niet opnieuw
+    c.ontdekking_antwoord("EMS_ONTDEKKING_1_aanwezig")
+    assert len(geschreven) == 1
+
+
+def test_leermodus_schrijft_niets_na_een_tik(make_coordinator, hass):
+    c = _coordinator(make_coordinator, [], {})
+    c.ontdekking_log = _log_met("bewegingssensor", ["binary_sensor.pir_gang"])
+    c.learning_only = True
+    geschreven = []
+    c._ontdekking_zet_instelling = lambda lijsten: geschreven.append(lijsten) or True
+    assert c.ontdekking_antwoord("EMS_ONTDEKKING_1_aanwezig")["gedaan"] is False and geschreven == []
+    assert c.ontdekking_log[0]["actie"] == O.VOORSTEL
+
+
+def test_nieuwe_bewegingssensor_krijgt_een_melding_met_knoppen(make_coordinator, hass):
+    inv = _inv(*MODULE_1)
+    c = _coordinator(make_coordinator, inv)
+    c._update_ontdekking(NU)
+    verstuurd = []
+    c._ontdekking_stuur = lambda titel, bericht, knoppen=None, tag="": verstuurd.append((bericht, knoppen, tag))
+    inv.append({"entity_id": "binary_sensor.pir_gang", "device_class": "motion", "apparaat": "Sensor gang"})
+    c._ontdekking_laatst = None
+    c._update_ontdekking(NU)
+    assert len(verstuurd) == 1 and "Sensor gang" in verstuurd[0][0]
+    assert [k["title"] for k in verstuurd[0][1]] == ["Telt mee voor aanwezigheid", "Nee"]
+    assert c.meldingen == []        # niet ook nog de gewone melding
+
+
+def test_de_luisteraar_staat_in_de_setup():
+    bron = (Path(pkg.__file__).parent / "__init__.py").read_text(encoding="utf-8")
+    assert 'async_listen("mobile_app_notification_action", _ontdekking_actie)' in bron

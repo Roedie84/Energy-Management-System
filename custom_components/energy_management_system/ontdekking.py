@@ -223,6 +223,68 @@ def beoordeel(inventaris: list[dict], config: dict, bekend: list | None) -> dict
     return {"bevindingen": bevindingen, "bekend": sorted(bekend_set | set(ids)), "eerste_keer": eerste_keer}
 
 
+# --- antwoorden vanaf de telefoon (v5.249.0) -------------------------------
+
+#: Wat een knop in de melding instelt. Afgesproken met Ruud (19-11): een
+#: bewegingssensor telt mee voor aanwezigheid; een deur of raam telt mee voor
+#: aanwezigheid of als 'raam bij de airco'. Airco, omvormer, accu en laadpaal
+#: krijgen geen knop: die vragen maatwerk.
+KEUZES = {
+    "aanwezig": ("Telt mee voor aanwezigheid", "presence_motion_sensor_entities"),
+    "raam": ("Raam bij de airco", "airco_raam_entities"),
+}
+KNOPPEN_PER_SOORT = {
+    "bewegingssensor": ("aanwezig",),
+    "deur- of raamsensor": ("aanwezig", "raam"),
+}
+ACTIE_VOORVOEGSEL = "EMS_ONTDEKKING_"
+AFGEWEZEN = "afgewezen"
+
+
+def knoppen(regel: dict) -> list[dict]:
+    """De knoppen voor een melding over deze bevinding; leeg = geen knoppen."""
+    keuzes = KNOPPEN_PER_SOORT.get(str(regel.get("soort")), ())
+    if not keuzes or regel.get("actie") != VOORSTEL or regel.get("id") is None:
+        return []
+    uit = [{"action": f"{ACTIE_VOORVOEGSEL}{regel['id']}_{k}", "title": KEUZES[k][0]} for k in keuzes]
+    uit.append({"action": f"{ACTIE_VOORVOEGSEL}{regel['id']}_nee", "title": "Nee"})
+    return uit
+
+
+def lees_actie(tekst: str) -> tuple[int, str] | None:
+    """(id, keuze) uit de actie van een knop, of None als hij niet van het EMS is."""
+    m = re.match(rf"^{ACTIE_VOORVOEGSEL}(\d+)_(aanwezig|raam|nee)$", str(tekst or ""))
+    return (int(m.group(1)), m.group(2)) if m else None
+
+
+def verwerk_antwoord(log: list | None, config: dict, nummer: int, keuze: str) -> dict:
+    """Wat een antwoord betekent: de nieuwe instelling en het bijgewerkte logboek.
+
+    Alleen een bevinding die nog op akkoord wacht en waarvoor deze keuze
+    bestaat, verandert iets. Twee keer tikken doet de tweede keer niets.
+    """
+    uit_log = [dict(r) for r in (log or [])]
+    regel = next((r for r in uit_log if r.get("id") == nummer), None)
+    if regel is None or regel.get("actie") != VOORSTEL:
+        return {"gedaan": False, "reden": "deze melding is al afgehandeld of bestaat niet meer", "log": uit_log}
+    if keuze == "nee":
+        regel["actie"] = AFGEWEZEN
+        return {"gedaan": True, "instelling": {}, "log": uit_log, "tekst": f"{regel.get('naam')}: niet meegenomen."}
+    if keuze not in KNOPPEN_PER_SOORT.get(str(regel.get("soort")), ()):
+        return {"gedaan": False, "reden": "deze keuze hoort niet bij dit apparaat", "log": uit_log}
+    titel, sleutel = KEUZES[keuze]
+    toe = [e for e in (regel.get("entiteiten") or []) if str(e).startswith("binary_sensor.")]
+    if not toe:
+        return {"gedaan": False, "reden": "geen sensor om toe te voegen", "log": uit_log}
+    lijst = list(config.get(sleutel) or [])
+    for e in toe:
+        if e not in lijst:
+            lijst.append(e)
+    regel["actie"] = f"ingesteld: {titel.lower()}"
+    return {"gedaan": True, "instelling": {sleutel: lijst}, "log": uit_log,
+            "tekst": f"{regel.get('naam')}: {titel.lower()} ({', '.join(toe)})."}
+
+
 def log_bij(log: list | None, bevindingen: list[dict], moment: str) -> list[dict]:
     """De bevindingen in het logboek; dezelfde (soort, naam, actie) niet twee keer."""
     uit = [dict(r) for r in (log or [])]
@@ -232,7 +294,9 @@ def log_bij(log: list | None, bevindingen: list[dict], moment: str) -> list[dict
         if sleutel in gezien:
             continue
         gezien.add(sleutel)
-        uit.append({"moment": moment, "soort": b.get("soort"), "naam": b.get("naam"), "actie": b.get("actie"),
+        # v5.249.0: een vast nummer, zodat een knop in de melding naar deze regel wijst.
+        nummer = max([int(r.get("id") or 0) for r in uit] or [0]) + 1
+        uit.append({"id": nummer, "moment": moment, "soort": b.get("soort"), "naam": b.get("naam"), "actie": b.get("actie"),
                     "uitleg": b.get("uitleg"), "entiteiten": list(b.get("entiteiten") or [])[:12]})
     return uit[-MAX_BEVINDINGEN:]
 

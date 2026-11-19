@@ -1,3 +1,9 @@
+EMS v5.249.0 - antwoorden op een nieuw apparaat vanaf je telefoon
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Een nieuwe bewegings-, deur- of raamsensor geeft een melding met knoppen: telt mee voor aanwezigheid, raam bij de airco, of nee. Een ja stelt het meteen in.
+
 EMS v5.248.0 - nieuwe apparaten: cockpit, omvormer/accu/laadpaal en verdwenen apparaten
 
 Installeren: via de Marketplace bijwerken en herstarten; daarna de browser verversen (Ctrl+F5).

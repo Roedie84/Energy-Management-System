@@ -205,6 +205,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.async_add_executor_job(_verwijder_oude_dashboardkopie, hass)
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))
+
+    # v5.249.0: een tik op een knop in de melding "nieuw apparaat gevonden".
+    def _ontdekking_actie(event) -> None:
+        try:
+            coordinator.ontdekking_antwoord(str((event.data or {}).get("action") or ""))
+        except Exception:  # noqa: BLE001 - een knop mag het EMS nooit raken
+            _LOGGER.warning("Antwoord op een ontdekking niet verwerkt", exc_info=True)
+
+    entry.async_on_unload(hass.bus.async_listen("mobile_app_notification_action", _ontdekking_actie))
     _async_register_nilm_services(hass)
     _async_register_module_service(hass)
     _async_register_schaduw_service(hass)
