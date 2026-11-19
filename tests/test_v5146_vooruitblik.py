@@ -102,10 +102,13 @@ for (let i = 0; i < 40; i++) {
 o._vbUren = 2;
 const twee = o._vooruitblik(rijen, tijden);
 o._vbUren = 6;
+const kort = o._vooruitblik(rijen, tijden);   // v5.242.0: de eerste vijf blokken
+o._vbAlles = true;
 const zes = o._vooruitblik(rijen, tijden);
 const blokken = o._vooruitBlokken(rijen, tijden, 2, 92);
 console.log(JSON.stringify({
   twee: (twee.match(/<tr/g) || []).length, zes: (zes.match(/<tr/g) || []).length,
+  kort: (kort.match(/<tr/g) || []).length, meer: kort.includes("Toon alle 9 blokken") && zes.includes("Toon minder"),
   nu: twee.includes("vb-nu"), knop: zes.includes('data-horizon="6" class="actief"'),
   b0: { label: blokken[0].label, begin: blokken[0].socBegin, eind: blokken[0].socEind },
   laadt: twee.includes("laadt 1,0 kW")
@@ -118,7 +121,8 @@ console.log(JSON.stringify({
     # De horizon telt vanaf nu: het lopende kwartier plus 8 (2 uur) of 24 (6 uur)
     # kwartieren, steeds 3 per status.
     assert r["twee"] == 1 + 3   # kop + 3 blokken (9 kwartieren)
-    assert r["zes"] == 1 + 9    # kop + 9 blokken (25 kwartieren)
+    assert r["zes"] == 1 + 9    # kop + 9 blokken (25 kwartieren), met "Toon alle"
+    assert r["kort"] == 1 + 5 and r["meer"] is True   # v5.242.0: standaard vijf blokken
     assert r["nu"] is True and r["knop"] is True
     assert r["b0"] == {"label": "Zon laden", "begin": 92, "eind": 88}
     assert r["laadt"] is True   # gemiddelde (-900, -1100, -1100) = 1,0 kW laden

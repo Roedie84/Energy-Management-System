@@ -17,14 +17,17 @@ def _skelet():
     return JS.split('`<main class="raster">`')[1].split("`</main>`")[0]
 
 
-def test_rijen_die_gelijk_eindigen():
-    """v5.179: rij 2 = Prijs en lading (8) naast een stapel met accumodules en
-    reserve (4); rij 3 = Huis en apparaten (8) naast de bediening (4)."""
+def test_twee_kolommen_met_eigen_hoogte():
+    """v5.242.0 (Ruud 19-11, "compacter"): links accu nu, Prijs en lading en
+    huis; rechts geld, accumodules, zon en de bediening. Geen kaarten meer die
+    even hoog worden als de langste."""
     s = _skelet()
-    stapel = s.split('class="stapel"')[1].split("`</div>`")[0]
-    assert s.index('data-p="planning"') < s.index('class="stapel"') < s.index('data-p="huis"') < s.index('data-p="bediening"')
-    assert stapel.index('data-p="modules"') < stapel.index('data-p="verkoop"')
-    assert 'data-p="bediening"' not in stapel
+    links = s.split('class="kolom k-links"')[1].split('class="kolom k-rechts"')[0]
+    rechts = s.split('class="kolom k-rechts"')[1]
+    assert links.index('data-p="accu"') < links.index('data-p="planning"') < links.index('data-p="huis"')
+    assert rechts.index('data-p="geld"') < rechts.index('data-p="modules"') < rechts.index('data-p="verkoop"') < rechts.index('data-p="bediening"')
+    assert 'data-p="planvandaag"' not in JS and 'class="hero"' not in JS.split("class EmsJaarafrekeningCard")[0]
+    assert ".raster { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); align-items: start; }" in JS
 
 
 def test_alle_panelen_staan_er_precies_een_keer():
@@ -35,16 +38,12 @@ def test_alle_panelen_staan_er_precies_een_keer():
         assert f'data-p="{weg}"' not in JS
 
 
-def test_smal_doet_de_stapel_niet_mee():
-    assert ".stapel { display: contents; }" in JS
-    breed = JS.split("@container (min-width: 1260px)")[1].split("@container")[0]
-    assert "grid-template-columns: repeat(12, minmax(0, 1fr))" in breed
-    assert ".p-planning, .p-huis { grid-column: span 8;" in breed
-    assert ".stapel { display: flex; flex-direction: column; gap: 12px; grid-column: span 4;" in breed
-    assert ".p-bediening { grid-column: span 4;" in breed
-    # de grafiek vult de kaart tot de stapel ernaast: geen gat onderaan
-    assert "grid-template-rows: minmax(220px, 1fr) 24px" in breed
-    # mobiel: na Prijs en lading eerst de knoppen, dan de rechterkolom
-    orde = {p: int(re.search(r"\.p-" + p + r" \{ order: (\d+); \}", JS).group(1))
-            for p in ("planning", "bediening", "modules", "verkoop", "huis")}
-    assert sorted(orde, key=orde.get) == ["planning", "bediening", "modules", "verkoop", "huis"]
+def test_smal_een_kolom_breed_twee():
+    assert ".kolom { display: contents; }" in JS
+    breed = JS.split("@container (min-width: 1100px)")[1].split("@container")[0]
+    assert ".raster { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }" in breed
+    assert ".kolom { display: flex; flex-direction: column; gap: 10px; min-width: 0; }" in breed
+    # smal: nu - grafiek - geld - bediening - accu - zon - huis
+    for klasse, plek in ((".t-accu", 0), (".p-planning", 1), (".t-geld", 2), (".p-bediening", 3),
+                         (".p-modules", 4), (".p-verkoop", 5), (".p-huis", 6)):
+        assert f"{klasse} {{ order: {plek}; }}" in JS

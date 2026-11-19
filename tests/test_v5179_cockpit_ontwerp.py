@@ -29,14 +29,14 @@ def test_geen_versiering_meer():
 
 def test_een_kaartsoort():
     kaart = STIJL.split(".tegel, .paneel {")[1].split("}")[0]
-    for regel in ("padding: 16px", "border-radius: var(--r)", "background: var(--kaart)", "border: 1px solid var(--rand)"):
+    for regel in ("padding: 12px", "border-radius: var(--r)", "background: var(--kaart)", "border: 1px solid var(--rand)"):
         assert regel in kaart
     assert "--kaart: #111827;" in STIJL and "--bg: #0b0f17;" in STIJL
     # elke kaart dezelfde kop (icoon + titel in zinsvorm, 13/600, vaste hoogte)
     assert ".ph { display: flex; align-items: center; gap: 8px; min-height: 28px;" in STIJL  # v5.215.0: chips mogen naar een tweede regel
     assert ".ph h2 { margin: 0; font-size: 13px; font-weight: 600;" in STIJL
-    for kop in ('paneelKop("accu", "Accu nu")', 'paneelKop("klok", "Plan vandaag")',
-                'paneelKop("euro", "Geld")'):
+    # v5.242.0: "Plan vandaag" is geen eigen kaart meer (zit in "Accu nu")
+    for kop in ('paneelKop("accu", "Accu nu")', 'paneelKop("euro", "Geld")'):
         assert kop in JS
 
 
@@ -65,7 +65,7 @@ def test_een_statistiektegel_voor_alle_rasters():
 
 def test_bediening_gelijke_knoppen_en_aan_met_stip():
     assert ".knoppen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }" in STIJL
-    breed = JS.split("@container (min-width: 1260px)")[1].split("@container")[0]
+    breed = JS.split("@container (min-width: 1100px)")[1].split("@container")[0]   # v5.242.0 (was 1260)
     assert ".knoppen { grid-template-columns: repeat(3, minmax(0, 1fr)); }" in breed
     assert ".knop .aan-t { position: absolute;" in STIJL and ".knop.aan {" in STIJL
 

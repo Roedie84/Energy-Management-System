@@ -16,8 +16,11 @@ def test_staaf_van_het_lopende_kwartier_gebruikt_de_meting():
     assert "t0 + 15 * 60000 > Date.now()" in blok
 
 
-def test_tijdlijn_van_het_lopende_kwartier_gebruikt_de_meting():
-    assert "DOEN[doen(t0 <= nu ? this._rijNu(r) : r)]" in _blok("_planvandaag() {")
+def test_tijdlijn_is_weg_de_grafiek_toont_hetzelfde():
+    """v5.242.0 (Ruud 19-11: "Plan vandaag 2x zichtbaar?"): de gekleurde
+    dagbalk stond ook als staven in de grafiek en is vervallen."""
+    assert 'class="strip"' not in _blok("_planvandaag() {")
+    assert "strip-x" not in _blok("_planvandaag() {")
 
 
 def test_vooruitblik_deed_dat_al():

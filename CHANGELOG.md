@@ -35825,3 +35825,17 @@ Gezien in de echte cijfers na v5.240.0: 2026 toonde EUR -12,61 kosten bij 321 da
 - Cockpit: achter het bedrag het aantal dagen als dat minder is dan de periode, met uitleg onder de tabel.
 
 Tests: `test_v5240_archief_perioden.py` (+1, samen 15).
+
+## v5.242.0 — energiecockpit compacter
+
+Gevraagd door Ruud (19-11): compacter, dubbelingen weg. Alleen weergave; geen gegevens vervallen (alles blijft bereikbaar via een uitklap).
+
+- Twee kolommen met elk een eigen hoogte (links Accu nu, Prijs en lading, Huis; rechts Geld, Accumodules, Zon en reserve, Bediening). Op een breed scherm ruim 70 % korter.
+- "Plan vandaag" is geen eigen kaart meer: een regel in "Accu nu" (status, afwijking, percentage volgens plan), de cijfers in de uitklap "Plan vandaag in detail". De dubbele dagbalk is weg (staat al in de grafiek).
+- Geld: zes tegels en de netlaadregel; de overige cijfers in "Alle geldcijfers".
+- Vooruitblik: de eerste vijf blokken, met een knop voor alle blokken.
+- "Zon en reserve": drie tegels; de rest in een uitklap.
+- Bediening: zes knoppen vooraan plus alles wat aan staat; de rest achter "Meer knoppen".
+- Dubbelingen weg: accustand in de kop, huisverbruik in de kop van "Huis en apparaten", de plantekst bij "volgens plan".
+
+Tests: zes cockpittoetsen bijgewerkt naar het nieuwe ontwerp; in een echte browser getekend op 1440 en 420 px.

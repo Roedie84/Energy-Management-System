@@ -37,7 +37,7 @@ def test_een_spatieschaal():
     """v5.179: alle afstanden uit de schaal 4/8/12/16/24; kaarten 16 px binnenruimte."""
     assert _px(".regel {", "padding") == [8, 12]
     kaart = JS.split(".tegel, .paneel {")[1].split("}")[0]
-    assert "padding: 16px" in kaart and "border-radius: var(--r)" in kaart
+    assert "padding: 12px" in kaart and "border-radius: var(--r)" in kaart   # v5.242.0: compacter (was 16)
     assert "--r: 12px;" in JS
-    assert "gap: 12px" in JS.split(".raster {")[1].split("}")[0]
+    assert "gap: 10px" in JS.split(".raster {")[1].split("}")[0]   # v5.242.0 (was 12)
     assert ".gwrap { position: relative; display: grid; grid-template-columns: 32px 1fr 36px; grid-template-rows: 180px 24px; }" in JS

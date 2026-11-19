@@ -1,3 +1,10 @@
+EMS v5.242.0 - energiecockpit compacter
+
+Installeren: via de Marketplace bijwerken en herstarten; daarna de browser verversen (Ctrl+F5).
+
+- De cockpit past op een breed scherm vrijwel op een pagina: twee kolommen, minder tegels, details achter een uitklap.
+- "Plan vandaag" zit nu in "Accu nu"; dubbele gegevens zijn weggehaald. Er zijn geen gegevens vervallen.
+
 EMS v5.241.1 - archief: kosten en accu met het aantal dagen erbij
 
 Installeren: via de Marketplace bijwerken en herstarten.

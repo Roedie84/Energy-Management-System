@@ -27,8 +27,10 @@ def _methode(naam):
 
 
 def test_drie_tegels_en_geen_stroomprijstegel():
-    hero = JS.split('`<section class="hero" aria-label="Status">`')[1].split("`</section>`")[0]
-    assert hero.index('data-p="accu"') < hero.index('data-p="planvandaag"') < hero.index('data-p="geld"')
+    # v5.242.0: twee kolommen; "Plan vandaag" zit in de kaart "Accu nu"
+    skelet = JS.split('`<main class="raster">`')[1].split("`</main>`")[0]
+    assert skelet.index('data-p="accu"') < skelet.index('data-p="planning"') < skelet.index('data-p="geld"')
+    assert 'data-p="planvandaag"' not in JS
     for weg in ("_tegelPrijs", "_tegelNu", "_tegelVandaag", "_tegelAccu", "Stroomprijs nu", "_stroom("):
         assert weg not in JS
     # wat in de tegel Stroomprijs stond, staat nu in de kop
@@ -48,10 +50,15 @@ def test_accu_tegel_toont_de_hele_energiestroom():
 
 
 def test_plan_vandaag_met_tijdlijn_en_planvolging_zichtbaar():
+    # v5.242.0: een regel in beeld (_planKort), de cijfers in de uitklap
     p = _methode("_planvandaag")
-    assert 'class="strip"' in p and "tegen geen accu" in p
+    assert 'class="strip"' not in p and "tegen geen accu" in p
     assert "this._planvolgingRegel() +" in p and "this._laadplanRegel() +" in p
-    assert "_uitklap" not in p
+    a = _methode("_accu")
+    assert "this._planKort() +" in a
+    assert 'this._uitklap("plan_detail", "Plan vandaag in detail", this._planvandaag())' in a
+    k = _methode("_planKort")
+    assert "chip(label, kl)" in k and "volgens_plan_procent" in k
 
 
 def test_tabbladen_met_aria_en_onthouden():
@@ -105,8 +112,11 @@ def test_geld_getallen_zichtbaar_toelichting_ingeklapt():
 
 def test_alle_knoppen_zichtbaar_en_gedrag_ongewijzigd():
     b = _methode("_bediening")
-    assert "Alle knoppen" not in JS and "_uitklap" not in b
+    # v5.242.0: zes vooraan plus wat aan staat; de rest achter "Meer knoppen"
     assert "KNOPPEN.filter((k) => this._s(k.k))" in b
+    assert 'this._uitklap("knoppen_meer"' in b and "KNOPPEN_VOORAAN.includes(k.k)" in b
+    assert 'this._s(k.k).state === "on"' in b
+    assert 'const KNOPPEN_VOORAAN = ["nuLaden", "verkoopUit", "handLaden", "vakantie", "meldingenAan", "aircoAutomaat"];' in JS
     k = _methode("_knop")
     assert 'aria-pressed="${aan}"' in k and "<button" in k
     s = JS.split("  async _schakel(sleutel) {")[1].split("\n  }\n")[0]
@@ -154,13 +164,16 @@ const S = {
 o._s = (k) => S[k];
 o._ids = {}; o._bezig = new Set(); o._uitgeklapt = {};
 o._hass = { states: {} };
+o._live = () => ({ accu: -760, zon: 0, net: 800, huis: 40 });
 const plan = o._planvandaag();
+const kort = o._planKort();
 const knoppen = o._bediening();
 o._tabKeuze = "morgen";
 const grafiek = o._planning();
 console.log(JSON.stringify({
   strip: (plan.match(/<i style=/g) || []).length,
-  legenda: plan.includes("net laden") && plan.includes("zon laden") && plan.includes("huis voeden"),
+  kort: kort.includes("volgens plan") && kort.includes("91% volgens plan") && kort.includes("verschil"),
+  meer: knoppen.includes("Meer knoppen (1)"),
   planvolg: plan.includes("91% van 20 kwartieren") && plan.includes("Gepland"),
   netladen: plan.includes("Netladen"),
   scheelt: plan.includes("0,30"),
@@ -176,8 +189,10 @@ console.log(JSON.stringify({
     )
     uit = subprocess.run(["node", str(script), str(JS_PAD)], capture_output=True, text=True, check=True)
     r = json.loads(uit.stdout.strip().splitlines()[-1])
-    assert r["strip"] >= 24 and r["legenda"] and r["planvolg"] and r["netladen"] and r["scheelt"]
-    assert r["knoppen"] == 3 and r["aan"] == 1                # alle drie zichtbaar, kalibratie aan
+    # v5.242.0: geen dagbalk meer; een korte planregel; de details in de uitklap
+    assert r["strip"] == 0 and r["kort"] and r["planvolg"] and r["netladen"] and r["scheelt"]
+    # nu laden (vooraan) en kalibratie (aan) in beeld, leermodus achter "Meer knoppen"
+    assert r["knoppen"] == 3 and r["aan"] == 1 and r["meer"]
     assert r["tabs"] == 2 and r["weekUit"] is True  # v5.181.4: Prijzen + 7 dagen
     assert r["geselecteerd"] == 1
     assert r["vooruitblik"] is True
