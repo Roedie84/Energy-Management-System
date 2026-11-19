@@ -48,9 +48,9 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 | `spiegelcontrole` | vergelijkt eigen getallen met de bron (v3.49.0) | vaste bewaking: blijft |
 | `herspeel` | speelt dagen na per EMS-versie, voedt de zelfanalyse | vaste bewaking: blijft |
 | `extra_dip_margin` | marge uit de oude regelset bij weinig zon | hoort bij de terugval als het waardeplan er niet uitkomt: blijft zolang de terugval blijft |
-| `powercalc_proef` | proef uit v3.97: maakt Powercalc de apparaatherkenning rustiger | proef zonder besluit: kandidaat om eruit te halen |
-| `gacs_assessment` | zelfbeoordeling tegen GACS-eisen; geldt volgens de eigen toelichting niet voor een woning | kandidaat om eruit te halen (met de bijbehorende tijdmeting gacs_traag/gacs_duur) |
-| `weather_source_reliability` | betrouwbaarheid per weerbron; sinds 29-10 is er nog maar een weerbron | kandidaat om eruit te halen |
+| `powercalc_proef` | proef uit v3.97: maakt Powercalc de apparaatherkenning rustiger | VERWIJDERD in v5.245.0 (19-11): niets gebruikte de uitkomst |
+| `gacs_assessment` | zelfbeoordeling tegen GACS-eisen; geldt volgens de eigen toelichting niet voor een woning | NIET ongebruikt: staat op 12 plekken in de cockpit en in 19 testbestanden. Weghalen is een bewuste keuze (kaart verdwijnt uit de cockpit), geen opruimwerk: wacht op Ruud |
+| `weather_source_reliability` | betrouwbaarheid per weerbron; sinds 29-10 is er nog maar een weerbron | NIET ongebruikt (eerdere inschatting was fout): op 7 plekken in gebruik, o.a. bij het wegen van de weerbron en een melding. Blijft |
 | `monte_carlo_vergelijking`, `lange_horizon_effect`, `pv_band_calibration` | rapportage rond de oude reserve-regels (tekortkans, lange horizon, onderkant Solcast) | een besluit samen: zijn de oude reserve-regels nog nodig als terugval nu het waardeplan stuurt? Apart en voorzichtig uitzoeken |
 
 Voor er iets uit de code gaat: live nakijken dat het niets voedt, en de tests.
