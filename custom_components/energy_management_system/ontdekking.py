@@ -32,6 +32,26 @@ AIRCO_INSTELLINGEN = ("airco_climate_entity", "slaapkamer_climate_entity")
 MAX_BEVINDINGEN = 60
 EIGEN_PLATFORM = "energy_management_system"
 
+#: v5.248.0: integraties waaraan een omvormer, thuisaccu of laadpaal te herkennen is.
+#: Bewust een lijst van integraties: `device_class: battery` hebben ook alle
+#: batterijsensoren van deurcontacten en afstandsbedieningen.
+OMVORMER_PLATFORMS = frozenset({
+    "solaredge", "solaredge_modbus_multi", "solaredge_modbus", "enphase_envoy", "growatt_server", "goodwe",
+    "fronius", "sma", "solax", "solax_modbus", "huawei_solar", "solis", "apsystems", "hoymiles", "opendtu",
+    "omnik_inverter", "solarman", "deye", "sungrow", "kostal_plenticore", "froeling",
+})
+ACCU_PLATFORMS = frozenset({
+    "zendure_ha", "zendure", "powerwall", "tesla_powerwall", "sonnen", "sonnenbatterie", "victron", "victron_ble",
+    "marstek", "marstek_local", "anker_solix", "ecoflow", "ecoflow_cloud", "byd_battery_box", "pylontech",
+    "homewizard_battery", "sessy", "huawei_luna",
+})
+LAADPAAL_PLATFORMS = frozenset({
+    "easee", "wallbox", "zaptec", "alfen_wallbox", "alfen", "goecharger", "go_e", "ocpp", "tesla_wall_connector",
+    "myenergi", "v2c", "keba", "peblar", "ohme", "evbox", "shell_recharge", "easee_hass",
+})
+#: v5.248.0: zoveel rondes achter elkaar weg voordat een ingesteld apparaat als verdwenen telt.
+VERDWENEN_RONDES = 3
+
 AUTOMATISCH = "automatisch toegevoegd"
 VOORSTEL = "wacht op jouw akkoord"
 GEMELD = "gemeld, geen instelling nodig"
@@ -85,6 +105,17 @@ def soort_van(regel: dict) -> tuple[str, str, str] | None:
         return None
     if MODULE_RE.match(e):
         return None  # modules lopen via `modules()`
+    platform = str(regel.get("platform") or "")
+    # v5.248.0: eerst de drie die de sturing en het plan raken.
+    if platform in LAADPAAL_PLATFORMS and (domein in ("switch", "number", "select") or klasse in ("power", "energy")):
+        return ("laadpaal", VOORSTEL,
+                "Een laadpaal verandert het verbruik en het plan. Het EMS doet er niets mee tot het is afgesproken; zeg het in de chat.")
+    if platform in OMVORMER_PLATFORMS and domein == "sensor" and klasse in ("power", "energy"):
+        return ("omvormer of zonnepanelen", VOORSTEL,
+                "Extra opwek telt nog niet mee in de zonverwachting en het plan. Zeg het in de chat, dan wordt hij ingesteld.")
+    if platform in ACCU_PLATFORMS and domein == "sensor" and klasse in ("battery", "power", "energy"):
+        return ("thuisaccu", VOORSTEL,
+                "Een tweede accu stuurt het EMS niet vanzelf aan; capaciteit en plan veranderen. Zeg het in de chat.")
     if domein == "climate":
         return ("airco of thermostaat", VOORSTEL,
                 "Het EMS stuurt een airco alleen als jij dat wilt (comfort). Zeg het in de chat, dan wordt hij ingesteld.")
@@ -105,6 +136,45 @@ def soort_van(regel: dict) -> tuple[str, str, str] | None:
     if domein in ("water_heater", "vacuum", "cover"):
         return (domein, GEMELD, "Gezien; het EMS doet er niets mee.")
     return None
+
+
+def ingestelde_entiteiten(config: dict) -> dict[str, str]:
+    """Elke entiteit die in de instellingen staat, met de instelling waarin (v5.248.0)."""
+    uit: dict[str, str] = {}
+    for sleutel, waarde in (config or {}).items():
+        for w in (waarde if isinstance(waarde, (list, tuple)) else [waarde]):
+            if isinstance(w, str) and re.match(r"^[a-z_]+\.[a-z0-9_]+$", w) and w.split(".")[0] in _DOMEINEN:
+                uit.setdefault(w, str(sleutel))
+    return uit
+
+
+_DOMEINEN = frozenset({
+    "sensor", "binary_sensor", "switch", "number", "select", "climate", "cover", "light", "weather", "person",
+    "remote", "input_boolean", "input_number", "device_tracker", "media_player", "fan", "water_heater",
+})
+
+
+def verdwenen(config: dict, aanwezig, tellers: dict | None) -> tuple[list[dict], dict]:
+    """Ingestelde entiteiten die al VERDWENEN_RONDES rondes niet meer bestaan.
+
+    Geeft (bevindingen, nieuwe tellers). Een entiteit die terugkomt, begint
+    opnieuw. 'Onbeschikbaar' is geen verdwenen: de entiteit bestaat dan nog.
+    """
+    aanwezig = set(aanwezig)
+    oud = dict(tellers or {})
+    nieuw: dict[str, int] = {}
+    bevindingen = []
+    for e, sleutel in sorted(ingestelde_entiteiten(config).items()):
+        if e in aanwezig:
+            continue
+        nieuw[e] = int(oud.get(e) or 0) + 1
+        if nieuw[e] == VERDWENEN_RONDES:
+            bevindingen.append({
+                "soort": "verdwenen", "naam": e, "actie": "bestaat niet meer",
+                "uitleg": f"Staat in de instelling '{sleutel}' maar bestaat niet meer in Home Assistant "
+                          "(hernoemd of verwijderd?). Het EMS haalt hem niet zelf weg.",
+                "entiteiten": [e]})
+    return bevindingen, nieuw
 
 
 def beoordeel(inventaris: list[dict], config: dict, bekend: list | None) -> dict:
@@ -132,6 +202,9 @@ def beoordeel(inventaris: list[dict], config: dict, bekend: list | None) -> dict
                                 "entiteiten": sorted(m["velden"].values())})
     if not eerste_keer:
         groepen: dict[tuple[str, str], dict] = {}
+        # v5.248.0: een nieuwe sensor van een apparaat dat er al was, is geen tweede accu of omvormer.
+        bekende_apparaten = {r.get("apparaat") for r in inventaris
+                             if r.get("apparaat") and str(r.get("entity_id")) in bekend_set}
         ingesteld = {str(config.get(k)) for k in AIRCO_INSTELLINGEN if config.get(k)}
         for regel in inventaris:
             e = str(regel.get("entity_id") or "")
@@ -141,6 +214,8 @@ def beoordeel(inventaris: list[dict], config: dict, bekend: list | None) -> dict
             if oordeel is None:
                 continue
             soort, actie, uitleg = oordeel
+            if soort in ("thuisaccu", "omvormer of zonnepanelen", "laadpaal") and regel.get("apparaat") in bekende_apparaten:
+                continue
             g = groepen.setdefault((soort, _groepsnaam(regel)), {
                 "soort": soort, "naam": _groepsnaam(regel), "actie": actie, "uitleg": uitleg, "entiteiten": []})
             g["entiteiten"].append(e)

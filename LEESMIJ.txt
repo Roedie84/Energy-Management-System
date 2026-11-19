@@ -1,3 +1,9 @@
+EMS v5.248.0 - nieuwe apparaten: cockpit, omvormer/accu/laadpaal en verdwenen apparaten
+
+Installeren: via de Marketplace bijwerken en herstarten; daarna de browser verversen (Ctrl+F5).
+
+- Nieuwe apparaten staan nu ook in de cockpit (Huis en apparaten). Een tweede omvormer, accu of laadpaal wordt herkend en gemeld. Verdwijnt een apparaat dat het EMS gebruikt, dan krijg je een melding.
+
 EMS v5.247.0 - nieuwe apparaten worden herkend
 
 Installeren: via de Marketplace bijwerken en herstarten.

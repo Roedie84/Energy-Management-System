@@ -1024,7 +1024,7 @@ const AFHANKELIJK = {
   verkoop: ["gacs", "plan", "mc", "tekort", "uitleg", "blok", "zon_vandaag", "zon_rest", "zon_morgen", "zon_werkelijk",
     "pvNauw", "bewolking", "pv"],
   modules: ["modules", "koeling", "accuGezondheid", "rendement"],
-  huis: ["fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "vaatwasserPlan", "wasmachinePlan", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip",
+  huis: ["gacs", "fietsen", "stofzuiger", "lader", "vaatwasser", "wasmachine", "vaatwasserPlan", "wasmachinePlan", "aircoBesluit", "klimaat", "water", "temp_binnen", "temp_buiten", "huis", "sluip",
     "vaatwasser_w", "wasmachine_w", "stofzuiger_w", "fietsen_w", "lader_w", "airco_w"],
   bediening: ["nuLaden", "verkoopUit", "handLaden", "handSmart", "forceManual", "leermodus", "kalibratie", "vakantie",
     "aircoAutomaat", "fietsenOverrule", "stofzuigerOverrule", "laderOverrule", "meldingenAan", "achterhoeks"],
@@ -2482,6 +2482,16 @@ class EmsCockpitCard extends HTMLElement {
       `<div class="regel"${kleur ? ` style="--rk:${kleur}"` : ""}><div class="ric">${icoon(ic)}</div>` +
       `<div><div class="rn">${esc(naam)}</div>${sub ? `<div class="rs">${sub}</div>` : ""}</div><div class="rw">${waarde}</div></div>`;
     const uit = [];
+    // v5.248.0: nieuwe apparaten die het EMS vond (alleen als er iets is).
+    const nieuw = this._gacs("nieuw_gevonden");
+    const wacht = Array.isArray(nieuw.wacht_op_akkoord) ? nieuw.wacht_op_akkoord : [];
+    const recent = Array.isArray(nieuw.recent) ? nieuw.recent : [];
+    const gevonden = wacht.length ? wacht : recent;
+    if (gevonden.length) {
+      const regels = gevonden.slice(-3).map((g) => `${esc(g.naam)} (${esc(g.soort)}): ${esc(g.actie)}`);
+      uit.push(regel("stekker", "Nieuw gevonden", regels.join("<br>"), String(gevonden.length),
+        wacht.length ? "var(--amber)" : ""));
+    }
     // v5.202.2 (Ruud 09-11: "Ook in 1 tegel?"): fietsladers, stofzuiger,
     // batterijlader, vaatwasser en wasmachine in een tegel "Apparaten",
     // een regel per apparaat in zijn eigen kleur; waarde = wat ze samen nu

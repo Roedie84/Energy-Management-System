@@ -5022,6 +5022,9 @@ class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
             # dan ook geen fout van de zelfbeoordeling op.
             if sleutels is None or "verbetermogelijkheden" in sleutels:
                 attributen.update(self._coordinator.get_gacs_assessment())
+            # v5.248.0: wat het EMS aan nieuwe apparaten vond, voor de cockpit.
+            if sleutels is None or "nieuw_gevonden" in sleutels:
+                attributen["nieuw_gevonden"] = self._coordinator.get_ontdekking_kort()
                 # v5.177.0 (A14): de eerste GACS_VERBETER_MAX op de sensor
                 # (de rest in de diagnostiek); de toestand telt ze allemaal.
                 adviezen = attributen.get("verbetermogelijkheden")
@@ -5078,6 +5081,7 @@ GACS_DASHBOARD_SLEUTELS = frozenset(
         "gezondheid",
         "haalt_de_accu_het",
         "kwartier_samenvatting",
+        "nieuw_gevonden",
         "prijstoets",
         "rendement",
         "reservemarge",

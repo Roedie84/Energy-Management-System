@@ -6837,6 +6837,10 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                         b["uitleg"] = "Kon niet vanzelf worden toegevoegd; voeg de module toe bij de instellingen."
         for b in bevindingen:
             b.pop("module", None)
+        # v5.248.0: ingestelde apparaten die niet meer bestaan.
+        weg, self._ontdekking_vermist = ontdekking.verdwenen(
+            self.config, [r.get("entity_id") for r in inventaris], getattr(self, "_ontdekking_vermist", None))
+        bevindingen = bevindingen + weg
         oud = list(getattr(self, "ontdekking_log", None) or [])
         nieuw_log = ontdekking.log_bij(oud, bevindingen, now.isoformat())
         nieuw = nieuw_log[len(oud):] if len(nieuw_log) >= len(oud) else []
@@ -6860,6 +6864,16 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "wacht_op_akkoord": [r for r in log if r.get("actie") == "wacht op jouw akkoord"][-10:],
             "laatste": log[-10:],
             "regel": "Meten voegt het EMS zelf toe; sturen alleen na akkoord; een schakelaar wordt nooit vanzelf schakelbaar.",
+        }
+
+    def get_ontdekking_kort(self) -> dict:
+        """Voor de cockpit: wat op akkoord wacht en wat er de laatste week bij kwam (v5.248.0)."""
+        log = list(getattr(self, "ontdekking_log", None) or [])
+        grens = (dt_util.now() - timedelta(days=7)).isoformat()
+        klein = lambda r: {"naam": r.get("naam"), "soort": r.get("soort"), "actie": r.get("actie")}  # noqa: E731
+        return {
+            "wacht_op_akkoord": [klein(r) for r in log if r.get("actie") == "wacht op jouw akkoord"][-5:],
+            "recent": [klein(r) for r in log if str(r.get("moment") or "") >= grens][-5:],
         }
 
     def _update_koude_laden(self, now: datetime) -> None:

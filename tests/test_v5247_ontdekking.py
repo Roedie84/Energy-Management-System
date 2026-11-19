@@ -159,3 +159,79 @@ def test_onleesbaar_home_assistant_breekt_de_ronde_niet(make_coordinator, hass):
     c._ontdekking_inventaris = stuk
     c._update_ontdekking(NU)
     assert c.meldingen == [] and c.ontdekking_bekend is None
+
+
+# --- v5.248.0: omvormer, accu, laadpaal en verdwenen apparaten -------------
+
+
+def test_laadpaal_omvormer_en_accu_zijn_een_voorstel():
+    assert O.soort_van({"entity_id": "switch.easee_lader", "platform": "easee"}) [:2] == ("laadpaal", O.VOORSTEL)
+    assert O.soort_van({"entity_id": "sensor.pv2_vermogen", "platform": "goodwe", "device_class": "power"})[:2] == (
+        "omvormer of zonnepanelen", O.VOORSTEL)
+    assert O.soort_van({"entity_id": "sensor.accu2_soc", "platform": "marstek", "device_class": "battery"})[:2] == (
+        "thuisaccu", O.VOORSTEL)
+
+
+def test_batterij_van_een_deurcontact_is_geen_thuisaccu():
+    assert O.soort_van({"entity_id": "sensor.deur_batterij", "platform": "mqtt", "device_class": "battery"}) is None
+    # en een gewone meetstekker blijft een vermogensmeting
+    assert O.soort_van({"entity_id": "sensor.stekker_w", "platform": "homewizard", "device_class": "power"})[0] == "vermogensmeting"
+
+
+def test_ingestelde_entiteiten_uit_tekst_en_lijsten():
+    config = {"airco_climate_entity": "climate.woonkamer", "lijst": ["sensor.a", "sensor.b"], "getal": 21.0,
+              "tijd": "22:00", "datum": "2026-12-31", "dienst": "notify.mobile_app_iphone", "leeg": None}
+    assert O.ingestelde_entiteiten(config) == {
+        "climate.woonkamer": "airco_climate_entity", "sensor.a": "lijst", "sensor.b": "lijst"}
+
+
+def test_verdwenen_pas_na_drie_rondes_en_een_keer():
+    config = {"x": "sensor.weg", "y": "sensor.blijft"}
+    tellers = None
+    gemeld = []
+    for _ in range(5):
+        b, tellers = O.verdwenen(config, ["sensor.blijft"], tellers)
+        gemeld += b
+    assert [g["naam"] for g in gemeld] == ["sensor.weg"] and "'x'" in gemeld[0]["uitleg"]
+    # komt hij terug, dan begint het tellen opnieuw
+    _, tellers = O.verdwenen(config, ["sensor.blijft", "sensor.weg"], tellers)
+    assert tellers == {}
+
+
+def test_ronde_meldt_een_verdwenen_ingesteld_apparaat(make_coordinator, hass):
+    config = {**CONFIG, "slaapkamer_climate_entity": "climate.slaapkamer"}
+    c = _coordinator(make_coordinator, _inv(*MODULE_1) + _inv("climate.woonkamer"), config)
+    for _ in range(O.VERDWENEN_RONDES):
+        c._ontdekking_laatst = None
+        c._update_ontdekking(NU)
+    assert len(c.meldingen) == 1 and "climate.slaapkamer" in c.meldingen[0]["message"]
+    assert c.get_ontdekking()["laatste"][-1]["soort"] == "verdwenen"
+
+
+def test_nieuwe_sensor_van_de_bestaande_accu_is_geen_tweede_accu():
+    inv = [{"entity_id": "sensor.solarflow_soc", "platform": "zendure_ha", "device_class": "battery", "apparaat": "SolarFlow 2400 AC"},
+           {"entity_id": "sensor.solarflow_nieuw", "platform": "zendure_ha", "device_class": "power", "apparaat": "SolarFlow 2400 AC"},
+           {"entity_id": "sensor.tweede_soc", "platform": "zendure_ha", "device_class": "battery", "apparaat": "SolarFlow 800"}]
+    uit = O.beoordeel(inv, {}, ["sensor.solarflow_soc"])
+    assert [(b["soort"], b["naam"]) for b in uit["bevindingen"]] == [("thuisaccu", "SolarFlow 800")]
+
+
+def test_cockpit_krijgt_een_korte_lijst(make_coordinator, hass):
+    c = _coordinator(make_coordinator, _inv(*MODULE_1) + _inv("climate.woonkamer"))
+    c._update_ontdekking(NU)
+    assert c.get_ontdekking_kort() == {"wacht_op_akkoord": [], "recent": []}
+    from homeassistant.util import dt as dt_util
+    c.ontdekking_log = [{"moment": dt_util.now().isoformat(), "soort": "airco of thermostaat", "naam": "Airco zolder",
+                         "actie": O.VOORSTEL, "uitleg": "x", "entiteiten": ["climate.zolder"]},
+                        {"moment": "2026-01-01T00:00:00", "soort": "lamp", "naam": "Oud", "actie": O.GEMELD}]
+    kort = c.get_ontdekking_kort()
+    assert kort["wacht_op_akkoord"] == [{"naam": "Airco zolder", "soort": "airco of thermostaat", "actie": O.VOORSTEL}]
+    assert [r["naam"] for r in kort["recent"]] == ["Airco zolder"]
+
+
+def test_cockpit_toont_nieuw_gevonden():
+    js = (Path(pkg.__file__).parent / "www" / "ems-cockpit.js").read_text(encoding="utf-8")
+    assert 'this._gacs("nieuw_gevonden")' in js and '"Nieuw gevonden"' in js
+    js.encode("ascii")
+    from custom_components.energy_management_system import sensor
+    assert "nieuw_gevonden" in sensor.GACS_DASHBOARD_SLEUTELS

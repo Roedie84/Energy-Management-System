@@ -35895,3 +35895,14 @@ Ruud 19-11: "stel ik sluit nu een extra accu, een nieuwe lamp, een extra airco a
 - In de leermodus wordt niets toegepast. De sturing is ongewijzigd.
 
 Tests: `test_v5247_ontdekking.py` (14).
+
+## v5.248.0 — ontdekking uitgebreid: cockpit, omvormer/accu/laadpaal, verdwenen apparaten
+
+Ruud 19-11: de herkenning van nieuwe apparaten "zeer uitgebreid" maken. Drie van de vier vervolgpunten; de ja/nee-knoppen in de melding volgen apart.
+
+- **Cockpit:** in "Huis en apparaten" een regel "Nieuw gevonden" zodra er iets op akkoord wacht of er de laatste week iets bij kwam (attribuut `nieuw_gevonden`).
+- **Omvormer, thuisaccu, laadpaal:** herkend aan de integratie waar ze uit komen (o.a. SolarEdge/GoodWe/Growatt, Zendure/Marstek/Powerwall, Easee/Wallbox/Zaptec/OCPP) en gemeld als "wacht op jouw akkoord": ze raken het plan. Een nieuwe sensor van een apparaat dat er al was telt niet als tweede accu of omvormer; de batterij van een deurcontact ook niet.
+- **Verdwenen:** een entiteit die in de instellingen staat maar drie rondes achter elkaar (een half uur) niet meer bestaat, wordt een keer gemeld met de instelling waarin hij staat. Het EMS haalt hem niet zelf weg. 'Onbeschikbaar' telt niet.
+- De sturing is ongewijzigd.
+
+Tests: `test_v5247_ontdekking.py` (+8, samen 22).
