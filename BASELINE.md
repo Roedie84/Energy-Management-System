@@ -137,3 +137,4 @@
 | Nachtverbruik 22-09 | 2,32 kWh | nacht 06→07 | 07-11 09:15 |
 | Achteraf gemist (LP-optimum, 62 kw) | € 0,32 (1 FOUT vastloper ~€ 0,12) | 08-11 16:00..09-11 07:30 | 09-11 07:40 |
 | Laadrendement (kalibratie, AC → SoC) | 83,6 % | 08-11 10:45-15:00 | 09-11 07:40 |
+| Ontlaad-/laadrendement van de dag (HomeWizard, week) | 99,2 % / 84,0 % (gewogen; plan ~101 %) | 12-11..18-11 | 19-11 06:45 |
