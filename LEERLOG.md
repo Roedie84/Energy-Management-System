@@ -200,66 +200,10 @@ Doorlopende leerronde (elke 4 uur). Alleen gemeten getallen; KPI's in KPI.csv, r
 - **MC 0 % sinds 03:14 terwijl det. 0,49:** klopt, kans telt pas boven beschikbaar + 0,5 kWh (0,67). Geen fout. Label 03-11 is leeg door de herstarts (L-EMS-060).
 - Nabeschouwing 7 d **65,4 %** (6,45 / 9,86). Planvolging 7 d **69,7 %** (03-11 64,9). Verbruik 7 d **+0,81** (MAE 1,62). Twin 0,396.
 
-## 04-11 07:40 · tussenronde
-- Draait v5.176.3, HACS gelijk. Geen release: niets acuts, er is vandaag om 03:40 al één uit. Herstarts 04:43 en 06:39; bij 06:39 alleen sensoren rond de herstart (Solcast, Zonneplan, weather), verder 0 EMS-fouten. Logvenster: Google News/Solar Magazine, iPhone-melding: niet EMS.
-- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, P1-export 22-07 uur 0,000 kWh.
-- **L-EMS-059 houdt stand:** `tekortnacht_tot_nu_kwh` **1,646** (03:45 1,232) bij P1 22-06 uur 1,764 kWh; accu leeg op 12 %. Telt als tekortdag. Blok 06:00 telt terecht niet mee. Uitslag 09:00 (volgende ronde).
-- **Laadblok 06:00:** SoC 12 → 18 % ≈ 0,52 kWh tegen 0,6 gepland; afwijking 06:30 komt door de herstart (267 W gepland, 0 gemeten). Plan 06:45 schrapte 11:30-11:45: geen laden uit het net in 16 u. Accu houdt 0,69 kWh voor 19:15-00:00, reserve 7,78 op het plafond.
-- **L-EMS-057 geverifieerd (n=1 volle nacht):** airco-besluit 22:01-05:16 'niets'. 7 van de 8 nachten ervoor kwam 'verwarmen' wel. Ochtendbesluit blijft komen (05:16).
-- **Nieuw L-EMS-063 (open):** het gewone besluit staat 8/8 ochtenden op 'verwarmen', gemiddeld 176 min tussen 04 en 11 uur, terwijl jullie hem op 1 van 26 ochtenden aanzetten en de eigen verwachting 'niet verwacht' zegt. Knop uit, dus nu geen effect.
-- L-EMS-061: niet te toetsen, accu 0 W op 12 %. Regeloverschot: geen zon gehad. H-EMS-15: live nog 'planning', uitslag 09:00. H-EMS-2: dag begint net.
-- MC tot blok 0 % (det. 0,22 kWh, horizon 11:15). Twin 0,384 (0,396). Planvolging vandaag 93,3 % (n=30). Stilstand: **geen echte** (12 wachten, 0 doen). Airco 'verwarmen', knop uit → rekent.
-- Niet gemeten: PV en verbruik vandaag (te vroeg), SoC-voorspelling (dagafsluiting).
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort). H-EMS-14 geparkeerd.
-
-laatste ronde: 04-11 07:40, gemeten t/m 04-11 07:45
-
-## 04-11 11:40 · tussenronde
-- Draait v5.181.1 (herstart ~11:26). Vanochtend veel releases uit de chat (v5.176.4-v5.181.1, grote controle, cockpit, opsplitsing coordinator). Herstarts 08:42, 09:16, 10:17, 11:26.
-- **ACUUT, leermodus staat aan zonder reden (L-EMS-064):** sinds 11:22 stuurt het EMS niet. Ruud zette smart charge om 11:25:38 uit, de herstart viel binnen de 30 s poll, het herstellen zette de leermodus terug. Zendure blijft op smart_charging tot iemand hem uitzet. Geen melding, omdat `leermodus_sinds` niet bewaard is.
-- **Gebouwd v5.181.2:** tussenrelease wegens fout gedrag nu. Suite 7069 groen, workflow groen, HACS ververst. Herstelt de huidige stand niet: Ruud moet de leermodus zelf uitzetten. Sturing ongewijzigd.
-- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg. Teruglevering vandaag 0,137 kWh t/m 11:41 (zon).
-- **Nacht 03→04 definitief 1,646 kWh** tekort (> 0,5, tekortdag). Record en soort komen om middernacht, niet om 09:00: mijn eerdere 'uitslag 09:00' klopte niet. H-EMS-15 en de Brier-telling dus in de dagafsluiting van 05-11 03:40.
-- Zon tot 11:45 3,25 kWh, Solcast dag 7,27; dag nog niet te beoordelen. SoC 18 → 36 %.
-- Planvolging vandaag **76,1 %** (n=46; 93,3 om 07:40): daling komt van 6 × 'sturing', alle tijdens handmatig/leermodus. Twin 0,394 (0,384), laatste twee 0,755 en 0,96 met meer zon dan gepland. MC tot 09:00 morgen 100 % (det. 7,99 kWh; rekent zonder sturing niet door).
-- **Nieuw H-EMS-18:** netlaadplan springt na een herstart: 11:27 '11:30-14:45 5,5 kWh', 11:28 '11:30-12:00 1,2 kWh', 11:30 geen. Reden `huis-eerst-regel aan`. n=1, deed niets (leermodus). Volgen bij de volgende herstart.
-- L-EMS-063 gebouwd v5.177.0, toets morgenochtend (nu overdag 'verwarmen', knop uit → rekent). L-EMS-061, regeloverschot: niet te toetsen. Stilstand: **geen echte** (11 wachten, 0 doen).
-- Niet gemeten: effect van de leermodus in euro's (dag loopt, avondpiek nog te komen).
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart). H-EMS-14 geparkeerd.
-
-laatste ronde: 04-11 11:40, gemeten t/m 04-11 11:52
-
-## 04-11 15:40 · tussenronde
-- Draait v5.183.3. Sinds 11:40 zeven releases uit de chat (waardeplan: huis eerst, bewaarmarge) en 7 herstarts (12:43, 13:36, 13:54, 14:30, 14:41, 15:20, 15:31). Fouten EMS 0; stuurt.
-- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg, regeloverschot 0,013 kWh, export 0,41 kWh in de zonuren.
-- **Gebouwd v5.183.4 (L-EMS-065, tussenrelease):** v5.183.3 bracht de v5.165.0-fout terug voor huis en zon van het lopende kwartier: 15:41 plan huis 2201 W, gemeten 613 W, en de oorzaak in de planvolging rekende daarmee. Foute data nu, dus niet tot 03:40 gewacht. Suite 7137 groen (6 nieuw). Sturing ongewijzigd.
-- **Fix v5.183.3 werkt verder:** accu + net + zon = huis binnen 2 W op 15:45-19:30. Bewaarmarge v5.183.2: net 0 van 15:45 tot 19:15 in het plan.
-- **L-EMS-064:** leermodus 86 min aan (11:22-12:48), door Ruud uit. Herstel na herstart nog niet opnieuw getest (n=0).
-- **H-EMS-18 sterker:** netlaadplan veranderde na 7 van de 7 herstarts binnen 10 min (12:43 3,8 → 4,7 → 0 kWh; 14:31 0,5 → 2,4 kWh; 15:20 2,9 → 3,0 → 2,4; 15:31 2,4 → 3,0 → 2,4), en daartussen niet. 1× uitgevoerd: 13:39-13:45 manual −2400 W, ~0,17 kWh, maar dat plan was van v5.181.4. Oorzaak nog niet gevonden; `reserve_sprongen` wijst op live_correctie en lange horizon die opnieuw inlopen.
-- Zon t/m 15:00 6,24 kWh (Solcast dag 7,27); dag beter dan de laatste week. Planvolging 57,4 % (n=61), twin 0,498 (0,394): beide zeggen vandaag weinig, door herstarts, leermodus en nieuwe sturing. Eerste volle dag: morgen.
-- Vanavond: accu leeg vanaf ~19:45, net tot 05:00 bij 36-49 ct, MC tot blok 99,4 % (det. 5,44, beschikbaar 3,46). Soort live 'planning'; uitslag dagafsluiting 06-11 (nacht 04→05) en 05-11 (nacht 03→04).
-- Stilstand: **geen echte** (10 wachten, 0 doen). Witgoedadvies even unknown na herstart, daarna 'morgen 04:15'. Airco 'niets', knop uit → rekent.
-- Niet gemeten: euro's van de leermodus, kwartierbeslissingen tegen optimum (dagafsluiting).
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart). H-EMS-14 geparkeerd.
-
-laatste ronde: 04-11 15:40, gemeten t/m 04-11 16:00
-
-## 04-11 19:40 · tussenronde
-- Draait v5.184.4, HACS gelijk. Sinds 15:40 zeven releases uit de chat (v5.183.4-v5.184.4) en herstarts 16:12, 16:59, 17:20, 19:36. Geen release: alleen weergave, en de chat heeft vandaag al veel uitgebracht.
-- **Harde regel: 0× onder de reserve**; verkoopkwartieren leeg. Maar `huis_gaat_voor` 04-11 staat nu op **geschonden**: regeloverschot **0,145 kWh** (15:40 0,013), grens 0,1. Geen verkoop.
-- **Koken sinds v5.184.1:** accu volgt nu: 5-min gemiddelde P1 17:05-19:40 max 339 W (16:45-17:00 tot 3.713 W, SoC bleef 40 %). Keerzijde: bij aan/uit van de kookplaat P1-dips tot −1.974 W, samen het regeloverschot hierboven. n=1 avond. Volgen; geen voorstel.
-- **Nieuw L-EMS-066 (zelf te bouwen, dagafsluiting):** eerste planrij klopt niet na een berekening midden in het kwartier: 19:41 en 19:43 accu 683 + net 413 bij huis 682 W, gemeten ~0-80 W. Rij `huis` sinds v5.183.2: `_waardeplan_net_kwh` neemt de accustap als heel kwartier, maar die is nu de rest van het kwartier. Sturing niet geraakt.
-- **v5.184.4 werkt:** vaatwasser 05-11 05:00-05:45 huis 1.824/1.448/1.756/652 W (was 5.112 W in één kwartier), aandeel 33/25/31/9 % tegen profiel 34/25/30/10.
-- **L-EMS-065 geverifieerd:** huis rij 0 682 W, gemeten 627 W (was 2.201 tegen 613 W).
-- Zon dag **6,62 kWh** (Solcast 7,27, **−9,0 %**, voorlopig). Import 5,25, export 0,57 t/m 19:00. SoC 50 → 16 % tussen 15:45 en 19:41, accu leeg rond 20:15.
-- Planvolging 54,5 % (n=77), twin 0,598 (grote fouten 15:30/16:30 uit ochtendplannen; laatste 0,091). Besparing −€ 0,03. MC tot blok 99,7 % (det. 2,08 kWh, horizon 00:00), soort live 'planning'.
-- **H-EMS-18:** 19:36 viel 13:00-13:15 uit het plan (reden 'opstartfase'); 16:12/16:59/17:20 niet te meten, want `laadplan_gewijzigd` bewaart alleen de laatste en attributen staan niet in de recorder → **L-EMS-067 (zelf te bouwen, dagafsluiting)**. `reserve_sprongen` 19:36: lange horizon 4,80 → 6,33 kWh.
-- Witgoedadvies: unknown na elke herstart, terug op het volgende kwartier (13× vandaag, 1-25 min). Geen stilstand.
-- L-EMS-061: accu nog niet op 10 %, 20:15 volgende ronde. L-EMS-063: toets morgenochtend. L-EMS-064: n=0. Stilstand: **geen echte** (10 wachten, 0 doen). Airco 'niets', knop uit → rekent.
-- Niet gemeten: euro's van de kookfout 16:45, SoC-voorspelling en kwartierbeslissingen tegen optimum (dagafsluiting).
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart). H-EMS-14 geparkeerd.
-
-laatste ronde: 04-11 19:40, gemeten t/m 04-11 19:47
+## 04-11 · samenvatting dag (4 tussenronden 07:40-19:40; ingekort na 14 dagen)
+- Dag vol releases uit de chat (v5.176.3 → v5.184.4) en ~12 herstarts; 0 EMS-fouten. Gebouwd door de ronde: v5.181.2 (L-EMS-064 leermodus na herstart, 86 min geen sturing 11:22-12:48) en v5.183.4 (L-EMS-065 huis/zon lopend kwartier; daarna geverifieerd 682 tegen 627 W).
+- Harde regel 0× onder de reserve. Nacht 03→04 tekort 1,646 kWh (tekortdag). Zon 6,62 kWh (Solcast −9,0 %). Koken sinds v5.184.1 gevolgd, regeloverschot 0,145 kWh (P1-dips bij aan/uit kookplaat).
+- L-EMS-057 geverifieerd (airco 'niets' 's nachts); nieuw L-EMS-063 (ochtend 'verwarmen'), L-EMS-066 (eerste planrij midden in kwartier), L-EMS-067 (laadplan-historie); H-EMS-18: netlaadplan springt na 7/7 herstarts.
 
 ## 05-11 09:15 · dagcontrole (vanaf nu de enige ronde)
 - Draait v5.187.0, HACS gelijk (herstart 08:28). Herstarts sinds de vorige ronde: 20:15, 20:20, 21:51, 08:28. Fouten EMS 0; koppelingen 74/74. **KNMI `weather.forecast_thuis`** viel drie keer ~35 min weg (23:55, 06:14, 08:20), telkens een telefoonmelding, nu weer terug; sturing niet geraakt.
@@ -465,3 +409,17 @@ laatste ronde: 17-11 06:45, gemeten t/m 17-11 06:45
 - Niet gemeten: MC-Brier (nacht loopt tot 09:00), SoC-voorspelling, NILM.
 
 laatste ronde: 18-11 06:45, gemeten t/m 18-11 06:45
+
+## 19-11 06:45 · dagcontrole (18-11 06:45 t/m 19-11 06:45; v5.239.0 geïnstalleerd, herstart 18-11 15:43)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, rendement 83,5/100 %, start 100 % eind 99 %): werkelijk € 2,70, optimum € 2,69 → **gemist € 0,02, 0 FOUT, 0 PECH**; zonder accu € 2,71. Alleen verkoop 08:00 (31 ct, 0,32 kWh, met zonherlading netto +0,5 ct) en LP 0,09 kWh ontladen 16:45 (40,1).
+- 18-11 accu de hele dag en nacht 99-100 %, huis op het net 28-40 ct, geen nachtladen (33-36 ct). **Toets van gisteren:** vasthouden 18-11 avond (39 ct) voor 19-11 (verkopen 07:30-09:15 en 18:00-19:15 bij 42-44,6 ct) is optimaal: LP 18-11 06:45 t/m 19-11 24:00 met het plan van 19-11 en dezelfde eind-SoC (55 %) € 5,21 tegen werkelijk+plan € 5,20. Avond ontladen + nachtladen kost 30,6 ct marginaal tegen 28,3 opbrengst.
+- **Voorlopig 19-11:** plan houdt 55 % (4,75 kWh) over voor 20-11 (verwachting gem. 42, piek 49,6) terwijl het huis 16:00-17:45 importeert bij 41-43 ct; waarde eind-kWh in het LP 28,2 ct marginaal (~39,3 bruto). Loont alleen als 20-11 boven ~40 ct komt: toetsen bij de prijzen van 20-11 (~13:00) en morgen.
+- Regels c: geen verliesverkoop, geen import vóór goedkoper kwartier met energie over (binnen 24 u), geen lege accu, geen gemiste verkoopwaarde.
+- **H-EMS-23 gesloten:** ontladen 12-18-11 gewogen 99,2 % (46,6 kWh AC; 97,6-101,1), plan ~100,5-102 → gat ~1,5-2 pp (< 3 pp, ~€ 0,04/dag): geen voorstel. Laden 84,0 % (79,6-87,3).
+- PV-plan 10 d **−3,9 %** (MAE 0,91 kWh/d), 30 d −11,4 %; snelle correctie 0,98 → 0,89. 18-11 2,01 kWh tegen ochtendplan 1,23 (uren 10-13 te laag, 1 dag uurcijfers). Verbruik 18-11 11,24 tegen 14,11 kWh (−20 %), 3e dag op rij te laag (−7/−24/−20); nacht 1,67 kWh. MC Brier 0,143 (7 nachten).
+- **Gebouwd v5.239.1 (L-EMS-080, classificatie):** 'Zonvoorspelling klopt hij nog met de panelen?' gaf 19-11 00:00 'structureel 43 pp lager, élke dag, vervuiling/streng' met reeks −51,5/−53,6/−43,4/−29,3/**+41,0** %. Een dag de andere kant op telt nu als tegenbewijs. Suite 7220 groen, workflow groen, Marketplace ververst.
+- Pendel 18-11 76,3 Wh, 0 regeluren (geen stand huis); regeloverschot niet te meten. Module 1: 100 % 0,02 V (bucket nu vol rustmetingen op 100 %; was 0,07 met laadpieken), 0 % 0,04 V (anderen 0,01), daghoogste 0,03, laagste cel 3,19 V (gelijk). Geen drempel.
+- Storingen: geen (Zonneplan-kostsensoren rond 00:00 en prijssensor bij herstart: cache, bekend). Stilstand 8 wachten, 0 doen (1 fout geclassificeerd, gebouwd).
+- Niet gemeten: regeloverschot en ontlaadrendement 18-11 (geen ontlading), SoC-voorspelling, NILM. Hypotheses: H-EMS-24 (nieuw) verbruiksverwachting koude dagen te laag; eindwaarde-toets na 20-11.
+
+laatste ronde: 19-11 06:45, gemeten t/m 19-11 06:45

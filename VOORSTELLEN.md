@@ -571,3 +571,9 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: push 12-11 19:11 "n Cel steet te lege" (patroon: 2 dagen onder 3,10 V). Gemeten 12-11 19:00-19:15 bij 2,1 kW ontladen en 13-14 %: module 1 3,07, 00917 3,08, 02093 3,09 V; 5 min later in rust weer 3,10-3,19 V. Geen cel lager dan de rest, terwijl de tekst dat zegt. Sinds v5.198.0 ontlaadt het plan vrijwel dagelijks tot 10 % op ~2,1 kW, dus deze melding komt bijna elke avond.
 - Bouw (keuze Ruud): 'aandacht' alleen als de laagste cel ≥ 0,05 V onder de laagste cel van de andere modules ligt, of de dagminimum-meting alleen in rust (< 300 W) tellen. Kritiek (< 3,00 V) en de celbescherming in de sturing blijven ongewijzigd.
 - Verwacht effect: geen avondpush zonder reden; een echt achterblijvende cel blijft gemeld. Euro-effect 0.
+
+## L-EMS-080 · zonmelding 'structureel lager op élke dag' terwijl een dag juist hoger was (classificatie)
+- Status: **gebouwd v5.239.1** (19-11, dagcontrole; zelf te bouwen: rapportage). Suite 7220 groen, `test_v5239_1_zon_andere_kant.py` (4).
+- Onderbouwing: melding solar_underperforming 19-11 00:00 (stille uren) en 'Nog niet bepaald': "De laatste 5 dagen liggen structureel 43 procentpunt lager dan de geleerde bias (0.0%), en dat geldt voor élke dag ... vervuiling, een uitgevallen streng". Reeks (`deviation_history`, ruw Solcast) −51,5 / −53,6 / −43,4 / −29,3 / +41,0 %. `get_solar_forecast_health` zag alleen dagen binnen 10 % als tegenbewijs; +41 telde als 'ver ernaast'.
+- Bouw: dagen > 10 % aan de andere kant van de verschuiving (`tegen`) tellen als goede dagen → 'wisselend', geen melding.
+- Verwacht effect: geen valse installatiemelding; euro-effect 0. Meten: geen solar_underperforming met 'élke dag' zolang er een dag van teken wisselt.
