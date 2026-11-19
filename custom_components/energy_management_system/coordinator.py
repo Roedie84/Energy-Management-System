@@ -42825,6 +42825,9 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "uit_statistiek": sum(1 for r in dagen.values() if r.get("b_") == "s"),
             "vergelijking": verg,
             "per_maand": D.per_maand(archief),
+            # v5.240.0 (Ruud 19-11): totalen per week, maand en jaar.
+            "perioden": {soort: D.per_periode(archief, soort, dt_util.now().date())
+                         for soort in ("week", "maand", "jaar")},
             "laatste_dagen": {d: D.uitgeschreven(dagen[d]) for d in gemeten[-7:]},
             "zaai_fout": archief.get("zaai_fout"),
             "toelichting": (

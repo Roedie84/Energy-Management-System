@@ -35796,3 +35796,14 @@ Dagcontrole 19-11: om 00:00 ging de melding `solar_underperforming` ("☀️ Zon
 
 Nu telt een dag die meer dan 10 % de andere kant op wijkt (`tegen`) net als een goede dag: oordeel 'wisselend' (nog niet te zeggen), geen melding, met in de reden hoeveel dagen de andere kant op zaten. Een echte verschuiving (alle dagen aan dezelfde kant) blijft gemeld. Alleen de beoordeling; de zonvoorspelling, de eigen correctie en de sturing veranderen niet. 4 nieuwe tests (`test_v5239_1_zon_andere_kant.py`).
 
+
+## v5.240.0 — dagarchief per week, maand en jaar
+
+Ruud 19-11 (bij de regel Dagarchief in de cockpit): "Kunnen we hiervoor ook een week, maand en jaar archief maken". Het dagarchief bewaart elke dag voor altijd; dit telt die dagen op.
+
+- **`dagarchief.per_periode(archief, soort, vandaag)`**: totalen per week (maandag t/m zondag, ISO-weeknummer; de laatste 26), per maand (de laatste 25) en per jaar (alle). Per periode: dagen met een meting tegenover de dagen die er hadden kunnen zijn, verbruik, zon, netafname, teruglevering, accu geladen/ontladen, kosten, kosten zonder accu, wat de accu opleverde, gemiddelde prijs, gemiddelde temperatuur en zelfvoorziening (eigen zon in het huis / verbruik). De periode waar vandaag in valt is `lopend` en telt tot en met gisteren.
+- **Sensor Dagarchief**: nieuw attribuut `perioden` (`week`, `maand`, `jaar`). Het bestaande `per_maand` blijft.
+- **Cockpit** (blok Geld, onder de toelichting): uitklapblok "Archief per week, maand en jaar" met de knoppen Week / Maand / Jaar (keuze onthouden per browser), nieuwste bovenaan. Een periode met gaten toont bijvoorbeeld "6/7" dagen; aanwijzen toont accu geladen/ontladen, de kosten zonder accu en de temperatuur.
+- Alleen weergave; er wordt niets extra opgeslagen. Rekentijd voor tien jaar archief ruim onder 0,25 s (getoetst).
+
+Tests: `test_v5240_archief_perioden.py` (9).

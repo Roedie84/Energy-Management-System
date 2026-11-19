@@ -1307,6 +1307,15 @@ class EmsCockpitCard extends HTMLElement {
         this._plan();
         return;
       }
+      // v5.240.0: week, maand of jaar in het archief
+      const archief = doel.closest("[data-archief]");
+      if (archief) {
+        this._archiefSoort = archief.dataset.archief;
+        try { localStorage.setItem("ems-archief-soort", this._archiefSoort); } catch (e) { /* geen opslag */ }
+        this._vuil.add("geld");
+        this._plan();
+        return;
+      }
       if (doel.closest("summary")) return;
       const info = doel.closest("[data-info]");
       if (info) this._info(info.dataset.info);
@@ -2653,6 +2662,7 @@ class EmsCockpitCard extends HTMLElement {
       `</div></div>` +
       (accuRegel ? `<div class="sub">${esc(accuRegel)}</div>` : "") +
       this._uitklap("geld_detail", "Toelichting zelfanalyse en archief", this._zelfanalyse()) +
+      this._uitklap("archief_perioden", "Archief per week, maand en jaar", this._archiefPerioden()) +
       `</div>`
     );
   }
@@ -2691,6 +2701,51 @@ class EmsCockpitCard extends HTMLElement {
     return (
       regels +
       (keuzes ? `<div class="za-s" style="margin-top:6px">Achteraf niet de beste (${esc(/^\d{4}-\d{2}-\d{2}$/.test(gisteren.datum || "") ? `${gisteren.datum.slice(8, 10)}-${gisteren.datum.slice(5, 7)}` : gisteren.datum || "")}):</div><ul class="za-l">${keuzes}</ul>` : "")
+    );
+  }
+
+  /* v5.240.0 (Ruud 19-11: "ook een week, maand en jaar archief"): het
+     dagarchief opgeteld per week, maand of jaar; nieuwste bovenaan. */
+  _archiefPerioden() {
+    const perioden = attr(this._s("dagarchief"), "perioden");
+    if (!perioden) return "";
+    const SOORTEN = [["week", "Week"], ["maand", "Maand"], ["jaar", "Jaar"]];
+    if (this._archiefSoort == null) {
+      let k = null;
+      try { k = localStorage.getItem("ems-archief-soort"); } catch (e) { k = null; }
+      this._archiefSoort = SOORTEN.some(([s]) => s === k) ? k : "maand";
+    }
+    const soort = this._archiefSoort;
+    const rijen = (Array.isArray(perioden[soort]) ? perioden[soort] : []).slice().reverse();
+    const knoppen = SOORTEN.map(([s, naam]) =>
+      `<button data-archief="${s}" class="${s === soort ? "actief" : ""}">${naam}</button>`).join("");
+    const dm = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || "") ? `${d.slice(8, 10)}-${d.slice(5, 7)}` : "");
+    const kwh = (v) => (num(v) == null ? STREEP : fmt(v, num(v) >= 100 ? 0 : 1));
+    const kleur = (v) => (v != null && v >= 0 ? "var(--groen)" : "var(--oranje)");
+    const tabel = rijen.length
+      ? `<div class="tabelvak"><table class="tabel"><thead><tr><th>Periode</th><th class="r">Dagen</th>` +
+        `<th class="r">Verbruik</th><th class="r">Zon</th><th class="r">Afname</th><th class="r">Terug</th>` +
+        `<th class="r">Kosten</th><th class="r">Accu</th><th class="r">Prijs</th><th class="r">Zelf</th></tr></thead><tbody>` +
+        rijen.map((r) => {
+          const vol = num(r.dagen) === num(r.dagen_mogelijk);
+          const dagen = r.lopend ? `${fmt(r.dagen)} (loopt)` : vol ? fmt(r.dagen) : `${fmt(r.dagen)}/${fmt(r.dagen_mogelijk)}`;
+          const bereik = soort === "week" ? ` <i class="bij">${dm(r.van)} \u2013 ${dm(r.tot)}</i>` : "";
+          const titel = `Geladen ${kwh(r.accu_geladen_kwh)} kWh, ontladen ${kwh(r.accu_ontladen_kwh)} kWh; zonder accu ${euro(r.kosten_zonder_accu_eur)}` +
+            (num(r.temp_c) == null ? "" : `; gemiddeld ${fmt(r.temp_c, 1)} \u00b0C`);
+          return `<tr title="${esc(titel)}"><td>${esc(r.label || r.periode)}${bereik}</td><td class="r">${dagen}</td>` +
+            `<td class="r">${kwh(r.verbruik_kwh)}</td><td class="r">${kwh(r.zon_kwh)}</td><td class="r">${kwh(r.netafname_kwh)}</td>` +
+            `<td class="r">${kwh(r.teruglevering_kwh)}</td><td class="r">${euro(r.kosten_eur)}</td>` +
+            `<td class="r" style="color:${kleur(num(r.accu_opbrengst_eur))}">${euroTeken(r.accu_opbrengst_eur)}</td>` +
+            `<td class="r">${num(r.prijs_gem_ct) == null ? STREEP : fmt(r.prijs_gem_ct, 1)}</td>` +
+            `<td class="r">${num(r.zelfvoorziening_procent) == null ? STREEP : fmt(r.zelfvoorziening_procent) + "%"}</td></tr>`;
+        }).join("") + `</tbody></table></div>`
+      : `<div class="za-s">Nog geen dagen in het archief.</div>`;
+    return (
+      `<div class="vb-kop"><span class="vb-knoppen">${knoppen}</span>` +
+      `<span class="vb-bereik">kWh \u00b7 kosten stroom zonder vaste kosten \u00b7 prijs in ct/kWh</span></div>` +
+      tabel +
+      `<div class="za-s">Accu = wat de accu opleverde (kosten zonder accu min de echte kosten). Zelf = eigen zon in het huis als deel van het verbruik. ` +
+      `Een periode met minder dagen dan mogelijk mist metingen.</div>`
     );
   }
 

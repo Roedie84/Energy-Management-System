@@ -1,3 +1,9 @@
+EMS v5.240.0 - dagarchief per week, maand en jaar
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- In de cockpit (blok Geld) staat een nieuw uitklapblok "Archief per week, maand en jaar": verbruik, zon, afname, teruglevering, kosten, wat de accu opleverde, de gemiddelde prijs en de zelfvoorziening per week, maand of jaar.
+
 EMS v5.239.1 - zonmelding: geen 'storing aan de panelen' als een dag juist meer opleverde
 
 Installeren: via de Marketplace bijwerken en herstarten.

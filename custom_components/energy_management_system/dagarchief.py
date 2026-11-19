@@ -444,6 +444,79 @@ def per_maand(archief: dict, maanden: int = 25) -> dict:
             for s in sleutels}
 
 
+#: v5.240.0: zoveel perioden in het overzicht (weken, maanden; jaren: alle).
+PERIODEN_WEKEN = 26
+PERIODEN_MAANDEN = 25
+MAANDNAMEN = ("jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec")
+_SOM = (("v", "verbruik_kwh"), ("p", "zon_kwh"), ("i", "netafname_kwh"), ("e", "teruglevering_kwh"),
+        ("l", "accu_geladen_kwh"), ("o", "accu_ontladen_kwh"), ("k", "kosten_eur"),
+        ("kz", "kosten_zonder_accu_eur"), ("b", "accu_opbrengst_eur"))
+
+
+def _periode_van(dag: date, soort: str) -> tuple[str, str, date, date]:
+    """(sleutel, label, eerste dag, laatste dag) van de week, maand of het
+    jaar waarin `dag` valt. Weken lopen van maandag tot en met zondag (ISO)."""
+    if soort == "week":
+        jaar, week, weekdag = dag.isocalendar()
+        van = dag - timedelta(days=weekdag - 1)
+        return f"{jaar}-W{week:02d}", f"wk {week} '{jaar % 100:02d}", van, van + timedelta(days=6)
+    if soort == "maand":
+        van = dag.replace(day=1)
+        volgende = (van + timedelta(days=32)).replace(day=1)
+        return f"{dag.year}-{dag.month:02d}", f"{MAANDNAMEN[dag.month - 1]} '{dag.year % 100:02d}", van, volgende - timedelta(days=1)
+    return str(dag.year), str(dag.year), date(dag.year, 1, 1), date(dag.year, 12, 31)
+
+
+def per_periode(archief: dict, soort: str, vandaag: date | None = None, aantal: int | None = None) -> list[dict]:
+    """Totalen per week, maand of jaar uit het dagarchief (v5.240.0).
+
+    Ruud 19-11: "Kunnen we hiervoor ook een week, maand en jaar archief
+    maken". Het dagarchief bewaart elke dag voor altijd; dit telt die dagen op.
+    Alleen dagen met een meting tellen (`dagen`), zodat een periode met gaten
+    herkenbaar is aan `dagen` tegenover `dagen_mogelijk`; de periode waar
+    vandaag in valt is `lopend`. Nieuwste laatst.
+    """
+    if soort not in ("week", "maand", "jaar"):
+        return []
+    groepen: dict[str, dict] = {}
+    for datum, r in sorted((archief.get("dagen") or {}).items()):
+        if r.get("v") is None:
+            continue
+        try:
+            dag = date.fromisoformat(datum)
+        except ValueError:
+            continue
+        sleutel, label, van, tot = _periode_van(dag, soort)
+        g = groepen.setdefault(sleutel, {"periode": sleutel, "label": label, "van": van.isoformat(),
+                                         "tot": tot.isoformat(), "dagen": 0, "_pg": [], "_t": []})
+        g["dagen"] += 1
+        for kort, lang in _SOM:
+            if r.get(kort) is not None:
+                g[lang] = g.get(lang, 0.0) + r[kort]
+        if r.get("pg") is not None:
+            g["_pg"].append(r["pg"])
+        if r.get("t") is not None:
+            g["_t"].append(r["t"])
+    uit = []
+    for sleutel in sorted(groepen):
+        g = groepen[sleutel]
+        van, tot = date.fromisoformat(g["van"]), date.fromisoformat(g["tot"])
+        lopend = vandaag is not None and van <= vandaag <= tot
+        einde = min(tot, vandaag - timedelta(days=1)) if lopend else tot
+        rij = {k: (round(v, 2) if isinstance(v, float) else v) for k, v in g.items() if not k.startswith("_")}
+        rij["dagen_mogelijk"] = max(0, (einde - van).days + 1)
+        rij["lopend"] = bool(lopend)
+        rij["prijs_gem_ct"] = round(sum(g["_pg"]) / len(g["_pg"]), 1) if g["_pg"] else None
+        rij["temp_c"] = round(sum(g["_t"]) / len(g["_t"]), 1) if g["_t"] else None
+        if rij.get("verbruik_kwh") and rij.get("zon_kwh") is not None and rij.get("teruglevering_kwh") is not None:
+            # eigen zon in het huis / verbruik, zoals de cockpit zelfvoorziening telt
+            eigen = max(0.0, rij["zon_kwh"] - rij["teruglevering_kwh"])
+            rij["zelfvoorziening_procent"] = round(min(100.0, 100.0 * eigen / rij["verbruik_kwh"]), 0)
+        uit.append(rij)
+    grens = aantal if aantal is not None else {"week": PERIODEN_WEKEN, "maand": PERIODEN_MAANDEN}.get(soort)
+    return uit[-grens:] if grens else uit
+
+
 def _getal(x, n=1):
     return f"{x:.{n}f}".replace(".", ",")
 
