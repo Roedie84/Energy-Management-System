@@ -423,3 +423,8 @@ laatste ronde: 18-11 06:45, gemeten t/m 18-11 06:45
 - Niet gemeten: regeloverschot en ontlaadrendement 18-11 (geen ontlading), SoC-voorspelling, NILM. Hypotheses: H-EMS-24 (nieuw) verbruiksverwachting koude dagen te laag; eindwaarde-toets na 20-11.
 
 laatste ronde: 19-11 06:45, gemeten t/m 19-11 06:45
+
+## 19-11 11:55 · vanuit de chat (Ruud: "monitor jij alle metingen en update je mij wat te doen, zodat het EMS schoon blijft")
+- Nieuw: MEETREGISTER.md op deze branch (zelfde inhoud als claude/ems-meetregister.md in het project). Elke 'alleen meten'-toevoeging heeft daar een regel met besluitdatum en wat er dan gebeurt (voorstel / meting stopt en gaat uit de code / vaste bewaking).
+- Dagcontrole: lees het register elke ronde; meld op de kaart en in het eindbericht wat op of over de besluitdatum is, met de uitkomst volgens de regel; werk de regel bij (afgesloten of nieuwe datum). Nieuwe meting in een release = nieuwe regel in het register in dezelfde ronde.
+- v5.243.0 (repetitie 2027 met het waardeplan) en v5.244.0 (deed de accu zelf wat het EMS opdroeg) zijn uit de chat uitgebracht, beide alleen meten; zie register nr. 7 en 8. Uitvalproef accu door Ruud achterwege gelaten.
