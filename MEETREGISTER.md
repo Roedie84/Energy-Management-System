@@ -20,7 +20,6 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 | 7 | Deed de accu zelf wat het EMS opdroeg (v5.244.0) | 19-11 | Claude | 26-11 | vrijwel 100 % gevolgd -> Zendure lokaal sturen stopt bij stap a; anders stap b voorstellen |
 | 8 | Repetitie 2027 met het waardeplan (v5.243.0) | 19-11 | Claude 20-11 (eerste cijfers), dagcontrole | 15-12 | oordeel 'klaar voor 2027' of voorstel; rond 31-12 letten op ontbrekende kale prijs |
 | 9 | Schaduw-aanwezigheid in HA (mens binnen) | 19-11 | Claude | 03-12 | omschakelen, bijstellen of opruimen (helper, automatisering, schaduwsensor) |
-| 10 | P1-regeldoel factor 0,5 (pendelen na een lastsprong) | 10-11 | dagcontrole | weekoordeel 18-11 gegeven: uitkomst nog aan Ruud melden | houden of bijstellen; daarna pendelmeting als bewaking of eruit |
 | 11 | Regelkwaliteit nul op de meter per dag (v5.232.0) | 13-11 | Claude | 27-11 | wijzigingen aan de regeling zijn afgewezen: na twee weken sluiten en de meting eruit, tenzij hij een storing liet zien |
 | 12 | Zonverwachting voorzichtiger wegen | gepland | Claude (taak 01-03-2027) | 01-03-2027 | voorstel na de winter |
 
@@ -36,10 +35,22 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 ## Afgesloten
 | Meting | Uitkomst |
 |---|---|
+| P1-regeldoel factor 0,5 (pendelen na een lastsprong) | weekoordeel dagcontrole 18-11: regeloverschot 0,003-0,015 kWh per kwartier tegen 0,045 bij de nulmeting (65 tot 95 % minder), nulregeling niet trager; factor houden. Uitdoven na een sprong niet gemeten. De dagelijkse pendelmeting loopt nog: stoppen of vaste bewaking beslist Ruud |
 | Ontlaadrendement een week (H-EMS-23) | 19-11: 99,2 % tegen ~101 % in het plan, onder de grens; geen wijziging |
 | Vervolgmeting accuplan 12 t/m 18-11 | 19-11: 89 % van het optimum; geen voorstel |
 | Uitvalproef accu (wat doet hij zonder HA) | 19-11 door Ruud achterwege gelaten; 64 s gemeten: houdt het laatste vermogen vast |
 | Opruimronde HA | 19-11: vrijwel niets op te ruimen |
 
-## Nog na te lopen (niet zeker of het nog iets doet)
-Uit de diagnose van het EMS, zonder dat hier een besluit of eigenaar bij bekend is: `powercalc_proef`, `herspeel` (per versie), `spiegelcontrole`, `gacs_assessment`, `monte_carlo_vergelijking`, `soc_demper`, `extra_dip_margin_history`, `pv_band_calibration`, `weather_source_reliability`, `lange_horizon_effect`. Per stuk vaststellen: stuurt het iets, is het vaste bewaking, of kan het eruit.
+## Nagelopen 19-11 (uit de code beoordeeld, niet uit live cijfers)
+| Onderdeel | Wat het is | Oordeel |
+|---|---|---|
+| `soc_demper` | dempt het flapperen van de beschikbare energie bij 0 W (v5.172.0) | telt mee in de meting waarop gestuurd wordt: blijft |
+| `spiegelcontrole` | vergelijkt eigen getallen met de bron (v3.49.0) | vaste bewaking: blijft |
+| `herspeel` | speelt dagen na per EMS-versie, voedt de zelfanalyse | vaste bewaking: blijft |
+| `extra_dip_margin` | marge uit de oude regelset bij weinig zon | hoort bij de terugval als het waardeplan er niet uitkomt: blijft zolang de terugval blijft |
+| `powercalc_proef` | proef uit v3.97: maakt Powercalc de apparaatherkenning rustiger | proef zonder besluit: kandidaat om eruit te halen |
+| `gacs_assessment` | zelfbeoordeling tegen GACS-eisen; geldt volgens de eigen toelichting niet voor een woning | kandidaat om eruit te halen (met de bijbehorende tijdmeting gacs_traag/gacs_duur) |
+| `weather_source_reliability` | betrouwbaarheid per weerbron; sinds 29-10 is er nog maar een weerbron | kandidaat om eruit te halen |
+| `monte_carlo_vergelijking`, `lange_horizon_effect`, `pv_band_calibration` | rapportage rond de oude reserve-regels (tekortkans, lange horizon, onderkant Solcast) | een besluit samen: zijn de oude reserve-regels nog nodig als terugval nu het waardeplan stuurt? Apart en voorzichtig uitzoeken |
+
+Voor er iets uit de code gaat: live nakijken dat het niets voedt, en de tests.
