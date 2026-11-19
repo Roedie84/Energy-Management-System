@@ -27,11 +27,18 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 ## Vaste bewaking (blijft, met reden)
 | Bewaking | Reden |
 |---|---|
+| Nieuwe apparaten herkennen (v5.247.0) | accumodule vanzelf in de bewaking; airco en sensoren pas na akkoord; melding per nieuw apparaat |
 | Accumodule 1 (01029): celspanningsverschil tegen de andere modules | garantie; melding bij een drempel |
 | Zendure lokaal meelezen (v5.50/v5.82) | terugval bij lezen als de Zendure-integratie hapert |
 | Opdrachtcontrole (v3.87.0) | melding als de accu een opdracht niet overneemt |
 | Dagcontrole: achteraf gemist bedrag, fouten/pech | hoofdmaat of de sturing goed is |
 | Planvolging (percentage volgens plan) | laat zien of de accu doet wat het plan zegt |
+
+## Nog te bouwen (toegezegd, geen meting)
+| Wat | Stand |
+|---|---|
+| Ontdekking uitbreiden (Ruud 19-11: 'zeer uitgebreid'): regel 'Nieuw gevonden' in de cockpit; ja/nee in de melding die een voorstel zelf instelt; tweede omvormer, tweede accu en laadpaal herkennen; verdwenen apparaten melden | fase 1 staat (v5.247.0); vervolg nog te bouwen |
+| Alinea PENDELEN uit de opdracht van de dagcontrole halen | bij de eerstvolgende aanpassing van die opdracht |
 
 ## Afgesloten
 | Meting | Uitkomst |
