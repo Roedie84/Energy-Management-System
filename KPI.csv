@@ -1591,3 +1591,27 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-19 06:45,DAG,module1_laagste_cel,3.19,1,"18-11 geschiedenis; 00917 3.19, 02093 3.19 (accu 94-100 %)"
 2026-11-19 06:45,DAG,module1_soc_laag_afwijking_pct,,0,"18-11 geen lage stand (min. 94 %)"
 2026-11-19 06:45,DAG,ems_tests_main,7220,7232,"v5.239.1, 12 overgeslagen"
+2026-11-20 06:45,DAG,ems_achteraf_werkelijk_eur,3.56,96,"19-11 06:45 t/m 20-11 06:45; marginaal (prijs-11,08 ct), slijtage 4,22 ct; start 99 % eind 100 %"
+2026-11-20 06:45,DAG,ems_achteraf_optimum_eur,3.45,96,"LP met gemeten laadrendement van de dag 78,5 % (SoC); met 83,5 %: 3,37"
+2026-11-20 06:45,DAG,ems_achteraf_gemist_eur,0.11,96,"0 fout 1 pech; met plan-rendement 83,5 % 0,19; verkoopsnelheid ochtend 1,28 kW i.p.v. 2,4 kW kost 0,01"
+2026-11-20 06:45,DAG,ems_zonder_accu_eur,3.48,96,"zelfde maatstaf, zonder voorraadcorrectie"
+2026-11-20 06:45,DAG,ems_cyclus_avondverkoop_eur,-0.02,1,"19-11 17:15-19:30 3,57 kWh uit (gem. 43,7 ct) tegen nachtladen 20-11 (gem. 33,5 ct) en slijtage 0,15: quitte"
+2026-11-20 06:45,DAG,ems_loslaten_woning_eerst_eur,,0,"niet apart te scheiden: verkoop 19-11 avond onder de oude reserve, cyclus quitte"
+2026-11-20 06:45,DAG,ems_knop_verkopen_uit_eur,0,1,19-11 knop uit
+2026-11-20 06:45,DAG,ems_nachtladen_kwh,8.27,22,"20-11 00:00-05:15 gem. 33,5 ct, 21 -> 95 % (+ sprong 95->100 om 06:00)"
+2026-11-20 06:45,DAG,accu_laadrendement_dag_pct,78.7,1,"21->95 % 6,39 kWh SoC / 8,12 kWh AC (SoC sprong 06:00 niet meegeteld)"
+2026-11-20 06:45,DAG,pv_werkelijk_kwh,2.04,96,"19-11; ochtendverwachting plan 1,41 (+45 %)"
+2026-11-20 06:45,DAG,pv_plan_bias_10d_pct,-6.9,10,"plan 26,1 / 24,3 kWh; MAE 0,84 kWh/d (36,4 %); 30 d -11,0 %; per uur 2 dagen (10-13 u te laag)"
+2026-11-20 06:45,DAG,pv_snelle_correctie_fout_kwh_dag,0.89,25,"zonder 0,93; bias -0,50 -> +0,02"
+2026-11-20 06:45,DAG,ems_verbruik_ochtendverwachting_fout_pct,-19,1,"19-11 verwacht 12,35 tegen 15,24 kWh; 4e dag op rij te laag (-7/-24/-20/-19)"
+2026-11-20 06:45,DAG,ems_nachtverbruik_kwh,1.78,35,19-11 22:00 - 20-11 06:45 huis
+2026-11-20 06:45,DAG,mc_brier_22u,0.143,7,kalibratie_22u ongewijzigd
+2026-11-20 06:45,DAG,ems_stilstand_functies,0,4,4 wachten 0 doen
+2026-11-20 06:45,DAG,zendure_opdrachten_gevolgd_pct,93.5,31,"29/31; beide 'niet gevolgd' bij laden op 93-95 % SoC (afbouw bovenin, -1828/-1606 W tegen -2400)"
+2026-11-20 06:45,DAG,repetitie_2027_waardeplan_laat_liggen_eur,0.03,96,"19-11 eerste dag: waardeplan 2027 5,23 tegen best 5,21; accu levert op -0,02"
+2026-11-20 06:45,DAG,module1_delta_100,0.02,200,soc_buckets mediaan (0.01-0.14); anderen 0.01/0.00
+2026-11-20 06:45,DAG,module1_delta_0,0.04,200,(0.02-0.05); anderen 0.01/0.01
+2026-11-20 06:45,DAG,module1_delta_max_dag,0.14,469,"20-11 00:00-06:45 (bovenin na laden, rust 06:43 0,11: 3,48/3,37 V); anderen 0.03/0.02; 18-11 0.17"
+2026-11-20 06:45,DAG,module1_laagste_cel,3.16,1,"19-11 geschiedenis; 00917 3.16, 02093 3.16"
+2026-11-20 06:45,DAG,module1_soc_laag_afwijking_pct,0.3,1,"19-11 19:51 laagste stand: module 1 21 %, 00917 20 %, 02093 21 %"
+2026-11-20 06:45,DAG,ems_tests_main,7283,7295,"v5.250.0, 12 overgeslagen"

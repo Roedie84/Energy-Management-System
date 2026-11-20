@@ -577,3 +577,9 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: melding solar_underperforming 19-11 00:00 (stille uren) en 'Nog niet bepaald': "De laatste 5 dagen liggen structureel 43 procentpunt lager dan de geleerde bias (0.0%), en dat geldt voor élke dag ... vervuiling, een uitgevallen streng". Reeks (`deviation_history`, ruw Solcast) −51,5 / −53,6 / −43,4 / −29,3 / +41,0 %. `get_solar_forecast_health` zag alleen dagen binnen 10 % als tegenbewijs; +41 telde als 'ver ernaast'.
 - Bouw: dagen > 10 % aan de andere kant van de verschuiving (`tegen`) tellen als goede dagen → 'wisselend', geen melding.
 - Verwacht effect: geen valse installatiemelding; euro-effect 0. Meten: geen solar_underperforming met 'élke dag' zolang er een dag van teken wisselt.
+
+## L-EMS-081 · ontdekking: instelknop als 'stekker' gemeld; planning meldt oude verkooprem onder het waardeplan (classificatie/rapportage)
+- Status: **gebouwd v5.250.0** (20-11, dagcontrole; zelf te bouwen: rapportage). Suite 7283 groen, `test_v5250_meldingen_kloppen.py` (7).
+- Onderbouwing: melding 'Ne nieuw apparaat evonden' 19-11 16:01 (verstuurd) voor switch.zolder_beeldherkenning, switch.achtertuin_beeldherkenning, switch.voortuin_deurbel_beeldherkenning (Eufy Lokaal, geen vermogensmeting). quarter_plan_summary 20-11 06:45: verkoop_geblokkeerd=true 'verkoopt op dit moment niet' bij 10 geplande verkoopkwartieren; 19-11 18:00-19:30 werd 4,5 kWh verkocht.
+- Bouw: schakelaar alleen als stekker bij device_class outlet of een power/energy-sensor op hetzelfde apparaat; onder het waardeplan alleen 'geblokkeerd' als het plan wilde verkopen en dat werd tegengehouden.
+- Verwacht effect: geen onterechte apparaatmeldingen; euro-effect 0. Meten: geen ontdekking 'schakelaar of stekker' zonder meting; verkoop_geblokkeerd false zolang het waardeplan verkoopt.

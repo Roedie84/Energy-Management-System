@@ -17,8 +17,8 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 | 4 | Prijsverwachting: wat kost een gemiste keuze (v5.236.0) | 16-11 | Claude | 23-11 | onder ~1,5 ct/kWh -> meting blijft als bewaking, geen modelwerk |
 | 5 | Eindprijs-toets: aangenomen eindprijs tegen echte (v5.239.0) | 18-11 | Claude | 25-11 | marge-regel houden, bijstellen of terugdraaien |
 | 6 | Prijsmodel-variant 'kort' (nu niet gekozen, 4,32 tegen 4,10 ct) | 18-11 | Claude | 09-12 | wint hij niet -> variant eruit |
-| 7 | Deed de accu zelf wat het EMS opdroeg (v5.244.0) | 19-11 | Claude | 26-11 | vrijwel 100 % gevolgd -> Zendure lokaal sturen stopt bij stap a; anders stap b voorstellen |
-| 8 | Repetitie 2027 met het waardeplan (v5.243.0) | 19-11 | Claude 20-11 (eerste cijfers), dagcontrole | 15-12 | oordeel 'klaar voor 2027' of voorstel; rond 31-12 letten op ontbrekende kale prijs |
+| 7 | Deed de accu zelf wat het EMS opdroeg (v5.244.0) | 19-11 | Claude | 26-11 | vrijwel 100 % gevolgd -> Zendure lokaal sturen stopt bij stap a; anders stap b voorstellen. Stand 20-11: 29/31 (93,5 %); beide missers = laden op 93-95 % SoC (afbouw bovenin), dus feitelijk 'kan_niet' |
+| 8 | Repetitie 2027 met het waardeplan (v5.243.0); eerste dag 19-11: laat EUR 0,03 liggen (5,23 tegen best 5,21) | 19-11 | dagcontrole | 15-12 | oordeel 'klaar voor 2027' of voorstel; rond 31-12 letten op ontbrekende kale prijs |
 | 9 | Schaduw-aanwezigheid in HA (mens binnen) | 19-11 | Claude | 03-12 | omschakelen, bijstellen of opruimen (helper, automatisering, schaduwsensor) |
 | 11 | Regelkwaliteit nul op de meter per dag (v5.232.0) | 13-11 | Claude | 27-11 | wijzigingen aan de regeling zijn afgewezen: na twee weken sluiten en de meting eruit, tenzij hij een storing liet zien |
 | 13 | Onderzoek: zijn de oude reserve-regels nog nodig als terugval nu het waardeplan stuurt (monte_carlo_vergelijking, lange_horizon_effect, pv_band_calibration en wat eraan hangt) | 19-11 (akkoord Ruud) | Claude | 26-11 | per onderdeel: blijft als terugval, of voorstel om het eruit te halen; eerst aantonen hoe vaak de terugval nog stuurt |
