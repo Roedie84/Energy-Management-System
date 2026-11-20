@@ -1,3 +1,10 @@
+EMS v5.250.0 - twee meldingen die niet klopten
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- 'Nieuw apparaat gevonden' meldt een schakelaar alleen nog als stekker als het apparaat vermogen of energie meet (de knoppen 'Beeldherkenning' van de camera's gaven 19-11 een onterechte melding).
+- De planning zegt niet meer 'de aansturing verkoopt op dit moment niet' terwijl het waardeplan gewoon verkoopt. De sturing is ongewijzigd.
+
 EMS v5.249.0 - antwoorden op een nieuw apparaat vanaf je telefoon
 
 Installeren: via de Marketplace bijwerken en herstarten.

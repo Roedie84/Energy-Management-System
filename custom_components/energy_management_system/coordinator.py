@@ -23923,7 +23923,15 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         Dezelfde drempel als de rem zelf. Twee drempels voor dezelfde
         beslissing zou betekenen dat de tabel iets anders zegt dan de
         aansturing doet, en dat is precies wat hier gerepareerd wordt.
+
+        v5.250.0: stuurt het waardeplan, dan geldt de oude rem niet (sinds
+        v5.198.0 mag verkocht worden onder de oude reserve). 20-11 06:45 stond
+        hier "verkoopt op dit moment niet" terwijl 19-11 18:00-19:30 en het
+        plan van 20-11 gewoon verkochten. Dan alleen geblokkeerd als het plan
+        wilde verkopen en dat werd tegengehouden (zelfde toets als de melding).
         """
+        if self._plan_volgt_waardeplan():
+            return bool(self._verkoopblokkade_voor_melding())
         return (
             (self.last_plan_shortfall or {}).get("kwartieren", 0)
             >= PLAN_SHORTFALL_ALERT_MIN_QUARTERS
@@ -23933,6 +23941,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         """Waarom de verkoopkolom laat zien wat er niet gebeurt."""
         if not self.verkoop_geblokkeerd_door_tekort():
             return None
+        if self._plan_volgt_waardeplan():
+            return str(self._verkoopblokkade_voor_melding().get("reden") or "")
         return (
             "De aansturing verkoopt op dit moment niet: de planning "
             "voorziet een tekort. Deze kolom laat zien wat er zou gebeuren "

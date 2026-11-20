@@ -177,6 +177,13 @@ def verdwenen(config: dict, aanwezig, tellers: dict | None) -> tuple[list[dict],
     return bevindingen, nieuw
 
 
+def is_stekker(regel: dict, apparaten_met_meting: set) -> bool:
+    """Een schakelaar telt als stekker als hij 'outlet' heet of zijn apparaat vermogen/energie meet (v5.250.0)."""
+    if regel.get("device_class") == "outlet":
+        return True
+    return bool(regel.get("apparaat")) and regel.get("apparaat") in apparaten_met_meting
+
+
 def beoordeel(inventaris: list[dict], config: dict, bekend: list | None) -> dict:
     """Wat is er nieuw sinds de vorige keer?
 
@@ -206,6 +213,12 @@ def beoordeel(inventaris: list[dict], config: dict, bekend: list | None) -> dict
         bekende_apparaten = {r.get("apparaat") for r in inventaris
                              if r.get("apparaat") and str(r.get("entity_id")) in bekend_set}
         ingesteld = {str(config.get(k)) for k in AIRCO_INSTELLINGEN if config.get(k)}
+        # v5.250.0: een schakelaar is pas een 'stekker' als zijn apparaat vermogen of energie meet
+        # (of hij zichzelf 'outlet' noemt). 19-11 kwam 'Nieuw apparaat gevonden' voor drie
+        # instelknoppen 'Beeldherkenning' van de camera's: geen stekker, niets voor het EMS.
+        met_meting = {r.get("apparaat") for r in inventaris
+                      if r.get("apparaat") and str(r.get("entity_id") or "").startswith("sensor.")
+                      and r.get("device_class") in ("power", "energy")}
         for regel in inventaris:
             e = str(regel.get("entity_id") or "")
             if not e or e in bekend_set or e in ingesteld:
@@ -214,6 +227,8 @@ def beoordeel(inventaris: list[dict], config: dict, bekend: list | None) -> dict
             if oordeel is None:
                 continue
             soort, actie, uitleg = oordeel
+            if soort == "schakelaar of stekker" and not is_stekker(regel, met_meting):
+                continue
             if soort in ("thuisaccu", "omvormer of zonnepanelen", "laadpaal") and regel.get("apparaat") in bekende_apparaten:
                 continue
             g = groepen.setdefault((soort, _groepsnaam(regel)), {

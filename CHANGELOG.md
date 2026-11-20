@@ -35918,3 +35918,12 @@ Ruud 19-11 (akkoord op alle vier de keuzes): een nieuwe bewegingssensor of deur-
 - In de leermodus wordt niets geschreven. De sturing zelf is ongewijzigd; alleen wat jij met een knop toevoegt telt daarna mee.
 
 Tests: `test_v5247_ontdekking.py` (+8, samen 30).
+
+## v5.250.0 — twee meldingen die niet klopten (dagcontrole 20-11)
+
+Correcties in rapportage en classificatie; de sturing is ongewijzigd.
+
+- **Nieuw apparaat gevonden:** een schakelaar telt alleen nog als "schakelaar of stekker" als hetzelfde apparaat een vermogens- of energiesensor heeft, of als hij zelf `device_class: outlet` heeft. 19-11 16:01 stuurde het EMS een melding voor drie instelknoppen `switch.*_beeldherkenning` van Eufy Lokaal (camera's zolder, achtertuin, deurbel): geen stekker en niets voor het EMS. Een nieuwe meetstekker wordt nog steeds gemeld (schakelaar én vermogensmeting).
+- **Planningssamenvatting:** `verkoop_geblokkeerd` en `verkoop_blokkade_reden` volgden de oude rem (tekort in de planning, v3.44.0), ook als het waardeplan stuurt. 20-11 06:45 stond er "De aansturing verkoopt op dit moment niet: de planning voorziet een tekort", terwijl de accu 19-11 18:00-19:30 4,5 kWh verkocht en het plan van 20-11 tien verkoopkwartieren heeft. Stuurt het waardeplan, dan geldt de blokkade alleen nog als het plan wilde verkopen en dat werd tegengehouden (dezelfde toets als de melding "Verkopen geet neet", v5.175.0), met die reden erbij. Zonder waardeplan blijft de oude rem.
+
+Tests: `test_v5250_meldingen_kloppen.py` (+7).
