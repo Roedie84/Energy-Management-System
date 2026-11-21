@@ -11,9 +11,8 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 ## Lopende metingen met een besluitdatum
 | # | Meting | Sinds | Wie kijkt | Besluit | Wat er dan gebeurt |
 |---|---|---|---|---|---|
-| 1 | Bewaren voor vrijdag 20-11 (plan hield 55-79 % vast): loonde het? | 18-11 | dagcontrole 21-11 | 21-11 | uitkomst melden; voedt nr. 5 |
 | 2 | Zonverwachting van het plan per uur (v5.237.0); planvoorspelling liep 10 dagen 9,6 tot 13,5 % te hoog | 17-11 | dagcontrole | 24-11 | uren aanwijzen -> voorstel correctie, of sluiten |
-| 3 | Economische schaduw: bewaarmarge 2 ct tegen 0 ct (v5.187.0, 14 dagen vanaf 07-11) | 07-11 | dagcontrole | 21-11 | gelijk aan productie -> schaduw eruit |
+| 3 | Economische schaduw: bewaarmarge 2 ct tegen 0 ct (v5.187.0) | 07-11 | Ruud | voorstel L-EMS-082 (21-11) | 21-11 afgerond: 2 ct kostte € 0,69 in 14 dagen; wacht op akkoord om de schaduw uit de code te halen |
 | 4 | Prijsverwachting: wat kost een gemiste keuze (v5.236.0) | 16-11 | Claude | 23-11 | onder ~1,5 ct/kWh -> meting blijft als bewaking, geen modelwerk |
 | 5 | Eindprijs-toets: aangenomen eindprijs tegen echte (v5.239.0) | 18-11 | Claude | 25-11 | marge-regel houden, bijstellen of terugdraaien |
 | 6 | Prijsmodel-variant 'kort' (nu niet gekozen, 4,32 tegen 4,10 ct) | 18-11 | Claude | 09-12 | wint hij niet -> variant eruit |
@@ -43,6 +42,7 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 ## Afgesloten
 | Meting | Uitkomst |
 |---|---|
+| Bewaren voor vrijdag 20-11 (nr. 1) | 21-11: bewaren 18-11 avond (38,1 ct) en verkopen 19-11 (43,4 ct) loonde, ca. € 0,30; vasthouden voor 20-11 terecht losgelaten (verwachting piek 49,6, werkelijk 44,1). Prijsverwachting te hoog: meegenomen in nr. 5 |
 | P1-regeldoel factor 0,5 (pendelen na een lastsprong) | weekoordeel dagcontrole 18-11: regeloverschot 0,003-0,015 kWh per kwartier tegen 0,045 bij de nulmeting (65 tot 95 % minder), nulregeling niet trager; factor houden. Uitdoven na een sprong niet gemeten. Ruud 19-11: de dagelijkse pendelmeting stopt. DAGCONTROLE: de alinea 'PENDELEN VAN DE ACCUREGELING' in de opdracht niet meer uitvoeren, geen KPI-regels p1_pendel_wh_dag / ems_regeloverschot_huis_kwh_per_kw meer en 'pendelenergie gisteren' niet meer in het eindbericht. De code (pendel_wh_gisteren op de sensor P1 regeldoel) staat er nog: bij de volgende opruimronde nagaan of iets hem leest |
 | Ontlaadrendement een week (H-EMS-23) | 19-11: 99,2 % tegen ~101 % in het plan, onder de grens; geen wijziging |
 | Vervolgmeting accuplan 12 t/m 18-11 | 19-11: 89 % van het optimum; geen voorstel |

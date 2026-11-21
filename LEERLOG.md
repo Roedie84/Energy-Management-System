@@ -444,3 +444,16 @@ laatste ronde: 19-11 06:45, gemeten t/m 19-11 06:45
 - Niet gemeten: SoC-voorspelling, NILM; loslaten woning-eerst niet apart te scheiden (cyclus quitte).
 
 laatste ronde: 20-11 06:45, gemeten t/m 20-11 06:45
+
+## 21-11 06:45 · dagcontrole (20-11 06:45 t/m 21-11 06:45; v5.250.0 geïnstalleerd, geen herstart sinds 20-11 07:07)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, start 100 % eind 25 %, zelfde eindvoorraad): werkelijk € 0,82, optimum € 0,82 (met gemeten laadrendement 78 % € 0,83) → **gemist € 0,00, 0 FOUT, 0 PECH**.
+- 20-11: verkocht 07:15-09:15 (1,27 kW, 41,6-43,8 ct), 10:30, 15:30-16:45 en 18:00-19:00 (43,0-44,1 ct), 7,1 kWh uit de accu gem. 43,0 ct; leeg (11 %) vanaf 19:15, huis van het net 36-42 ct; 03:45-04:45 1,55 kWh geladen (33,8 ct) tot 25 %. Import 17:00-17:30 bij 43,0-43,4 ct met 44 % in de accu die om 18:00 op 43,0 verkocht: < € 0,01.
+- Loslaten woning-eerst: +€ 0,03 (1,35 kWh verkocht 43,09 ct, teruggekocht 40,74 ct). Knop verkopen-uit niet gebruikt.
+- Register nr. 1 afgesloten: bewaren 18-11 avond (gem. 38,1 ct, accu vol) → verkocht 19-11 gem. 43,4 ct: loonde (~5 ct/kWh, ca. € 0,30). Vasthouden voor 20-11 werd op 19-11 terecht losgelaten: verwachting 20-11 gem 42,2 / piek 49,6, werkelijk 38,9 / 44,1 (piek 5,5 ct te hoog) → voedt nr. 5.
+- Register nr. 3 afgesloten met voorstel **L-EMS-082**: schaduw 14 dagen: productie € 34,14, C0 € 34,49, C2 € 34,83 → marges op 0 bevestigd; schaduw uit de code (Ruud beslist).
+- PV-plan 10 d **−0,8 %** (30 d −10,2 %), 20-11 3,06 tegen plan 3,19. Per uur 3 dagen: 10 u (+144 %) en 13 u te laag voorspeld (register nr. 2, 24-11). Verbruik 20-11 10,85 tegen 13,74 verwacht (+27 % te hoog; H-EMS-24 koude dagen: eerste dag de andere kant op). Nacht 1,83 kWh. Brier 7 avonden 0,00.
+- Module 1: 100 % 0,02 V, 0 % 0,04 V, laagste cel 20-11 3,04 (anderen 3,05/3,06), laagste stand 11 % gelijk. Geen drempel.
+- Register nr. 7: 35/35 gevolgd sinds herstart. Nr. 8: 20-11 waardeplan 2027 laat € 0,00 liggen. Storingen: geen (cachewaarschuwingen Zonneplan rond 00:00, bekend). Stilstand 0. Suite 7283 groen. Geen release.
+- Niet gemeten: daghoogste celdelta module 1 (geschiedenis per dag niet eenduidig), SoC-voorspelling, NILM.
+
+laatste ronde: 21-11 06:45, gemeten t/m 21-11 06:45

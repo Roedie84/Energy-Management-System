@@ -583,3 +583,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: melding 'Ne nieuw apparaat evonden' 19-11 16:01 (verstuurd) voor switch.zolder_beeldherkenning, switch.achtertuin_beeldherkenning, switch.voortuin_deurbel_beeldherkenning (Eufy Lokaal, geen vermogensmeting). quarter_plan_summary 20-11 06:45: verkoop_geblokkeerd=true 'verkoopt op dit moment niet' bij 10 geplande verkoopkwartieren; 19-11 18:00-19:30 werd 4,5 kWh verkocht.
 - Bouw: schakelaar alleen als stekker bij device_class outlet of een power/energy-sensor op hetzelfde apparaat; onder het waardeplan alleen 'geblokkeerd' als het plan wilde verkopen en dat werd tegengehouden.
 - Verwacht effect: geen onterechte apparaatmeldingen; euro-effect 0. Meten: geen ontdekking 'schakelaar of stekker' zonder meting; verkoop_geblokkeerd false zolang het waardeplan verkoopt.
+
+## L-EMS-082 · economische schaduw (C2/C0) uit de code: meting afgerond (meetregister nr. 3)
+- Status: **open** (21-11, dagcontrole; raakt de code van een meting: Ruud beslist, meetregister regel d).
+- Onderbouwing: diagnostics economische_schaduw 07 t/m 20-11 (14 dagen, 9 met alle kwartieren): productie (marges 0) € 34,14, C0 € 34,49 (+0,34), C2 bewaarmarge 2 ct € 34,83 (+0,69); volle dagen +0,32 / +0,54. De 2 ct-marge was elke week duurder; het besluit 'marges op 0' (10-11) is bevestigd. De schaduw levert geen nieuwe beslissing meer op.
+- Bouw (na akkoord): economische_schaduw.py, economische_schaduw_sturing.py, de schakelaar, de haken in waardeplan_sturing.py en de diagnose eruit; tests bijwerken. Sturing ongewijzigd.
+- Verwacht effect: minder rekenwerk per kwartier en minder code; € 0.
+- Hoe gemeten: suite groen, rondeduur gelijk of lager, geen ontbrekende entiteiten in cockpit/dashboards.
