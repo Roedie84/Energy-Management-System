@@ -457,3 +457,17 @@ laatste ronde: 20-11 06:45, gemeten t/m 20-11 06:45
 - Niet gemeten: daghoogste celdelta module 1 (geschiedenis per dag niet eenduidig), SoC-voorspelling, NILM.
 
 laatste ronde: 21-11 06:45, gemeten t/m 21-11 06:45
+
+## 22-11 06:45 · dagcontrole (21-11 06:45 t/m 22-11 06:45; v5.250.0 geïnstalleerd, geen herstart sinds 20-11 07:07)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, start 25 % eind 30 %): werkelijk € 1,27, optimum € 1,26 → **gemist € 0,01, 0 FOUT, 0 PECH** (verkoop 1,26 kW gespreid i.p.v. 2,4 kW in de duurste kwartieren). Zonder accu € 1,20.
+- 21-11: ochtendverkoop 08:00-09:00 (0,69 kWh, 40,3-43,2 ct) tot 13 %; netladen 11:19-14:15 gem. 32,9 ct tot 81 % (6,71 kWh AC, laadrendement **85 %** op de Zendure-teller; de kwartier-snapshots gaven 8,07 kWh = te hoog), LP laadt in hetzelfde blok; verkoop 16:30-19:45 3,76 kWh gem. 41,6 ct tot 31 %; 31 % vastgehouden voor vanavond (22-11 17:00-19:15 40,3-41,9 ct): terecht, geen extra cyclus.
+- Regels c: geen verliesverkoop (middagladen → avondverkoop +0,6 ct/kWh, quitte); import 21:30 (1,6 kW, 37,7 ct) met 31 % in de accu: later kwartier is duurder (41,9), dus geen fout; geen lege accu met eerder goedkoper laden; geen onnodig vastgehouden lading.
+- Loslaten woning-eerst: +€ 0,15 (3,76 kWh verkocht 41,61 ct; huis 20:00-06:45 3,03 kWh van het net 36,68 ct). Knop verkopen-uit niet gebruikt.
+- PV-plan 10 d **+1,5 %** (30 d −9,2 %); 21-11 4,26 tegen ochtendverwachting 4,95. Per uur 4 dagen: 10 u +116 %, 13 u +35 %, 15 u −36 % (register nr. 2, 24-11). Snelle correctie 0,95 → 0,84 kWh/d. Verbruik 21-11 8,07 tegen 12,97 verwacht (**+61 % te hoog**, 2e dag op rij te hoog na 4 dagen te laag; H-EMS-24 wisselt van teken: geen structurele richting). Nacht 2,12 kWh.
+- Module 1: 100 % 0,02 V, 0 % 0,04 V (anderen 0,01/0,01), laagste cel 21-11 3,07 (3,07/3,08), laagste stand 13 % gelijk. Geen drempel.
+- Register nr. 7: 80/80 gevolgd sinds herstart (21-11: 49 gevolgd, 7 onbekend). Nr. 8: 21-11 waardeplan 2027 laat € 0,00 liggen (3 dagen € 0,03). Niets op of over de besluitdatum (nr. 4 morgen).
+- Storingen: geen (cachewaarschuwingen Zonneplan rond 00:00, bekend). Eenmalig 21-11 21:09 HA-waarschuwing 'Dagarchief bijwerken duurde 2,4 s' (attributen 40 kB, 812 dagen; lokaal 12 ms per berekening, tweemaal per schrijfbeurt): eenmalig, geen release; volgen.
+- Stilstand 0. Geen release.
+- Niet gemeten: MC-Brier (geen avondmeting opgehaald), daghoogste celdelta module 1, SoC-voorspelling, NILM.
+
+laatste ronde: 22-11 06:45, gemeten t/m 22-11 06:45

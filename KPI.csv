@@ -1638,3 +1638,23 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-21 06:45,DAG,module1_laagste_cel,3.04,1,"20-11 geschiedenis (accu 11 %); 00917 3.05, 02093 3.06"
 2026-11-21 06:45,DAG,module1_soc_laag_afwijking_pct,0,1,"20-11 20:13 laagste stand: module 1 11 %, 00917 11 %, 02093 12 %"
 2026-11-21 06:45,DAG,ems_tests_main,7283,7295,"v5.250.0, 12 overgeslagen"
+2026-11-22 06:45,DAG,ems_achteraf_werkelijk_eur,1.27,96,"21-11 06:45 t/m 22-11 06:45; marginaal (prijs-11,08 ct), slijtage 4,22 ct; start 25 % eind 30 % (optimum met zelfde eindvoorraad)"
+2026-11-22 06:45,DAG,ems_achteraf_optimum_eur,1.26,96,"LP met laadrendement 83,5 %; zelfde laadblok 11:45-13:45, verkoop geconcentreerd in 17:30-19:00"
+2026-11-22 06:45,DAG,ems_achteraf_gemist_eur,0.01,96,"0 fout 0 pech; verkoop 1,26 kW gespreid i.p.v. 2,4 kW in de duurste kwartieren"
+2026-11-22 06:45,DAG,ems_zonder_accu_eur,1.20,96,"zelfde maatstaf, zonder voorraadcorrectie (accu 25 -> 30 %)"
+2026-11-22 06:45,DAG,ems_loslaten_woning_eerst_eur,0.15,1,"21-11 16:30-19:45 3,76 kWh uit accu verkocht gem 41,61 ct; huis 20:00-06:45 3,03 kWh van het net gem 36,68 ct"
+2026-11-22 06:45,DAG,ems_knop_verkopen_uit_eur,0,1,21-11 knop uit
+2026-11-22 06:45,DAG,ems_middagladen_kwh,6.71,1,"21-11 11:19-14:15 netladen gem 32,9 ct, SoC 15 -> 81 %; Zendure-teller 6,71 kWh"
+2026-11-22 06:45,DAG,accu_laadrendement_dag_pct,85,1,"15->81 % = 5,70 kWh SoC / 6,71 kWh AC (Zendure-teller; kwartier-snapshots gaven 8,07 en dus te laag)"
+2026-11-22 06:45,DAG,pv_werkelijk_kwh,4.26,96,"21-11; ochtendverwachting archief 4,95 (-14 %)"
+2026-11-22 06:45,DAG,pv_plan_bias_10d_pct,1.5,10,"plan 27,4 / 27,8 kWh; MAE 0,70 kWh/d (32 %); 30 d -9,2 %; per uur 4 dagen: 10 u +116 %, 13 u +35 %, 11 u +28 %, 15 u -36 %"
+2026-11-22 06:45,DAG,pv_snelle_correctie_fout_kwh_dag,0.84,25,"zonder 0,95; bias -0,52 -> -0,04"
+2026-11-22 06:45,DAG,ems_verbruik_ochtendverwachting_fout_pct,61,1,"21-11 verwacht 12,97 tegen 8,07 kWh (2e dag op rij te hoog: +27/+61, daarvoor 4 dagen te laag)"
+2026-11-22 06:45,DAG,ems_nachtverbruik_kwh,2.12,35,21-11 22:00 - 22-11 06:45 huis
+2026-11-22 06:45,DAG,ems_stilstand_functies,0,0,"geen (nog_niet_bepaald wisselt 4-9; airco-verwachting kort unknown, normaal)"
+2026-11-22 06:45,DAG,zendure_opdrachten_gevolgd_pct,100,80,"80/80 sinds herstart 20-11 07:07 (21-11: 49 gevolgd, 7 onbekend)"
+2026-11-22 06:45,DAG,repetitie_2027_waardeplan_laat_liggen_eur,0.00,96,"21-11: waardeplan 2027 1,51 tegen best 1,52 (afgerond 0); samenvatting 3 dagen 0,03"
+2026-11-22 06:45,DAG,module1_delta_100,0.02,200,soc_buckets mediaan (0.01-0.14); anderen 0.01/0.01
+2026-11-22 06:45,DAG,module1_delta_0,0.04,200,(0.02-0.05); anderen 0.01/0.01
+2026-11-22 06:45,DAG,module1_laagste_cel,3.07,1,"21-11 geschiedenis (accu 13 %); 00917 3.07, 02093 3.08"
+2026-11-22 06:45,DAG,module1_soc_laag_afwijking_pct,0,1,"21-11 laagste stand 13 %; module 1 nu +2 % boven gemiddeld (geen tekort)"
