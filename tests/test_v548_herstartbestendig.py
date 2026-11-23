@@ -214,7 +214,6 @@ def test_sluipverbruik_dagvloer_overleeft_een_herstart(make_coordinator):
 def _proefstand_klaar(c, capaciteit=8.64):
     c._read_sensor_float = lambda *_a, **_k: capaciteit
     c._get_forecast_entries = lambda: []
-    c._dagtype_verschil_kwh = lambda _dag: None
     c.get_wear_cost_overview = lambda: {
         "beschikbaar": True,
         "slijtage_ct_per_kwh": 5.0,

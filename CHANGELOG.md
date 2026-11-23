@@ -35947,3 +35947,48 @@ nooit iets gekregen in 3 dagen*. Terecht. `_leer_reden_afwijkingen`
 Toets: `tests/test_v52501_reden_afwijkingen.py` (dagwissel vult 96
 kwartieren en noteert de meting; de diagnose leert niet mee en bewaart
 geen acties).
+
+## v5.251.0 — tweede prijsbron, stille fouten, opruimen (Ruud 23-11: "Alle 6 akkoord")
+
+**1. Tweede prijsbron (EnergyZero).** Aanleiding: Zonneplan gaf 23-11 vanaf
+11:16 een 500. De bewaarde reeks (v5.113.2) reikt hooguit tot middernacht.
+`reserveprijs.py` (zuiver) + `reserveprijs_sturing.py` (lijm): eens per uur,
+bij een storing elk kwartier, `energyzero.get_energy_prices` (kwartieren,
+incl. btw, vandaag + morgen) op de achtergrond. Uit de LEVENDE Zonneplan-reeks
+wordt per kwartier het verschil geleerd (incl. en excl. belasting; laatste 672
+kwartieren, mediaan). `_forecast_met_cache` vult de bewaarde reeks aan met de
+reserve in Zonneplan-formaat, pas vanaf 96 geleerde kwartieren; bij een
+schatting uit de prijsgeschiedenis gaat de reserve voor. Status in
+`get_prijsbron()["reserve"]` en de diagnose (`reserveprijs`); de terugval heet
+dan "bewaarde reeks + energyzero". Zonder EnergyZero-integratie verandert er
+niets. Stuurt zelf niets.
+
+**2. Economische schaduw verwijderd** (L-EMS-082; afgerond 21-11). Modules
+`economische_schaduw*.py`, sensor, schakelaar, dienst
+`economische_schaduw_resync`, diagnose en de haken in waardeplan en
+kwartierronde. Het opslagbestand (~0,8 MB) wordt bij de start verwijderd. De
+schaduw van de meetlaag (v5.28) blijft.
+
+**3. Opdrachtcontrole**: laden bij SoC >= 80 % waarbij de accu minder hard
+laadt (maar >= 40 % van de opdracht) is `kan_niet` (afbouw bovenin). Alle
+missers van 20-23 november waren zo.
+
+**4. Eindwaarde narekenen** (niet gebouwd): over 125 dagen (juli-november,
+echte prijzen) zou een begrenzing op de bijlaadkosten van de nacht erna 6 keer
+bijten, bovengrens EUR 0,46 in totaal. Te weinig. De afwijking van de
+prijsverwachting zelf volgt uit de eindprijs-toets (meetregister 5, 25-11).
+
+**5. Stille fouten** (aanleiding: `reden_afwijkingen`, v5.250.1).
+`tests/test_v5251_bedrading.py`: elke methode moet in de integratie zelf
+gebruikt worden (op een korte lijst bewuste uitzonderingen na), en elke
+bewaakte meting een aangeroepen vuller hebben. Gevonden en opgelost:
+`noteer_eigen_ingreep` (v4.18) werd door niets aangeroepen - nu bij het aan- en
+uitzetten van de handmatige stand; `_stop_logopvang` (v3.4.0) ook niet - nu
+bij het afsluiten. Verwijderd (ongebruikt): `hoogste_moduletemperatuur_c`,
+`_dagtype_verschil_kwh`, `_dagtype_voortgang`, `gemiste_zonlading`,
+`_deel_nacht_in_uit_verloop`. `_reserve_margin_factor` en `_piekverkoop`
+blijven tot het besluit over de oude reserve-regels (meetregister 13).
+
+**6. Jaarafrekening** direct opnieuw na het opslaan van de instellingen
+(`jaarafrekening_direct_verversen`), ook als hij net aan het rekenen was.
+

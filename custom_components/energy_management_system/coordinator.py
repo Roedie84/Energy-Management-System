@@ -105,7 +105,7 @@ from .accutoestand import AccuToestandMixin
 from .financien import FinancienMixin
 from .coordinator_hulp import (PriceEntry, _nl, accu_is_leeg, demp_soc_stap, effectieve_ondergrens)  # noqa: F401 - re-export
 from .waardeplan_sturing import WaardeplanSturingMixin
-from .economische_schaduw_sturing import EconomischeSchaduwMixin
+from .reserveprijs_sturing import ReserveprijsMixin
 from .verkoop_pauze import VerkoopPauzeMixin
 from .jaarafrekening_sturing import JaarafrekeningMixin
 from .const import (
@@ -1185,7 +1185,7 @@ def _tel_rangorde(paren: list[tuple[float, float]]) -> tuple[int, int]:
     return eens, totaal
 
 
-class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixin, EconomischeSchaduwMixin, JaarafrekeningMixin, FinancienMixin, AccuToestandMixin, UitlegMixin, LegacySturingMixin, KlimaatMixin, NilmMixin):
+class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixin, ReserveprijsMixin, JaarafrekeningMixin, FinancienMixin, AccuToestandMixin, UitlegMixin, LegacySturingMixin, KlimaatMixin, NilmMixin):
     """Runs the control loop that decides the Zendure operation mode."""
 
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
@@ -2685,6 +2685,10 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         # v1.0.4: een geplande, nog niet uitgevoerde opslag zou bij een
         # herstart alsnog verloren gaan - dus hier hard wegschrijven.
         await self.async_save_persisted_state_now()
+        # v5.251.0: de logopvang loskoppelen. _stop_logopvang bestond
+        # sinds v3.4.0 maar niets riep hem aan: na elke herlaadactie hing
+        # er een extra handler aan de logger van de integratie.
+        self._stop_logopvang()
         await self._paneelgrens_vrij_bij_afsluiten()  # v5.186.0 (B19)
         # v5.186.0 (B21/B23): de kwartierronde en de ronde na de opstartfase.
         for opzeggen in (self._unsub_kwartierronde, self._unsub_opstart_einde):
@@ -3513,15 +3517,19 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             bron = self._forecast_uit_geschiedenis()
             cache = {"om": "prijsgeschiedenis"}
             soort = "prijsgeschiedenis (schatting)"
-        self._prijsbron_weg(sensor, soort if bron else "geen")
-        if not bron:
-            return forecast
         nu = dt_util.now()
         nog = []
-        for item in bron:
+        for item in bron or []:
             eind = self._parse_forecast_datetime(item.get("end_date")) if isinstance(item, dict) else None
             if eind is not None and (eind if eind.tzinfo else eind.replace(tzinfo=dt_util.UTC)) > nu:
                 nog.append(item)
+        # v5.251.0: aanvullen met de tweede prijsbron (EnergyZero + geleerde
+        # opslag): de bewaarde reeks reikt hooguit tot middernacht.
+        aangevuld = self.reserveprijs_aanvullen(nog, alleen_schatting=soort.startswith("prijsgeschiedenis"))
+        if self._reserveprijs_in_gebruik:
+            soort = f"{soort if nog else 'geen'} + energyzero"
+            nog = aangevuld
+        self._prijsbron_weg(sensor, soort if nog else "geen")
         if not nog:
             return forecast
         if not self._prijs_uit_cache:
@@ -3608,6 +3616,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             "storingen_7_dagen": len(recent),
             "storingen_7_dagen_minuten": sum(s.get("minuten") or 0 for s in recent),
             "laatste_storingen": list(reversed((self.prijsbron_storingen or [])[-5:])),
+            # v5.251.0: de tweede prijsbron (EnergyZero) en de geleerde opslag.
+            "reserve": self.get_reserveprijs(),
         }
 
     def _prijsbron_aandachtspunt(self, now: datetime | None = None) -> str | None:
@@ -11180,16 +11190,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             return None
         return round(statistics.median(temperaturen), 1)
 
-    def hoogste_moduletemperatuur_c(self) -> float | None:
-        """De warmste module (v4.15). Voor de bescherming, niet voor de
-        veroudering."""
-        temperaturen = [
-            m.get("temperatuur_c")
-            for m in (self.battery_module_live or [])
-            if m.get("temperatuur_c") is not None
-        ]
-        return max(temperaturen) if temperaturen else None
-
     def cycluskosten(
         self, apparaat: str, start: datetime, einde: datetime, kwh: float
     ) -> dict:
@@ -12233,26 +12233,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         }
 
 
-    def _dagtype_verschil_kwh(self, dag) -> float | None:
-        """Hoeveel scheelt het dagtype-profiel met het algemene profiel,
-        over een etmaal? (v1.39.0)"""
-        soort = "weekend" if dag.weekday() >= 5 else "werkdag"
-        totaal = 0.0
-        uren = 0
-        for uur in range(24):
-            reeks = self.daytype_consumption_profile.get(f"{soort}-{uur}") or []
-            # v5.74: mediaan tegen mediaan - de proefstand vergelijkt het
-            # gewone uur per dagtype, geen energiesom.
-            algemeen = self.learned_hourly_median_kw(uur)
-            if len(reeks) < PROEFSTAND_MIN_SAMPLES or algemeen is None:
-                continue
-            totaal += statistics.median(reeks) - algemeen
-            uren += 1
-        if uren < PROEFSTAND_MIN_HOURS:
-            return None
-        return totaal
-
-
     def _onthoud_projectie(self, traject: list[dict], now: datetime) -> None:
         """Wat de projectie VOORAF zei, per uur bewaard (v5.27.1).
 
@@ -12515,12 +12495,22 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 self._leermodus_door_handmatige_stand = False
                 await self.async_set_learning_only(False)
             if vorige:
+                # v5.251.0: het einde van de ingreep vastleggen.
+                self.noteer_eigen_ingreep(None, nu)
                 _LOGGER.info(
                     "Handmatige stand %s uitgezet; de aansturing is weer "
                     "aan EMS.",
                     vorige,
                 )
             return
+
+        # v5.251.0: de ingreep vastleggen (eigen_ingrepen, v4.18). De
+        # functie bestond en was getest, maar niets riep hem aan: de
+        # meting bleef sinds v4.18 leeg.
+        if self.handmatige_stand and self.handmatige_stand != stand:
+            self.noteer_eigen_ingreep(None, nu)
+        if self.handmatige_stand != stand:
+            self.noteer_eigen_ingreep(stand, nu)
 
         # Eén tegelijk: de twee standen sluiten elkaar uit.
         self.handmatige_stand = stand
@@ -13785,33 +13775,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             return 0.0
         return statistics.median(verschillen)
 
-
-    def _dagtype_voortgang(self, uren: int) -> str:
-        """Zeggen waar het aan ligt (v1.45.0).
-
-        Gevraagd: "Nog geen data verzameld?" bij "0 van de 24 uren".
-        Dat laat in het midden of er niets binnenkomt of dat één van de
-        twee dagtypen achterloopt - en dat is juist het antwoord.
-        """
-        dagen = {
-            soort: max(
-                (
-                    len(reeks)
-                    for sleutel, reeks in self.daytype_consumption_profile.items()
-                    if sleutel.startswith(f"{soort}-")
-                ),
-                default=0,
-            )
-            for soort in ("werkdag", "weekend")
-        }
-        achter = min(dagen, key=lambda k: dagen[k])
-        return (
-            f"Werkdagen: {dagen['werkdag']} waarneming(en) per uur, weekend: "
-            f"{dagen['weekend']}. Er zijn er {PROEFSTAND_MIN_SAMPLES} nodig "
-            f"voor beide, en {achter} loopt achter. Een weekend levert twee "
-            f"dagen per week, dus dat is de vertragende kant. "
-            f"({uren} van de 24 uren compleet.)"
-        )
 
     def bruikbare_capaciteit_kwh(self) -> float | None:
         """De capaciteit waar de reserve mee hoort te rekenen (v3.5.0).
@@ -21426,61 +21389,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 "ruil."
             ),
         }
-
-    def gemiste_zonlading(self, datum: str) -> dict:
-        """Hoeveel zon ging er naar het net terwijl de accu ruimte had?
-        (v4.7)
-
-        Gemeld op 9 september: stapelwolken met wind, en de Zendure kan
-        de fluctuatie niet bijbenen. Uit het verloop van 8 september:
-        de zon zakt 767 W en het laadvermogen zakt 1329 W - een regellus
-        die doorschiet. In de slimme stand bepaalt het apparaat zelf hoe
-        hard het laadt.
-
-        Per kwartier: ging er stroom naar het NET, had de accu nog ruimte,
-        en zat hij niet op zijn laadgrens? Dan is wat er naar het net
-        ging - hooguit de resterende laadruimte - opvangbaar geweest.
-        Dat is een BOVENGRENS: het apparaat had de fluctuatie ook
-        handmatig niet perfect gevolgd.
-        """
-        reeks = (self.dagverloop or {}).get(datum) or []
-        capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
-        min_soc = float(self.effective_min_soc_percent())
-        laadgrens_w = abs(
-            self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
-        )
-        kwh = 0.0
-        eur = 0.0
-        kwartieren = 0
-        for r in reeks:
-            net_w = r.get("net_w")
-            soc = r.get("soc")
-            accu_w = r.get("accu_w")
-            if net_w is None or soc is None or accu_w is None:
-                continue
-            naar_het_net = -net_w
-            # v1.0.1: alleen bij ZON en boven de regelruis. Zonder deze
-            # twee telde de -40 W die 's nachts naar het net gaat mee -
-            # 505 kwartieren in zeven dagen, achttien uur per dag.
-            if naar_het_net < ZONLADING_MIN_EXPORT_W or (r.get("pv_w") or 0) <= 0:
-                continue
-            ruimte_kwh = max(0.0, (100.0 - soc) / max(1.0, 100.0 - min_soc) * capaciteit)
-            if ruimte_kwh <= 0.05:
-                continue
-            laadruimte_w = max(0.0, laadgrens_w - max(0.0, -accu_w))
-            if laadruimte_w <= 50:
-                continue
-            opvangbaar_w = min(naar_het_net, laadruimte_w)
-            deel = min(opvangbaar_w / 4000, ruimte_kwh)
-            if deel <= 0:
-                continue
-            kwh += deel
-            prijs = r.get("prijs_ct")
-            if prijs is not None:
-                eur += deel * prijs / 100
-            kwartieren += 1
-        return {"kwh": round(kwh, 2), "eur": round(eur, 2), "kwartieren": kwartieren}
-
 
     def _leg_pv_bandbreedte_vast(self, dag) -> None:
         """Legt vast waar de werkelijke opwek in de band viel (v2.8.0).
@@ -30060,23 +29968,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         if not vol and economisch:
             return TEKORTSOORT_ECONOMISCH
         return TEKORTSOORT_PLANNING
-
-    @classmethod
-    def _deel_nacht_in_uit_verloop(
-        cls,
-        rijen: list,
-        vol_grens: float,
-        rendement: float | None,
-        slijtage_ct: float | None,
-        verschuiving_w: float = 0.0,
-    ) -> str | None:
-        """Een tekortnacht achteraf indelen uit het dagverloop (v5.41).
-
-        Alleen de soort; zie `_deel_nacht_in_met_reden`.
-        """
-        return cls._deel_nacht_in_met_reden(
-            rijen, vol_grens, rendement, slijtage_ct, verschuiving_w
-        )[0]
 
     @staticmethod
     def _verkocht_uit_verloop(rijen: list, verschuiving_w: float) -> tuple[float, float | None]:
@@ -41722,8 +41613,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         laag = self._meetlaag_object()
         if laag is not None:
             laag.kwartiergrens(now)
-        # v5.187.0: daarna het vorige kwartier van de economische schaduw afrekenen.
-        self._economische_schaduw_kwartier(now, laag)
+        # v5.251.0: de reserveprijzen (EnergyZero) bijhouden, op de achtergrond.
+        self._bewaak_stap("reserveprijs", lambda: self._reserveprijs_kwartier(now))
         # v5.188.0: eens per uur de jaarafrekening verversen (achtergrond, alleen lezen).
         self._bewaak_stap("jaarafrekening_start", lambda: self._jaarafrekening_kwartier(now))
 

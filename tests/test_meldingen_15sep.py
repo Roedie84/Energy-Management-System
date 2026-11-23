@@ -82,7 +82,6 @@ def test_de_veroudering_rekent_met_de_mediaan(make_coordinator, hass):
     ]
 
     assert c.celtemperatuur_voor_veroudering_c() == 27.0
-    assert c.hoogste_moduletemperatuur_c() == 35.0
 
 
 def test_met_een_module_blijft_het_die_ene(make_coordinator, hass):

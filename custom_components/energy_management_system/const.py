@@ -3795,6 +3795,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "eindprijs_toets": {"type": "plain"},
     # v5.113.2: de laatste prijsreeks, voor een storing bij de prijsbron.
     "prijs_forecast_cache": {"type": "plain"},
+    # v5.251.0: tweede prijsbron (EnergyZero) en de geleerde opslag.
+    "reserveprijs": {"type": "plain"},
+    "reserveprijs_verschillen": {"type": "plain"},
     # v5.116.0: storingen van de prijsbron en het begin van een lopende.
     "prijsbron_storingen": {"type": "plain"},
     "_prijsbron_weg_sinds": {"type": "plain"},

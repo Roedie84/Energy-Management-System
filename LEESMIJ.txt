@@ -1,3 +1,15 @@
+EMS v5.251.0 - tweede prijsbron, stille fouten opgespoord, opgeruimd
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Tweede prijsbron: valt Zonneplan uit, dan vult het EMS de bewaarde prijzen aan met EnergyZero (beursprijs + de opslag die het zelf leert uit de kwartieren waarvoor beide bronnen een prijs hebben). Pas na 96 geleerde kwartieren. De EnergyZero-integratie is in HA toegevoegd.
+- Handmatige standen (laden / smart) worden weer vastgelegd (eigen_ingrepen); dat gebeurde sinds v4.18 niet.
+- Bij herladen van de integratie blijft er geen extra log-opvang meer hangen.
+- Nieuwe toets: elke functie in de integratie moet ook ergens gebruikt worden, en elke bewaakte meting moet een aangeroepen vuller hebben. Vier ongebruikte hulpfuncties zijn verwijderd.
+- Opdrachtcontrole: laden boven 80 % waarbij de accu zelf afbouwt telt als 'kan niet' in plaats van 'niet gevolgd'.
+- Economische schaduw (afgerond 21-11: 2 ct kostte EUR 0,69 in 14 dagen) is uit de code: sensor, schakelaar, dienst en het tabblad Schaduw in de cockpit. Het opslagbestand wordt bij de start opgeruimd.
+- Jaarafrekening: na een wijziging van de instellingen meteen opnieuw berekend (was tot een uur).
+
 EMS v5.250.1 - reden_afwijkingen leert weer
 
 Installeren: via de Marketplace bijwerken en herstarten.

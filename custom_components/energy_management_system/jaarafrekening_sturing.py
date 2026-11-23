@@ -200,6 +200,15 @@ class JaarafrekeningMixin:
         self._jaarafrekening_ververst = now
         maker(self._async_jaarafrekening_ververs(start, now), "ems_jaarafrekening")
 
+    def jaarafrekening_direct_verversen(self, now: datetime | None = None) -> None:
+        """v5.251.0: na een wijziging van de instellingen meteen opnieuw rekenen
+        (Ruud 17-11: een nieuw termijnbedrag stond tot een uur niet in de kaart)."""
+        if self._jaarafrekening_bezig:
+            self._jaarafrekening_nog_eens = True
+            return
+        self._jaarafrekening_ververst = None
+        self._jaarafrekening_kwartier(now or dt_util.now())
+
     async def _async_jaarafrekening_ververs(self, start: date, now: datetime) -> None:
         try:
             ids = {veld: self.config.get(sleutel) for veld, sleutel in BRONNEN.items() if self.config.get(sleutel)}
@@ -217,6 +226,9 @@ class JaarafrekeningMixin:
             self._jaarafrekening_status = "fout bij berekenen"
         finally:
             self._jaarafrekening_bezig = False
+            # v5.251.0: kwam er een wijziging van de instellingen tijdens het rekenen
+            if self.__dict__.pop("_jaarafrekening_nog_eens", False):
+                self.jaarafrekening_direct_verversen()
 
     async def _async_jaarafrekening_statistiek(self, van: datetime, ids: set) -> dict:
         if not ids:

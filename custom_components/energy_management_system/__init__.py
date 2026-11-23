@@ -95,7 +95,6 @@ EIGEN_SERVICES = (
     SERVICE_VRAAG,
     "confirm_water_source",
     "accumodule_melding",
-    "economische_schaduw_resync",
     "profiel_ronde",
 )
 
@@ -216,10 +215,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(hass.bus.async_listen("mobile_app_notification_action", _ontdekking_actie))
     _async_register_nilm_services(hass)
     _async_register_module_service(hass)
-    _async_register_schaduw_service(hass)
+    # v5.251.0: de economische schaduw (v5.187.0) is afgerond en uit de code;
+    # het opslagbestand (~0,8 MB) eenmalig opruimen.
+    hass.async_create_background_task(_ruim_schaduwopslag_op(hass), "ems_schaduwopslag_opruimen")
     _async_register_profiel_service(hass)
 
     return True
+
+
+async def _ruim_schaduwopslag_op(hass: HomeAssistant) -> None:
+    from homeassistant.helpers.storage import Store
+
+    try:
+        await Store(hass, 1, "energy_management_system.economische_schaduw").async_remove()
+    except Exception:  # noqa: BLE001 - opruimen mag de start nooit raken
+        _LOGGER.debug("Opslag economische schaduw niet verwijderd", exc_info=True)
 
 
 def _async_register_profiel_service(hass: HomeAssistant) -> None:
@@ -236,22 +246,6 @@ def _async_register_profiel_service(hass: HomeAssistant) -> None:
 
     hass.services.async_register(DOMAIN, "profiel_ronde", _handle, schema=vol.Schema({}))
 
-
-def _async_register_schaduw_service(hass: HomeAssistant) -> None:
-    """v5.187.0: de virtuele accu's van de economische schaduw terug op de
-    echte inhoud (handmatig; standaard niet automatisch, anders verdwijnt het
-    verschil dat gemeten moet worden)."""
-    if hass.services.has_service(DOMAIN, "economische_schaduw_resync"):
-        return
-
-    async def _handle(call: ServiceCall) -> None:
-        for key, value in hass.data.get(DOMAIN, {}).items():
-            if isinstance(key, str) and key.endswith("_solar_tracker"):
-                continue
-            if hasattr(value, "economische_schaduw_resync"):
-                value.economische_schaduw_resync()
-
-    hass.services.async_register(DOMAIN, "economische_schaduw_resync", _handle, schema=vol.Schema({}))
 
 
 def _async_register_module_service(hass: HomeAssistant) -> None:
@@ -452,6 +446,11 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     solar_tracker.config = {**entry.data, **entry.options}
 
     await coordinator.async_update()
+    # v5.251.0: de jaarafrekening niet pas na een uur met de nieuwe instellingen.
+    try:
+        coordinator.jaarafrekening_direct_verversen()
+    except Exception:  # noqa: BLE001 - verversen mag het opslaan nooit raken
+        _LOGGER.debug("Jaarafrekening niet direct ververst", exc_info=True)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

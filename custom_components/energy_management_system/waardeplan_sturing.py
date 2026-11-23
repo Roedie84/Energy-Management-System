@@ -554,10 +554,6 @@ class WaardeplanSturingMixin:
         if "uitkomst" in voor:
             return voor["uitkomst"]
         res = waardeplan_mod.plan(voor["kwartieren"], voor["accu"])
-        # v5.189.1: ook hier de schaduwhaak. In de ronde vraagt `_secundaire_laag`
-        # het plan vaak eerst synchroon op; dat vulde de cache en de schaduw
-        # (alleen in het async pad) plande dan nooit (live 05-11 18:30 - 07-11).
-        self._economische_schaduw_na_plan(now, voor, res)
         return self._waardeplan_afronden(now, voor, res)
 
     async def _async_bereken_waardeplan(self, now: datetime, entries) -> dict:
@@ -579,9 +575,6 @@ class WaardeplanSturingMixin:
             res = waardeplan_mod.plan(voor["kwartieren"], voor["accu"])
         else:
             res = await uitvoeren(waardeplan_mod.plan, voor["kwartieren"], voor["accu"])
-        # v5.187.0: de economische schaduw krijgt een kopie van deze invoer
-        # (alleen bij het eerste plan van het kwartier); productie wacht er niet op.
-        self._economische_schaduw_na_plan(now, voor, res)
         return self._waardeplan_afronden(now, voor, res)
 
     def _waardeplan_invoer(self, now: datetime, entries) -> dict:
@@ -1313,8 +1306,6 @@ class WaardeplanSturingMixin:
         if self._STAND_VAN_ACTIE.get(actie, actie) == self._STAND_VAN_ACTIE.get(oud_actie, oud_actie):
             return None
         reden = self._midkwartier_wissel_reden(now, plan, oud, oud_actie)
-        # v5.187.0 (plantoets 7): alleen noteren voor de economische schaduw.
-        self._schaduw_midkwartier(now, plan, oud, reden)
         plan["midkwartier"] = {
             "actie_plan": actie,
             "actie_dit_kwartier": oud_actie,

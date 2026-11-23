@@ -12,7 +12,9 @@ zendure_lokaal, elke 2 s). Vier uitkomsten:
 
     gevolgd        het gemeten vermogen ligt binnen de marge
     niet_gevolgd   de accu doet iets anders
-    kan_niet       de accu is vol (laden) of leeg (ontladen): geen oordeel
+    kan_niet       de accu is vol (laden) of leeg (ontladen): geen oordeel;
+                   ook laden boven AFBOUW_SOC als hij minder hard laadt
+                   (v5.251.0: de accu bouwt bovenin zelf af)
     onbekend       geen verse eigen lezing
 
 Zuivere functies; schrijft nergens naar de accu.
@@ -29,6 +31,12 @@ MAX_LEEFTIJD_S = 15.0
 MIN_OPDRACHT_W = 100.0
 #: Zoveel procent van de grens af telt de accu als vol of leeg.
 GRENSMARGE_PROCENT = 1.0
+#: v5.251.0: boven deze SoC bouwt de accu het laadvermogen zelf af. Alle
+#: missers van 20-23 november waren laden bij 83-98 % (gemeten 1,29-1,99 kW
+#: tegen 1,95-2,4 kW opgedragen, dalend met de SoC). Telt als kan_niet zolang
+#: hij nog minstens AFBOUW_MIN_FRACTIE van de opdracht laadt.
+AFBOUW_SOC = 80.0
+AFBOUW_MIN_FRACTIE = 0.4
 LAATSTE_AFWIJKINGEN = 10
 DAGEN = 30
 
@@ -50,6 +58,9 @@ def beoordeel(verwacht_w, gemeten_w, leeftijd_s=None, soc=None, ondergrens=None,
         return "gevolgd"
     if soc is not None:
         if verwacht < 0 and bovengrens is not None and float(soc) >= float(bovengrens) - GRENSMARGE_PROCENT:
+            return "kan_niet"
+        if verwacht < 0 and float(soc) >= AFBOUW_SOC and gemeten < 0 \
+                and abs(gemeten) >= AFBOUW_MIN_FRACTIE * abs(verwacht) and abs(gemeten) < abs(verwacht):
             return "kan_niet"
         if verwacht > 0 and ondergrens is not None and float(soc) <= float(ondergrens) + GRENSMARGE_PROCENT:
             return "kan_niet"

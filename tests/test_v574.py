@@ -206,11 +206,6 @@ def test_monte_carlo_centrum_volgt_het_gemiddelde(make_coordinator):
     assert centrum[0][0] == pytest.approx(0.32)
 
 
-def test_de_dagtype_proefstand_vergelijkt_mediaan_met_mediaan(make_coordinator):
-    bron = Path(mod.__file__).read_text()
-    assert "algemeen = self.learned_hourly_median_kw(uur)" in bron
-
-
 # --- 3. sluipverbruik ----------------------------------------------------
 
 
