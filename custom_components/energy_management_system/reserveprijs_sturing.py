@@ -70,13 +70,26 @@ class ReserveprijsMixin:
     async def _async_reserveprijs_halen(self, entry_id: str, now: datetime) -> None:
         try:
             begin = dt_util.as_local(now).replace(hour=0, minute=0, second=0, microsecond=0)
-            eind = begin + timedelta(days=2)
-            antwoord = await self.hass.services.async_call(
-                RESERVE_DOMEIN, "get_energy_prices",
-                {"config_entry": entry_id, "incl_vat": True, "interval": "quarter",
-                 "start": begin.strftime("%Y-%m-%d %H:%M:%S"), "end": eind.strftime("%Y-%m-%d %H:%M:%S")},
-                blocking=True, return_response=True,
-            )
+            # v5.251.1: per dag vragen, tot 23:59. Een vraag die morgen raakt
+            # terwijl die prijzen er nog niet zijn, wordt in zijn geheel
+            # geweigerd ("No price data available"); ook een eind op 00:00
+            # telt als de volgende dag. Morgen is dus een losse, vrijblijvende vraag.
+            antwoord = {"prices": []}
+            for dag in (0, 1):
+                van = begin + timedelta(days=dag)
+                try:
+                    deel = await self.hass.services.async_call(
+                        RESERVE_DOMEIN, "get_energy_prices",
+                        {"config_entry": entry_id, "incl_vat": True, "interval": "quarter",
+                         "start": van.strftime("%Y-%m-%d %H:%M:%S"),
+                         "end": van.strftime("%Y-%m-%d 23:59:00")},
+                        blocking=True, return_response=True,
+                    )
+                except Exception:  # noqa: BLE001
+                    if dag == 0:
+                        raise
+                    break       # morgen is nog niet gepubliceerd
+                antwoord["prices"].extend((deel or {}).get("prices") or [])
             reeks = rp.lees_energyzero(antwoord)
             if reeks:
                 self.reserveprijs = {"om": dt_util.now().isoformat(), "reeks": reeks}

@@ -35992,3 +35992,11 @@ blijven tot het besluit over de oude reserve-regels (meetregister 13).
 **6. Jaarafrekening** direct opnieuw na het opslaan van de instellingen
 (`jaarafrekening_direct_verversen`), ook als hij net aan het rekenen was.
 
+
+## v5.251.1 — de tweede prijsbron haalde niets op (nagekeken 23-11 12:18)
+
+Na de herstart op v5.251.0 bleef `reserveprijs` leeg (fout in de diagnose).
+Met de hand nagevraagd: `energyzero.get_energy_prices` weigert de hele vraag
+met "No price data available for <morgen>" zodra het bereik morgen raakt en
+die prijzen nog niet gepubliceerd zijn - ook bij een eind op 00:00. Nu een
+vraag per dag (tot 23:59); vandaag moet lukken, morgen mag mislukken.

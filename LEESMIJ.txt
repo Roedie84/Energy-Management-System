@@ -1,3 +1,9 @@
+EMS v5.251.1 - tweede prijsbron haalde niets op
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- EnergyZero weigert een vraag die de prijzen van morgen raakt zolang die er nog niet zijn; de vraag van v5.251.0 (vandaag + morgen in een keer) mislukte daardoor. Nu per dag; morgen is vrijblijvend.
+
 EMS v5.251.0 - tweede prijsbron, stille fouten opgespoord, opgeruimd
 
 Installeren: via de Marketplace bijwerken en herstarten.

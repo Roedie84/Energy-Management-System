@@ -102,10 +102,15 @@ async def test_ophalen_vraagt_kwartieren_en_leert_van_de_levende_reeks(make_coor
     c = make_coordinator({"price_sensor_entity": "sensor.zonneplan"})
     gevraagd = {}
 
+    vragen = []
+
     async def _roep(domein, dienst, data, blocking, return_response):
+        vragen.append(data)
+        if len(vragen) == 2:
+            raise RuntimeError("No price data available for morgen")   # v5.251.1
         gevraagd.update(data)
         gevraagd["domein"], gevraagd["dienst"] = domein, dienst
-        return {"prices": [{"price": r["prijs"], "start": r["start"], "end": r["eind"]} for r in _ez(48)]}
+        return {"prices": [{"price": r["prijs"], "start": r["start"], "end": r["eind"]} for r in _ez(24)]}
 
     c.hass.services = SimpleNamespace(async_call=_roep)
     c.hass.states.get = lambda e: SimpleNamespace(attributes={"forecast": _zonneplan(192)}) \
@@ -117,5 +122,8 @@ async def test_ophalen_vraagt_kwartieren_en_leert_van_de_levende_reeks(make_coor
     assert c._reserveprijs_fout is None, c._reserveprijs_fout
     assert gevraagd["domein"] == "energyzero" and gevraagd["interval"] == "quarter"
     assert gevraagd["config_entry"] == "abc" and gevraagd["incl_vat"] is True
-    assert c.get_reserveprijs()["opslag"]["kwartieren"] == 192
+    assert c.get_reserveprijs()["opslag"]["kwartieren"] == 96
+    # v5.251.1: per dag gevraagd, tot 23:59; morgen mag mislukken
+    assert len(vragen) == 2 and gevraagd["end"].endswith("23:59:00")
+    assert gevraagd["start"][:10] == gevraagd["end"][:10]
     assert c._reserveprijs_bezig is False
