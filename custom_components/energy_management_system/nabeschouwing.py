@@ -347,6 +347,10 @@ def nabeschouwing(
         },
         "grootste_verschillen": verschillen[:8],
         "per_dagdeel": per_dagdeel,
+        # v5.250.1: de acties van de beste planning per kwartier, voor
+        # reden_afwijkingen. De coordinator haalt ze eruit voor hij de
+        # nabeschouwing bewaart (96 regels per dag is te veel opslag).
+        "acties": beste["acties"],
         "toelichting": (
             (
                 "Best mogelijk mag uit het net laden, net als de integratie zelf "

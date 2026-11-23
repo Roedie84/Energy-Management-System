@@ -24476,7 +24476,9 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 gevuld += 1
         return gevuld
 
-    def get_nabeschouwing(self, datum: str | None = None) -> dict:
+    def get_nabeschouwing(
+        self, datum: str | None = None, leren: bool = False
+    ) -> dict:
         """Wat had de accu die dag het best kunnen doen, en wat deed ze?
         (v3.99.19) Zie nabeschouwing.py. Standaard de laatste volledige
         dag in het verloop."""
@@ -24570,7 +24572,13 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         uit["handmatige_kwartieren"] = handmatig
         # v4.22: de kWh-afwijking per reden, uit dezelfde planning die de
         # nabeschouwing net heeft gemaakt. Geen tweede berekening.
-        self._leer_reden_afwijkingen(datum, kwartieren, uit)
+        # v5.250.1: alleen leren bij de dagwissel (leren=True). De
+        # diagnose roept deze functie ook aan; dat mag niet dubbel tellen.
+        # Tot v5.250.0 stonden de acties niet in de uitkomst, dus leerde
+        # reden_afwijkingen sinds v4.22 nooit iets.
+        if leren:
+            self._leer_reden_afwijkingen(datum, kwartieren, uit)
+        uit.pop("acties", None)
         if handmatig:
             uit["let_op"] = (
                 f"{handmatig} van de {len(kwartieren)} kwartieren zijn met de hand "
@@ -24582,7 +24590,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
     def _sluit_dag_af_met_nabeschouwing(self, gisteren: str) -> None:
         """Bij dagwissel: de nabeschouwing van gisteren bewaren."""
         try:
-            uit = self.get_nabeschouwing(gisteren)
+            uit = self.get_nabeschouwing(gisteren, leren=True)
         except Exception as fout:  # noqa: BLE001
             uit = {"te_becijferen": False, "reden": f"{type(fout).__name__}: {fout}"}
         self.nabeschouwingen.append(uit)

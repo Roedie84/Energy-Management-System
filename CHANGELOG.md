@@ -35927,3 +35927,23 @@ Correcties in rapportage en classificatie; de sturing is ongewijzigd.
 - **Planningssamenvatting:** `verkoop_geblokkeerd` en `verkoop_blokkade_reden` volgden de oude rem (tekort in de planning, v3.44.0), ook als het waardeplan stuurt. 20-11 06:45 stond er "De aansturing verkoopt op dit moment niet: de planning voorziet een tekort", terwijl de accu 19-11 18:00-19:30 4,5 kWh verkocht en het plan van 20-11 tien verkoopkwartieren heeft. Stuurt het waardeplan, dan geldt de blokkade alleen nog als het plan wilde verkopen en dat werd tegengehouden (dezelfde toets als de melding "Verkopen geet neet", v5.175.0), met die reden erbij. Zonder waardeplan blijft de oude rem.
 
 Tests: `test_v5250_meldingen_kloppen.py` (+7).
+
+## v5.250.1 — reden_afwijkingen kreeg nooit iets (cockpit 23-11)
+
+De stilstandcontrole meldde in de cockpit: *reden_afwijkingen heeft nog
+nooit iets gekregen in 3 dagen*. Terecht. `_leer_reden_afwijkingen`
+(v4.22) leest `uit["acties"]`, maar `nabeschouwing()` gaf die niet terug
+- alleen `beste_planning()` intern. Dus stopte het leren altijd bij
+`if not acties`, sinds v4.22.
+
+- `nabeschouwing()` geeft nu `acties` van de beste planning mee.
+- `get_nabeschouwing(..., leren=False)`: alleen de dagwissel leert
+  (`leren=True`). De diagnose roept de functie ook aan en mag niet dubbel
+  tellen.
+- De acties worden uit de uitkomst gehaald vóór die bewaard wordt (96
+  regels per dag is te veel opslag).
+- Sturing ongewijzigd; het is een meting.
+
+Toets: `tests/test_v52501_reden_afwijkingen.py` (dagwissel vult 96
+kwartieren en noteert de meting; de diagnose leert niet mee en bewaart
+geen acties).

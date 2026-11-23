@@ -1,3 +1,10 @@
+EMS v5.250.1 - reden_afwijkingen leert weer
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- De cockpit meldde 'reden_afwijkingen heeft nog nooit iets gekregen'. Klopt: de nabeschouwing gaf de acties van de beste planning niet door, dus deze meting (sinds v4.22) bleef altijd leeg. Nu vult de dagwissel hem; de melding verdwijnt na de eerste dagwissel na de herstart.
+- De diagnose telt niet mee (anders dubbel). De sturing is ongewijzigd.
+
 EMS v5.250.0 - twee meldingen die niet klopten
 
 Installeren: via de Marketplace bijwerken en herstarten.
