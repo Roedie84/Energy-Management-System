@@ -205,46 +205,14 @@ Doorlopende leerronde (elke 4 uur). Alleen gemeten getallen; KPI's in KPI.csv, r
 - Harde regel 0× onder de reserve. Nacht 03→04 tekort 1,646 kWh (tekortdag). Zon 6,62 kWh (Solcast −9,0 %). Koken sinds v5.184.1 gevolgd, regeloverschot 0,145 kWh (P1-dips bij aan/uit kookplaat).
 - L-EMS-057 geverifieerd (airco 'niets' 's nachts); nieuw L-EMS-063 (ochtend 'verwarmen'), L-EMS-066 (eerste planrij midden in kwartier), L-EMS-067 (laadplan-historie); H-EMS-18: netlaadplan springt na 7/7 herstarts.
 
-## 05-11 09:15 · dagcontrole (vanaf nu de enige ronde)
-- Draait v5.187.0, HACS gelijk (herstart 08:28). Herstarts sinds de vorige ronde: 20:15, 20:20, 21:51, 08:28. Fouten EMS 0; koppelingen 74/74. **KNMI `weather.forecast_thuis`** viel drie keer ~35 min weg (23:55, 06:14, 08:20), telkens een telefoonmelding, nu weer terug; sturing niet geraakt.
-- **Terugkijken 04-11 00:00 - 05-11 09:00 (132 kwartieren):** werkelijk € 4,01, LP-optimum € 3,69 → **gemist € 0,32** (zonder verkoop € 0,22). Niet voor rekening van de sturing: verkoop niet door reserve € 0,10, bewaarmarge 5 ct ~€ 0,09. **1 FOUT, € 0,01:** 16:45 0,82 kWh net bij 50,6 ct met SoC 40 %, stand 'houden', koken; v5.184.1 lost dit op (zie 19:40). PECH € 0,12: verbruik 12,28 tegen 9,35 verwacht.
-- Beslissingen: laden 06:00 en 05:45 goed (32,5/34,9 ct); ontladen 17-20 uur goed, gemiddeld 48,2 ct; 15:15-16:15 0,84 kWh bij 41-47 ct terwijl net vanaf 20:15 44-48 ct kostte: bewaarmarge, geen fout (€ 0,05, valt in de schaduwmeting). Netladen 10:15 en 13:36 na herstarts ~0,35 kWh bij 37 ct, plansprong H-EMS-18, geen schade. Leermodus 11:22-12:48: kosteloos, net was 35-37 ct.
-- **Harde regel: 0× onder de reserve**, verkoop 0. Vlag `huis_gaat_voor` 04-11 wel **geschonden** door regeloverschot 0,159 kWh (grens 0,1), 05-11 0,048 t/m 09:18. Rimpel op P1 tijdens ontladen; export 15-22 uur 0,20 kWh. Keuze voor Ruud → **L-EMS-069**.
-- **Stopjes uit de kaart van 21:10:** 06:30-08:15 ononderbroken 'huis' (n=1 ochtend, sinds v5.186.0); avond volgt.
-- **Tekortnacht 04→05 2,99 kWh** (accu leeg sinds 20:15), import 22-09 bij gem. 37,3 ct. LP haalt hier weinig uit. Soort komt om middernacht. MC 22:00 78,7 %, **uitslag vannacht** (Brier nu 0,25, n=4).
-- PV 04-11 **6,62** (dagarchief 6,05 → +9,4 %; tracker 4,82 → +37,3 %). 7 d MAE/bias **34,4/−15,4**, 14 d 23,0/−11,7, 30 d 20,3/−14,4. Verbruik 7 d **+1,05** (MAE 1,86). Nabeschouwing 7 d 63,2 %, planvolging 7 d 68,9 %, twin 0,568. Rendement 84,0 %. NILM 38/52 volgroeid. Geplande laaduren vandaag 11:45-14:15 bij 37 ct naast 05:00-05:30 bij 35-36 ct: past bij bewaarkost 0,2 ct/u, niet gemeten.
-- **Gebouwd v5.187.1** (suite 7374 groen): L-EMS-067 (24 uur laadplanwijzigingen op `diagnose_sturing`) en de temperatuurnotitie: "te weinig (7/4)" was vals, het model weigert omdat de helling positief is (+2,1 W/°C) bij 3,2 °C onder het gemeten bereik. Sturing ongewijzigd.
-- **L-EMS-066 opgelost** via v5.186.0: 09:15-rij accu −137 + zon 368 = huis 232 W, net 0, midden in het kwartier. **L-EMS-050 valt tegen:** sinds v5.159.0 één paar uit het vaste venster in 3 nachten (3,2 °C, 9 u); nachten met herstart missen hun paar (vermoeden, niet getoetst).
-- Stilstand: **geen echte** (10 wachten, 0 doen). Airco 'niets', knop uit → rekent. Schaduw start 08:29, state unknown tot eerste dag af: normaal.
-- Niet gemeten: PV en verbruik per uur (uurvoorspelling niet in de recorder), SoC-voorspelling per kwartier, plan op 05:45 (attribuut niet bewaard; L-EMS-067 dekt dit vanaf nu).
-- Hypotheses: H-EMS-2 (PV te hoog), H-EMS-15 (tekortsoort), H-EMS-18 (plan springt na herstart; 08:30 'opstartfase'). H-EMS-14 geparkeerd.
+## 05-11 · samenvatting dag (dagcontrole 09:15; ingekort na 14 dagen)
+- v5.187.0; gemist € 0,32 (0 FOUT); tekortnacht 04→05 2,99 kWh; KNMI 3× ~35 min weg; gebouwd v5.187.1 (L-EMS-067, temperatuurnotitie). PV 7 d bias −15,4 %.
 
-laatste ronde: 05-11 09:15, gemeten t/m 05-11 09:18
+## 07-11 · samenvatting dag (dagcontrole 09:15; ingekort na 14 dagen)
+- v5.188.0 (v5.189.0 klaar); gemist € 0,54 (0 FOUT); 3.178× 'state > 255 tekens' en schaduw vast → v5.189.1. PV 06-11 −20,9 %; H-EMS-19 (middernacht-zon).
 
-## 07-11 09:15 · dagcontrole (06-11 en nacht tot 07-11 09:00; de ronde van 06-11 schreef niets in het leerlog)
-- Draait **v5.188.0**; v5.189.0 (06-11, L-EMS-068/069) staat klaar maar was in de Marketplace niet zichtbaar (update-entiteit zag 5.188.0). Geen herstart sinds 05-11 18:26. Fouten EMS: **3.178× 'state > 255 tekens'** op model_en_parameternauwkeurigheid (sinds 06-11 08:20, sensor unknown) → v5.189.1. Zonneplan-kostensensoren 00:00 even onbeschikbaar (cache, geen invloed).
-- **Terugkijken 132 kwartieren:** werkelijk € 3,70, LP-optimum € 3,16 → **gemist € 0,54**; zonder accuverkoop € 3,36 (**€ 0,33**). **0 FOUT.** € 0,20 = verkopen in de avond en 's nachts het net op (regel 'woning eerst', bewust). € 0,33 = 's nachts 3,4 kWh extra laden bij 39-40 ct en de zon van 09-11 u (41-51 ct) terugleveren i.p.v. opslaan; afweging bewaarmarge 5 ct + onzekerheid 0,2 ct/u (schaduw meet dit) en zon −20,9 % (Solcast 9,26 / gemeten 7,33): PECH. 07-11 08:00-08:15 0,57 kWh netlading bij 44,7 ct buiten het plan bij SoC 7 % (omvormer herstelt ondergrens; < € 0,01).
-- Beslissingen: laden 05:15-05:30 (38,6/39,1 ct) en 12:45-13:00 (39,7/40,1) goed; huis 06:15-08:15 (44-54 ct) en 15:00-21:30 (47-57 ct) goed; houden 13:15-14:15 bij 40-42 ct met import 0,65 kWh goed (avond 50-57 ct). Leeg 21:45 → nacht import 2,75 kWh gem. 43,3 ct; laden loonde niet (39 ct/0,84 + 4,2 = 51 ct).
-- Harde regel: **0× verkoop, 0 kwartieren onder de reserve.** Vlag 06-11 'geschonden' door regeloverschot 0,119 kWh (oude dagsom; v5.189.0 telt per kwartier). Netimport duurder dan later ontladen: 1× 18:00 0,09 kWh (piek boven 2,4 kW), ~€ 0,00.
-- **Zit vast → v5.189.1:** economische schaduw sinds 05-11 18:30 stil (open_dag 05-11, 8 kwartieren, 0 dagen, virtueel 0,9/0,9). Oorzaak: haak alleen in het async planpad; `_secundaire_laag` vult de cache synchroon. Herhaald in test (0 rijen → 11). De 14 dagen beginnen opnieuw bij installatie.
-- PV 06-11 7,33 kWh (Solcast 00:00 9,26, **−20,9 %**); 7 d (31-10..06-11) MAE **31,3 %**, bias **−12,2 %** (5/7 te hoog). Verbruik 06-11 12,55 kWh; nacht 22-09 **2,32 kWh**. Reserve-behoefte 18:22 zonder lange horizon 7,8 kWh tegen werkelijk 5,44 (18:15-09:00): +43 %, kostte niets (accu leeg om 21:45). MC 22:00 100 %, tekortnacht kwam → Brier-bijdrage 0. Tekortdagen 7 d: 4.
-- Laadplan 24 u: 23 wijzigingen, 0 na herstart, 20× 'live correctie'. 00:00 'zonverwachting 9,2 → 1,9 kWh', 00:15 terug: **H-EMS-19** (nieuw) zon-vandaag rekent om middernacht met de oude rest-teller; geen schade (blokken 09:45+).
-- Stilstand verder: 10 wachten, 0 doen; airco 'niets', knop uit → rekent. Advies 7/8 klaar (08:30 'module klaar'). Niet gemeten: verbruiksvoorspelling per uur en SoC-voorspelling (niet in de recorder), NILM-herkenning per apparaat.
-- Hypotheses: H-EMS-2 (PV te hoog, bevestigd), H-EMS-15 (tekortsoort 'bijladen loonde' 3 nachten op rij), H-EMS-19 (middernacht-zon). H-EMS-18 geparkeerd (geen herstarts).
-
-laatste ronde: 07-11 09:15, gemeten t/m 07-11 09:00
-
-## 08-11 09:15 · dagcontrole (07-11 en nacht tot 08-11 09:00)
-- Draait **v5.192.2** (v5.189.1 t/m v5.192.2 op 07-11 geïnstalleerd, herstart 11:20). 0 fouten, 0 storingen. De geplande sessie kon niet naar GitHub schrijven; dit blok is op 08-11 09:25 opnieuw uit de recorder herleid (getallen hieronder zelf gemeten, gemist-bedrag en oordeel uit de dagkaart van 09:20).
-- **Terugkijken:** gemist **€ 0,13**, **0 FOUT, 0 PECH**. 0× verkoop onder de reserve. Laden 08-15 u 4,89 kWh (zon 5,67 kWh, nauwelijks netlading), ontladen 15-20 u 3,97 kWh; accu leeg vanaf ~19:00, nacht van het net (2,33 kWh).
-- 07-11: huis 10,90 kWh, nacht 22-09 2,40 kWh. Rondrit dag 81 %.
-- **Economische schaduw loopt:** 07-11 de eerste volle dag (51/51 kwartieren sinds de herstart). C2 −€ 0,035 en C0 −€ 0,031 tegen productie: de lagere bewaarmarge zou die dag iets duurder zijn geweest. Evaluatie na 14 dagen (~21-11).
-- **Indelingsfout tekortnachten → L-EMS-075 (wacht op akkoord):** 4 nachten op rij (naar 4-7 nov) als 'bijladen loonde, accu niet vol'. Herrekend voor de nacht naar 08-11: een extra kWh was 33,6 ct waard en kostte ≥ 39,7 ct → economisch, niet 'loonde'. Gevolg: LET OP op de cockpit en 5 tekortdagen in de reservemarge (+45 %, reserve 7,8 kWh).
-- Module-temperatuur: de valse 'uit de pas'-melding (module 1 ~1 °C warmer) is weg sinds v5.192.2.
-- PV 40 d: bias −12,9 %, MAE 17,5 % (mediaan 10,1 %). Koude accu: koudste cel 8 °C, geen verwarming. Panelen niet bedekt (geen vorst).
-- Hypotheses: H-EMS-2 (PV te hoog, loopt), H-EMS-15 → L-EMS-075, H-EMS-19 (middernacht-zon).
-
-laatste ronde: 08-11 09:15 (herleid 09:25), gemeten t/m 08-11 09:00
+## 08-11 · samenvatting dag (dagcontrole 09:15; ingekort na 14 dagen)
+- v5.192.2; gemist € 0,13 (0 FOUT, 0 PECH); schaduw eerste volle dag; indelingsfout tekortnachten → L-EMS-075. PV 40 d bias −12,9 %.
 
 ## 09-11 07:40 · dagcontrole (08-11 06:45 t/m 09-11 07:30; ronde draait nu om ~06:45)
 - Draait **v5.194.3**; v5.195.0 om 07:26 door Ruud geïnstalleerd, herstart nog niet. Herstart 09-11 05:23. 0 fouten sinds de herstart.
@@ -471,3 +439,15 @@ laatste ronde: 21-11 06:45, gemeten t/m 21-11 06:45
 - Niet gemeten: MC-Brier (geen avondmeting opgehaald), daghoogste celdelta module 1, SoC-voorspelling, NILM.
 
 laatste ronde: 22-11 06:45, gemeten t/m 22-11 06:45
+
+## 23-11 06:45 · dagcontrole (22-11 06:45 t/m 23-11 06:45; v5.250.0 geïnstalleerd, geen herstart sinds 20-11 07:07)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, laadrendement 78,4 % op de snapshots = zelfde maatstaf, start 30 % eind 98 %): werkelijk € 4,82, optimum € 4,79 → **gemist € 0,04, 0 FOUT, 1 PECH** (middag 22-11 laden op 34,5-35,0 ct i.p.v. nacht 35,0-35,1; nachtprijzen pas ~13:00 bekend). Met Zendure-teller (82,9 %) € 0,13, zelfde uitspraak.
+- 22-11: vlakke prijzen 34,5-41,9 ct; accu hield 30-36 % de hele dag en avond vast; 23:45-05:15 7,3 kWh AC geladen op gem. 35,07 ct tot 98 % voor de piek van 23-11 (45-51 ct). Vasthouden in de avond (40,7 ct) terecht: ontladen en terugladen kost 35,1/0,83 + 4,2 = 46,5 ct.
+- Regels c: geen verkoop; avondimport bij 36 % niet fout (later duurder, en terugladen duurder dan de besparing); geen lege accu; geen onnodig vastgehouden lading. Loslaten woning-eerst € 0,00; knop verkopen-uit niet gebruikt.
+- PV-plan 10 d **+3,6 %** (30 d −8,9 %); 22-11 4,70 tegen ochtendverwachting 5,09. Per uur 5 dagen: 10 u +117 %, 9 u +27 %, 13 u +24 %, 15 u −28 % (register nr. 2 morgen). Verbruik 22-11 16,33 tegen 10,97 verwacht (**−33 %, te laag**; 4,5 °C; na 2 dagen te hoog: H-EMS-24 wisselt nog). Nacht 2,35 kWh.
+- Module 1: 100 % 0,02 V, 0 % 0,04 V (anderen 0,01/0,01), laagste cel 22-11 3,16 (3,16/3,16), daghoogste celdelta 0,03 (0,02/0,03). Geen drempel.
+- Register nr. 4 **afgesloten**: goedkoopste meerprijs d1 live 1,44 ct (35 d; 7 d 0,32), duurste gemist 0,80 ct → vaste bewaking, geen modelwerk. Nr. 7: nacht 23-11 10 gevolgd, 9 niet_gevolgd; alle zichtbare missers laden bij SoC 83-98 % (1,29-1,99 kW, dalend met SoC: afbouw bovenin). Laadvermogen 40-60 % ~2,25 kW. Oordeel 26-11. Nr. 8: 22-11 € 0,00.
+- Storingen 0 (Zonneplan-kostensensoren rond 00:00 onbeschikbaar, bekend). Stilstand 0. Suite 7283 groen. Geen release.
+- Niet gemeten: MC-Brier (geen avondmeting), SoC-voorspelling, NILM; de eerste 4 van 9 missers (alleen laatste 5 zichtbaar).
+
+laatste ronde: 23-11 06:45, gemeten t/m 23-11 06:45
