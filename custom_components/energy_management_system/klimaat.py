@@ -2717,7 +2717,9 @@ class KlimaatMixin:
         sinds = getattr(self, "_weg_sinds", None)
         if (
             airco_sturing.AIRCO_UIT_BIJ_WEG or sinds is None
-            or uit.get("actie") != "niets" or stand != "heat" or not self.airco_door_ems
+            or uit.get("actie") != "niets" or stand != "heat"
+            # v5.255.1: de knop geldt ook voor een airco die jullie zelf aanzetten
+            or (not self.airco_door_ems and not self._afwezig_knop())
             or doel_nu is None or float(doel_nu) <= vast_c + 0.05
             # v5.255.0: met de knop 'iedereen weg' meteen, zonder twee uur wachten
             or (not self._afwezig_knop()

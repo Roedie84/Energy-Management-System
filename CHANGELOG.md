@@ -36095,3 +36095,11 @@ uit v5.254.0 (`VOORLOOP_VAST_MAX_UUR`) is weg: het begin is het tekort
 (doel min de verwachte kamertemperatuur op het moment zelf) gedeeld door het
 geleerde opwarmtempo bij de buitentemperatuur van die ochtend, hooguit 1,5 uur
 en binnen die tijd op het goedkoopste moment.
+
+## v5.255.1
+
+**Knop 'iedereen weg' ook op een zelf aangezette airco** (Ruud 24-11: knop aan,
+airco bleef op 23 °C). `_airco_lang_weg_terugzetten` eiste `airco_door_ems`;
+de airco was die ochtend met de hand aangezet, dus gebeurde er niets. Met de
+knop vervalt die eis: de knop is een uitdrukkelijke opdracht. Zonder knop
+blijft een zelf aangezette airco met rust gelaten.

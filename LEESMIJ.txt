@@ -1,3 +1,9 @@
+EMS v5.255.1 - knop 'iedereen weg' werkt ook op een zelf aangezette airco
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Met de knop 'iedereen weg' aan gaat de airco naar 18 graden, ook als jullie hem zelf aanzetten. In v5.255.0 gold dat alleen voor een airco die het EMS had aangezet, waardoor hij op 23 graden bleef staan. Zonder knop blijft een zelf aangezette airco zoals voorheen met rust gelaten.
+
 EMS v5.255.0 - knop 'iedereen weg' en 's nachts op 18 graden
 
 Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen de knop kiezen (input_boolean.iedereen_weg).

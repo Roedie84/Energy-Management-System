@@ -57,9 +57,15 @@ def test_de_airco_gaat_meteen_naar_de_lage_stand(make_coordinator, hass):
     z.airco_door_ems = True
     z._weg_sinds = NU - timedelta(minutes=1)
     assert z._airco_lang_weg_terugzetten(NU, {"actie": "niets"}, "heat", 21.0)["actie"] == "niets"
-    # wat jullie zelf aanzetten, blijft staan
-    c.airco_door_ems = False
-    assert c._airco_lang_weg_terugzetten(NU, {"actie": "niets"}, "heat", 21.0)["actie"] == "niets"
+    # v5.255.1 (Ruud 24-11: knop aan, airco bleef op 23): de knop geldt ook
+    # voor een airco die jullie zelf aanzetten; zonder knop blijft die staan
+    z.airco_door_ems = False
+    z._weg_sinds = NU - timedelta(hours=3)
+    assert z._airco_lang_weg_terugzetten(NU, {"actie": "niets"}, "heat", 23.0)["actie"] == "niets"
+    zelf = _c(make_coordinator, "on")
+    zelf.airco_door_ems = False
+    zelf._weg_sinds = NU - timedelta(minutes=1)
+    assert zelf._airco_lang_weg_terugzetten(NU, {"actie": "niets"}, "heat", 23.0)["doel_c"] == 18.0
 
 
 def test_de_ochtendverwarming_slaat_over(make_coordinator, hass):
