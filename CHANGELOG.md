@@ -36103,3 +36103,13 @@ airco bleef op 23 °C). `_airco_lang_weg_terugzetten` eiste `airco_door_ems`;
 de airco was die ochtend met de hand aangezet, dus gebeurde er niets. Met de
 knop vervalt die eis: de knop is een uitdrukkelijke opdracht. Zonder knop
 blijft een zelf aangezette airco met rust gelaten.
+
+## v5.256.0
+
+**Vermoedelijke ontdooibeurten tellen** (Ruud 24-11: "Kun je ook zien wanneer
+de buitenunit 'bevroren' is?"). De Daikin geeft geen ontdooisignaal. Nieuw
+`airco_ontdooi.py`: uit de compressorfrequentie en de temperatuur bij de
+binnenunit (nu ook vanzelf gevonden, `_zoek_airco_bronnen`) een beurt
+herkennen - zie de moduletekst voor de voorwaarden. Opslag in
+`ritme["ontdooi"]`, overzicht in `get_airco_vermogen()["ontdooien"]`.
+Alleen meting; ijken met een door Ruud waargenomen moment staat nog open.

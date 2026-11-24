@@ -13,7 +13,7 @@ import logging
 import statistics
 from datetime import datetime, timedelta
 from homeassistant.util import dt as dt_util
-from . import airco_frequentie, airco_ritme, airco_sturing, klimaat_wind, klimaat_zon
+from . import airco_frequentie, airco_ontdooi, airco_ritme, airco_sturing, klimaat_wind, klimaat_zon
 from .const import (
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -2114,6 +2114,8 @@ class KlimaatMixin:
                     gevonden["frequentie"] = item.entity_id
                 elif "compressor_energy" in item.entity_id and eenheid == "kWh":
                     gevonden["teller"] = item.entity_id
+                elif "inside_temperature" in item.entity_id and eenheid == "°C":
+                    gevonden["binnenunit"] = item.entity_id
         except Exception:  # noqa: BLE001 - zoeken mag de ronde nooit breken
             return {}
         return gevonden
@@ -2153,12 +2155,16 @@ class KlimaatMixin:
                     if loop is not None and airco_frequentie.stand_kwh(loop) is not None else None
                 ),
                 "bronnen": dict(self._airco_bronnen or {}),
+                "ontdooien": airco_ontdooi.overzicht(
+                    (self.airco_ritme or {}).get("ontdooi"), dt_util.now()
+                ),
             }
         except Exception as err:  # noqa: BLE001 - een overzicht mag nooit breken
             return {"vermogen_w": None, "fout": str(err)}
 
     _airco_freq_loop: dict | None = None
     _airco_freq_vorige: tuple | None = None
+    _airco_ontdooi_buffer: list | None = None
 
     def _noteer_airco_frequentie(self, now: datetime, ritme: dict) -> None:
         """v5.200.0: model bijleren uit de teller, opwarmen en vasthouden
@@ -2190,6 +2196,15 @@ class KlimaatMixin:
             uren=uren,
             binnen_c=self.living_room_current_temp_c,
             buiten_c=buiten,
+            doel_c=float(doel) if isinstance(doel, (int, float)) else None,
+            verwarmt=toestand is not None and toestand.state == "heat",
+        )
+        # v5.256.0: vermoedelijke ontdooibeurten tellen (alleen meting)
+        if self._airco_ontdooi_buffer is None:
+            self._airco_ontdooi_buffer = []
+        airco_ontdooi.ronde(
+            ritme.setdefault("ontdooi", airco_ontdooi.leeg()), self._airco_ontdooi_buffer, now,
+            hz=hz, unit_c=self._airco_bron_waarde("binnenunit"), buiten_c=buiten,
             doel_c=float(doel) if isinstance(doel, (int, float)) else None,
             verwarmt=toestand is not None and toestand.state == "heat",
         )

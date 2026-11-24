@@ -1,3 +1,10 @@
+EMS v5.256.0 - vermoedelijke ontdooibeurten van de airco tellen
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het EMS herkent en telt vermoedelijke ontdooibeurten van de buitenunit: de airco verwarmt, het is buiten hooguit 7 graden, de compressor draaide al tien minuten en de temperatuur bij de binnenunit zakt binnen tien minuten twee graden of meer. Te zien bij de sensor 'Airco vermogen (berekend)', attribuut 'ontdooien' (vandaag, laatste zeven dagen, gemiddelde duur, de laatste beurten).
+- Alleen een meting: het EMS stuurt er niet op. Het patroon is nog niet geijkt en heet daarom 'vermoedelijk'.
+
 EMS v5.255.1 - knop 'iedereen weg' werkt ook op een zelf aangezette airco
 
 Installeren: via de Marketplace bijwerken en herstarten.

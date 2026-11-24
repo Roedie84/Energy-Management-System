@@ -31,7 +31,7 @@ from __future__ import annotations
 import statistics
 from datetime import datetime, timedelta
 
-from . import airco_frequentie
+from . import airco_frequentie, airco_ontdooi
 
 OCHTEND_VAN = 4 * 60
 OCHTEND_TOT = 11 * 60
@@ -78,6 +78,8 @@ def leeg() -> dict:
         "dag_gezaaid": False,
         # v5.200.0: het vermogen uit de compressorfrequentie
         "frequentie": airco_frequentie.leeg(),
+        # v5.256.0: vermoedelijke ontdooibeurten (alleen meting)
+        "ontdooi": airco_ontdooi.leeg(),
     }
 
 
@@ -128,6 +130,7 @@ def geldig(ritme) -> dict:
             basis["dagen_thuis"][soort] = [str(d) for d in waarde]
     basis["dag_gezaaid"] = bool(ritme.get("dag_gezaaid"))
     basis["frequentie"] = airco_frequentie.geldig(ritme.get("frequentie"))
+    basis["ontdooi"] = airco_ontdooi.geldig(ritme.get("ontdooi"))
     return basis
 
 
