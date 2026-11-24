@@ -248,6 +248,8 @@ def geleerd(ritme: dict, soort: str) -> dict:
             "keer_uit": len(uit),
             "ochtenden": len(ochtenden),
             "vast": True,
+            # v5.257.0: ingestelde begintijd (None = het begin volgt uit het huis)
+            "aan_om": int(vast["aan_om"]) if vast.get("aan_om") is not None else None,
         }
     return {
         "warm_om": round(statistics.median(momenten)) if len(momenten) >= MIN_KEER else None,
@@ -463,7 +465,12 @@ def besluit(
         return None
     voorloop = voorloop_uren(verwacht, doel, tempo_c_per_uur)
     m = minuut(nu)
-    start, prijs = prijsstart(leer["warm_om"] - round(voorloop * 60), voorloop, kost_per_uur, m)
+    aan_om = leer.get("aan_om")
+    if aan_om is not None:
+        # v5.257.0 (Ruud 24-11: "door om 06:30 aan te gaan"): vaste begintijd
+        start, prijs = aan_om, None
+    else:
+        start, prijs = prijsstart(leer["warm_om"] - round(voorloop * 60), voorloop, kost_per_uur, m)
     if not (start <= m < leer["warm_om"] + NA_WARM_OM_MIN):
         return None
     return {
@@ -471,6 +478,9 @@ def besluit(
         "doel_c": doel,
         "prijsstart": prijs,
         "tekst": (
+            f"Ochtend: verwarmen tot {doel:.1f} °C, ingesteld begin {klok(aan_om)} "
+            f"(warm om {klok(leer['warm_om'])} gevraagd)."
+            if aan_om is not None else
             f"Ochtend: verwarmen tot {doel:.1f} °C zodat het om {klok(leer['warm_om'])} "
             f"warm is (verwacht dan {verwacht:.1f} °C, {round(voorloop * 60)} min "
             "opwarmen)." + _prijstekst(prijs)
@@ -701,6 +711,8 @@ def ochtend_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, tempo_c_
             voorloop = voorloop_uren(voorspeld, leer["ochtend_doel_c"], tempo_c_per_uur)
             if voorspeld is None or voorspeld < leer["ochtend_doel_c"] - MARGE_C:
                 start = warm - timedelta(hours=voorloop)
+                if leer.get("aan_om") is not None:
+                    start = middernacht + timedelta(minutes=leer["aan_om"])
                 totaal += vermogen * _overlap_uren(start, warm, van, tot)
                 totaal += vermogen * VASTHOUDEN_FACTOR * _overlap_uren(
                     warm, warm + timedelta(minutes=NA_WARM_OM_MIN), van, tot

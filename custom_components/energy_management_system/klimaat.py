@@ -53,6 +53,7 @@ from .const import (
     CONF_AIRCO_COP_PER_GRAAD,
     CONF_AIRCO_EXTERN_ENTITY,
     CONF_AIRCO_UIT_OM,
+    CONF_AIRCO_WERKDAG_AAN_OM,
     CONF_AIRCO_WERKDAG_WARM_OM,
     CONF_AIRCO_MIDDAG_DOEL_C,
     CONF_AIRCO_NACHT_C,
@@ -1915,6 +1916,10 @@ class KlimaatMixin:
         if om is not None and airco_ritme.OCHTEND_VAN < om < airco_ritme.OCHTEND_TOT \
                 and not getattr(self, "vacation_mode", False) and not self._afwezig_knop():
             vast = {"werkdag": {"warm_om": om, "doel_c": AIRCO_WERKDAG_OCHTEND_DOEL_C}}
+            # v5.257.0: vaste begintijd, alleen als die voor 'warm om' ligt
+            aan = airco_ritme.minuten_uit_klok(self.instelling(CONF_AIRCO_WERKDAG_AAN_OM, ""))
+            if aan is not None and airco_ritme.OCHTEND_VAN <= aan < om:
+                vast["werkdag"]["aan_om"] = aan
         self.airco_ritme["vast_ochtend"] = vast
         # v5.254.0: het ingestelde doel voor overdag en 's avonds (None = geleerd)
         self.airco_ritme["vast_dag_doel"] = self._airco_middag_doel()

@@ -168,3 +168,38 @@ def test_het_begin_volgt_uit_het_huis_en_niet_uit_een_vaste_tijd():
     assert _vraag(_ritme(), DI.replace(hour=6, minute=40), woonkamer=20.0)["actie"] == "verwarmen"
     # strenge vorst: de airco warmt trager op (2 graden per uur): anderhalf uur
     assert _vraag(_ritme(), DI.replace(hour=5, minute=30), woonkamer=18.0, tempo=2.0)["actie"] == "verwarmen"
+
+
+# --- v5.257.0: vaste begintijd (Ruud 24-11: "door om 06:30 aan te gaan") -----
+
+def _ritme_vast_begin():
+    r = R.leeg()
+    r["vast_ochtend"] = {"werkdag": {"warm_om": 7 * 60, "doel_c": 21.0, "aan_om": 6 * 60 + 30}}
+    return r
+
+
+def test_met_een_vaste_begintijd_begint_hij_precies_dan():
+    r = _ritme_vast_begin()
+    assert R.geleerd(r, "werkdag")["aan_om"] == 390
+    assert R.geleerd(_ritme(), "werkdag")["aan_om"] is None
+    # zonder vaste begintijd zou hij om 05:30 beginnen (zie hierboven)
+    assert _vraag(r, DI.replace(hour=5, minute=30)) is None
+    assert _vraag(r, DI.replace(hour=6, minute=29)) is None
+    v = _vraag(r, DI.replace(hour=6, minute=30))
+    assert v["actie"] == "verwarmen" and v["doel_c"] == 21.0 and v["prijsstart"] is None
+    assert "06:30" in v["tekst"]
+    # en het verbruik in de verwachting telt vanaf 06:30, niet vanaf 05:30
+    r["vermogens"] = [1.3] * 5
+    zonder = _ritme() | {"vermogens": [1.3] * 5}
+    assert R.ochtend_kwh(r, DI.replace(hour=0), DI.replace(hour=12), lambda t: 16.5, 3.0) < \
+        R.ochtend_kwh(zonder, DI.replace(hour=0), DI.replace(hour=12), lambda t: 16.5, 3.0)
+
+
+def test_de_coordinator_neemt_de_begintijd_alleen_over_als_die_voor_warm_om_ligt(make_coordinator, hass):
+    c = make_coordinator({"airco_werkdag_warm_om": "07:00", "airco_werkdag_aan_om": "06:30"})
+    assert c._airco_ritme()["vast_ochtend"]["werkdag"]["aan_om"] == 390
+    for fout in ("07:30", "", "03:00", "onzin"):
+        c = make_coordinator({"airco_werkdag_warm_om": "07:00", "airco_werkdag_aan_om": fout})
+        assert "aan_om" not in c._airco_ritme()["vast_ochtend"]["werkdag"]
+    for bestand in ("strings.json", "translations/nl.json", "translations/en.json"):
+        assert json.dumps(json.loads((MAP / bestand).read_text())).count("airco_werkdag_aan_om") == 2

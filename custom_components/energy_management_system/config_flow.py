@@ -65,6 +65,7 @@ from .const import (
     CONF_AIRCO_EXTERN_ENTITY,
     CONF_AIRCO_POWER_SENSOR,
     CONF_AIRCO_UIT_OM,
+    CONF_AIRCO_WERKDAG_AAN_OM,
     CONF_AIRCO_WERKDAG_WARM_OM,
     CONF_AIRCO_MIDDAG_DOEL_C,
     CONF_AIRCO_NACHT_C,
@@ -631,6 +632,11 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_AIRCO_WERKDAG_WARM_OM,
                 description={"suggested_value": _as_text(defaults.get(CONF_AIRCO_WERKDAG_WARM_OM, ""))},
+            ): selector.TextSelector(),
+            # v5.257.0: vaste begintijd van de werkdagochtend (leeg = zelf uitrekenen).
+            vol.Optional(
+                CONF_AIRCO_WERKDAG_AAN_OM,
+                description={"suggested_value": _as_text(defaults.get(CONF_AIRCO_WERKDAG_AAN_OM, ""))},
             ): selector.TextSelector(),
             # v5.254.0: overdag verwarmen tot (0 = geleerd).
             vol.Optional(

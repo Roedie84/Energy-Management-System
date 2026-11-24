@@ -36113,3 +36113,11 @@ binnenunit (nu ook vanzelf gevonden, `_zoek_airco_bronnen`) een beurt
 herkennen - zie de moduletekst voor de voorwaarden. Opslag in
 `ritme["ontdooi"]`, overzicht in `get_airco_vermogen()["ontdooien"]`.
 Alleen meting; ijken met een door Ruud waargenomen moment staat nog open.
+
+## v5.257.0
+
+**Vaste begintijd werkdagochtend** (Ruud 24-11: "zorgen dat het morgen rond
+07:00 aangenaam is door om 06:30 aan te gaan"). Nieuwe optie
+`airco_werkdag_aan_om`; `vast_ochtend[soort]["aan_om"]` -> `geleerd()["aan_om"]`;
+`besluit` begint dan op dat moment (geen `prijsstart`), `ochtend_kwh` telt het
+opwarmen vanaf dat moment. Leeg = het dynamische begin van v5.255.0.

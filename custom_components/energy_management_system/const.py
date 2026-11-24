@@ -208,6 +208,8 @@ DEFAULT_AIRCO_UIT_OM = "22:00"
 # het EMS uit jullie eigen bediening leerde).
 CONF_AIRCO_WERKDAG_WARM_OM = "airco_werkdag_warm_om"
 DEFAULT_AIRCO_WERKDAG_WARM_OM = ""
+# v5.257.0: vaste begintijd van de werkdagochtend (leeg = het EMS rekent het begin zelf uit)
+CONF_AIRCO_WERKDAG_AAN_OM = "airco_werkdag_aan_om"
 AIRCO_WERKDAG_OCHTEND_DOEL_C = 21.0
 # v5.254.0 (Ruud 24-11: "Smiddags mag de temperatuur naar 23 i.p.v. 21"):
 # overdag en 's avonds (11:00-21:30) verwarmen tot deze temperatuur. Leeg of

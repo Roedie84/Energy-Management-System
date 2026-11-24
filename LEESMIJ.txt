@@ -1,3 +1,9 @@
+EMS v5.257.0 - vaste begintijd voor de werkdagochtend van de airco
+
+Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen de begintijd invullen.
+
+- Nieuwe instelling 'Airco op werkdagen: vaste begintijd' (UU:MM). Ingevuld: de ochtendverwarming begint precies dan, niet eerder en niet op prijs verschoven. Leeg: het EMS rekent het begin zelf uit, zoals in v5.255.0. De begintijd moet voor 'warm om' liggen.
+
 EMS v5.256.0 - vermoedelijke ontdooibeurten van de airco tellen
 
 Installeren: via de Marketplace bijwerken en herstarten.
