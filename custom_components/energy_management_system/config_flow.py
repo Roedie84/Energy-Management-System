@@ -67,6 +67,7 @@ from .const import (
     CONF_AIRCO_UIT_OM,
     CONF_AIRCO_WERKDAG_WARM_OM,
     CONF_AIRCO_MIDDAG_DOEL_C,
+    CONF_AIRCO_NACHT_C,
     CONF_AIRCO_RAAM_ENTITIES,
     DEFAULT_AIRCO_UIT_OM,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
@@ -79,6 +80,7 @@ from .const import (
     CONF_PRESENCE_MOTION_SENSORS,
     CONF_PRESENCE_LIGHT_ENTITIES,
     CONF_PRESENCE_TV_ENTITY,
+    CONF_AFWEZIG_KNOP_ENTITY,
     CONF_PRESENCE_PERSON_ENTITIES,
     CONF_WATER_SOFTENER_END_HOUR,
     CONF_WATER_SOFTENER_START_HOUR,
@@ -637,6 +639,13 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=0, max=26, step=0.5, mode=selector.NumberSelectorMode.BOX)
             ),
+            # v5.255.0: 's nachts vasthouden op (0 = uit).
+            vol.Optional(
+                CONF_AIRCO_NACHT_C,
+                default=float(defaults.get(CONF_AIRCO_NACHT_C) or 0.0),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0, max=21, step=0.5, mode=selector.NumberSelectorMode.BOX)
+            ),
             # v5.77: ramen van woonkamer en keuken - open = airco nooit aan.
             vol.Optional(
                 CONF_AIRCO_RAAM_ENTITIES,
@@ -855,6 +864,10 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_POWER_LIMITS_INTENTIONAL,
                 default=defaults.get(CONF_POWER_LIMITS_INTENTIONAL, False),
             ): selector.BooleanSelector(),
+            # v5.255.0: knop 'iedereen weg' (aan = weg)
+            _optioneel(CONF_AFWEZIG_KNOP_ENTITY, defaults): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["input_boolean", "switch", "binary_sensor"])
+            ),
             _optioneel(CONF_PRESENCE_TV_ENTITY, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["media_player", "remote", "binary_sensor", "switch"]

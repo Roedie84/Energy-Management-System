@@ -36063,3 +36063,35 @@ Smiddags mag de temperatuur naar 23 i.p.v. 21."
 Het bijstellen naar het dagdoel (v5.254.0) keek niet naar de aanwezigheid: wie
 om 10:00 vertrok, kreeg om 11:00 een airco op 23 °C tot de lage stand na twee
 uur weg. Nu alleen bij aanwezigheid 'thuis'.
+
+## v5.255.0 — knop 'iedereen weg' (Ruud 24-11)
+
+"Omdat het lastig is om op snelle termijn te bepalen of er iemand aanwezig
+is, is het misschien een optie om op het dashboard een knop
+aanwezig/afwezig te zetten?" Majorie's telefoon wordt niet gevolgd; de
+sensoren zien iemand die stilzit niet.
+
+- Instelling `afwezig_knop_entity` (input_boolean/switch/binary_sensor; aan =
+  iedereen weg). `_update_presence_met_knop`: de sensoren rekenen gewoon door,
+  maar de stand is 'weg' zolang de knop aan staat.
+- `_airco_lang_weg_terugzetten`: met de knop meteen naar 18 °C in plaats van
+  na twee uur; de ingestelde werkdagochtend (`vast_ochtend`) vervalt zolang de
+  knop aan staat. Wat een mens zelf aanzette, blijft staan.
+
+Toets: `tests/test_v5255_afwezig_knop.py` (5).
+
+**Nacht op een ingestelde temperatuur** (Ruud 24-11: "En snachts op 18 graden
+houden"). Instelling `airco_nacht_c` (0 = uit). Op de vaste uittijd wordt
+"uit" een "verwarmen" naar de nachttemperatuur (alleen met de knop Airco
+automaat aan, niet bij 'weg', vakantie of als gas goedkoper is).
+`_airco_op_nachtstand` herkent die stand zonder geheugen (verwarmen, door het
+EMS, doel <= nacht + 0,5): het gewone besluit en het ritme zien de airco dan
+als 'niet aan het verwarmen', zodat 'iedereen slaapt' hem niet uitzet en de
+ochtend hem naar het doel brengt.
+
+**Begin van de ochtend weer dynamisch** (Ruud 24-11: "met starttijden rekening
+houden met de klimaathuishouding van mijn woning"). De vaste grens van een uur
+uit v5.254.0 (`VOORLOOP_VAST_MAX_UUR`) is weg: het begin is het tekort
+(doel min de verwachte kamertemperatuur op het moment zelf) gedeeld door het
+geleerde opwarmtempo bij de buitentemperatuur van die ochtend, hooguit 1,5 uur
+en binnen die tijd op het goedkoopste moment.

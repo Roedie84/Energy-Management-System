@@ -48,10 +48,13 @@ KANS_MINIMAAL = 0.5
 NA_WARM_OM_MIN = 60
 VOORLOOP_MIN_UUR = 0.25
 VOORLOOP_MAX_UUR = 1.5
-# v5.254.0 (Ruud 24-11: "1,5 uur van te voren lijkt me wat ruim"): een
-# ingestelde ochtend begint hooguit zo lang vooraf. Op een koude ochtend is
-# het dan om het ingestelde tijdstip nog niet helemaal op temperatuur.
-VOORLOOP_VAST_MAX_UUR = 1.0
+# v5.254.0 gaf een ingestelde ochtend een vaste grens van een uur (Ruud:
+# "1,5 uur van te voren lijkt me wat ruim"). v5.255.0 (Ruud 24-11: "met
+# starttijden rekening houden met de klimaathuishouding van mijn woning, een
+# dynamische sturing die echt slim is"): geen eigen grens meer. Het begin
+# volgt uit het huis zelf: de verwachte kamertemperatuur op het moment zelf,
+# gedeeld door het geleerde opwarmtempo bij de buitentemperatuur van die
+# ochtend. Met de nacht op 18 graden is dat vanzelf ongeveer een uur.
 VOORLOOP_ONBEKEND_UUR = 0.5
 MARGE_C = 0.3
 
@@ -456,8 +459,6 @@ def besluit(
     if verwacht >= doel - MARGE_C and woonkamer_c >= doel - MARGE_C:
         return None
     voorloop = voorloop_uren(verwacht, doel, tempo_c_per_uur)
-    if leer.get("vast"):
-        voorloop = min(voorloop, VOORLOOP_VAST_MAX_UUR)
     m = minuut(nu)
     start, prijs = prijsstart(leer["warm_om"] - round(voorloop * 60), voorloop, kost_per_uur, m)
     if not (start <= m < leer["warm_om"] + NA_WARM_OM_MIN):
@@ -695,8 +696,6 @@ def ochtend_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, tempo_c_
             warm = middernacht + timedelta(minutes=leer["warm_om"])
             voorspeld = verwacht_op(warm) if verwacht_op else None
             voorloop = voorloop_uren(voorspeld, leer["ochtend_doel_c"], tempo_c_per_uur)
-            if leer.get("vast"):
-                voorloop = min(voorloop, VOORLOOP_VAST_MAX_UUR)
             if voorspeld is None or voorspeld < leer["ochtend_doel_c"] - MARGE_C:
                 start = warm - timedelta(hours=voorloop)
                 totaal += vermogen * _overlap_uren(start, warm, van, tot)

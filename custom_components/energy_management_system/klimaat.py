@@ -55,6 +55,7 @@ from .const import (
     CONF_AIRCO_UIT_OM,
     CONF_AIRCO_WERKDAG_WARM_OM,
     CONF_AIRCO_MIDDAG_DOEL_C,
+    CONF_AIRCO_NACHT_C,
     DEFAULT_AIRCO_WERKDAG_WARM_OM,
     AIRCO_WERKDAG_OCHTEND_DOEL_C,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
@@ -1795,6 +1796,7 @@ class KlimaatMixin:
         if self._airco_handmatig_bij is not None and self.presence_state != self._airco_handmatig_bij:
             self._airco_handmatig_bij = None
         bakjes = (self.get_airco_kansen_per_bakje() or {}).get("bakjes") or {}
+        stand_besluit = "off" if self._airco_op_nachtstand(stand, doel_nu) else stand
         uit = airco_sturing.besluit(
             woonkamer_c=self.living_room_current_temp_c,
             aanwezigheid=self.presence_state,
@@ -1802,7 +1804,10 @@ class KlimaatMixin:
             doel_c=self._airco_doel_nu(now),
             advies=(self.get_verwarmingsadvies() or {}).get("advies"),
             handmatig=self._airco_handmatig_bij is not None,
-            airco_stand=stand,
+            # v5.255.0: op de nachtstand telt de airco voor het besluit als
+            # 'niet aan het verwarmen': dan zet 'iedereen slaapt' hem niet uit
+            # en gaat hij 's ochtends gewoon naar het doel.
+            airco_stand=stand_besluit,
             door_ems_aan=self.airco_door_ems,
             setpunten_gezien=len(self.airco_setpunten or []),
             setpunten_nodig=AIRCO_PREDICTION_MIN_SAMPLES,
@@ -1818,7 +1823,7 @@ class KlimaatMixin:
             # v5.177.0 (A16): 's ochtends alleen verwarmen als jullie dat doen
             ochtend=airco_ritme.ochtend_kans(self._airco_ritme(), now),
         )
-        uit = self._airco_ritme_ronde(now, uit, stand)
+        uit = self._airco_ritme_ronde(now, uit, stand_besluit)
         uit = self._airco_kort_weg_ronde(now, uit)
         uit = self._airco_weg_ronde(now, uit, stand, doel_nu)
         uit = self._airco_thuiskomst_ronde(now, uit, stand)
@@ -1908,7 +1913,7 @@ class KlimaatMixin:
         )
         vast = {}
         if om is not None and airco_ritme.OCHTEND_VAN < om < airco_ritme.OCHTEND_TOT \
-                and not getattr(self, "vacation_mode", False):
+                and not getattr(self, "vacation_mode", False) and not self._afwezig_knop():
             vast = {"werkdag": {"warm_om": om, "doel_c": AIRCO_WERKDAG_OCHTEND_DOEL_C}}
         self.airco_ritme["vast_ochtend"] = vast
         # v5.254.0: het ingestelde doel voor overdag en 's avonds (None = geleerd)
@@ -1922,6 +1927,30 @@ class KlimaatMixin:
         except (TypeError, ValueError):
             return None
         return doel if 16.0 <= doel <= 26.0 else None
+
+    def _airco_nacht_c(self) -> float | None:
+        """De ingestelde nachttemperatuur (v5.255.0), of None (= uit)."""
+        try:
+            nacht = float(self.instelling(CONF_AIRCO_NACHT_C, 0) or 0)
+        except (TypeError, ValueError):
+            return None
+        return nacht if 14.0 <= nacht <= 21.0 else None
+
+    def _airco_op_nachtstand(self, stand: str | None, doel_nu) -> bool:
+        """Staat de airco op de lage nachtstand die het EMS zette? (v5.255.0)
+
+        Zonder eigen geheugen, dus bestand tegen een herstart: verwarmen, door
+        het EMS aangezet, en het doel op de nachttemperatuur (met de halve
+        graad van voorverwarmen op goedkope stroom erbij).
+        """
+        nacht = self._airco_nacht_c()
+        try:
+            return bool(
+                nacht is not None and stand == "heat" and self.airco_door_ems
+                and doel_nu is not None and float(doel_nu) <= nacht + airco_sturing.BUFFER_C + 0.05
+            )
+        except (TypeError, ValueError):
+            return False
 
     def _airco_doel_nu(self, now: datetime) -> float | None:
         """Het doel van dit moment: overdag het ingestelde, anders het geleerde."""
@@ -2527,7 +2556,21 @@ class KlimaatMixin:
         nieuw = dict(uit)
         nieuw["redenen"] = list(uit.get("redenen") or []) + [vraag["reden"]]
         nieuw["redenen_tekst"] = " · ".join(nieuw["redenen"])
-        if vraag["actie"] == "uit":
+        nacht = self._airco_nacht_c()
+        if (
+            vraag["actie"] == "uit" and nacht is not None and self.airco_automaat_aan
+            and self.presence_state != "weg" and not getattr(self, "vacation_mode", False)
+            and (self.get_verwarmingsadvies() or {}).get("advies") == "airco"
+        ):
+            # v5.255.0 (Ruud 24-11): 's nachts niet uit maar terug naar de
+            # nachttemperatuur; 's ochtends is het dan sneller warm.
+            nieuw.update(
+                actie="verwarmen", doel_c=nacht,
+                tekst=f"Nacht: terug naar {nacht:.0f} °C tot de ochtend.",
+            )
+            nieuw["redenen"][-1] = f"nacht: vasthouden op {nacht:.0f} °C"
+            nieuw["redenen_tekst"] = " · ".join(nieuw["redenen"])
+        elif vraag["actie"] == "uit":
             nieuw.update(actie="uit", tekst=vraag["tekst"], altijd=bool(vraag.get("altijd")))
         elif vraag.get("houd_aan"):
             if uit["actie"] == "uit":
@@ -2654,6 +2697,11 @@ class KlimaatMixin:
                     redenen_tekst=" · ".join(redenen), weg_keuze=keuze,
                     tekst=f"Niemand thuis: {vast_c:.0f} °C vasthouden tot jullie terug zijn ({keuze['reden']}).")
 
+    def _afwezig_knop(self) -> bool:
+        """De knop 'iedereen weg' (v5.255.0); zonder coordinator (toetsen) uit."""
+        lees = getattr(self, "afwezig_knop_aan", None)
+        return bool(lees()) if lees else False
+
     def _airco_lang_weg_terugzetten(self, now: datetime, uit: dict, stand: str | None, doel_nu) -> dict:
         """Langer dan twee uur weg: terug naar 18 °C, niet uit (v5.235.0).
 
@@ -2671,10 +2719,17 @@ class KlimaatMixin:
             airco_sturing.AIRCO_UIT_BIJ_WEG or sinds is None
             or uit.get("actie") != "niets" or stand != "heat" or not self.airco_door_ems
             or doel_nu is None or float(doel_nu) <= vast_c + 0.05
-            or (now - sinds).total_seconds() < airco_sturing.AIRCO_WEG_TERUGZETTEN_NA_MIN * 60
+            # v5.255.0: met de knop 'iedereen weg' meteen, zonder twee uur wachten
+            or (not self._afwezig_knop()
+                and (now - sinds).total_seconds() < airco_sturing.AIRCO_WEG_TERUGZETTEN_NA_MIN * 60)
         ):
             return uit
         self._airco_weg_vast = True
+        if self._afwezig_knop():
+            redenen = list(uit.get("redenen") or []) + [f"knop 'iedereen weg': terug naar {vast_c:.0f} °C"]
+            return dict(uit, actie="verwarmen", doel_c=vast_c, redenen=redenen,
+                        redenen_tekst=" · ".join(redenen),
+                        tekst=f"Knop 'iedereen weg': terug naar {vast_c:.0f} °C tot jullie terug zijn.")
         uren = airco_sturing.AIRCO_WEG_TERUGZETTEN_NA_MIN / 60
         redenen = list(uit.get("redenen") or []) + [f"langer dan {uren:g} uur weg: terug naar {vast_c:.0f} °C"]
         return dict(uit, actie="verwarmen", doel_c=vast_c, redenen=redenen,

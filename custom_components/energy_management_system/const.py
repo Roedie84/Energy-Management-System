@@ -213,6 +213,10 @@ AIRCO_WERKDAG_OCHTEND_DOEL_C = 21.0
 # overdag en 's avonds (11:00-21:30) verwarmen tot deze temperatuur. Leeg of
 # 0 = de temperatuur die uit jullie eigen bediening geleerd is.
 CONF_AIRCO_MIDDAG_DOEL_C = "airco_middag_doel_c"
+# v5.255.0 (Ruud 24-11: "En snachts op 18 graden houden"): op de vaste
+# uittijd niet uit maar terug naar deze temperatuur, tot de ochtend. Leeg of
+# 0 = uit zoals altijd.
+CONF_AIRCO_NACHT_C = "airco_nacht_c"
 CONF_LIVING_ROOM_TEMPERATURE_SENSOR = "living_room_temperature_sensor_entity"
 CONF_LIVING_ROOM_HUMIDITY_SENSOR = "living_room_humidity_sensor_entity"
 CONF_LIVING_ROOM_SHUTTER_ENTITY_1 = "living_room_shutter_entity_1"
@@ -6368,6 +6372,11 @@ PRESENCE_LAST_SEEN_LENGTH = 12
 # Tv aan telt als aanwezig - ongeacht hoe lang er niemand langs een
 # sensor liep.
 CONF_PRESENCE_TV_ENTITY = "presence_tv_entity"
+# v5.255.0 (Ruud 24-11: "een knop aanwezig/afwezig op het dashboard"): een
+# schakelaar die AAN staat als iedereen weg is. Gaat voor de sensoren: de
+# aanwezigheid is dan 'weg', de airco gaat meteen naar de lage stand en de
+# ingestelde ochtendverwarming slaat over. Geen telefoons nodig.
+CONF_AFWEZIG_KNOP_ENTITY = "afwezig_knop_entity"
 
 # --- Telefoons als extra "thuis" (v5.127.0) -------------------------
 # Gevraagd 25-10: "Mijn telefoon (Ruud) mee laten tellen" - alleen als

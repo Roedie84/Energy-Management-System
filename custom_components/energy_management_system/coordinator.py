@@ -644,6 +644,7 @@ from .const import (
     CONF_PRESENCE_LIGHT_ENTITIES,
     CONF_PRESENCE_ABSENCE_MINUTES,
     CONF_PRESENCE_TV_ENTITY,
+    CONF_AFWEZIG_KNOP_ENTITY,
     CONF_PRESENCE_PERSON_ENTITIES,
     PRESENCE_EEN_PLEK_MINUTEN,
     PRESENCE_EEN_PLEK_NA_DEUR_MINUTEN,
@@ -9199,6 +9200,23 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             self._nachtrust_onderbroken_sinds = None
             return False
         return True
+
+    def afwezig_knop_aan(self) -> bool:
+        """Staat de knop 'iedereen weg' aan? (v5.255.0) Onbekend of niet
+        ingesteld = niet aan."""
+        entiteit = self.config.get(CONF_AFWEZIG_KNOP_ENTITY)
+        if not entiteit:
+            return False
+        staat = self.hass.states.get(entiteit)
+        return staat is not None and staat.state == "on"
+
+    def _update_presence_met_knop(self, now: datetime) -> None:
+        """De aanwezigheid uit de sensoren; de knop 'iedereen weg' gaat voor
+        (v5.255.0). De sensoren blijven gewoon meetellen en leren, zodat de
+        stand klopt zodra de knop weer uit gaat."""
+        self._update_presence(now)
+        if self.afwezig_knop_aan() and self.presence_state is not None:
+            self.presence_state = "weg"
 
     def _update_presence(self, now: datetime) -> None:
         """Is er iemand thuis? (v1.18.2)
@@ -38969,7 +38987,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             ("quooker", lambda: self._update_quooker_tracking(now)),
             ("water", lambda: self._update_water_tracking(now)),
             # v1.18.2: aanwezigheid uit de gekozen bewegingssensoren.
-            ("aanwezigheid", lambda: self._update_presence(now)),
+            ("aanwezigheid", lambda: self._update_presence_met_knop(now)),
             ("piekvermogen", lambda: self._update_peak_power_tracking(now)),
             ("accumodules", lambda: self._update_battery_module_health(now)),
         ]

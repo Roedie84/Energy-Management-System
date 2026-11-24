@@ -1,3 +1,11 @@
+EMS v5.255.0 - knop 'iedereen weg' en 's nachts op 18 graden
+
+Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen de knop kiezen (input_boolean.iedereen_weg).
+
+- Nieuwe instelling 'Airco 's nachts vasthouden op': op de vaste uittijd (22:00) gaat de airco niet uit maar terug naar die temperatuur, tot de ochtend. Alleen met Airco automaat aan, als er iemand thuis is en de airco goedkoper is dan gas; anders gewoon uit.
+- Het begin van de ochtendverwarming is weer dynamisch: het volgt uit de verwachte kamertemperatuur en hoe snel de airco het huis bij de buitentemperatuur van die ochtend opwarmt (de vaste grens van een uur uit v5.254.0 is weg).
+- Nieuwe instelling: een schakelaar die aan staat als iedereen weg is. De aanwezigheid is dan 'weg', wat de sensoren ook zeggen; de airco die het EMS aanzette gaat meteen naar 18 graden (anders pas na twee uur) en de ingestelde ochtendverwarming slaat over. Gaat de knop uit, dan gelden de sensoren weer en gaat de airco terug naar de gewone temperatuur.
+
 EMS v5.254.1 - airco gaat overdag alleen naar 23 graden als er iemand thuis is
 
 Installeren: via de Marketplace bijwerken en herstarten.

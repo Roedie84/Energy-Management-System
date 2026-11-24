@@ -38,10 +38,10 @@ def test_de_instelling_gaat_voor_wat_geleerd_is():
 
 def test_op_tijd_beginnen_zodat_het_om_zeven_uur_warm_is():
     r = _ritme()
-    # 4,5 graad tekort bij 3 graden per uur = 1,5 uur, maar een ingestelde
-    # ochtend begint hooguit een uur vooraf (v5.254.0): vanaf 06:00
-    assert _vraag(r, DI.replace(hour=5, minute=45)) is None
-    v = _vraag(r, DI.replace(hour=6, minute=0))
+    # v5.255.0: het begin volgt uit het huis. 4,5 graad tekort bij 3 graden
+    # per uur = 1,5 uur: vanaf 05:30
+    assert _vraag(r, DI.replace(hour=5, minute=15)) is None
+    v = _vraag(r, DI.replace(hour=5, minute=30))
     assert v["actie"] == "verwarmen" and v["doel_c"] == 21.0
     assert "ingesteld" in v["reden"] and "07:00" in v["tekst"]
 
@@ -155,3 +155,16 @@ def test_een_airco_van_de_ochtend_gaat_overdag_mee_naar_het_dagdoel(make_coordin
     c._airco_laatste_ems = {"stand": "heat", "doel": 21.0, "basis": 21.0}
     uit = c._airco_buffer_ronde(DI.replace(hour=8, minute=30), {"actie": "niets", "doel_c": 21.0}, "heat")
     assert uit.get("actie") == "niets"
+
+
+def test_het_begin_volgt_uit_het_huis_en_niet_uit_een_vaste_tijd():
+    """v5.255.0 (Ruud: dynamisch). Warmere kamer of sneller opwarmen = later
+    beginnen; koude nacht of traag opwarmen = eerder."""
+    # nacht op 18 graden, 3 graden per uur: een uur vooraf
+    assert _vraag(_ritme(), DI.replace(hour=5, minute=55), woonkamer=18.0) is None
+    assert _vraag(_ritme(), DI.replace(hour=6, minute=0), woonkamer=18.0)["actie"] == "verwarmen"
+    # bijna warm (20 graden): 20 minuten vooraf
+    assert _vraag(_ritme(), DI.replace(hour=6, minute=30), woonkamer=20.0) is None
+    assert _vraag(_ritme(), DI.replace(hour=6, minute=40), woonkamer=20.0)["actie"] == "verwarmen"
+    # strenge vorst: de airco warmt trager op (2 graden per uur): anderhalf uur
+    assert _vraag(_ritme(), DI.replace(hour=5, minute=30), woonkamer=18.0, tempo=2.0)["actie"] == "verwarmen"
