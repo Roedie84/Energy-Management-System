@@ -451,3 +451,16 @@ laatste ronde: 22-11 06:45, gemeten t/m 22-11 06:45
 - Niet gemeten: MC-Brier (geen avondmeting), SoC-voorspelling, NILM; de eerste 4 van 9 missers (alleen laatste 5 zichtbaar).
 
 laatste ronde: 23-11 06:45, gemeten t/m 23-11 06:45
+
+## 24-11 06:45 · dagcontrole (23-11 06:45 t/m 24-11 06:45; v5.251.1 geïnstalleerd, herstart 23-11 ~14:53)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, laden 82,1 % sluitend op de snapshots, ontladen 99 %, start 98 % eind 100 %): werkelijk € 3,39, optimum € 3,33 → **gemist € 0,06, 1 FOUT, 0 PECH**. Zonder accu € 3,52.
+- FOUT 23-11 07:45-10:15: 2,08 kWh verkocht op 46-48 ct (1,25 kW), daarna 11:00-14:15 2,77 kWh AC teruggeladen op 38,3-39,6 ct tot 99 % (Zendure-teller: 74 % laadrendement). Regel c: verkoop + terugkoop kostte meer dan hij opbracht (teller € −0,10, LP € −0,06). Zonder deze cyclus was de accu om 16:15 even vol geweest (avond zat op max vermogen). Oorzaak: plan rekent laden vlak met 82,8 % en ontladen bij 0,5-1,5 kW met 102,8 %; in eigen model quitte. **H-EMS-25 (nieuw):** laden boven ~90 % kost meer (uurstatistiek 10-24/11: 72 % tegen 83-85 % eronder). 24-11 plant hetzelfde patroon (verkoop 06:45-09:15 47-52 ct, bijladen 11:15+ 39-40 ct). Toetsen met minuutdata; bij bevestiging voorstel SoC-afhankelijk laadrendement.
+- Avond 16:15-19:15 2,4 kW verkocht 49,7-53 ct tot 10 %; huis 19:30-24:00 3,18 kWh van het net 43,9 ct: loslaten woning-eerst +€ 0,18. Nachtladen 23:45-05:15 9,20 kWh AC gem 37,6 ct (84,6 %), goedkoopste kwartieren ≤ € 0,01 ernaast. Knop verkopen-uit niet gebruikt.
+- Register nr. 2 **afgesloten**: per uur 6 dagen 10 u +100 % (+0,30 kWh/d), dagtotaal 10 d −3 %; onder saldering geen euro-effect (zon om 10 u wordt teruggeleverd op 42-46 ct) → geen correctie, vaste bewaking (nodig voor nr. 12, 01-03-2027).
+- PV-plan 10 d **−3,0 %** (30 d −8 %). Verbruik 23-11 13,90 kWh; meetlat sinds herstart 1 u vooraf −45 W (te laag), 3 u −39 W. Nacht 3,18 kWh (incl. vaatwasser 03:15).
+- Module 1: 100 % **0,09 V** (gisteren 0,02; accu stond vanaf 05:15 op 100 %, eerder 98-99 %; bij 99 % live 0,01; = nulmeting 10-11), 0 % 0,04 V, laagste cel 23-11 3,03 (3,06/3,06), daghoogste celdelta 0,16 (0,05/0,03). Geen drempel; volgen of de 100 %-mediaan verder stijgt.
+- Register nr. 7: sinds herstart 44 gevolgd, 2 niet (laden bij 95 %), 5 kan_niet = 95,7 %. Nr. 8: 23-11 € 0,00. Reserveprijs EnergyZero: 96 geleerde kwartieren, opslag 13,1 ct, fout null.
+- Storingen 0 (prijssensor kort leeg na herstart 23-11 15:00, Zonneplan-kostensensoren rond 00:00: bekend). Schaduw-entiteiten weg. Stilstand 0. Suite niet gedraaid (geen codewijziging). Geen release.
+- Niet gemeten: verbruik tegen ochtendverwachting (geen archiefwaarde opgehaald), MC-Brier, SoC-voorspelling, NILM.
+
+laatste ronde: 24-11 06:45, gemeten t/m 24-11 06:45

@@ -1678,3 +1678,26 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-11-23 06:45,DAG,module1_delta_0,0.04,200,(0.02-0.05); anderen 0.01/0.01
 2026-11-23 06:45,DAG,module1_laagste_cel,3.16,1,"22-11 geschiedenis (accu 29 %); 00917 3.16, 02093 3.16; daghoogste celdelta 0,03 (anderen 0,02/0,03)"
 2026-11-23 06:45,DAG,module1_soc_laag_afwijking_pct,0,1,"22-11 laagste stand 29 % (geen lage stand); dagmediaan -1 %"
+2026-11-24 06:45,DAG,ems_achteraf_werkelijk_eur,3.39,96,"23-11 06:45 t/m 24-11 06:45; marginaal (prijs-11,08 ct), slijtage 4,22 ct; start 98 % eind 100 %"
+2026-11-24 06:45,DAG,ems_achteraf_optimum_eur,3.33,96,"LP laadrendement 82,1 % (kwartier-snapshots, sluitend over de dag), ontladen 99 %; met 84,7 % (nacht, teller) 3,25"
+2026-11-24 06:45,DAG,ems_achteraf_gemist_eur,0.06,96,"1 fout 0 pech: ochtendverkoop 07:45-10:15 2,08 kWh (46-48 ct) teruggeladen 11:00-14:15 2,77 kWh AC (38,3-39,6 ct, laadrendement 74 % tot 99 %)"
+2026-11-24 06:45,DAG,ems_zonder_accu_eur,3.52,96,"zelfde maatstaf, zonder voorraadcorrectie (98 -> 100 %)"
+2026-11-24 06:45,DAG,ems_loslaten_woning_eerst_eur,0.18,1,"23-11 5,19 kWh uit de accu verkocht gem 49,65 ct; huis 19:30-24:00 3,18 kWh van het net gem 43,87 ct"
+2026-11-24 06:45,DAG,ems_knop_verkopen_uit_eur,0,1,23-11 knop uit
+2026-11-24 06:45,DAG,ems_nachtladen_kwh,9.20,24,"23-11 23:45 - 24-11 05:15 Zendure-teller, gem 37,6 ct, 10 -> 100 % (laadrendement 84,6 %)"
+2026-11-24 06:45,DAG,accu_laadrendement_dag_pct,74,1,"middag 23-11 75 -> 98/99 % = 2,0 kWh inhoud / 2,77 kWh AC (Zendure-teller); nacht 84,6 %"
+2026-11-24 06:45,DAG,accu_laadrendement_boven90_pct,72,8,"10-24 nov uurstatistiek: uren die op >= 95 % eindigen 72 % (8 u, 10,0 kWh AC) tegen 83-85 % onder 90 % (69 u, 107 kWh); grof (SoC per heel procent)"
+2026-11-24 06:45,DAG,pv_werkelijk_kwh,4.72,96,23-11 (kwartier-snapshots)
+2026-11-24 06:45,DAG,pv_plan_bias_10d_pct,-3.0,10,"plan 28,4 / 27,6 kWh; MAE 0,61 kWh/d; 30 d -8 %; per uur 6 dagen (18-23): 10 u +100 % (+0,30 kWh/d), 9 u +25 %, 13 u +17 %, 8 u -45 %, 15 u -23 %"
+2026-11-24 06:45,DAG,ems_verbruik_dag_kwh,13.90,96,23-11 huis (kwartier-snapshots)
+2026-11-24 06:45,DAG,ems_verbruiksmeetlat_1u_w,-45,60,"sinds herstart 23-11: 1 u vooraf 45 W te laag (fout 164 W), 3 u -39 (155), dit kwartier -106 (171)"
+2026-11-24 06:45,DAG,ems_nachtverbruik_kwh,3.18,35,"23-11 22:00 - 24-11 06:45 huis (incl. vaatwasser 03:15-03:45 ~2,2 kW)"
+2026-11-24 06:45,DAG,ems_stilstand_functies,0,0,"geen (zelfconsumptieratio unknown na middernacht normaal; nog_niet_bepaald 6)"
+2026-11-24 06:45,DAG,zendure_opdrachten_gevolgd_pct,95.7,46,"sinds herstart 23-11 ~14:53: 44 gevolgd, 2 niet_gevolgd (05:03/05:11 laden bij 95 %: 37/33 % van de opdracht), 5 kan_niet"
+2026-11-24 06:45,DAG,repetitie_2027_waardeplan_laat_liggen_eur,0.00,96,"23-11: waardeplan 2027 4,21, best 4,27 (regels 2027 4,31); samenvatting 5 dagen 0,03"
+2026-11-24 06:45,DAG,reserveprijs_geleerde_kwartieren,96,96,"EnergyZero: opslag 13,1 ct incl (2,0 excl), fout null, niet in gebruik"
+2026-11-24 06:45,DAG,module1_delta_100,0.09,200,"soc_buckets mediaan (0.01-0.14; laatste 0.08); anderen 0.02/0.01. Sprong van 0,02: accu stond 24-11 vanaf 05:15 op 100 % (eerder 98-99 %); bij 99 % live 0,01. Gelijk aan nulmeting 10-11 (0,09), onder grens 0,13"
+2026-11-24 06:45,DAG,module1_delta_0,0.04,200,(0.02-0.05); anderen 0.01/0.01
+2026-11-24 06:45,DAG,module1_laagste_cel,3.03,1,"23-11 geschiedenis (accu 10 %); 00917 3.06, 02093 3.06 (verschil 0,03)"
+2026-11-24 06:45,DAG,module1_daghoogste_celdelta,0.16,471,"24-11 tot 06:45 (bucket 90-100 % bij volladen); anderen 0.05/0.03"
+2026-11-24 06:45,DAG,module1_soc_laag_afwijking_pct,-3,471,"dag_metingen laagste -3 % (grens: meer dan 3 % onder); mediaan 0"
