@@ -225,6 +225,20 @@ def geleerd(ritme: dict, soort: str) -> dict:
     uit = list(ritme["uit"][soort].values())
     ochtenden = ritme["ochtenden"][soort]
     gewenst = sum(1 for d in ochtenden if d in aan)
+    vast = (ritme.get("vast_ochtend") or {}).get(soort)
+    if vast and vast.get("warm_om") is not None:
+        # v5.253.0: een ingestelde ochtend gaat voor wat er geleerd is.
+        return {
+            "warm_om": int(vast["warm_om"]),
+            "ochtend_doel_c": float(vast["doel_c"]),
+            "bedtijd": round(statistics.median(uit)) if len(uit) >= MIN_KEER else None,
+            "kans": 1.0,
+            "keer_aan": len(momenten),
+            "keer_doel": len(doelen),
+            "keer_uit": len(uit),
+            "ochtenden": len(ochtenden),
+            "vast": True,
+        }
     return {
         "warm_om": round(statistics.median(momenten)) if len(momenten) >= MIN_KEER else None,
         "ochtend_doel_c": (
@@ -398,10 +412,15 @@ def besluit(
                 else f"geleerde bedtijd {klok(bed)} ({leer['keer_uit']} avonden)"
             ),
         }
-    if not is_ochtend(nu) or aanwezigheid == "weg":
+    if not is_ochtend(nu):
         return None
     soort = dagsoort(nu)
     leer = geleerd(ritme, soort)
+    # v5.253.0: een ingestelde ochtend geldt ook als de aanwezigheid 'weg'
+    # zegt (Ruud is dan al naar zijn werk; wie er nog is, slaapt of is niet
+    # te volgen). Wat geleerd is, blijft alleen gelden als er iemand is.
+    if aanwezigheid == "weg" and not leer.get("vast"):
+        return None
     if leer["warm_om"] is None or leer["ochtend_doel_c"] is None:
         return None
     if ritme["ems"]["aan"] == nu.date().isoformat() and airco_stand == "heat":
@@ -443,7 +462,9 @@ def besluit(
             "opwarmen)." + _prijstekst(prijs)
         ),
         "reden": (
-            f"{soort}: jullie willen het rond {klok(leer['warm_om'])} {doel:.1f} °C "
+            f"{soort}: ingesteld - om {klok(leer['warm_om'])} {doel:.1f} °C"
+            if leer.get("vast")
+            else f"{soort}: jullie willen het rond {klok(leer['warm_om'])} {doel:.1f} °C "
             f"({leer['keer_aan']} ochtenden, {round((leer['kans'] or 0) * 100)}% van de ochtenden)"
         ),
     }

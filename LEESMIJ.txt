@@ -1,3 +1,10 @@
+EMS v5.253.0 - op werkdagen 's ochtends warm
+
+Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen 'Airco op werkdagen warm om' invullen (bijvoorbeeld 07:00); leeg = uit.
+
+- Het EMS verwarmt de woonkamer op werkdagen vooraf (tot 1,5 uur, op het goedkoopste moment daarbinnen) zodat het op het ingestelde tijdstip op temperatuur is, en houdt dat een uur vast. Ook als de aanwezigheid 'weg' of 'slaapt' zegt; niet in de vakantiestand, niet als gas goedkoper is en alleen met de knop Airco automaat aan.
+- Het extra verbruik zit in de verbruiksverwachting, dus het accuplan houdt er rekening mee (bewaart er lading voor als dat goedkoper is dan verkopen).
+
 EMS v5.252.0 - bovenin kost netladen meer stroom
 
 Installeren: via de Marketplace bijwerken en herstarten.

@@ -203,6 +203,12 @@ CONF_AIRCO_POWER_SENSOR = "airco_power_sensor_entity"
 # aan), één keer per avond. Ongeldig: de geleerde bedtijd.
 CONF_AIRCO_UIT_OM = "airco_uit_om"
 DEFAULT_AIRCO_UIT_OM = "22:00"
+# v5.253.0 (Ruud 24-11: "smorgens tussen 7 en 8 door de week ook behaaglijk"):
+# op werkdagen warm om dit tijdstip, een uur lang. Leeg = uit (dan geldt wat
+# het EMS uit jullie eigen bediening leerde).
+CONF_AIRCO_WERKDAG_WARM_OM = "airco_werkdag_warm_om"
+DEFAULT_AIRCO_WERKDAG_WARM_OM = ""
+AIRCO_WERKDAG_OCHTEND_DOEL_C = 21.0
 CONF_LIVING_ROOM_TEMPERATURE_SENSOR = "living_room_temperature_sensor_entity"
 CONF_LIVING_ROOM_HUMIDITY_SENSOR = "living_room_humidity_sensor_entity"
 CONF_LIVING_ROOM_SHUTTER_ENTITY_1 = "living_room_shutter_entity_1"

@@ -36021,3 +36021,21 @@ uit uurcijfers; over alle kwartieren is het 78 %.
 
 Toets: `tests/test_v5252_laadtoeslag.py` (krap bijladen bovenin vervalt, onder
 de grens identiek plan, ruim verschil laadt nog tot vol, SoC naar fractie).
+
+## v5.253.0 — op werkdagen 's ochtends warm (Ruud 24-11)
+
+"Ik wil graag dat het smorgens tussen 7 en 8 door de week ook behaaglijk is"
+en "het energieverbruik van mijn woning wordt daardoor natuurlijk anders".
+Het dagritme leerde dit niet (1 van de 20 werkdagochtenden aan).
+
+- Nieuwe instelling `airco_werkdag_warm_om` (UU:MM, leeg = uit). De
+  coordinator zet hem als `vast_ochtend` in het ritme; `airco_ritme.geleerd`
+  geeft dan dat tijdstip met het geleerde dagdoel (anders 21 °C) en kans 1.
+  Alles wat het ritme leest, volgt vanzelf: het opwarmmoment (tot 1,5 uur
+  vooraf, op prijs), een uur vasthouden, en `ochtend_kwh` in de
+  verbruiksverwachting van het waardeplan.
+- Een ingestelde ochtend geldt ook bij aanwezigheid 'weg' (Ruud is dan al
+  weg; de anderen zijn niet te volgen). Niet in de vakantiestand; gas
+  goedkoper, raam open en de knop Airco automaat gelden zoals altijd.
+
+Toets: `tests/test_v5253_werkdagochtend.py` (8).

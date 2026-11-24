@@ -53,6 +53,9 @@ from .const import (
     CONF_AIRCO_COP_PER_GRAAD,
     CONF_AIRCO_EXTERN_ENTITY,
     CONF_AIRCO_UIT_OM,
+    CONF_AIRCO_WERKDAG_WARM_OM,
+    DEFAULT_AIRCO_WERKDAG_WARM_OM,
+    AIRCO_WERKDAG_OCHTEND_DOEL_C,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
     CONF_KNMI_WEATHER_ENTITY,
     CONF_LIVING_ROOM_HUMIDITY_SENSOR,
@@ -1900,6 +1903,16 @@ class KlimaatMixin:
     def _airco_ritme(self) -> dict:
         """Het geleerde dagritme, altijd in een bruikbare vorm (v5.65)."""
         self.airco_ritme = airco_ritme.geldig(self.airco_ritme)
+        # v5.253.0: de ingestelde werkdagochtend (leeg = uit; niet in de vakantiestand)
+        om = airco_ritme.minuten_uit_klok(
+            self.instelling(CONF_AIRCO_WERKDAG_WARM_OM, DEFAULT_AIRCO_WERKDAG_WARM_OM)
+        )
+        vast = {}
+        if om is not None and airco_ritme.OCHTEND_VAN < om < airco_ritme.OCHTEND_TOT \
+                and not getattr(self, "vacation_mode", False):
+            doel = airco_ritme.geleerd_dag(self.airco_ritme, "werkdag").get("doel_c")
+            vast = {"werkdag": {"warm_om": om, "doel_c": doel or AIRCO_WERKDAG_OCHTEND_DOEL_C}}
+        self.airco_ritme["vast_ochtend"] = vast
         return self.airco_ritme
 
     def _airco_opwarmtempo(
