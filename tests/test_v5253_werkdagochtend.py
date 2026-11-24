@@ -138,6 +138,11 @@ def test_een_airco_van_de_ochtend_gaat_overdag_mee_naar_het_dagdoel(make_coordin
     c.airco_door_ems = True
     c._airco_handmatig_bij = None
     c._airco_laatste_ems = {"stand": "heat", "doel": 21.0, "basis": 21.0}
+    c.presence_state = "weg"                      # v5.254.1: niet omhoog in een leeg huis
+    c.huidige_prijs_eur_per_kwh = lambda *_a: 0.30
+    c._get_forecast_entries = lambda *a, **k: []
+    assert c._airco_buffer_ronde(DI.replace(hour=11, minute=5), {"actie": "niets", "doel_c": 23.0}, "heat").get("actie") == "niets"
+    c.presence_state = "thuis"
     c._get_forecast_entries = lambda *a, **k: []
     c.huidige_prijs_eur_per_kwh = lambda *_a: 0.30
     uit = c._airco_buffer_ronde(DI.replace(hour=11, minute=5), {"actie": "niets", "doel_c": 23.0}, "heat")

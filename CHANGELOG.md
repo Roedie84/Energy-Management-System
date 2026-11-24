@@ -36057,3 +36057,9 @@ Smiddags mag de temperatuur naar 23 i.p.v. 21."
   het EMS eerder aanzette, wordt bijgesteld naar dat doel (niet vanaf de lage
   stand voor lang weg). De ochtend blijft 21 °C. Wat het EMS zelf instelt,
   telt niet mee in het geleerde doel.
+
+## v5.254.1 — dagdoel niet in een leeg huis (Ruud 24-11: "wat als er om half 9 niemand meer thuis is?")
+
+Het bijstellen naar het dagdoel (v5.254.0) keek niet naar de aanwezigheid: wie
+om 10:00 vertrok, kreeg om 11:00 een airco op 23 °C tot de lage stand na twee
+uur weg. Nu alleen bij aanwezigheid 'thuis'.

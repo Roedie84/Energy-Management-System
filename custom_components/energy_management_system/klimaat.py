@@ -2801,7 +2801,9 @@ class KlimaatMixin:
         # overdag mee naar het ingestelde dagdoel. Niet als hij op de lage
         # stand voor 'lang weg' staat (onder 19 °C).
         dagdoel = self._airco_middag_doel()
+        # v5.254.1: alleen als er iemand thuis is - niet omhoog in een leeg huis.
         if bijstellen and dagdoel is not None and airco_ritme.is_dag(now) \
+                and self.presence_state == "thuis" \
                 and basis is not None and 19.0 <= basis < dagdoel:
             basis = dagdoel
         # v5.141.0 (L-EMS-043): de reeks staat in eenheden van 1e-7 euro

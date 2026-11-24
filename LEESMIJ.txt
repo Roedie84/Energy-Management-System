@@ -1,3 +1,9 @@
+EMS v5.254.1 - airco gaat overdag alleen naar 23 graden als er iemand thuis is
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Een airco die het EMS 's ochtends aanzette, ging om 11:00 mee naar het dagdoel, ook in een leeg huis. Nu alleen als er iemand thuis is.
+
 EMS v5.254.0 - airco: korter vooraf, alleen als er iemand was, overdag naar 23 graden
 
 Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen invullen: 'Airco op werkdagen warm om' (07:00) en 'Airco overdag verwarmen tot' (23).
