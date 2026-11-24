@@ -1,3 +1,11 @@
+EMS v5.258.0 - werkdagochtend 19 graden met een dynamisch begin; nieuwe apparaten korter in beeld
+
+Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen 'niet eerder beginnen dan' invullen.
+
+- Werkdagochtend: het doel is 19 graden (was 21), instelbaar met 'Airco op werkdagen: 's ochtends verwarmen tot'.
+- 'Airco op werkdagen: niet eerder beginnen dan' (in v5.257.0 een vaste begintijd): de ochtendverwarming begint niet voor die tijd, en later naarmate het huis minder is afgekoeld. Is het al warm genoeg, dan gaat hij niet aan.
+- Cockpit, regel 'Nieuw gevonden': een vondst blijft twee dagen staan (was een week), en een dag als er niets voor hoeft te gebeuren. Wat op akkoord wacht, blijft staan tot er een antwoord is.
+
 EMS v5.257.0 - vaste begintijd voor de werkdagochtend van de airco
 
 Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen de begintijd invullen.

@@ -89,7 +89,7 @@ def test_het_verbruik_van_de_ochtend_zit_in_de_verwachting():
 
 def test_de_coordinator_zet_de_instelling_in_het_ritme(make_coordinator, hass):
     c = make_coordinator({"airco_werkdag_warm_om": "07:00"})
-    assert c._airco_ritme()["vast_ochtend"] == {"werkdag": {"warm_om": 420, "doel_c": 21.0}}
+    assert c._airco_ritme()["vast_ochtend"] == {"werkdag": {"warm_om": 420, "doel_c": 19.0}}
     c.vacation_mode = True
     assert c._airco_ritme()["vast_ochtend"] == {}
     assert make_coordinator({})._airco_ritme()["vast_ochtend"] == {}
@@ -123,7 +123,7 @@ def test_de_coordinator_kiest_overdag_het_ingestelde_doel(make_coordinator, hass
     assert c._airco_doel_nu(DI.replace(hour=21, minute=45)) == 21.0
     r = c._airco_ritme()
     assert r["vast_dag_doel"] == 23.0
-    assert r["vast_ochtend"]["werkdag"]["doel_c"] == 21.0        # de ochtend blijft 21
+    assert r["vast_ochtend"]["werkdag"]["doel_c"] == 19.0        # de ochtend: eigen doel (v5.258.0)
     zonder = make_coordinator({})
     zonder.airco_setpunten = [21.0] * 6
     assert zonder._airco_doel_nu(DI.replace(hour=14)) == 21.0
@@ -170,36 +170,45 @@ def test_het_begin_volgt_uit_het_huis_en_niet_uit_een_vaste_tijd():
     assert _vraag(_ritme(), DI.replace(hour=5, minute=30), woonkamer=18.0, tempo=2.0)["actie"] == "verwarmen"
 
 
-# --- v5.257.0: vaste begintijd (Ruud 24-11: "door om 06:30 aan te gaan") -----
+# --- v5.257.0/v5.258.0: vroegste begin (Ruud 24-11: "06:30 starten, wel
+# dynamisch dus woning minder afgekoeld later starten") en 19 graden ---------
 
-def _ritme_vast_begin():
+def _ritme_begin(doel=19.0):
     r = R.leeg()
-    r["vast_ochtend"] = {"werkdag": {"warm_om": 7 * 60, "doel_c": 21.0, "aan_om": 6 * 60 + 30}}
+    r["vast_ochtend"] = {"werkdag": {"warm_om": 7 * 60, "doel_c": doel, "aan_om": 6 * 60 + 30}}
     return r
 
 
-def test_met_een_vaste_begintijd_begint_hij_precies_dan():
-    r = _ritme_vast_begin()
+def test_niet_voor_de_ingestelde_tijd_en_later_als_het_huis_warmer_is():
+    r = _ritme_begin()
     assert R.geleerd(r, "werkdag")["aan_om"] == 390
     assert R.geleerd(_ritme(), "werkdag")["aan_om"] is None
-    # zonder vaste begintijd zou hij om 05:30 beginnen (zie hierboven)
-    assert _vraag(r, DI.replace(hour=5, minute=30)) is None
-    assert _vraag(r, DI.replace(hour=6, minute=29)) is None
+    # koud huis (16,5): 2,5 graad bij 3 per uur = 50 min -> 06:10, maar niet voor 06:30
+    assert _vraag(r, DI.replace(hour=6, minute=15)) is None
     v = _vraag(r, DI.replace(hour=6, minute=30))
-    assert v["actie"] == "verwarmen" and v["doel_c"] == 21.0 and v["prijsstart"] is None
+    assert v["actie"] == "verwarmen" and v["doel_c"] == 19.0 and v["prijsstart"] is None
     assert "06:30" in v["tekst"]
-    # en het verbruik in de verwachting telt vanaf 06:30, niet vanaf 05:30
-    r["vermogens"] = [1.3] * 5
+    # minder afgekoeld (18,0): 20 min -> pas om 06:40
+    assert _vraag(r, DI.replace(hour=6, minute=35), woonkamer=18.0) is None
+    assert _vraag(r, DI.replace(hour=6, minute=40), woonkamer=18.0)["actie"] == "verwarmen"
+    # al warm genoeg: niet aan
+    assert _vraag(r, DI.replace(hour=6, minute=45), woonkamer=19.0) is None
+    # het verbruik in de verwachting telt vanaf 06:30, niet eerder
+    r21 = _ritme_begin(21.0) | {"vermogens": [1.3] * 5}
     zonder = _ritme() | {"vermogens": [1.3] * 5}
-    assert R.ochtend_kwh(r, DI.replace(hour=0), DI.replace(hour=12), lambda t: 16.5, 3.0) < \
+    assert R.ochtend_kwh(r21, DI.replace(hour=0), DI.replace(hour=12), lambda t: 16.5, 3.0) < \
         R.ochtend_kwh(zonder, DI.replace(hour=0), DI.replace(hour=12), lambda t: 16.5, 3.0)
 
 
-def test_de_coordinator_neemt_de_begintijd_alleen_over_als_die_voor_warm_om_ligt(make_coordinator, hass):
+def test_de_coordinator_zet_begin_en_doel(make_coordinator, hass):
     c = make_coordinator({"airco_werkdag_warm_om": "07:00", "airco_werkdag_aan_om": "06:30"})
-    assert c._airco_ritme()["vast_ochtend"]["werkdag"]["aan_om"] == 390
+    assert c._airco_ritme()["vast_ochtend"]["werkdag"] == {"warm_om": 420, "doel_c": 19.0, "aan_om": 390}
+    c = make_coordinator({"airco_werkdag_warm_om": "07:00", "airco_werkdag_doel_c": 20.5})
+    assert c._airco_ritme()["vast_ochtend"]["werkdag"]["doel_c"] == 20.5
     for fout in ("07:30", "", "03:00", "onzin"):
-        c = make_coordinator({"airco_werkdag_warm_om": "07:00", "airco_werkdag_aan_om": fout})
-        assert "aan_om" not in c._airco_ritme()["vast_ochtend"]["werkdag"]
+        c = make_coordinator({"airco_werkdag_warm_om": "07:00", "airco_werkdag_aan_om": fout,
+                              "airco_werkdag_doel_c": 30})
+        assert c._airco_ritme()["vast_ochtend"]["werkdag"] == {"warm_om": 420, "doel_c": 19.0}
     for bestand in ("strings.json", "translations/nl.json", "translations/en.json"):
-        assert json.dumps(json.loads((MAP / bestand).read_text())).count("airco_werkdag_aan_om") == 2
+        tekst = json.dumps(json.loads((MAP / bestand).read_text()))
+        assert tekst.count("airco_werkdag_aan_om") == 2 and tekst.count("airco_werkdag_doel_c") == 2

@@ -6928,13 +6928,26 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         }
 
     def get_ontdekking_kort(self) -> dict:
-        """Voor de cockpit: wat op akkoord wacht en wat er de laatste week bij kwam (v5.248.0)."""
+        """Voor de cockpit: wat op akkoord wacht en wat er net bij kwam (v5.248.0).
+
+        v5.258.0 (Ruud 24-11: "naar 2 dagen weghalen, sneller als ik niets hoef
+        te doen"): een vondst blijft twee dagen staan, en maar een dag als er
+        niets voor hoeft te gebeuren (vanzelf toegevoegd of alleen gemeld). Wat
+        op akkoord wacht, blijft tot er een antwoord is. Was een week."""
+        from . import ontdekking as ontdekking_mod
+
         log = list(getattr(self, "ontdekking_log", None) or [])
-        grens = (dt_util.now() - timedelta(days=7)).isoformat()
+        nu = dt_util.now()
+        grens = (nu - timedelta(days=2)).isoformat()
+        grens_kort = (nu - timedelta(days=1)).isoformat()
+        niets_te_doen = (ontdekking_mod.AUTOMATISCH, ontdekking_mod.GEMELD)
         klein = lambda r: {"naam": r.get("naam"), "soort": r.get("soort"), "actie": r.get("actie")}  # noqa: E731
         return {
             "wacht_op_akkoord": [klein(r) for r in log if r.get("actie") == "wacht op jouw akkoord"][-5:],
-            "recent": [klein(r) for r in log if str(r.get("moment") or "") >= grens][-5:],
+            "recent": [
+                klein(r) for r in log
+                if str(r.get("moment") or "") >= (grens_kort if r.get("actie") in niets_te_doen else grens)
+            ][-5:],
         }
 
     def _update_koude_laden(self, now: datetime) -> None:

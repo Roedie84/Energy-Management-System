@@ -36121,3 +36121,14 @@ Alleen meting; ijken met een door Ruud waargenomen moment staat nog open.
 `airco_werkdag_aan_om`; `vast_ochtend[soort]["aan_om"]` -> `geleerd()["aan_om"]`;
 `besluit` begint dan op dat moment (geen `prijsstart`), `ochtend_kwh` telt het
 opwarmen vanaf dat moment. Leeg = het dynamische begin van v5.255.0.
+
+## v5.258.0
+
+**Werkdagochtend 19 °C, begin dynamisch met een vroegste tijd** (Ruud 24-11:
+"als setpoint 's morgens 19 ... 06:30 starten, wel dynamisch dus woning minder
+afgekoeld later starten"). `AIRCO_WERKDAG_OCHTEND_DOEL_C` 21 -> 19, nieuwe optie
+`airco_werkdag_doel_c` (16-24; anders 19). `airco_werkdag_aan_om` is nu het
+vroegste begin: start = max(aan_om, warm_om - voorloop); geen `prijsstart`.
+
+**Nieuw gevonden korter in beeld** (Ruud 24-11): `get_ontdekking_kort` toont
+twee dagen (was zeven), een dag voor 'automatisch toegevoegd' en 'gemeld'.

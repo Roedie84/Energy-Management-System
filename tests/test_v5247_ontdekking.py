@@ -322,3 +322,25 @@ def test_nieuwe_bewegingssensor_krijgt_een_melding_met_knoppen(make_coordinator,
 def test_de_luisteraar_staat_in_de_setup():
     bron = (Path(pkg.__file__).parent / "__init__.py").read_text(encoding="utf-8")
     assert 'async_listen("mobile_app_notification_action", _ontdekking_actie)' in bron
+
+
+# --- v5.258.0: korter in beeld (Ruud 24-11) ---------------------------------
+
+def test_een_vondst_blijft_twee_dagen_en_zonder_werk_een_dag(make_coordinator, hass):
+    from datetime import timedelta
+    from homeassistant.util import dt as dt_util
+    c = _coordinator(make_coordinator, _inv(*MODULE_1))
+    nu = dt_util.now()
+
+    def rij(naam, uren, actie):
+        return {"moment": (nu - timedelta(hours=uren)).isoformat(), "soort": "lamp", "naam": naam, "actie": actie}
+
+    c.ontdekking_log = [
+        rij("gemeld 30 u", 30, O.GEMELD), rij("gemeld 20 u", 20, O.GEMELD),
+        rij("vanzelf 30 u", 30, O.AUTOMATISCH), rij("vanzelf 2 u", 2, O.AUTOMATISCH),
+        rij("wacht-sensoren 40 u", 40, O.WACHT), rij("wacht-sensoren 50 u", 50, O.WACHT),
+        rij("akkoord 200 u", 200, O.VOORSTEL),
+    ]
+    kort = c.get_ontdekking_kort()
+    assert [r["naam"] for r in kort["recent"]] == ["gemeld 20 u", "vanzelf 2 u", "wacht-sensoren 40 u"]
+    assert [r["naam"] for r in kort["wacht_op_akkoord"]] == ["akkoord 200 u"]
