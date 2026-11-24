@@ -7433,6 +7433,14 @@ WAARDEPLAN_MIN_VERMOGEN_W = 400.0
 # v5.177.0 (A12): netladen pas vanaf dit vermogen (W, netkant). Onder 500 W
 # haalde laden 72 % tegen 85 % bij 500-1500 W: minder kwartieren, hoger vermogen.
 WAARDEPLAN_MIN_LAAD_W = 500.0
+# v5.252.0: bovenin laadt de accu minder zuinig (dagcontrole 24-11: verkocht
+# voor 46-48 ct en voor 38-40 ct bijgeladen tot 99 %, verlies EUR 0,06).
+# Gemeten uit 40 dagen dagverloop (15-10..24-11), kWh AC per procent SoC bij
+# laden: 0,1015 onder 80 %, 0,1076 van 80-90 %, 0,1108 daarboven (gemiddeld
+# 0,1030); ontladen in elke band 0,085-0,089. Dus t.o.v. het gemiddelde
+# laadrendement +4,5 % stroom vanaf 80 % en nog eens +3 % vanaf 90 %.
+# (SoC-grens in procenten, extra AC als fractie), optellend.
+WAARDEPLAN_LAADTOESLAG_SOC = ((80.0, 0.045), (90.0, 0.03))
 # v5.181.1 (punt 2, live 04-11): het handmatige vermogen wordt elke ronde
 # opnieuw bepaald (rest van het kwartier); binnen deze marge van wat er al op de
 # accu staat niet opnieuw schrijven.

@@ -58,6 +58,7 @@ from .const import (
     WAARDEPLAN_HUIS_EERST,
     WAARDEPLAN_VERKOOPVLOER_RESERVE,
     WAARDEPLAN_MIN_LAAD_W,
+    WAARDEPLAN_LAADTOESLAG_SOC,
     WAARDEPLAN_MIN_VERMOGEN_W,
     WAARDEPLAN_SLIJTAGE_TERUGVAL_CT,
     WAARDEPLAN_STUURT,
@@ -692,7 +693,22 @@ class WaardeplanSturingMixin:
             # v5.239.0: netladen dat alleen op die verwachting leunt moet de
             # gebruikelijke fout ervan goedmaken.
             eindprijs_marge_eur=self._waardeplan_eindprijs_marge(),
+            # v5.252.0: bovenin kost netladen meer stroom.
+            laadtoeslag=self._waardeplan_laadtoeslag(),
             **self._waardeplan_rendementen(now),
+        )
+
+    def _waardeplan_laadtoeslag(self) -> tuple:
+        """De toeslag op netladen bovenin (v5.252.0), van SoC-grenzen naar
+        fracties van de bruikbare inhoud (boven de ondergrens)."""
+        try:
+            onder = float(self.effective_min_soc_percent() or 0.0)
+        except Exception:  # noqa: BLE001
+            onder = 0.0
+        onder = max(0.0, min(50.0, onder))
+        return tuple(
+            (max(0.0, min(1.0, (soc - onder) / (100.0 - onder))), toeslag)
+            for soc, toeslag in WAARDEPLAN_LAADTOESLAG_SOC
         )
 
     def _waardeplan_uitkomst(self, res, accu, bruikbaar, kwartieren, balans) -> dict:

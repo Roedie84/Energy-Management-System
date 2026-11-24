@@ -136,6 +136,11 @@ class Accu:
     netlaadmarge_eur: float = 0.0
     #: v5.165.0: het gemeten laadrendement; None = wortel van de rondrit.
     rendement_laden: float | None = None
+    #: v5.252.0: bovenin laadt de accu minder zuinig. ((vanaf_fractie van de
+    #: bruikbare inhoud, extra AC als fractie), ...) oplopend en optellend:
+    #: wat een netlading boven die inhoud meer aan stroom kost dan het
+    #: gemiddelde laadrendement zegt. Leeg = overal hetzelfde rendement.
+    laadtoeslag: tuple = ()
     #: v5.165.0: ontlaadrendement per vermogensband aan de netkant, als
     #: ((bovengrens_w, rendement of None), ...) oplopend. Leeg of None in
     #: een band = het ene getal (rondrit / laadrendement).
@@ -559,6 +564,17 @@ class _Kw:
                 # anders ontliep een mini-netlading de marge (koken 17:00).
                 extra = np.minimum(min(self.tekort, self.af_slim), np.maximum(e, 0.0) * self.eta_h) \
                     * accu.bewaarmarge_eur
+            if accu.laadtoeslag and k.inkoop_eur > 0:
+                # v5.252.0: het deel van deze lading dat boven de afbouwgrens
+                # terechtkomt, kost meer stroom (gemeten 15-10..24-11: rondrit
+                # 85 % onder 80 % SoC, 82 % van 80-90 %, 78 % daarboven; het
+                # ontladen is in elke band gelijk). Alleen het netdeel telt:
+                # zon die anders het net op ging, is hier niet duurder van.
+                meer = 0.0
+                for vanaf, toeslag in accu.laadtoeslag:
+                    meer = meer + np.maximum(e2 - np.maximum(e, vanaf * cap), 0.0) * toeslag / eta_l
+                netdeel = np.clip((b - self.overschot) / np.maximum(b, 1e-9), 0.0, 1.0)
+                extra = extra + meer * netdeel * k.inkoop_eur
             if streng and k.dekken and k.inkoop_eur >= 0 and self.tekort > EPS_KWH:
                 # v5.186.0 (punt 5): in een dekkwartier ook geen netlading met
                 # inhoud: bij dezelfde prijs is laden voor later nog minder waard

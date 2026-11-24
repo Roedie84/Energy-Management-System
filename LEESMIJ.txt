@@ -1,3 +1,10 @@
+EMS v5.252.0 - bovenin kost netladen meer stroom
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Het plan rekende bij netladen overal met hetzelfde rendement. Gemeten over 40 dagen: rondrit 85 % onder 80 % lading, 82 % van 80-90 % en 78 % daarboven (ontladen is overal gelijk). Het plan telt nu de extra stroom mee voor het deel van een netlading boven 80 % (+4,5 %) en boven 90 % (nog +3 %).
+- Gevolg: een krappe ruil zoals op 23-11 ('s ochtends verkopen voor 46-48 ct, daarna voor 38-40 ct bijladen tot 99 %) doet het plan niet meer. Is het prijsverschil ruim, dan laadt het nog steeds tot vol. Zon opslaan is ongewijzigd.
+
 EMS v5.251.1 - tweede prijsbron haalde niets op
 
 Installeren: via de Marketplace bijwerken en herstarten.

@@ -36000,3 +36000,24 @@ Met de hand nagevraagd: `energyzero.get_energy_prices` weigert de hele vraag
 met "No price data available for <morgen>" zodra het bereik morgen raakt en
 die prijzen nog niet gepubliceerd zijn - ook bij een eind op 00:00. Nu een
 vraag per dag (tot 23:59); vandaag moet lukken, morgen mag mislukken.
+
+## v5.252.0 — bovenin kost netladen meer stroom (dagcontrole 24-11; Ruud: "doen wat het beste is")
+
+Fout 23-11 (EUR 0,06): 07:45-10:15 verkocht voor 46-48 ct, 11:00-14:15 voor
+38-40 ct bijgeladen tot 99 %. Het plan rekent met een laadrendement (82,8 %).
+Nagemeten uit 40 dagen dagverloop (kWh AC per procent SoC): laden 0,1015
+onder 80 %, 0,1076 van 80-90 %, 0,1108 daarboven; ontladen in elke band
+0,085-0,089. Het verlies zit dus echt in het laden bovenin (rondrit 85 / 82 /
+78 %), niet in de schaal van de SoC. De dagcontrole schatte ~72 % boven 90 %
+uit uurcijfers; over alle kwartieren is het 78 %.
+
+- `Accu.laadtoeslag` + `WAARDEPLAN_LAADTOESLAG_SOC = ((80, 0.045), (90, 0.03))`:
+  in de actie 'laden' kost het netdeel van de lading boven die grenzen zoveel
+  extra stroom tegen de inkoopprijs (t.o.v. het gemiddelde laadrendement, dus
+  geen dubbeltelling bovenin; onder 80 % blijft het plan ~1,5 % voorzichtig).
+- Alleen netladen in het waardeplan; zon opslaan, ontladen, de terugval en de
+  repetitie 2027 zijn ongewijzigd. De vaste grenzen: opnieuw meten bij de
+  volgende rendementsronde (meetregister nr. 14).
+
+Toets: `tests/test_v5252_laadtoeslag.py` (krap bijladen bovenin vervalt, onder
+de grens identiek plan, ruim verschil laadt nog tot vol, SoC naar fractie).
