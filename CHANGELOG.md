@@ -36039,3 +36039,21 @@ Het dagritme leerde dit niet (1 van de 20 werkdagochtenden aan).
   goedkoper, raam open en de knop Airco automaat gelden zoals altijd.
 
 Toets: `tests/test_v5253_werkdagochtend.py` (8).
+
+## v5.254.0 — airco: korter vooraf, alleen als er iemand was, dagdoel (Ruud 24-11)
+
+"Ik zit er een beetje mee dat Majorie haar telefoon in principe niet gevolgd
+mag worden. Dus wat is het beste? 1,5 uur van te voren lijkt me wat ruim.
+Smiddags mag de temperatuur naar 23 i.p.v. 21."
+
+- Aanwezigheid zonder telefoon: een ingestelde ochtend verwarmt bij 'weg'
+  alleen als deze datum in `ochtenden` staat, dus als de sensoren in huis
+  vannacht of vanochtend (vanaf 04:00) iemand zagen of 'slaapt' gold. Een
+  huis dat de hele nacht leeg was, wordt niet verwarmd (v5.253.0 deed dat wel).
+- `VOORLOOP_VAST_MAX_UUR = 1.0` voor een ingestelde ochtend (besluit en
+  verbruiksverwachting); geleerde ochtenden houden 1,5 uur.
+- Nieuwe instelling `airco_middag_doel_c` (0 = geleerd): tussen 11:00 en
+  21:30 het doel van het gewone besluit en van het dagritme. Een airco die
+  het EMS eerder aanzette, wordt bijgesteld naar dat doel (niet vanaf de lage
+  stand voor lang weg). De ochtend blijft 21 °C. Wat het EMS zelf instelt,
+  telt niet mee in het geleerde doel.

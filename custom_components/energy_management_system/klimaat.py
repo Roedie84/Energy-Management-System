@@ -54,6 +54,7 @@ from .const import (
     CONF_AIRCO_EXTERN_ENTITY,
     CONF_AIRCO_UIT_OM,
     CONF_AIRCO_WERKDAG_WARM_OM,
+    CONF_AIRCO_MIDDAG_DOEL_C,
     DEFAULT_AIRCO_WERKDAG_WARM_OM,
     AIRCO_WERKDAG_OCHTEND_DOEL_C,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
@@ -1798,9 +1799,7 @@ class KlimaatMixin:
             woonkamer_c=self.living_room_current_temp_c,
             aanwezigheid=self.presence_state,
             aanzet_c=airco_sturing.aanzettemperatuur(bakjes),
-            doel_c=airco_sturing.gewenste_temperatuur(
-                self.airco_setpunten, AIRCO_PREDICTION_MIN_SAMPLES
-            ),
+            doel_c=self._airco_doel_nu(now),
             advies=(self.get_verwarmingsadvies() or {}).get("advies"),
             handmatig=self._airco_handmatig_bij is not None,
             airco_stand=stand,
@@ -1910,10 +1909,26 @@ class KlimaatMixin:
         vast = {}
         if om is not None and airco_ritme.OCHTEND_VAN < om < airco_ritme.OCHTEND_TOT \
                 and not getattr(self, "vacation_mode", False):
-            doel = airco_ritme.geleerd_dag(self.airco_ritme, "werkdag").get("doel_c")
-            vast = {"werkdag": {"warm_om": om, "doel_c": doel or AIRCO_WERKDAG_OCHTEND_DOEL_C}}
+            vast = {"werkdag": {"warm_om": om, "doel_c": AIRCO_WERKDAG_OCHTEND_DOEL_C}}
         self.airco_ritme["vast_ochtend"] = vast
+        # v5.254.0: het ingestelde doel voor overdag en 's avonds (None = geleerd)
+        self.airco_ritme["vast_dag_doel"] = self._airco_middag_doel()
         return self.airco_ritme
+
+    def _airco_middag_doel(self) -> float | None:
+        """Het ingestelde doel voor overdag en 's avonds (v5.254.0), of None."""
+        try:
+            doel = float(self.instelling(CONF_AIRCO_MIDDAG_DOEL_C, 0) or 0)
+        except (TypeError, ValueError):
+            return None
+        return doel if 16.0 <= doel <= 26.0 else None
+
+    def _airco_doel_nu(self, now: datetime) -> float | None:
+        """Het doel van dit moment: overdag het ingestelde, anders het geleerde."""
+        vast = self._airco_middag_doel()
+        if vast is not None and airco_ritme.is_dag(now):
+            return vast
+        return airco_sturing.gewenste_temperatuur(self.airco_setpunten, AIRCO_PREDICTION_MIN_SAMPLES)
 
     def _airco_opwarmtempo(
         self, buiten_c: float | None = None, binnen_c: float | None = None
@@ -2782,6 +2797,13 @@ class KlimaatMixin:
         if uit.get("actie") != "verwarmen" and not bijstellen:
             return uit
         basis = uit.get("doel_c") if uit.get("actie") == "verwarmen" else laatste["basis"]
+        # v5.254.0: een airco die het EMS eerder aanzette (ochtend, 21 °C) gaat
+        # overdag mee naar het ingestelde dagdoel. Niet als hij op de lage
+        # stand voor 'lang weg' staat (onder 19 °C).
+        dagdoel = self._airco_middag_doel()
+        if bijstellen and dagdoel is not None and airco_ritme.is_dag(now) \
+                and basis is not None and 19.0 <= basis < dagdoel:
+            basis = dagdoel
         # v5.141.0 (L-EMS-043): de reeks staat in eenheden van 1e-7 euro
         # (PRICE_SCALE_FACTOR); de prijs van nu in euro. Zonder deling was
         # 'straks' altijd duurder en elk verwarmbesluit een halve graad hoger.

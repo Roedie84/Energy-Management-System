@@ -1,3 +1,11 @@
+EMS v5.254.0 - airco: korter vooraf, alleen als er iemand was, overdag naar 23 graden
+
+Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen invullen: 'Airco op werkdagen warm om' (07:00) en 'Airco overdag verwarmen tot' (23).
+
+- De werkdagochtend begint hooguit een uur vooraf (was 1,5 uur). Op een koude ochtend is het om 07:00 dan nog niet helemaal 21 graden.
+- De werkdagochtend verwarmt alleen als er vannacht of vanochtend iemand thuis was (gezien door de sensoren in huis, geen telefoons). Was het huis de hele nacht leeg, dan niet.
+- Nieuw: overdag en 's avonds (11:00-21:30) verwarmen tot een ingestelde temperatuur in plaats van de geleerde. Een airco die het EMS 's ochtends aanzette, gaat vanaf 11:00 mee naar die temperatuur.
+
 EMS v5.253.0 - op werkdagen 's ochtends warm
 
 Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen 'Airco op werkdagen warm om' invullen (bijvoorbeeld 07:00); leeg = uit.

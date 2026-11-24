@@ -209,6 +209,10 @@ DEFAULT_AIRCO_UIT_OM = "22:00"
 CONF_AIRCO_WERKDAG_WARM_OM = "airco_werkdag_warm_om"
 DEFAULT_AIRCO_WERKDAG_WARM_OM = ""
 AIRCO_WERKDAG_OCHTEND_DOEL_C = 21.0
+# v5.254.0 (Ruud 24-11: "Smiddags mag de temperatuur naar 23 i.p.v. 21"):
+# overdag en 's avonds (11:00-21:30) verwarmen tot deze temperatuur. Leeg of
+# 0 = de temperatuur die uit jullie eigen bediening geleerd is.
+CONF_AIRCO_MIDDAG_DOEL_C = "airco_middag_doel_c"
 CONF_LIVING_ROOM_TEMPERATURE_SENSOR = "living_room_temperature_sensor_entity"
 CONF_LIVING_ROOM_HUMIDITY_SENSOR = "living_room_humidity_sensor_entity"
 CONF_LIVING_ROOM_SHUTTER_ENTITY_1 = "living_room_shutter_entity_1"

@@ -48,6 +48,10 @@ KANS_MINIMAAL = 0.5
 NA_WARM_OM_MIN = 60
 VOORLOOP_MIN_UUR = 0.25
 VOORLOOP_MAX_UUR = 1.5
+# v5.254.0 (Ruud 24-11: "1,5 uur van te voren lijkt me wat ruim"): een
+# ingestelde ochtend begint hooguit zo lang vooraf. Op een koude ochtend is
+# het dan om het ingestelde tijdstip nog niet helemaal op temperatuur.
+VOORLOOP_VAST_MAX_UUR = 1.0
 VOORLOOP_ONBEKEND_UUR = 0.5
 MARGE_C = 0.3
 
@@ -416,10 +420,14 @@ def besluit(
         return None
     soort = dagsoort(nu)
     leer = geleerd(ritme, soort)
-    # v5.253.0: een ingestelde ochtend geldt ook als de aanwezigheid 'weg'
-    # zegt (Ruud is dan al naar zijn werk; wie er nog is, slaapt of is niet
-    # te volgen). Wat geleerd is, blijft alleen gelden als er iemand is.
-    if aanwezigheid == "weg" and not leer.get("vast"):
+    # v5.253.0/v5.254.0: een ingestelde ochtend geldt ook als de aanwezigheid
+    # nu 'weg' zegt, mits er vannacht of vanochtend iemand thuis was (Ruud is
+    # dan al naar zijn werk; wie er nog is, slaapt en wordt niet gevolgd). Was
+    # het huis de hele nacht leeg, dan niet. Wat geleerd is, blijft alleen
+    # gelden als er nu iemand is.
+    if aanwezigheid == "weg" and not (
+        leer.get("vast") and nu.date().isoformat() in ritme["ochtenden"][soort]
+    ):
         return None
     if leer["warm_om"] is None or leer["ochtend_doel_c"] is None:
         return None
@@ -448,6 +456,8 @@ def besluit(
     if verwacht >= doel - MARGE_C and woonkamer_c >= doel - MARGE_C:
         return None
     voorloop = voorloop_uren(verwacht, doel, tempo_c_per_uur)
+    if leer.get("vast"):
+        voorloop = min(voorloop, VOORLOOP_VAST_MAX_UUR)
     m = minuut(nu)
     start, prijs = prijsstart(leer["warm_om"] - round(voorloop * 60), voorloop, kost_per_uur, m)
     if not (start <= m < leer["warm_om"] + NA_WARM_OM_MIN):
@@ -685,6 +695,8 @@ def ochtend_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, tempo_c_
             warm = middernacht + timedelta(minutes=leer["warm_om"])
             voorspeld = verwacht_op(warm) if verwacht_op else None
             voorloop = voorloop_uren(voorspeld, leer["ochtend_doel_c"], tempo_c_per_uur)
+            if leer.get("vast"):
+                voorloop = min(voorloop, VOORLOOP_VAST_MAX_UUR)
             if voorspeld is None or voorspeld < leer["ochtend_doel_c"] - MARGE_C:
                 start = warm - timedelta(hours=voorloop)
                 totaal += vermogen * _overlap_uren(start, warm, van, tot)
@@ -986,7 +998,11 @@ def geleerd_dag(ritme: dict, soort: str) -> dict:
         "aan_om": round(statistics.median(momenten)) if len(momenten) >= MIN_KEER else None,
         "vroegst": momenten[0] if momenten else None,
         "laatst": momenten[-1] if momenten else None,
-        "doel_c": round(statistics.median(doelen), 1) if len(doelen) >= MIN_KEER else None,
+        # v5.254.0: een ingesteld dagdoel gaat voor het geleerde.
+        "doel_c": (
+            float(ritme["vast_dag_doel"]) if ritme.get("vast_dag_doel")
+            else round(statistics.median(doelen), 1) if len(doelen) >= MIN_KEER else None
+        ),
         "kans": round(gewenst / len(dagen), 2) if dagen else None,
         "keer_aan": len(momenten),
         "dagen": len(dagen),

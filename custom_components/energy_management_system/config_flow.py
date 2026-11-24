@@ -66,6 +66,7 @@ from .const import (
     CONF_AIRCO_POWER_SENSOR,
     CONF_AIRCO_UIT_OM,
     CONF_AIRCO_WERKDAG_WARM_OM,
+    CONF_AIRCO_MIDDAG_DOEL_C,
     CONF_AIRCO_RAAM_ENTITIES,
     DEFAULT_AIRCO_UIT_OM,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
@@ -629,6 +630,13 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_AIRCO_WERKDAG_WARM_OM,
                 description={"suggested_value": _as_text(defaults.get(CONF_AIRCO_WERKDAG_WARM_OM, ""))},
             ): selector.TextSelector(),
+            # v5.254.0: overdag verwarmen tot (0 = geleerd).
+            vol.Optional(
+                CONF_AIRCO_MIDDAG_DOEL_C,
+                default=float(defaults.get(CONF_AIRCO_MIDDAG_DOEL_C) or 0.0),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0, max=26, step=0.5, mode=selector.NumberSelectorMode.BOX)
+            ),
             # v5.77: ramen van woonkamer en keuken - open = airco nooit aan.
             vol.Optional(
                 CONF_AIRCO_RAAM_ENTITIES,
