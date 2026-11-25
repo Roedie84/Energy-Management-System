@@ -1,3 +1,9 @@
+EMS v5.258.1 - airco gaat 's nachts niet meer vanzelf aan voor de ingestelde ochtend
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Fout uit v5.253.0-v5.258.0: met een ingestelde werkdagochtend ging de airco vanaf 04:00 aan tot 21 graden zodra er iemand beneden kwam en het onder de 19,5 graden was (25-11 04:24, een halfuur aan). De ingestelde ochtend telde als 'jullie zetten hem 's ochtends altijd aan'. Nu kijkt die regel weer alleen naar wat jullie zelf deden; de ingestelde ochtend (niet voor de ingestelde begintijd, tot 19 graden) werkt ongewijzigd.
+
 EMS v5.258.0 - werkdagochtend 19 graden met een dynamisch begin; nieuwe apparaten korter in beeld
 
 Installeren: via de Marketplace bijwerken en herstarten. Daarna bij de instellingen 'niet eerder beginnen dan' invullen.

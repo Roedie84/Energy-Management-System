@@ -36132,3 +36132,12 @@ vroegste begin: start = max(aan_om, warm_om - voorloop); geen `prijsstart`.
 
 **Nieuw gevonden korter in beeld** (Ruud 24-11): `get_ontdekking_kort` toont
 twee dagen (was zeven), een dag voor 'automatisch toegevoegd' en 'gemeld'.
+
+## v5.258.1
+
+**Geen nachtstart door de ingestelde ochtend** (Ruud 25-11 04:57: "airco
+zojuist kort aan en weer uit"). `geleerd()` gaf met `vast_ochtend` kans 1,0;
+`ochtend_kans` gaf die door aan `airco_sturing.besluit`, waardoor de rem
+'jullie zetten hem 's ochtends zelden aan' (v5.177.0) verviel en het gewone
+besluit vanaf 04:00 tot het geleerde doel (21 °C) verwarmde. `ochtend_kans`
+rekent nu zonder `vast_ochtend`.

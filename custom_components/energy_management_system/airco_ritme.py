@@ -275,7 +275,12 @@ def ochtend_kans(ritme: dict, moment: datetime) -> dict | None:
     if not is_ochtend(moment):
         return None
     soort = dagsoort(moment)
-    leer = geleerd(ritme, soort)
+    # v5.258.1: de ingestelde werkdagochtend telt hier NIET mee. Die zette de
+    # kans op 100 %, waardoor het gewone besluit vanaf 04:00 tot het geleerde
+    # doel ging verwarmen zodra er iemand beneden kwam (25-11 04:24, Ruud:
+    # "airco zojuist kort aan en weer uit"). De ingestelde ochtend loopt via
+    # `besluit`; het gewone besluit kijkt naar wat jullie zelf deden.
+    leer = geleerd(dict(ritme, vast_ochtend={}), soort)
     if leer["kans"] is None:
         return None
     aan = ritme["aan"][soort]

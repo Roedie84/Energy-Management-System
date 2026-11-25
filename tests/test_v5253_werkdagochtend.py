@@ -212,3 +212,30 @@ def test_de_coordinator_zet_begin_en_doel(make_coordinator, hass):
     for bestand in ("strings.json", "translations/nl.json", "translations/en.json"):
         tekst = json.dumps(json.loads((MAP / bestand).read_text()))
         assert tekst.count("airco_werkdag_aan_om") == 2 and tekst.count("airco_werkdag_doel_c") == 2
+
+
+# --- v5.258.1: de ingestelde ochtend maakt het gewone besluit niet los -------
+
+def test_de_ingestelde_ochtend_telt_niet_als_geleerde_ochtendkans():
+    r = _ritme_begin()
+    for d in range(1, 21):                       # 20 werkdagochtenden thuis, 1 keer zelf aan
+        dag = (DI - timedelta(days=d)).date().isoformat()
+        r["ochtenden"]["werkdag"].append(dag)
+    r["aan"]["werkdag"][(DI - timedelta(days=3)).date().isoformat()] = {"minuut": 400, "doel": 21.0}
+    kans = R.ochtend_kans(r, DI.replace(hour=4, minute=24))
+    assert kans["kans"] == 0.05 and kans["keer"] == 1
+    # de ingestelde ochtend zelf blijft werken
+    assert R.geleerd(r, "werkdag")["kans"] == 1.0
+    assert _vraag(r, DI.replace(hour=6, minute=30))["actie"] == "verwarmen"
+    assert _vraag(r, DI.replace(hour=4, minute=24)) is None
+
+
+def test_het_gewone_besluit_verwarmt_dan_niet_om_half_vijf():
+    from custom_components.energy_management_system import airco_sturing as S
+    import inspect
+    r = _ritme_begin()
+    for d in range(1, 21):
+        r["ochtenden"]["werkdag"].append((DI - timedelta(days=d)).date().isoformat())
+    kans = R.ochtend_kans(r, DI.replace(hour=4, minute=24))
+    assert kans["kans"] < S.AIRCO_OCHTEND_MIN_KANS
+    assert "ochtend" in inspect.signature(S.besluit).parameters
