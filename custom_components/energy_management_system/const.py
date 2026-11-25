@@ -4172,6 +4172,10 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # een mens hem aanzette.
     "airco_setpunten": {"type": "plain"},
     "airco_door_ems": {"type": "plain"},
+    # v5.259.1 (Ruud 25-11: "nu nog 19?"): ook wat het EMS het laatst instelde.
+    # Zonder dit wist het na een herstart niet meer dat de draaiende airco van
+    # hem was en stelde het hem overdag niet bij naar het dagdoel.
+    "_airco_laatste_ems": {"type": "plain"},
     # v5.45: de Monte-Carlo-tekortkans van 22:00 per avond (kalibratie).
     "mc_22u_per_avond": {"type": "plain"},
     # v5.57: de tellerstanden van de laatste kwartiergrens, zodat het

@@ -214,3 +214,36 @@ def test_voorverwarmen_overdag_wel_en_in_de_ochtend_niet(make_coordinator, hass)
     assert ochtend and all(r[2] == 19.0 for r in ochtend), ochtend
     dag = _tussen(huis.log, "11:00", "12:00")
     assert dag and dag[0][2] == 21.5, huis.log
+
+
+def _herstart(huis):
+    """Home Assistant herstart: alleen wat bewaard wordt blijft over."""
+    from custom_components.energy_management_system.const import PERSISTED_PLAIN_FIELDS
+
+    assert "_airco_laatste_ems" in PERSISTED_PLAIN_FIELDS and "airco_door_ems" in PERSISTED_PLAIN_FIELDS
+    huis.c._airco_laatst_gezien = None
+    huis.c._airco_handmatig_bij = None
+    huis.c._airco_geschakeld = None
+
+
+def test_na_een_herstart_gaat_de_ochtendairco_toch_naar_het_dagdoel(make_coordinator, hass):
+    """25-11: herstart 10:57, de airco bleef tot 15:53 op 19 staan (Ruud: "nu nog 19?")."""
+    huis = Huis(make_coordinator, hass, datetime(2026, 11, 25, 5, 0, tzinfo=TZ), 16.5,
+                lambda t: "slaapt" if (t.hour, t.minute) < (6, 15) else "thuis")
+    huis.speel_tot(datetime(2026, 11, 25, 10, 57, tzinfo=TZ))
+    assert huis.stand() == ("heat", 19.0), huis.log
+    _herstart(huis)
+    huis.speel_tot(datetime(2026, 11, 25, 12, 0, tzinfo=TZ))
+    assert huis.stand() == ("heat", 21.0), huis.log
+    assert [r[0] for r in huis.log if r[2] == 21.0][0] <= "11:02", huis.log
+
+
+def test_na_een_herstart_blijft_een_zelf_verzette_airco_staan(make_coordinator, hass):
+    """Tijdens de herstart met de afstandsbediening op 23 gezet: dat blijft."""
+    huis = Huis(make_coordinator, hass, datetime(2026, 11, 25, 5, 0, tzinfo=TZ), 16.5,
+                lambda t: "slaapt" if (t.hour, t.minute) < (6, 15) else "thuis")
+    huis.speel_tot(datetime(2026, 11, 25, 10, 57, tzinfo=TZ))
+    _herstart(huis)
+    huis.zet_met_de_hand("heat", 23.0)
+    huis.speel_tot(datetime(2026, 11, 25, 12, 0, tzinfo=TZ))
+    assert huis.stand() == ("heat", 23.0), huis.log

@@ -1,3 +1,10 @@
+v5.259.1 (25-11-2026)
+- Airco na een herstart: het EMS onthoudt nu wat het de airco het laatst opdroeg.
+  Na de herstart van 10:57 wist het niet meer dat de draaiende airco (19 °C van
+  de ochtend) van hem was en ging die om 11:00 niet naar het dagdoel van 21 °C.
+  Is de airco tijdens de herstart met de hand verzet, dan blijft dat staan.
+- Dagsimulatie: twee tests erbij (herstart midden op de ochtend).
+
 EMS v5.259.0 - airco: lager dagdoel volgen, 's ochtends niet voorverwarmen; dagsimulatie als test
 
 Installeren: via de Marketplace bijwerken en herstarten.

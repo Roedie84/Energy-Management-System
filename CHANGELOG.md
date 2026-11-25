@@ -36152,3 +36152,7 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 - `tests/test_v5259_airco_dagsimulatie.py`: etmaal per minuut door `_airco_ronde`
   met een nagebootste airco en kamer. Mutatieproef: nachtstart, knop en lager
   dagdoel terugzetten laat de test falen.
+
+## v5.259.1 (25-11-2026)
+- Airco: de laatste EMS-opdracht (`_airco_laatste_ems`) wordt bewaard over een herstart, zodat een door het EMS gestarte airco daarna nog naar het dagdoel wordt bijgesteld. Met de hand verzet tijdens de herstart: blijft staan.
+- Dagsimulatie: twee herstart-tests.

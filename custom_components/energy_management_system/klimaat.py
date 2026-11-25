@@ -1778,6 +1778,12 @@ class KlimaatMixin:
         self._airco_laatst_gezien = gezien
         ems = self._airco_laatste_ems
         door_ems = ems is not None and (ems.get("stand"), ems.get("doel")) == gezien
+        # v5.259.1: na een herstart is wat het EMS het laatst instelde bewaard.
+        # Staat de airco dan anders (iemand bediende hem terwijl Home Assistant
+        # uit stond), dan is hij niet meer van het EMS.
+        if vorige is None and ems is not None and not door_ems and stand in ("heat", "off"):
+            ems = self._airco_laatste_ems = None
+            self.airco_door_ems = False
         # v5.208.0: een eigen automatisering (koken) is geen handbediening -
         # ook niet in de ronde direct na afloop, waarin hij terugzet.
         extern = self._airco_extern_bezig()
