@@ -464,3 +464,17 @@ laatste ronde: 23-11 06:45, gemeten t/m 23-11 06:45
 - Niet gemeten: verbruik tegen ochtendverwachting (geen archiefwaarde opgehaald), MC-Brier, SoC-voorspelling, NILM.
 
 laatste ronde: 24-11 06:45, gemeten t/m 24-11 06:45
+
+## 25-11 06:45 · dagcontrole (24-11 06:45 t/m 25-11 06:45; v5.258.1 actief sinds herstart 05:05)
+- Achteraf (LP 96 kw, marginaal −11,08 ct, slijtage 4,22 ct, laden 82,1 %, ontladen 99 %, start 100 % eind 54 %): werkelijk € 4,23, optimum € 4,10 → **gemist € 0,13, 1 FOUT accu, 0 PECH**; zonder accu € 5,75. DP met SoC-afhankelijk laden (85/82/78 %): optimum € 4,02.
+- FOUT 24-11: 06:45-09:15 4,63 kWh verkocht op gem. 49,4 ct, 11:30-13:15 3,94 kWh AC bijgeladen op 39,3 ct tot 82 % (laadtoeslag v5.252.0 stopte terecht bij ~80 %); avondpiek 50-55 ct begon op 80 %, accu leeg 18:15. Optimum: 's ochtends 1,8 kWh (07:45-08:15), rest voor de avond. De ruil zelf quitte (33,8 tegen 34,3 ct per kWh inhoud), het verlies zit in de te lege avond (−€ 0,24 avond, +€ 0,06 nacht/rest). Prijzen waren bekend → geen pech. **H-EMS-26 (nieuw):** ontlaadbanden in het plan 100,5 % (<0,5 kW) / 102,2 % (0,5-1,5 kW) / 99,4 % (>1,5 kW): verkopen op middelhoog vermogen lijkt ~3 % goedkoper dan de avond op vol vermogen; gemeten ontladen ~99 %. Tweede dag op rij hetzelfde patroon (23-11 € 0,06). Toetsen met een replay; dan pas voorstel.
+- FOUT 25-11 04:24-04:55 airco aan (fout v5.253-5.258.0, opgelost v5.258.1, actief 05:05): 0,8 kWh, € 0,30. 06:30 werkdagstart zoals ingesteld.
+- **H-EMS-27 (nieuw):** de werkdag-airco die al draait telt niet in het plan (06:30 gemeten 1432 W, plan 248 W; verbruik_opbouw zonder klimaat_kwh). In `airco_ritme.gebruik_kwh` slaat `zonder_ochtend` ook 'zeker'-uren (airco draait) in 04-11 over. Euro-effect vermoedelijk klein (accu houdt, net dekt). Drie werkdagochtenden meten met de verbruiksmeetlat, dan bouwen als het blijft.
+- Regels c: ochtendruil quitte (±0,6 ct/kWh); avondimport 18:30-24:00 4,17 kWh gem 44,2 ct bij lege accu terwijl middag 39,3 ct was → valt onder de FOUT. Nachtladen 04:30-06:15 36,3-37,3 ct (goedkoopste nachtkwartieren). Knop verkopen-uit niet gebruikt. Loslaten woning-eerst +€ 0,23.
+- PV-plan 10 d **+1,3 %** (30 d −7,1 %); 24-11 3,49 kWh. Verbruik 24-11 20,9 kWh (airco 10,8: 0,55 kWh/graad, 18,6 °C binnen, −1,1 °C buiten, € 4,88; nr. 16 nulmeting 6,3 kWh/0,45). Nacht 2,70 kWh.
+- Module 1: 100 % 0,09 V (gelijk aan gisteren), 0 % 0,04 V (anderen 0,01/0,01), laagste cel 24-11 3,05 (3,07/3,08), daghoogste celdelta 0,03; SoC −3,5 % alleen tijdens laden, bij de lage stand gelijk. Geen drempel.
+- Register nr. 5 **beoordeeld**: 6 dagen −1,84 ct (5/6 te laag), fout 2,73 ct → marge-regel houden, eindprijs opnieuw 09-12. Nr. 7: sinds herstart 8/8. Nr. 8: 24-11 € 0,00. Nr. 16: zie boven; nabeschouwing 24-11 gemist € 0,08, leverde € 0,22.
+- Storingen 0 (alleen opstartmelding Solcast/energy_production_today na herstart). Stilstand 0. Geen codewijziging, suite niet gedraaid, geen release.
+- Niet gemeten: MC-Brier, SoC-voorspelling, NILM; replay van H-EMS-26 (tijd).
+
+laatste ronde: 25-11 06:45, gemeten t/m 25-11 06:45
