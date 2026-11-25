@@ -2886,9 +2886,11 @@ class KlimaatMixin:
         # stand voor 'lang weg' staat (onder 19 °C).
         dagdoel = self._airco_middag_doel()
         # v5.254.1: alleen als er iemand thuis is - niet omhoog in een leeg huis.
+        # v5.259.0 (Ruud 24-11, van 22 naar 21): ook omlaag als het ingestelde
+        # dagdoel lager is dan waar de airco op staat.
         if bijstellen and dagdoel is not None and airco_ritme.is_dag(now) \
                 and self.presence_state == "thuis" \
-                and basis is not None and 19.0 <= basis < dagdoel:
+                and basis is not None and basis >= 19.0 and abs(basis - dagdoel) > 0.05:
             basis = dagdoel
         # v5.141.0 (L-EMS-043): de reeks staat in eenheden van 1e-7 euro
         # (PRICE_SCALE_FACTOR); de prijs van nu in euro. Zonder deling was
@@ -2899,6 +2901,10 @@ class KlimaatMixin:
             if now < start <= now + timedelta(hours=airco_sturing.BUFFER_VOORUIT_UREN)
         ]
         b = airco_sturing.buffer(basis, self.huidige_prijs_eur_per_kwh(now), komende)
+        # v5.259.0 (Ruud 25-11: "waarom ging het setpoint naar 20, we hadden 19
+        # afgesproken"): 's ochtends geen halve graad voorverwarmen.
+        if airco_ritme.is_ochtend(now):
+            b = {"doel_c": basis, "reden": None}
         if bijstellen and b["doel_c"] == laatste.get("doel"):
             return uit
         nieuw = dict(uit, basis_doel_c=basis, doel_c=b["doel_c"])

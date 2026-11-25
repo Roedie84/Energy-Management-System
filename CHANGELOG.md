@@ -36141,3 +36141,14 @@ zojuist kort aan en weer uit"). `geleerd()` gaf met `vast_ochtend` kans 1,0;
 'jullie zetten hem 's ochtends zelden aan' (v5.177.0) verviel en het gewone
 besluit vanaf 04:00 tot het geleerde doel (21 °C) verwarmde. `ochtend_kans`
 rekent nu zonder `vast_ochtend`.
+
+## v5.259.0
+
+Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
+- `_airco_buffer_ronde`: het dagdoel werkt in beide richtingen (was alleen omhoog);
+  in het ochtendvenster geen `buffer`.
+- `airco_ontdooi`: `FREQUENTIE_DIP` 0,6 en `BUITEN_MAX_C` 5.
+- `_blijft_koelen_tekst`: tweede trap (onder 32 °C uit bij drempel - 5).
+- `tests/test_v5259_airco_dagsimulatie.py`: etmaal per minuut door `_airco_ronde`
+  met een nagebootste airco en kamer. Mutatieproef: nachtstart, knop en lager
+  dagdoel terugzetten laat de test falen.

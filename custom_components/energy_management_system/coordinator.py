@@ -31402,22 +31402,26 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         )
         if accu_c >= BATTERY_COOLING_KEEP_RUNNING_ABOVE_C:
             return f"{nu} Boven {c(BATTERY_COOLING_KEEP_RUNNING_ABOVE_C)} °C blijft hij altijd aan."
+        try:
+            drempel = float(self.config.get(
+                CONF_BATTERY_COOLING_OPPORTUNITY_C, BATTERY_COOLING_OPPORTUNITY_MIN_C))
+        except (TypeError, ValueError):
+            drempel = BATTERY_COOLING_OPPORTUNITY_MIN_C
+        stop_bij = drempel - BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C
         if accu_c < BATTERY_COOLING_STOP_BELOW_C:
-            try:
-                drempel = float(self.config.get(
-                    CONF_BATTERY_COOLING_OPPORTUNITY_C, BATTERY_COOLING_OPPORTUNITY_MIN_C))
-            except (TypeError, ValueError):
-                drempel = BATTERY_COOLING_OPPORTUNITY_MIN_C
-            stop_bij = drempel - BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C
             return (
                 f"{nu} Uit zodra de accu op {c(stop_bij)} °C of lager is, minder dan "
                 f"{c(BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C)} °C boven buiten komt, "
                 f"of onder {c(drempel)} °C bijna stil staat (< "
                 f"{BATTERY_COOLING_OPPORTUNITY_IDLE_W:.0f} W)."
             )
+        # v5.259.0 (Ruud 24-11): bij 34 °C in de vorst stond hier alleen de regel
+        # voor een warme accu, terwijl hij onder 32 °C al bij 23 °C uitgaat.
         return (
             f"{nu} Uit zodra hij minder dan {c(BATTERY_COOLING_OFF_DELTA_C)} °C boven "
-            f"buiten is én er minder dan {BATTERY_COOLING_OFF_POWER_W:.0f} W door gaat."
+            f"buiten is én er minder dan {BATTERY_COOLING_OFF_POWER_W:.0f} W door gaat. "
+            f"Zakt hij eerst onder {c(BATTERY_COOLING_STOP_BELOW_C)} °C, dan gaat hij uit "
+            f"bij {c(stop_bij)} °C of lager."
         )
 
     def _koeling_rust_tekst(self, grens: float | None, belast: bool) -> str:

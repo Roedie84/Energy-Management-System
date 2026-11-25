@@ -17,7 +17,9 @@ Een beurt telt als:
   zakt de meting ook, omdat de ventilator kamerlucht gaat aanzuigen);
 - het doel in die tijd niet is veranderd (geen bediening);
 - de temperatuur bij de binnenunit binnen `VENSTER_MIN` minuten minstens
-  `DALING_C` zakt.
+  `DALING_C` zakt;
+- de compressorfrequentie in die tijd inzakt tot hooguit `FREQUENTIE_DIP`
+  van wat hij ervoor was (v5.259.0).
 
 Alleen pure functies; de beurten staan in het dagritme (`ritme["ontdooi"]`),
 de laatste metingen in een buffer die de coordinator vasthoudt.
@@ -26,9 +28,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-BUITEN_MAX_C = 7.0
+BUITEN_MAX_C = 5.0
 DALING_C = 2.0
 VENSTER_MIN = 10
+#: De laagste frequentie in het venster is hooguit dit deel van die ervoor.
+FREQUENTIE_DIP = 0.6
 VOORAF_MIN = 10
 #: Zoveel metingen vooraf nodig (één per ronde van een minuut; ruim genomen).
 VOORAF_METINGEN = 3
@@ -108,6 +112,11 @@ def ronde(
         return None
     voor_c = vooraf[-1][2]
     if voor_c - unit_c < DALING_C:
+        return None
+    # v5.259.0: de compressor moet zelf ook inzakken. 24-11 telden 15:38 en
+    # 18:19 mee met alleen een daling bij de binnenunit (frequentie 32 -> 28
+    # en 36 -> 27); de enige geloofwaardige beurt (11:05) ging van 40 naar 18.
+    if min(m[1] for m in venster) > vooraf[-1][1] * FREQUENTIE_DIP:
         return None
     begin = next((m[0] for m in venster if m[2] < voor_c), now)
     beurt = {

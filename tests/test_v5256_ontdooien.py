@@ -66,3 +66,15 @@ def test_de_coordinator_meet_mee(make_coordinator, hass):
     c = make_coordinator({})
     assert "ontdooien" in c.get_airco_vermogen()
     assert c.get_airco_vermogen()["ontdooien"]["vandaag"] == 0
+
+
+# --- v5.259.0: strenger (de twee tellingen van 24-11 waren onterecht) -------
+
+def test_alleen_een_daling_bij_de_binnenunit_telt_niet():
+    # 24-11 15:38: frequentie 32 -> 28, binnenunit 25 -> 23
+    assert _speel([(0, 32, 25), (17, 32, 25), (22, 28, 24), (26, 30, 23), (40, 32, 24)], buiten=2.2)[1] == []
+    # 24-11 18:19: 36 -> 27
+    assert _speel([(0, 36, 24), (17, 36, 24), (22, 27, 23), (26, 40, 22), (40, 38, 23)], buiten=-0.7)[1] == []
+    # en boven de 5 graden buiten niet
+    assert _speel(VANDAAG, buiten=6.0)[1] == []
+    assert len(_speel(VANDAAG, buiten=4.0)[1]) == 1

@@ -1,3 +1,13 @@
+EMS v5.259.0 - airco: lager dagdoel volgen, 's ochtends niet voorverwarmen; dagsimulatie als test
+
+Installeren: via de Marketplace bijwerken en herstarten.
+
+- Staat de airco door het EMS aan en wordt het dagdoel lager gezet, dan gaat de airco mee omlaag (ging alleen omhoog).
+- 's Ochtends telt het EMS geen halve graad voorverwarmen meer op: de airco krijgt precies het ingestelde ochtenddoel.
+- Vermoedelijke ontdooibeurten: telt alleen nog als ook de compressor inzakt (tot hooguit 60 % van de frequentie ervoor) en het buiten hooguit 5 graden is. De twee tellingen van 24-11 vallen daarmee af.
+- De uitleg bij de accukoeling noemt nu ook wanneer hij uitgaat nadat de accu onder de 32 graden is gezakt.
+- Nieuwe test die een heel etmaal van de airco-automaat per minuut naspeelt met de instellingen van Ruud. Hij vangt de twee fouten van 24/25-11 (knop zonder effect, start om 04:24) als ze worden teruggezet.
+
 EMS v5.258.1 - airco gaat 's nachts niet meer vanzelf aan voor de ingestelde ochtend
 
 Installeren: via de Marketplace bijwerken en herstarten.
