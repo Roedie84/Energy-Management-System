@@ -247,3 +247,38 @@ def test_na_een_herstart_blijft_een_zelf_verzette_airco_staan(make_coordinator, 
     huis.zet_met_de_hand("heat", 23.0)
     huis.speel_tot(datetime(2026, 11, 25, 12, 0, tzinfo=TZ))
     assert huis.stand() == ("heat", 23.0), huis.log
+
+
+def _dag_met_dagdoel_vanaf(make_coordinator, hass, knop=None):
+    huis = Huis(make_coordinator, hass, datetime(2026, 11, 25, 5, 0, tzinfo=TZ), 16.5, _werkdag_aanwezigheid,
+                knop=knop, instellingen=lambda t: {"airco_middag_vanaf": "16:00"})
+    return huis.speel_tot(datetime(2026, 11, 25, 23, 0, tzinfo=TZ))
+
+
+def test_het_dagdoel_pas_vanaf_vier_uur(make_coordinator, hass):
+    """Ruud 25-11: "om 16:00 pas naar 21 is prima" - tot die tijd 19."""
+    huis = _dag_met_dagdoel_vanaf(make_coordinator, hass)
+    voor = _tussen(huis.log, "06:30", "16:00")
+    assert voor and all(r[2] <= 19.0 for r in voor if r[1] == "heat"), huis.log
+    thuis = _tussen(huis.log, "13:00", "16:00")
+    assert thuis and thuis[0][1:3] == ("heat", 19.0), huis.log      # terug van 18 naar 19, niet 21
+    om_vier = _tussen(huis.log, "16:00", "22:00")
+    assert om_vier and om_vier[0][1:3] == ("heat", 21.0) and om_vier[0][0] <= "16:02", huis.log
+    assert huis.stand()[0] == "off"
+
+
+def test_om_vier_uur_niet_omhoog_met_de_knop_iedereen_weg(make_coordinator, hass):
+    """Ruud: "tenzij de knop niet thuis uiteraard wordt ingedrukt"."""
+    huis = _dag_met_dagdoel_vanaf(
+        make_coordinator, hass, knop=lambda t: (15, 30) <= (t.hour, t.minute) < (17, 0))
+    knop = _tussen(huis.log, "15:30", "17:00")
+    assert knop and all(r[2] <= 19.0 for r in knop), huis.log
+    na = _tussen(huis.log, "17:00", "22:00")
+    assert na and na[0][1:3] == ("heat", 21.0) and na[0][0] <= "17:02", huis.log
+
+
+def test_zonder_dagdoel_vanaf_blijft_het_elf_uur(make_coordinator, hass):
+    huis = Huis(make_coordinator, hass, datetime(2026, 11, 25, 5, 0, tzinfo=TZ), 16.5,
+                lambda t: "slaapt" if (t.hour, t.minute) < (6, 15) else "thuis")
+    huis.speel_tot(datetime(2026, 11, 25, 12, 0, tzinfo=TZ))
+    assert [r[0] for r in huis.log if r[2] == 21.0][0] <= "11:02", huis.log

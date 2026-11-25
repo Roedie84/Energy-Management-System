@@ -1,3 +1,10 @@
+v5.260.0 (25-11-2026)
+- Airco: nieuwe instelling "het dagdoel geldt pas vanaf (UU:MM)". Tot die tijd
+  houdt de airco het ochtenddoel (19 °C) aan, daarna het dagdoel (21 °C) tot de
+  vaste uittijd. Leeg = vanaf 11:00 zoals voorheen. Met de knop "iedereen weg"
+  aan gaat hij niet omhoog.
+- Dagsimulatie: drie tests erbij.
+
 v5.259.1 (25-11-2026)
 - Airco na een herstart: het EMS onthoudt nu wat het de airco het laatst opdroeg.
   Na de herstart van 10:57 wist het niet meer dat de draaiende airco (19 °C van

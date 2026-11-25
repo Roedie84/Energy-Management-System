@@ -217,6 +217,10 @@ CONF_AIRCO_WERKDAG_DOEL_C = "airco_werkdag_doel_c"
 # overdag en 's avonds (11:00-21:30) verwarmen tot deze temperatuur. Leeg of
 # 0 = de temperatuur die uit jullie eigen bediening geleerd is.
 CONF_AIRCO_MIDDAG_DOEL_C = "airco_middag_doel_c"
+# v5.260.0 (Ruud 25-11: "om 16:00 pas naar 21 is prima"): het dagdoel geldt
+# pas vanaf dit tijdstip (UU:MM); daarvoor houdt de airco het ochtenddoel
+# (19 graden) aan. Leeg = vanaf 11:00 zoals voorheen.
+CONF_AIRCO_MIDDAG_VANAF = "airco_middag_vanaf"
 # v5.255.0 (Ruud 24-11: "En snachts op 18 graden houden"): op de vaste
 # uittijd niet uit maar terug naar deze temperatuur, tot de ochtend. Leeg of
 # 0 = uit zoals altijd.

@@ -36156,3 +36156,7 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 ## v5.259.1 (25-11-2026)
 - Airco: de laatste EMS-opdracht (`_airco_laatste_ems`) wordt bewaard over een herstart, zodat een door het EMS gestarte airco daarna nog naar het dagdoel wordt bijgesteld. Met de hand verzet tijdens de herstart: blijft staan.
 - Dagsimulatie: twee herstart-tests.
+
+## v5.260.0 (25-11-2026)
+- Airco: optie `airco_middag_vanaf` (UU:MM): het dagdoel geldt pas vanaf dat tijdstip; daarvoor het ochtenddoel. Leeg = 11:00.
+- Dagsimulatie: drie tests (dagdoel vanaf 16:00, knop iedereen weg, zonder instelling).

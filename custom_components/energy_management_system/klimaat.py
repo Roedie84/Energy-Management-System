@@ -57,6 +57,7 @@ from .const import (
     CONF_AIRCO_WERKDAG_DOEL_C,
     CONF_AIRCO_WERKDAG_WARM_OM,
     CONF_AIRCO_MIDDAG_DOEL_C,
+    CONF_AIRCO_MIDDAG_VANAF,
     CONF_AIRCO_NACHT_C,
     DEFAULT_AIRCO_WERKDAG_WARM_OM,
     AIRCO_WERKDAG_OCHTEND_DOEL_C,
@@ -1761,6 +1762,7 @@ class KlimaatMixin:
 
         Alleen de woonkamer. De slaapkamer-airco wordt nooit aangeraakt.
         """
+        self._airco_ronde_nu = now  # v5.260.0: het moment van deze ronde
         entiteit = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
         if not entiteit or entiteit == self.config.get(CONF_SLAAPKAMER_CLIMATE_ENTITY):
             self.last_airco_besluit = {
@@ -1935,16 +1937,36 @@ class KlimaatMixin:
                 vast["werkdag"]["aan_om"] = aan
         self.airco_ritme["vast_ochtend"] = vast
         # v5.254.0: het ingestelde doel voor overdag en 's avonds (None = geleerd)
-        self.airco_ritme["vast_dag_doel"] = self._airco_middag_doel()
+        self.airco_ritme["vast_dag_doel"] = self._airco_middag_doel(
+            getattr(self, "_airco_ronde_nu", None) or dt_util.now()
+        )
         return self.airco_ritme
 
-    def _airco_middag_doel(self) -> float | None:
-        """Het ingestelde doel voor overdag en 's avonds (v5.254.0), of None."""
+    def _airco_ochtend_doel(self) -> float:
+        """Het doel van de ochtend: ingesteld (16-24), anders 19 (v5.258.0)."""
+        try:
+            doel = float(self.instelling(CONF_AIRCO_WERKDAG_DOEL_C, 0) or 0)
+        except (TypeError, ValueError):
+            doel = 0.0
+        return doel if 16.0 <= doel <= 24.0 else AIRCO_WERKDAG_OCHTEND_DOEL_C
+
+    def _airco_middag_doel(self, now: datetime | None = None) -> float | None:
+        """Het ingestelde doel voor overdag en 's avonds (v5.254.0), of None.
+
+        v5.260.0: met een moment erbij en 'dagdoel vanaf' ingesteld geldt
+        daarvoor het ochtenddoel (nooit hoger dan het dagdoel zelf)."""
         try:
             doel = float(self.instelling(CONF_AIRCO_MIDDAG_DOEL_C, 0) or 0)
         except (TypeError, ValueError):
             return None
-        return doel if 16.0 <= doel <= 26.0 else None
+        if not 16.0 <= doel <= 26.0:
+            return None
+        vanaf = airco_ritme.minuten_uit_klok(self.instelling(CONF_AIRCO_MIDDAG_VANAF, ""))
+        if now is not None and vanaf is not None \
+                and airco_ritme.DAG_VAN < vanaf < airco_ritme.DAG_TOT \
+                and airco_ritme.minuut(now) < vanaf:
+            return min(doel, self._airco_ochtend_doel())
+        return doel
 
     def _airco_nacht_c(self) -> float | None:
         """De ingestelde nachttemperatuur (v5.255.0), of None (= uit)."""
@@ -1972,7 +1994,7 @@ class KlimaatMixin:
 
     def _airco_doel_nu(self, now: datetime) -> float | None:
         """Het doel van dit moment: overdag het ingestelde, anders het geleerde."""
-        vast = self._airco_middag_doel()
+        vast = self._airco_middag_doel(now)
         if vast is not None and airco_ritme.is_dag(now):
             return vast
         return airco_sturing.gewenste_temperatuur(self.airco_setpunten, AIRCO_PREDICTION_MIN_SAMPLES)
@@ -2890,7 +2912,7 @@ class KlimaatMixin:
         # v5.254.0: een airco die het EMS eerder aanzette (ochtend, 21 °C) gaat
         # overdag mee naar het ingestelde dagdoel. Niet als hij op de lage
         # stand voor 'lang weg' staat (onder 19 °C).
-        dagdoel = self._airco_middag_doel()
+        dagdoel = self._airco_middag_doel(now)
         # v5.254.1: alleen als er iemand thuis is - niet omhoog in een leeg huis.
         # v5.259.0 (Ruud 24-11, van 22 naar 21): ook omlaag als het ingestelde
         # dagdoel lager is dan waar de airco op staat.

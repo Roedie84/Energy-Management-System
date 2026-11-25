@@ -69,6 +69,7 @@ from .const import (
     CONF_AIRCO_WERKDAG_DOEL_C,
     CONF_AIRCO_WERKDAG_WARM_OM,
     CONF_AIRCO_MIDDAG_DOEL_C,
+    CONF_AIRCO_MIDDAG_VANAF,
     CONF_AIRCO_NACHT_C,
     CONF_AIRCO_RAAM_ENTITIES,
     DEFAULT_AIRCO_UIT_OM,
@@ -653,6 +654,11 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=0, max=26, step=0.5, mode=selector.NumberSelectorMode.BOX)
             ),
+            # v5.260.0: het dagdoel geldt pas vanaf (leeg = 11:00).
+            vol.Optional(
+                CONF_AIRCO_MIDDAG_VANAF,
+                description={"suggested_value": _as_text(defaults.get(CONF_AIRCO_MIDDAG_VANAF, ""))},
+            ): selector.TextSelector(),
             # v5.255.0: 's nachts vasthouden op (0 = uit).
             vol.Optional(
                 CONF_AIRCO_NACHT_C,
