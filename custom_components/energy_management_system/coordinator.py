@@ -23986,42 +23986,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             delen.append(f"{len(informatief)} informatief")
         return " en ".join(delen) + ". Tik voor alle details."
 
-    def get_lange_horizon_effect(self) -> dict:
-        """Wat heeft de lange horizon werkelijk opgeleverd? (v3.99.18)
-
-        Gevraagd: "monitoren middels de diagnostiek wat het werkelijk
-        heeft opgeleverd." Per dag staat in het dagrecord wat de horizon
-        extra vasthield, de laagste laadstand in de ochtend en de
-        netimport 's nachts. Hier de vergelijking: de dagen VOOR de
-        inschakeling (geen extra) tegen de dagen erna.
-        """
-        records = [r for r in (self.reserve_daily_records or []) if "laagste_soc_ochtend" in r]
-        voor = [r for r in records if not r.get("lange_horizon_extra_kwh")]
-        na = [r for r in records if r.get("lange_horizon_extra_kwh")]
-
-        def _samen(rs):
-            socs = [r["laagste_soc_ochtend"] for r in rs if r.get("laagste_soc_ochtend") is not None]
-            imports = [r.get("netimport_nacht_kwh") or 0.0 for r in rs]
-            return {
-                "dagen": len(rs),
-                "laagste_soc_ochtend_mediaan": round(statistics.median(socs), 1) if socs else None,
-                "netimport_nacht_kwh_gemiddeld": round(sum(imports) / len(imports), 2) if imports else None,
-            }
-
-        return {
-            "actief": self.lange_horizon_actief,
-            "extra_kwh_nu": round(float(self._lange_reserve_extra_kwh or 0.0), 2),
-            "zonder_lange_horizon": _samen(voor),
-            "met_lange_horizon": _samen(na),
-            "toelichting": (
-                "Vergelijk de laagste laadstand in de ochtend en de netimport "
-                "'s nachts tussen de dagen zonder en met lange horizon. De "
-                "prijs van de horizon is minder verkopen 's avonds; dat staat "
-                "in de dagsamenvatting (besparing tegenover zonder accu). "
-                "Pas na minstens zeven dagen met zegt de vergelijking iets."
-            ),
-        }
-
     # --- Dagverloop en nabeschouwing (v3.99.19) --------------------------
 
     def _leg_dagverloop_vast(self, now: datetime) -> None:
@@ -39675,8 +39639,6 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             else:
                 await self._async_apply_manual(scaled_power)
                 self.last_reason = "expensive_quarter"
-                if (self.last_piekverkoop or {}).get("verkopen"):
-                    self.last_reason = "expensive_quarter_peak"
             self._update_financial_tracking(
                 now, entries, self.last_reason, scaled_power, None
             )

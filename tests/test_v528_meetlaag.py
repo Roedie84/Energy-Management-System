@@ -83,33 +83,6 @@ def _reeks(rng, start, n=192):
 
 
 @pytest.mark.parametrize("zaad", range(25))
-def test_spiegel_rekent_de_piekregel_exact_na(make_coordinator, hass, monkeypatch, zaad):
-    """Productie's eigen _piekverkoop tegen de spiegel, op willekeurige
-    prijzen, met en zonder blok - met de productieslijtage hetzelfde besluit."""
-    rng = random.Random(zaad)
-    c = make_coordinator({})
-    monkeypatch.setattr(type(c), "get_wear_cost_overview", lambda self: {"slijtage_ct_per_kwh": 11.28})
-    c.charge_efficiency_history = [round(rng.uniform(80, 95), 1)] * 7
-    c.discharge_efficiency_history = [round(rng.uniform(88, 98), 1)] * 7
-    entries = _reeks(rng, NU)
-    nu = entries[rng.randint(0, 60)][0] + timedelta(minutes=rng.choice([0, 7]))
-    blok = entries[rng.randint(61, 150)][0] if zaad % 5 else None
-    c.last_cheap_block_end = blok + timedelta(hours=4) if blok else None
-    productie = c._piekverkoop(nu, entries, blok, 3.0)
-    if "prijs_nu_eur" not in productie:
-        pytest.skip("geen piekafweging in dit scenario")
-    reeks = [(b, p / PRICE_SCALE_FACTOR) for b, _e, p in entries]
-    spiegel = schaduw.spiegel({
-        "productie_categorie": "huis_dekken", "piek": productie, "moment": nu, "reeks": reeks,
-        "blok": blok, "blokprijzen": [p for b, p in reeks if blok and blok <= b < c.last_cheap_block_end],
-        "rendement_procent": c.learned_battery_efficiency_percent,
-    }, 11.28)
-    assert spiegel["piek"]["verkopen"] == productie["verkopen"]
-    assert spiegel["piek"]["duurste_later_eur"] == productie["duurste_later_eur"]
-    assert spiegel["doorgegeven"] is False
-
-
-@pytest.mark.parametrize("zaad", range(25))
 def test_spiegel_rekent_de_laadregel_exact_na(make_coordinator, hass, zaad):
     rng = random.Random(100 + zaad)
     c = make_coordinator({})

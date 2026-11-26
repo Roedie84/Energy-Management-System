@@ -31,8 +31,6 @@ BEWUST = {
     "async_step_init",           # HA options flow
     "async_step_user",           # HA config flow
     "async_select_option",       # HA select
-    "_reserve_margin_factor",    # oude reserve-regels, besluit 26-11 (meetregister 13)
-    "_piekverkoop",              # oude verkoopregel, besluit 26-11 (meetregister 13)
     "learned_hourly_median_kw",  # maatstaf in de toetsen (v5.74: gemiddelde tegen mediaan)
 }
 

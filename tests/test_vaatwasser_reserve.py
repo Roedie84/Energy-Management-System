@@ -117,7 +117,6 @@ def test_de_verkooptoets_gaat_niet_boven_de_accu(make_coordinator, hass):
     c.bruikbare_capaciteit_kwh = lambda: 8.64
     c.beschikbare_energie_kwh = lambda: 7.52
     c._estimate_worst_case_deficit_kwh = lambda *a, **k: 11.1
-    c._reserve_margin_factor = lambda: 1.616
     c.last_cheap_block_start = NU + timedelta(hours=20)
 
     uitkomst = c.may_sell_now(NU)

@@ -1,3 +1,11 @@
+v5.261.0 (26-11-2026)
+- Opruimen (L-EMS-083, akkoord Ruud): de oude reserve-regels stuurden sinds
+  10-11 geen kwartier meer. Twee functies die nergens meer werden aangeroepen
+  zijn weg (marge van de oude verkooptoets, de oude piekverkoopregel), met hun
+  tests. Uit de diagnose: het effect van de lange horizon en de dubbele
+  Monte-Carlo-vergelijking (die staat nog op de sensor).
+- De oude regels zelf blijven als vangnet. De sturing is niet veranderd.
+
 v5.260.0 (25-11-2026)
 - Airco: nieuwe instelling "het dagdoel geldt pas vanaf (UU:MM)". Tot die tijd
   houdt de airco het ochtenddoel (19 °C) aan, daarna het dagdoel (21 °C) tot de

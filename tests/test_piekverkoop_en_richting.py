@@ -23,25 +23,6 @@ def _reeks(start, prijzen):
 # --- de piekverkoop -------------------------------------------------------
 
 
-def test_het_duurste_kwartier_tot_het_blok_mag_onder_de_reserve(make_coordinator, hass):
-    """48 ct nu, daarna nooit meer dan 38 ct tot het blok: verkopen en later
-    inkopen levert minstens 10 ct per kWh op."""
-    c = make_coordinator({})
-    reeks = _reeks(NU, [0.48] + [0.38] * 8 + [0.30] * 50)
-
-    piek = c._piekverkoop(NU, reeks, BLOK, beschikbaar_kwh=3.0)
-
-    assert piek["verkopen"] is True
-    assert piek["winst_ct_per_kwh"] == 10.0
-
-
-def test_komt_er_nog_een_duurder_kwartier_dan_niet(make_coordinator, hass):
-    c = make_coordinator({})
-    reeks = _reeks(NU, [0.44, 0.48] + [0.30] * 50)
-
-    assert c._piekverkoop(NU, reeks, BLOK, beschikbaar_kwh=3.0)["verkopen"] is False
-
-
 def test_nooit_door_de_bodem(make_coordinator, hass):
     """De bodem kwam er na de nacht van 30 op 31 augustus (voorspeld 52%
     over, werkelijk 17%). De piekverkoop mag er nooit doorheen."""
@@ -58,14 +39,6 @@ def test_nooit_door_de_bodem(make_coordinator, hass):
     erboven = c._geen_ruimte_boven_reserve(NU, reeks, BLOK, 2.0, 4.0, 1600.0, 0.25)
     assert erboven is None
     assert "het huis gaat voor" in c.last_piekverkoop["reden"]
-
-
-def test_zonder_bekende_bodem_geen_piekverkoop(make_coordinator, hass):
-    c = make_coordinator({})
-    c.last_reserve_margin_breakdown = {}
-    reeks = _reeks(NU, [0.48] + [0.30] * 50)
-
-    assert c._geen_ruimte_boven_reserve(NU, reeks, BLOK, 3.0, 4.0, 1600.0, 0.25) is None
 
 
 def test_de_import_na_een_piekverkoop_is_verklaard(make_coordinator, hass):
@@ -86,17 +59,6 @@ def test_de_piekverkoop_heeft_een_eigen_reden():
     from custom_components.energy_management_system.const import REASON_REGISTRY
 
     assert REASON_REGISTRY["expensive_quarter_peak"]["titel"] == "Verkopen in de duurste piek"
-
-
-def test_de_waarom_regels_van_de_piekverkoop(make_coordinator, hass):
-    c = make_coordinator({})
-    c.last_piekverkoop = c._piekverkoop(
-        NU, _reeks(NU, [0.48] + [0.38] * 8), BLOK, beschikbaar_kwh=3.0
-    )
-
-    regels = " · ".join(c._waarom_bij_laden("expensive_quarter_peak", [], None))
-
-    assert "48.0 ct" in regels and "38.0 ct" in regels and "10.0 ct per kWh" in regels
 
 
 # --- laden in het plan ----------------------------------------------------

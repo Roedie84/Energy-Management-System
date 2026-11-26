@@ -2858,6 +2858,8 @@ REASON_REGISTRY: dict[str, dict] = {
         "emoji": "🔋⏸️",
     },
     "expensive_quarter_peak": {
+        # v5.261.0 (L-EMS-083): wordt niet meer gezet; blijft voor oude dagverlopen.
+        "vervallen": True,
         "mode": OPTION_MANUAL,
         "titel": "Verkopen in de duurste piek",
         "uitleg": (

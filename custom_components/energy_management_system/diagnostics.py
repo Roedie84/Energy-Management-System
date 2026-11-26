@@ -1114,10 +1114,6 @@ async def async_get_config_entry_diagnostics(
             "herspeel": _veilig("get_herspeel", coordinator.get_herspeel),
             # v5.102: het dagarchief (vergelijking, maanden, laatste dagen).
             "dagarchief": _veilig("get_dagarchief", coordinator.get_dagarchief),
-            # v3.99.18: wat de lange horizon werkelijk opleverde.
-            "lange_horizon_effect": _veilig(
-                "get_lange_horizon_effect", coordinator.get_lange_horizon_effect
-            ),
             "helderheid_ijking": _veilig(
                 "get_helderheid_ijking", coordinator.get_helderheid_ijking
             ),
@@ -1431,11 +1427,6 @@ async def async_get_config_entry_diagnostics(
             "monte_carlo_simulations_run": coordinator.monte_carlo_simulations_run,
             "monte_carlo_hours_simulated": coordinator.monte_carlo_hours_simulated,
             "monte_carlo_note": coordinator.monte_carlo_note,
-            # v5.36: naast de tekortdagen gelegd.
-            "monte_carlo_vergelijking": _veilig(
-                "get_monte_carlo_vergelijking",
-                coordinator.get_monte_carlo_vergelijking,
-            ),
             # v5.40: tekortnachten per soort (capaciteit of planning).
             "tekortsoorten": _veilig(
                 "get_tekortsoorten", coordinator.get_tekortsoorten

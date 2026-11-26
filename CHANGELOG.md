@@ -36160,3 +36160,6 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 ## v5.260.0 (25-11-2026)
 - Airco: optie `airco_middag_vanaf` (UU:MM): het dagdoel geldt pas vanaf dat tijdstip; daarvoor het ochtenddoel. Leeg = 11:00.
 - Dagsimulatie: drie tests (dagdoel vanaf 16:00, knop iedereen weg, zonder instelling).
+
+## v5.261.0 (26-11-2026)
+- L-EMS-083: `_reserve_margin_factor` en `_piekverkoop` verwijderd (alleen nog in tests aangeroepen), reden `expensive_quarter_peak` als vervallen gemarkeerd, `get_lange_horizon_effect` weg, `monte_carlo_vergelijking` en `lange_horizon_effect` uit de diagnose. Sturing ongewijzigd; de terugval (legacy_sturing) blijft.

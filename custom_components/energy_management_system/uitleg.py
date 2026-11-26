@@ -387,16 +387,9 @@ class UitlegMixin:
                 regels.append("gedekt: " + ", ".join(plan["gedekt"]))
             return regels
         if reden == "expensive_quarter_peak":
-            piek = self.last_piekverkoop or {}
-            if piek.get("prijs_nu_eur") is None:
-                return list(gemeenschappelijk)
-            return [
-                f"de prijs is nu {piek['prijs_nu_eur'] * 100:.1f} ct",
-                f"het duurste kwartier tot het volgende goedkope blok kost "
-                f"{piek['duurste_later_eur'] * 100:.1f} ct",
-                f"nu verkopen en later inkopen levert minstens "
-                f"{piek['winst_ct_per_kwh']:.1f} ct per kWh op, ook onder de reserve",
-            ]
+            # v5.261.0 (L-EMS-083): de piekregel zelf is weg; de reden komt
+            # alleen nog in oude dagverlopen voor.
+            return list(gemeenschappelijk)
         if reden == "grid_charging_dip":
             besluit = self.last_laadbesluit or {}
             if besluit.get("waarde_eur") is None:

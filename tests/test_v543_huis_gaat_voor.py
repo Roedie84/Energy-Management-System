@@ -43,8 +43,6 @@ def test_de_piekregel_passeert_de_huisgrens_niet(make_coordinator, hass):
         "mag_verkopen": False,
         "reden": "huis gaat voor",
     }
-    # Ook als de prijs nu de duurste is tot het blok.
-    c._piekverkoop = lambda *a, **k: {"verkopen": True}
 
     ruimte = c._verkoopruimte_met_piek(DAG.replace(hour=19), [], None, 2.0)
 

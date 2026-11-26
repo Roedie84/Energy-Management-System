@@ -862,31 +862,6 @@ class LegacySturingMixin:
             ),
         }
 
-    def _reserve_margin_factor(self) -> float:
-        """De marge die de ontlaadreserve op dit moment aanhoudt
-        (v1.86.0).
-
-        Gevraagd: "Maar dan worden toch simpelweg de manual
-        ontlaadkwartieren tegen een hoge prijs gereduceerd om de nacht te
-        halen?"
-
-        Precies - en dat gebeurde niet, omdat er twee reserves in omloop
-        waren. De ontlaadreserve is zelfcorrigerend (elke tekortdag
-        verhoogt hem), de verkooptoets hield een vaste 1,15 aan. Die
-        verkocht dus precies de buffer weg die de tekortbonus had
-        opgebouwd.
-
-        Deze functie geeft die ene marge terug, zodat beide kanten
-        hetzelfde getal gebruiken. Terugval op de vaste factor zolang de
-        uitsplitsing er nog niet is - dat is de stand vlak na een
-        herstart.
-        """
-        uitsplitsing = self.last_reserve_margin_breakdown or {}
-        totaal = uitsplitsing.get("total_percent")
-        if totaal is None:
-            return SELL_RESERVE_DEEPEST_SAFETY_FACTOR
-        return 1.0 + totaal / 100
-
     def _reserve_plafond_kwh(self) -> float | None:
         """Het hoogste dat een reserve kan zijn (v5.81.1, akkoord Ruud 11-10).
 
@@ -2645,55 +2620,6 @@ class LegacySturingMixin:
         return info
 
     last_verkoopreserve: dict | None = None
-
-    def _piekverkoop(
-        self,
-        now: datetime,
-        entries,
-        cheap_block_start: datetime | None,
-        beschikbaar_kwh: float | None,
-    ) -> dict:
-        """Loont het om nu ONDER de reserve te verkopen? (v5.22)
-
-        Gevraagd: "het systeem moet zo slim mogelijk en kosten effectief
-        zijn". Het laden rekent sinds v5.21 per kWh; het verkopen stopte
-        tot nu toe op de reserve, ongeacht wat de rest van de nacht kost.
-
-        De kWh zit al in de accu. Rendement en slijtage zijn gelijk of hij
-        nu verkocht wordt of later het huis dekt. Dus telt alleen: wat is
-        duurder, nu verkopen of later inkopen? Het tekort dat de verkoop
-        veroorzaakt, wordt ergens tussen nu en het volgende goedkope blok
-        ingekocht - hoogstens tegen het duurste kwartier dat nog komt. Ligt
-        de prijs NU daarboven, dan levert verkopen altijd meer op dan het
-        inkopen kost.
-        """
-        prijs_nu = self._get_current_price_per_kwh(entries or [], now)
-        if prijs_nu is None or not beschikbaar_kwh or beschikbaar_kwh <= 0:
-            return {"verkopen": False, "reden": "prijs of lading onbekend"}
-        tot = (
-            cheap_block_start
-            if cheap_block_start is not None and cheap_block_start > now
-            else now + timedelta(hours=24)
-        )
-        reeks = [(b, p / PRICE_SCALE_FACTOR) for b, _e, p in (entries or [])]
-        blok = cheap_block_start if cheap_block_start is not None and cheap_block_start > now else None
-        duurste_later = self._duurste_later(
-            now, reeks, blok, self._piek_vervangprijs(entries, blok)
-        )
-        if duurste_later == float("-inf"):
-            return {"verkopen": False, "reden": "geen prijzen tot het blok"}
-        return {
-            "verkopen": prijs_nu > duurste_later,
-            "prijs_nu_eur": round(prijs_nu, 4),
-            "duurste_later_eur": round(duurste_later, 4),
-            "winst_ct_per_kwh": round((prijs_nu - duurste_later) * 100, 1),
-            "tot": tot.isoformat(),
-            "reden": (
-                "nu duurder dan elk kwartier dat nog komt"
-                if prijs_nu > duurste_later
-                else "er komt nog een duurder kwartier"
-            ),
-        }
 
     def _geen_ruimte_boven_reserve(
         self,
