@@ -225,6 +225,9 @@ CONF_AIRCO_MIDDAG_VANAF = "airco_middag_vanaf"
 # uittijd niet uit maar terug naar deze temperatuur, tot de ochtend. Leeg of
 # 0 = uit zoals altijd.
 CONF_AIRCO_NACHT_C = "airco_nacht_c"
+# v5.262.0 (Ruud 26-11: "16 graden"): de temperatuur bij 'iedereen weg' (knop
+# of langer dan twee uur weg). Leeg of 0 = 18 graden zoals voorheen.
+CONF_AIRCO_WEG_C = "airco_weg_c"
 CONF_LIVING_ROOM_TEMPERATURE_SENSOR = "living_room_temperature_sensor_entity"
 CONF_LIVING_ROOM_HUMIDITY_SENSOR = "living_room_humidity_sensor_entity"
 CONF_LIVING_ROOM_SHUTTER_ENTITY_1 = "living_room_shutter_entity_1"

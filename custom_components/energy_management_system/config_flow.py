@@ -71,6 +71,7 @@ from .const import (
     CONF_AIRCO_MIDDAG_DOEL_C,
     CONF_AIRCO_MIDDAG_VANAF,
     CONF_AIRCO_NACHT_C,
+    CONF_AIRCO_WEG_C,
     CONF_AIRCO_RAAM_ENTITIES,
     DEFAULT_AIRCO_UIT_OM,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
@@ -659,6 +660,13 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_AIRCO_MIDDAG_VANAF,
                 description={"suggested_value": _as_text(defaults.get(CONF_AIRCO_MIDDAG_VANAF, ""))},
             ): selector.TextSelector(),
+            # v5.262.0: temperatuur bij 'iedereen weg' (0 = 18 graden).
+            vol.Optional(
+                CONF_AIRCO_WEG_C,
+                default=float(defaults.get(CONF_AIRCO_WEG_C) or 0.0),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0, max=20, step=0.5, mode=selector.NumberSelectorMode.BOX)
+            ),
             # v5.255.0: 's nachts vasthouden op (0 = uit).
             vol.Optional(
                 CONF_AIRCO_NACHT_C,

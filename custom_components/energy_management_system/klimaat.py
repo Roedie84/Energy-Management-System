@@ -59,6 +59,7 @@ from .const import (
     CONF_AIRCO_MIDDAG_DOEL_C,
     CONF_AIRCO_MIDDAG_VANAF,
     CONF_AIRCO_NACHT_C,
+    CONF_AIRCO_WEG_C,
     DEFAULT_AIRCO_WERKDAG_WARM_OM,
     AIRCO_WERKDAG_OCHTEND_DOEL_C,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
@@ -1968,6 +1969,15 @@ class KlimaatMixin:
             return min(doel, self._airco_ochtend_doel())
         return doel
 
+    def _airco_weg_c(self) -> float:
+        """De temperatuur bij 'iedereen weg' (v5.262.0): ingesteld (14-20),
+        anders 18 graden."""
+        try:
+            weg = float(self.instelling(CONF_AIRCO_WEG_C, 0) or 0)
+        except (AttributeError, TypeError, ValueError):
+            weg = 0.0
+        return weg if 14.0 <= weg <= 20.0 else airco_sturing.AIRCO_WEG_VAST_C
+
     def _airco_nacht_c(self) -> float | None:
         """De ingestelde nachttemperatuur (v5.255.0), of None (= uit)."""
         try:
@@ -1996,6 +2006,11 @@ class KlimaatMixin:
         """Het doel van dit moment: overdag het ingestelde, anders het geleerde."""
         vast = self._airco_middag_doel(now)
         if vast is not None and airco_ritme.is_dag(now):
+            return vast
+        # v5.262.0: met 'dagdoel vanaf' geldt het ochtenddoel ook voor 11:00 -
+        # anders ging de airco bij thuiskomst om 09:30 naar het geleerde doel.
+        vanaf = airco_ritme.minuten_uit_klok(self.instelling(CONF_AIRCO_MIDDAG_VANAF, ""))
+        if vast is not None and vanaf is not None and airco_ritme.minuut(now) < vanaf:
             return vast
         return airco_sturing.gewenste_temperatuur(self.airco_setpunten, AIRCO_PREDICTION_MIN_SAMPLES)
 
@@ -2710,7 +2725,7 @@ class KlimaatMixin:
         (v5.199.0) - zie `airco_sturing.weg_keuze`. Eén keer per
         afwezigheid besloten; bij thuiskomst weer naar de gewone temperatuur.
         De vaste uittijd en handmatige bediening gaan voor."""
-        vast_c = airco_sturing.AIRCO_WEG_VAST_C
+        vast_c = self._airco_weg_c()
         if self.presence_state != "weg":
             self._airco_weg_keuze = None
             if not self._airco_weg_vast:
@@ -2768,7 +2783,7 @@ class KlimaatMixin:
         bestaande pad van `_airco_weg_ronde`). De teller begint opnieuw na een
         herstart.
         """
-        vast_c = airco_sturing.AIRCO_WEG_VAST_C
+        vast_c = self._airco_weg_c()
         sinds = getattr(self, "_weg_sinds", None)
         if (
             airco_sturing.AIRCO_UIT_BIJ_WEG or sinds is None

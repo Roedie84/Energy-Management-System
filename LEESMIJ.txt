@@ -1,3 +1,11 @@
+v5.262.0 (26-11-2026)
+- Airco: de temperatuur bij 'iedereen weg' (knop, of langer dan twee uur weg)
+  is instelbaar. Leeg of 0 = 18 °C zoals voorheen.
+- Airco: met 'dagdoel vanaf' ingesteld gaat de airco bij thuiskomst voor dat
+  tijdstip terug naar het ochtenddoel (19 °C) en niet naar het geleerde doel
+  (21 °C). Gevonden met de dagsimulatie.
+- Dagsimulatie: twee tests erbij.
+
 v5.261.0 (26-11-2026)
 - Opruimen (L-EMS-083, akkoord Ruud): de oude reserve-regels stuurden sinds
   10-11 geen kwartier meer. Twee functies die nergens meer werden aangeroepen

@@ -36163,3 +36163,7 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 
 ## v5.261.0 (26-11-2026)
 - L-EMS-083: `_reserve_margin_factor` en `_piekverkoop` verwijderd (alleen nog in tests aangeroepen), reden `expensive_quarter_peak` als vervallen gemarkeerd, `get_lange_horizon_effect` weg, `monte_carlo_vergelijking` en `lange_horizon_effect` uit de diagnose. Sturing ongewijzigd; de terugval (legacy_sturing) blijft.
+
+## v5.262.0 (26-11-2026)
+- Airco: optie `airco_weg_c` (14-20 °C, anders 18) voor de knop iedereen weg en langer dan twee uur weg.
+- Airco: `_airco_doel_nu` geeft voor het tijdstip van `airco_middag_vanaf` het ochtenddoel, ook voor 11:00 (thuiskomst ging naar het geleerde doel).

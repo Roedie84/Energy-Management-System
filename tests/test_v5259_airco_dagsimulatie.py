@@ -282,3 +282,25 @@ def test_zonder_dagdoel_vanaf_blijft_het_elf_uur(make_coordinator, hass):
                 lambda t: "slaapt" if (t.hour, t.minute) < (6, 15) else "thuis")
     huis.speel_tot(datetime(2026, 11, 25, 12, 0, tzinfo=TZ))
     assert [r[0] for r in huis.log if r[2] == 21.0][0] <= "11:02", huis.log
+
+
+def test_de_knop_iedereen_weg_op_de_ingestelde_temperatuur(make_coordinator, hass):
+    """Ruud 26-11 07:50: knop aan in de ochtend (19 graden) gaf maar 1 graad
+    terug -> instelbaar, 16 graden; knop uit: terug naar het ochtenddoel."""
+    huis = Huis(make_coordinator, hass, datetime(2026, 11, 26, 5, 0, tzinfo=TZ), 16.5,
+                lambda t: "slaapt" if (t.hour, t.minute) < (6, 15) else "thuis",
+                knop=lambda t: (7, 50) <= (t.hour, t.minute) < (9, 30),
+                instellingen=lambda t: {"airco_weg_c": 16.0, "airco_middag_vanaf": "16:00"})
+    huis.speel_tot(datetime(2026, 11, 26, 10, 30, tzinfo=TZ))
+    weg = _tussen(huis.log, "07:50", "09:30")
+    assert weg and weg[0][1:3] == ("heat", 16.0) and weg[0][0] <= "07:52", huis.log
+    assert all(r[2] == 16.0 for r in weg), huis.log
+    terug = _tussen(huis.log, "09:30", "10:30")
+    assert terug and terug[0][1:3] == ("heat", 19.0) and terug[0][0] <= "09:32", huis.log
+
+
+def test_zonder_instelling_blijft_weg_achttien(make_coordinator, hass):
+    c = make_coordinator({})
+    assert c._airco_weg_c() == 18.0
+    c.config = dict(c.config or {}, airco_weg_c=30)
+    assert c._airco_weg_c() == 18.0
