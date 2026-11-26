@@ -491,3 +491,5 @@ laatste ronde: 25-11 06:45, gemeten t/m 25-11 06:45
 - Niet gemeten: MC-Brier, SoC-voorspelling, NILM; replay H-EMS-26.
 
 laatste ronde: 26-11 06:45, gemeten t/m 26-11 06:45
+
+- 26-11 08:50 (chat, Claude): v5.264.0 - de werkdagochtend van de airco zat niet in de verbruiksverwachting doordat `nacht_extra_kwh` het airco-profiel van het hele planvenster (37 uur) van de ochtend aftrok. Nu per uur. De meting "06:30 verwacht tegen gemeten" is dus pas zinvol vanaf de eerste ochtend na de herstart op v5.264.0; de drie ochtenden daarvoor zijn de oude fout.
