@@ -1,3 +1,9 @@
+v5.264.0 (26-11-2026)
+- Accuplan: de werkdagochtend van de airco zit nu in de verbruiksverwachting.
+  Het plan kijkt 37 uur vooruit; het gewone airco-verbruik van de middag en
+  avond ging van de ochtend af, waardoor die altijd op nul uitkwam (06:30
+  gemeten 1242 W, verwacht 332 W). Nu per uur vergeleken.
+
 v5.263.0 (26-11-2026)
 - Airco en de knop 'iedereen weg' (Ruud 26-11): de knop zet de airco nu UIT
   (was: terug naar 18 °C), ook een airco die jullie zelf aanzetten. Gaat de

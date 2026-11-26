@@ -293,6 +293,19 @@ def test_wat_het_profiel_al_meeneemt_telt_niet_dubbel():
     assert uit["al_in_profiel_kwh"] == 0.8 and uit["extra_kwh"] == 1.0
 
 
+def test_het_profiel_van_de_middag_drukt_de_ochtend_niet_weg():
+    """v5.264.0 (dagcontrole 25/26-11): het plan kijkt 37 uur vooruit. Het
+    airco-profiel van de middag en avond ging van de ochtend af, waardoor die
+    altijd op nul uitkwam (06:30 gemeten 1242 W, verwacht 332 W)."""
+    r = _met_vermogen(_geleerd_ritme())
+    for uur in range(15, 22):
+        for _ in range(3):
+            ar.noteer_uur(r, uur, 1.0)
+    uit = ar.nacht_extra_kwh(r, _op(2, 21, 0), _op(4, 10, 0), lambda m: 17.0, 2.0)
+    # twee ochtenden in het venster, elk 1,8 kWh; niets daarvan zit in het profiel
+    assert uit["extra_kwh"] == 3.6 and uit["al_in_profiel_kwh"] == 0.0, uit
+
+
 def test_geen_extra_zonder_vermogen_of_als_het_warm_genoeg_is():
     r = _geleerd_ritme()
     assert ar.nacht_extra_kwh(r, _op(2, 23, 0), _op(3, 8, 0), lambda m: 17.0, 2.0)["extra_kwh"] == 0.0

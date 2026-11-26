@@ -732,13 +732,27 @@ def ochtend_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, tempo_c_
 def nacht_extra_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, tempo_c_per_uur) -> dict:
     """Wat er bovenop het gewone verbruiksprofiel bij moet: de verwachte
     ochtendverwarming min wat het profiel al aan airco meeneemt. Nooit
-    negatief - het profiel wordt hier niet verlaagd."""
-    verwacht = ochtend_kwh(ritme, van, tot, verwacht_op, tempo_c_per_uur)
-    al_in_profiel = profiel_kwh(ritme, van, tot)
+    negatief - het profiel wordt hier niet verlaagd.
+
+    v5.264.0 (dagcontrole 25/26-11: 06:30 gemeten 1242 W, verwacht 332 W):
+    per uur vergeleken. Eerst ging het profiel van het HELE venster eraf; sinds
+    de planenergie (v5.186.0) is dat venster 37 uur, en daarin zit meer airco
+    dan een ochtend kost - de ochtend viel dan altijd weg tegen nul."""
+    verwacht = al_in_profiel = extra = 0.0
+    uur = van.replace(minute=0, second=0, microsecond=0)
+    while uur < tot:
+        a, b = max(uur, van), min(uur + timedelta(hours=1), tot)
+        deel = ochtend_kwh(ritme, a, b, verwacht_op, tempo_c_per_uur)
+        if deel > 0:
+            profiel = profiel_kwh(ritme, a, b)
+            verwacht += deel
+            al_in_profiel += profiel
+            extra += max(deel - profiel, 0.0)
+        uur += timedelta(hours=1)
     return {
         "verwacht_kwh": round(verwacht, 3),
         "al_in_profiel_kwh": round(al_in_profiel, 3),
-        "extra_kwh": round(max(verwacht - al_in_profiel, 0.0), 3),
+        "extra_kwh": round(extra, 3),
     }
 
 

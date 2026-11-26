@@ -36172,3 +36172,6 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 - Nieuw `oorzaak.py`: oorzaak van een wijziging uit de HA-context; `airco_wijzigingen` (bewaard, in de diagnose) en veld `oorzaak` bij `handmatige_ingrepen`. Alleen meten.
 - Meldingen: knop "Minder hiervan" (`EMS_MINDER|<soort>`), `melding_minder_antwoord`; drie tikken in dertig dagen zetten de soort uit. Niet bij kritieke soorten.
 - Airco: `_airco_knop_ronde` - knop iedereen weg zet de airco uit en bij terugkomst weer aan (`airco_knop_sinds`, `airco_knop_uit` bewaard); de lang-weg-regel geldt alleen nog zonder knop.
+
+## v5.264.0 (26-11-2026)
+- `airco_ritme.nacht_extra_kwh` vergelijkt de ochtendverwarming per uur met het airco-profiel in plaats van over het hele venster; de ochtend komt daardoor in de planenergie (v5.186.0) en de reserve.
