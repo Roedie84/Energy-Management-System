@@ -1,3 +1,10 @@
+v5.266.0 (26-11-2026)
+- Ontdooien van de airco herkennen, geijkt op een waarneming (Ruud 26-11
+  20:22: raar compressiegeluid en koudere lucht, buiten -2,7 °C). Het patroon:
+  de compressor valt vanuit bedrijf in een keer stil en start binnen twintig
+  minuten weer. Afbouwen en afslaan op de eigen thermostaat telt niet, en ook
+  niet als hij daarna uit blijft. Alleen een telling; het EMS stuurt er niet op.
+
 v5.265.0 (26-11-2026)
 - Airco-vermogen nameten op de P1-meter (alleen meten): per blok van tien
   minuten legt het EMS het berekende vermogen naast wat de fase van de airco

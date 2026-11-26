@@ -42,6 +42,15 @@ TUSSENTIJD_MIN = 20
 #: Een beurt die na zoveel minuten niet hersteld is, sluiten we af.
 DUUR_MAX_MIN = 30
 BEURTEN_MAX = 120
+#: v5.266.0 - tweede patroon, geijkt op Ruud 26-11 20:22 ("binnen een raar
+#: compressiegeluid en koudere lucht", buiten -2,7 °C): de compressor valt
+#: vanuit bedrijf in een keer stil (67 -> 0 Hz; de fase van de airco trekt dan
+#: ~45 W) en start binnen een kwartier weer. Dezelfde dag ook 07:16 en 19:27,
+#: steeds 45-55 minuten na de vorige start. Afslaan op de eigen thermostaat
+#: gaat anders: de frequentie bouwt eerst af (08:10: 33 -> 13 -> 0 Hz).
+STIL_VAN_HZ = 30.0
+#: Start hij binnen zoveel minuten niet opnieuw, dan was het geen ontdooien.
+STIL_MAX_MIN = 20
 
 
 def leeg() -> dict:
@@ -74,8 +83,18 @@ def ronde(
     """Eén meetronde. Werkt `buffer` (lijst van [tijd, hz, unit_c, doel_c]) en
     `model` bij; geeft de nieuwe beurt terug als er net een is herkend."""
     beurten = model.setdefault("beurten", [])
+    # v5.266.0: een stilstand telt pas als de compressor weer start
+    if beurten and beurten[-1].get("duur_min") is None and beurten[-1].get("soort") == "stilstand":
+        lopend = beurten[-1]
+        begin = _tijd(lopend.get("begin"))
+        minuten = (now - begin).total_seconds() / 60 if begin else STIL_MAX_MIN
+        if hz is not None and hz > 0 and verwarmt:
+            lopend["duur_min"] = round(minuten, 0)
+            lopend["hersteld"] = True
+        elif minuten >= STIL_MAX_MIN or not verwarmt:
+            beurten.pop()       # bleef uit: afgeslagen of uitgezet, geen ontdooien
     # een lopende beurt afsluiten zodra de binnenunit weer warm is
-    if beurten and beurten[-1].get("duur_min") is None:
+    if beurten and beurten[-1].get("duur_min") is None and beurten[-1].get("soort") != "stilstand":
         lopend = beurten[-1]
         begin = _tijd(lopend.get("begin"))
         minuten = (now - begin).total_seconds() / 60 if begin else DUUR_MAX_MIN
@@ -99,6 +118,11 @@ def ronde(
         vorige = _tijd(beurten[-1].get("begin"))
         if vorige is not None and (now - vorige).total_seconds() < TUSSENTIJD_MIN * 60:
             return None
+    stil = _stilstand(buffer, now, buiten_c)
+    if stil is not None:
+        beurten.append(stil)
+        del beurten[:-BEURTEN_MAX]
+        return stil
     venster_begin = now - timedelta(minutes=VENSTER_MIN)
     vooraf = [m for m in buffer if m[0] < venster_begin]
     venster = [m for m in buffer if m[0] >= venster_begin]
@@ -134,17 +158,47 @@ def ronde(
     return beurt
 
 
+def _stilstand(buffer: list, now: datetime, buiten_c) -> dict | None:
+    """De compressor valt vanuit bedrijf in een keer stil (v5.266.0)."""
+    if len(buffer) < VOORAF_METINGEN + 1 or buffer[-1][1] > 0:
+        return None
+    eerder = buffer[:-1]
+    if eerder[-1][1] < STIL_VAN_HZ:
+        return None
+    grens = now - timedelta(minutes=VOORAF_MIN)
+    vooraf = [m for m in eerder if m[0] >= grens]
+    if len(vooraf) < VOORAF_METINGEN or (now - eerder[0][0]).total_seconds() < (VOORAF_MIN - 2) * 60:
+        return None
+    if any(m[1] <= 0 for m in vooraf) or len({m[3] for m in vooraf + [buffer[-1]]}) > 1:
+        return None
+    return {
+        "begin": now.isoformat(),
+        "soort": "stilstand",
+        "buiten_c": round(float(buiten_c), 1),
+        "unit_voor_c": eerder[-1][2],
+        "unit_laagst_c": buffer[-1][2],
+        "hz_voor": eerder[-1][1],
+        "hz_laagst": 0.0,
+        "hz_hoogst": max(m[1] for m in vooraf),
+        "duur_min": None,
+    }
+
+
 def overzicht(model: dict | None, now: datetime) -> dict:
     """Voor de sensor en de diagnose."""
-    beurten = list((model or {}).get("beurten") or [])
+    beurten = [
+        b for b in ((model or {}).get("beurten") or [])
+        if not (b.get("soort") == "stilstand" and b.get("duur_min") is None)
+    ]
     vandaag = now.date().isoformat()
     week = (now - timedelta(days=7)).isoformat()
     duren = [b["duur_min"] for b in beurten if isinstance(b.get("duur_min"), (int, float)) and b.get("hersteld")]
     return {
         "zeker": False,
         "toelichting": (
-            "Vermoedelijke ontdooibeurten, afgeleid uit de compressorfrequentie en de "
-            "temperatuur bij de binnenunit. Nog niet geijkt; het EMS stuurt er niet op."
+            "Vermoedelijke ontdooibeurten: de compressor valt vanuit bedrijf in een keer stil en "
+            "start binnen twintig minuten weer (geijkt op een waarneming van 26-11), of de "
+            "temperatuur bij de binnenunit zakt snel terwijl de compressor inzakt. Het EMS stuurt er niet op."
         ),
         "vandaag": sum(1 for b in beurten if str(b.get("begin", ""))[:10] == vandaag),
         "laatste_7_dagen": sum(1 for b in beurten if str(b.get("begin", "")) >= week),

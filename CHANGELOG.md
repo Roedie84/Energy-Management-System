@@ -36178,3 +36178,6 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 
 ## v5.265.0 (26-11-2026)
 - Nieuw `airco_ijking.py`: berekend airco-vermogen tegen de fasevermogens van de P1-meter (`ritme["ijking"]`, uitkomst in `get_airco_vermogen()["ijking_p1"]`). Alleen meten.
+
+## v5.266.0 (26-11-2026)
+- `airco_ontdooi`: tweede patroon `stilstand` (compressor >= 30 Hz in een keer naar 0, herstart binnen 20 min), geijkt op een waarneming van 26-11. Alleen meten.
