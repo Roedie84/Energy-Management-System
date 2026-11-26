@@ -588,6 +588,9 @@ from .const import (
     MEASUREMENT_QUALITY_MIN_SAMPLES,
     MELDING_ADVIES,
     NOTIFICATION_HISTORY_LENGTH,
+    MELDING_MINDER_ACTIE,
+    MELDING_MINDER_KEER,
+    MELDING_MINDER_DAGEN,
     NOTIFICATION_RECOVERY_KINDS,
     GACS_EFFICIENCY_ADVICE_PERCENT,
     GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
@@ -12924,6 +12927,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                 # ct. Dat zijn twee TEGENGESTELDE beslissingen, en op één
                 # hoop geteld is de mediaanprijs van 13 en 37 ct
                 # betekenisloos.
+                # v5.263.0: wie of wat de stand veranderde (context van de keuzelijst).
+                "oorzaak": self._oorzaak_accustand(),
                 "richting": self._richting_van_de_accu(),
                 "accustand_procent": self.accustand_procent(),
                 "beschikbaar_kwh": self.beschikbare_energie_kwh(),
@@ -18144,6 +18149,63 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             )
         return overzicht
 
+    def _oorzaak_accustand(self) -> str | None:
+        """Wie of wat de accustand veranderde (v5.263.0) - zie `oorzaak`."""
+        from . import oorzaak
+
+        try:
+            toestand = self.hass.states.get(self.config.get(CONF_OPERATION_SELECT) or "")
+            if toestand is None:
+                return None
+            return oorzaak.uit_context(getattr(toestand, "context", None))
+        except Exception:  # noqa: BLE001 - vastleggen mag de ronde nooit raken
+            return None
+
+    melding_minder: dict | None = None
+
+    def _melding_minder_knop(self, kind: str | None) -> list[dict]:
+        """De knop "Minder hiervan" voor deze soort (v5.263.0); leeg bij een
+        kritieke of onbekende soort."""
+        if not kind or self.notification_definition(kind) is None:
+            return []
+        if LOG_PRIORITEITEN.get(kind) == LOG_PRIO_KRITIEK:
+            return []
+        return [{"action": f"{MELDING_MINDER_ACTIE}|{kind}", "title": "Minder hiervan"}]
+
+    def melding_minder_antwoord(self, actie: str, now: datetime | None = None) -> dict | None:
+        """Een tik op "Minder hiervan" (v5.263.0). None = niet van deze knop.
+
+        Drie tikken binnen dertig dagen zetten die soort melding uit; de
+        schakelaar van de melding zet hem weer aan. Kritieke soorten nooit.
+        """
+        deel = str(actie or "").split("|")
+        if len(deel) != 2 or deel[0] != MELDING_MINDER_ACTIE:
+            return None
+        kind = deel[1]
+        definitie = self.notification_definition(kind)
+        if definitie is None or LOG_PRIORITEITEN.get(kind) == LOG_PRIO_KRITIEK:
+            return {"soort": kind, "geteld": False}
+        now = now or dt_util.now()
+        grens = now - timedelta(days=MELDING_MINDER_DAGEN)
+        tikken = []
+        for moment in (self.melding_minder or {}).get(kind) or []:
+            tijd = dt_util.parse_datetime(str(moment))
+            if tijd is not None and tijd >= grens:
+                tikken.append(str(moment))
+        tikken.append(now.isoformat())
+        uitgezet = len(tikken) >= MELDING_MINDER_KEER
+        self.melding_minder = {**(self.melding_minder or {}), kind: [] if uitgezet else tikken}
+        if uitgezet:
+            self.set_notification_enabled(kind, False)
+            self._ontdekking_stuur(
+                "Melding uitgezet",
+                f"'{definitie[1]}' staat nu uit: je tikte {MELDING_MINDER_KEER} keer op Minder hiervan. "
+                "Weer aanzetten kan met de schakelaar van deze melding.",
+                tag=f"ems_minder_{kind}",
+            )
+        self.schedule_persisted_state_save()
+        return {"soort": kind, "geteld": True, "tikken": len(tikken), "uitgezet": uitgezet}
+
     def set_notification_enabled(self, kind: str, ingeschakeld: bool) -> None:
         self.notification_enabled[kind] = bool(ingeschakeld)
         self._notify_listeners()
@@ -18417,6 +18479,10 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
                         "ttl": 0,
                         "priority": "high",
                     }
+                # v5.263.0: bij gewone meldingen de knop "Minder hiervan".
+                knoppen = self._melding_minder_knop(kind)
+                if knoppen:
+                    gegevens["data"] = {**(gegevens.get("data") or {}), "actions": knoppen}
                 self.hass.async_create_task(
                     self.hass.services.async_call(
                         service_domain,

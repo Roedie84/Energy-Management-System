@@ -14,6 +14,7 @@ import statistics
 from datetime import datetime, timedelta
 from homeassistant.util import dt as dt_util
 from . import airco_frequentie, airco_ontdooi, airco_ritme, airco_sturing, klimaat_wind, klimaat_zon
+from . import oorzaak as oorzaak_mod
 from .const import (
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -1792,6 +1793,22 @@ class KlimaatMixin:
         extern = self._airco_extern_bezig()
         extern_net = extern or self._airco_extern_vorige
         self._airco_extern_vorige = extern
+        # v5.263.0: elke wijziging vastleggen met wie of wat hem deed (alleen
+        # meten; de sturing hieronder is ongewijzigd).
+        if vorige is not None and gezien != vorige:
+            try:
+                self.airco_wijzigingen = oorzaak_mod.bijgewerkt(
+                    self.airco_wijzigingen,
+                    oorzaak_mod.regel(
+                        now.isoformat(), vorige, gezien,
+                        oorzaak_mod.uit_context(
+                            getattr(toestand, "context", None),
+                            door_ems=door_ems, eigen_automatisering=extern_net,
+                        ),
+                    ),
+                )
+            except Exception:  # noqa: BLE001 - vastleggen mag de ronde nooit raken
+                pass
         if vorige is not None and gezien != vorige and not door_ems and not extern_net:
             # Iemand bediende de airco zelf: dat gaat voor, tot de
             # aanwezigheid verandert - en wat hij nu doet is niet meer van het
@@ -1836,9 +1853,13 @@ class KlimaatMixin:
         )
         uit = self._airco_ritme_ronde(now, uit, stand_besluit)
         uit = self._airco_kort_weg_ronde(now, uit)
-        uit = self._airco_weg_ronde(now, uit, stand, doel_nu)
-        uit = self._airco_thuiskomst_ronde(now, uit, stand)
-        uit = self._airco_zon_ronde(now, self._airco_buffer_ronde(now, uit, stand), stand)
+        # v5.263.0 (Ruud 26-11: "airco uit bij indrukken knop"): de knop gaat
+        # voor de afwezigheidsregels.
+        uit = self._airco_knop_ronde(now, uit, stand)
+        if not uit.get("knop_weg"):
+            uit = self._airco_weg_ronde(now, uit, stand, doel_nu)
+            uit = self._airco_thuiskomst_ronde(now, uit, stand)
+            uit = self._airco_zon_ronde(now, self._airco_buffer_ronde(now, uit, stand), stand)
         # v5.208.0: zolang de eigen automatisering loopt, stelt het EMS het doel
         # van een airco die al verwarmt niet bij; uitzetten mag wel.
         if extern and uit.get("actie") == "verwarmen" and stand == "heat":
@@ -1880,6 +1901,7 @@ class KlimaatMixin:
             self.hass.async_create_task(self._async_pas_airco_toe(entiteit, uit))
 
     _airco_extern_vorige: bool = False
+    airco_wijzigingen: list | None = None
 
     def _airco_extern_bezig(self) -> bool:
         """Een eigen automatisering stelt de airco nu bij (v5.208.0) - zie
@@ -2767,6 +2789,65 @@ class KlimaatMixin:
                     redenen_tekst=" · ".join(redenen), weg_keuze=keuze,
                     tekst=f"Niemand thuis: {vast_c:.0f} °C vasthouden tot jullie terug zijn ({keuze['reden']}).")
 
+    airco_knop_sinds: str | None = None
+    airco_knop_uit: bool = False
+
+    def _airco_knop_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
+        """De knop 'iedereen weg': airco uit, en bij terugkomst weer aan (v5.263.0).
+
+        Ruud 26-11: "Airco uit bij indrukken knop aanwezig naar afwezig". Ook
+        een airco die jullie zelf aanzetten gaat uit (v5.255.1). Zet iemand hem
+        NA het indrukken weer aan, dan blijft dat staan. Gaat de knop uit, dan
+        gaat een airco die de knop uitzette overdag weer aan op het doel van
+        dat moment; de vaste uittijd en het raam gaan altijd voor.
+        """
+        if self._afwezig_knop():
+            if self.airco_knop_sinds is None:
+                self.airco_knop_sinds = now.isoformat()
+            if stand == "heat":
+                if uit.get("actie") == "uit" or self._airco_zelf_aan_sinds_knop():
+                    return dict(uit, knop_weg=True)
+                self.airco_knop_uit = True
+                redenen = list(uit.get("redenen") or []) + ["knop 'iedereen weg': airco uit"]
+                return dict(uit, actie="uit", knop_weg=True, redenen=redenen,
+                            redenen_tekst=" · ".join(redenen),
+                            tekst="Knop 'iedereen weg': airco uit tot jullie terug zijn.")
+            if uit.get("actie") == "verwarmen":
+                redenen = list(uit.get("redenen") or []) + ["knop 'iedereen weg' staat aan"]
+                return dict(uit, actie="niets", knop_weg=True, redenen=redenen,
+                            redenen_tekst=" · ".join(redenen),
+                            tekst="Knop 'iedereen weg' staat aan: de airco blijft uit.")
+            return dict(uit, knop_weg=True)
+        self.airco_knop_sinds = None
+        if not self.airco_knop_uit:
+            return uit
+        overdag = airco_ritme.is_ochtend(now) or airco_ritme.is_dag(now)
+        if stand == "heat" or not overdag or uit.get("altijd"):
+            self.airco_knop_uit = False
+            return uit
+        if stand != "off" or uit.get("actie") == "uit":
+            return uit
+        doel = uit.get("doel_c") if uit.get("actie") == "verwarmen" else self._airco_doel_nu(now)
+        if doel is None:
+            self.airco_knop_uit = False
+            return uit
+        redenen = list(uit.get("redenen") or []) + ["knop 'iedereen weg' is uit: airco weer aan"]
+        return dict(uit, actie="verwarmen", doel_c=float(doel), redenen=redenen,
+                    redenen_tekst=" · ".join(redenen),
+                    tekst=f"Welkom thuis: airco weer aan op {float(doel):.1f} °C.")
+
+    def _airco_zelf_aan_sinds_knop(self) -> bool:
+        """Zette iemand de airco aan nadat de knop werd ingedrukt?"""
+        sinds = self.airco_knop_sinds
+        if not sinds:
+            return False
+        for regel in reversed(self.airco_wijzigingen or []):
+            if str(regel.get("moment") or "") <= sinds:
+                break
+            if regel.get("oorzaak") != oorzaak_mod.EMS and (regel.get("naar") or [None])[0] == "heat":
+                return True
+        return False
+
     def _afwezig_knop(self) -> bool:
         """De knop 'iedereen weg' (v5.255.0); zonder coordinator (toetsen) uit."""
         lees = getattr(self, "afwezig_knop_aan", None)
@@ -2788,20 +2869,14 @@ class KlimaatMixin:
         if (
             airco_sturing.AIRCO_UIT_BIJ_WEG or sinds is None
             or uit.get("actie") != "niets" or stand != "heat"
-            # v5.255.1: de knop geldt ook voor een airco die jullie zelf aanzetten
-            or (not self.airco_door_ems and not self._afwezig_knop())
+            # v5.263.0: de knop 'iedereen weg' zet de airco uit (`_airco_knop_ronde`);
+            # deze regel is alleen nog voor langer dan twee uur weg zonder knop.
+            or not self.airco_door_ems
             or doel_nu is None or float(doel_nu) <= vast_c + 0.05
-            # v5.255.0: met de knop 'iedereen weg' meteen, zonder twee uur wachten
-            or (not self._afwezig_knop()
-                and (now - sinds).total_seconds() < airco_sturing.AIRCO_WEG_TERUGZETTEN_NA_MIN * 60)
+            or (now - sinds).total_seconds() < airco_sturing.AIRCO_WEG_TERUGZETTEN_NA_MIN * 60
         ):
             return uit
         self._airco_weg_vast = True
-        if self._afwezig_knop():
-            redenen = list(uit.get("redenen") or []) + [f"knop 'iedereen weg': terug naar {vast_c:.0f} °C"]
-            return dict(uit, actie="verwarmen", doel_c=vast_c, redenen=redenen,
-                        redenen_tekst=" · ".join(redenen),
-                        tekst=f"Knop 'iedereen weg': terug naar {vast_c:.0f} °C tot jullie terug zijn.")
         uren = airco_sturing.AIRCO_WEG_TERUGZETTEN_NA_MIN / 60
         redenen = list(uit.get("redenen") or []) + [f"langer dan {uren:g} uur weg: terug naar {vast_c:.0f} °C"]
         return dict(uit, actie="verwarmen", doel_c=vast_c, redenen=redenen,

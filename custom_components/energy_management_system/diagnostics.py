@@ -611,6 +611,9 @@ async def async_get_config_entry_diagnostics(
         # v5.27: het airco-besluit, met redenen - ook met de knop uit.
         "airco_besluit": dict(getattr(coordinator, "last_airco_besluit", None) or {}),
         "airco_setpunten": list(getattr(coordinator, "airco_setpunten", None) or []),
+        # v5.263.0: wie of wat de airco bediende, en de tikken op "Minder hiervan".
+        "airco_wijzigingen": list(getattr(coordinator, "airco_wijzigingen", None) or []),
+        "melding_minder": dict(getattr(coordinator, "melding_minder", None) or {}),
         # v5.65: het geleerde dagritme van de airco.
         "airco_ritme": _veilig("get_airco_ritme", coordinator.get_airco_ritme),
         # v5.93.0: verwacht tot het volgende blok, zoals de reserve rekent.

@@ -4185,6 +4185,14 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # Zonder dit wist het na een herstart niet meer dat de draaiende airco van
     # hem was en stelde het hem overdag niet bij naar het dagdoel.
     "_airco_laatste_ems": {"type": "plain"},
+    # v5.263.0: wie of wat de airco bediende (laatste 40), en hoe vaak er bij
+    # een soort melding op "Minder hiervan" is getikt.
+    "airco_wijzigingen": {"type": "plain"},
+    "melding_minder": {"type": "plain"},
+    # v5.263.0: sinds wanneer de knop 'iedereen weg' aan staat, en of de knop
+    # de airco uitzette (dan gaat hij bij terugkomst weer aan).
+    "airco_knop_sinds": {"type": "plain"},
+    "airco_knop_uit": {"type": "plain"},
     # v5.45: de Monte-Carlo-tekortkans van 22:00 per avond (kalibratie).
     "mc_22u_per_avond": {"type": "plain"},
     # v5.57: de tellerstanden van de laatste kwartiergrens, zodat het
@@ -5103,6 +5111,12 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
 # alweer uit.
 # v5.25: 41 soorten x 5 - zie test_the_history_is_long_enough_for_a_busy_day.
 NOTIFICATION_HISTORY_LENGTH = 220
+# v5.263.0 (Ruud 26-11, idee uit Sentient): een knop "Minder hiervan" in de
+# melding. Zo vaak tikken binnen dit aantal dagen zet die soort uit. Niet bij
+# kritieke meldingen.
+MELDING_MINDER_ACTIE = "EMS_MINDER"
+MELDING_MINDER_KEER = 3
+MELDING_MINDER_DAGEN = 30
 
 # --- Eén betrouwbaarheidsschaal (v1.3.0) -----------------------------
 # Gevraagd: "ik wil dit eigenlijk voor vele data welke wordt gecreeerd,

@@ -1,3 +1,18 @@
+v5.263.0 (26-11-2026)
+- Airco en de knop 'iedereen weg' (Ruud 26-11): de knop zet de airco nu UIT
+  (was: terug naar 18 °C), ook een airco die jullie zelf aanzetten. Gaat de
+  knop uit, dan gaat de airco overdag weer aan op het doel van dat moment.
+  Zet iemand hem na het indrukken zelf aan, dan blijft dat staan. Langer dan
+  twee uur weg zonder knop: nog steeds terug naar de ingestelde temperatuur.
+- Wie of wat bediende de airco: bij elke wijziging van de airco legt het EMS
+  vast of het zelf was, iemand via Home Assistant (app of dashboard), een
+  automatisering of het apparaat zelf (afstandsbediening of eigen app). De
+  laatste 40 staan in de diagnose. Ook bij een handmatige ingreep op de
+  accustand. Alleen vastleggen; de sturing is niet veranderd.
+- Meldingen: gewone meldingen hebben een knop "Minder hiervan". Drie keer
+  tikken binnen dertig dagen zet die soort melding uit (weer aan met de
+  schakelaar van de melding). Kritieke meldingen hebben de knop niet.
+
 v5.262.0 (26-11-2026)
 - Airco: de temperatuur bij 'iedereen weg' (knop, of langer dan twee uur weg)
   is instelbaar. Leeg of 0 = 18 °C zoals voorheen.

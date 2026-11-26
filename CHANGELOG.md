@@ -36167,3 +36167,8 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 ## v5.262.0 (26-11-2026)
 - Airco: optie `airco_weg_c` (14-20 °C, anders 18) voor de knop iedereen weg en langer dan twee uur weg.
 - Airco: `_airco_doel_nu` geeft voor het tijdstip van `airco_middag_vanaf` het ochtenddoel, ook voor 11:00 (thuiskomst ging naar het geleerde doel).
+
+## v5.263.0 (26-11-2026)
+- Nieuw `oorzaak.py`: oorzaak van een wijziging uit de HA-context; `airco_wijzigingen` (bewaard, in de diagnose) en veld `oorzaak` bij `handmatige_ingrepen`. Alleen meten.
+- Meldingen: knop "Minder hiervan" (`EMS_MINDER|<soort>`), `melding_minder_antwoord`; drie tikken in dertig dagen zetten de soort uit. Niet bij kritieke soorten.
+- Airco: `_airco_knop_ronde` - knop iedereen weg zet de airco uit en bij terugkomst weer aan (`airco_knop_sinds`, `airco_knop_uit` bewaard); de lang-weg-regel geldt alleen nog zonder knop.

@@ -45,27 +45,26 @@ def test_de_knop_gaat_voor_de_sensoren(make_coordinator, hass):
     assert geen.presence_state is None
 
 
-def test_de_airco_gaat_meteen_naar_de_lage_stand(make_coordinator, hass):
+def test_de_knop_zet_de_airco_uit(make_coordinator, hass):
+    """v5.263.0 (Ruud 26-11): de knop zet de airco uit (was: naar 18 graden),
+    ook een airco die jullie zelf aanzetten (v5.255.1)."""
     c = _c(make_coordinator, "on")
     c.airco_door_ems = True
-    c._weg_sinds = NU - timedelta(minutes=1)
-    uit = c._airco_lang_weg_terugzetten(NU, {"actie": "niets"}, "heat", 21.0)
-    assert uit["actie"] == "verwarmen" and uit["doel_c"] == 18.0
-    assert "knop" in uit["tekst"].lower()
-    # zonder knop pas na twee uur
+    uit = c._airco_knop_ronde(NU, {"actie": "niets"}, "heat")
+    assert uit["actie"] == "uit" and uit["knop_weg"] and "knop" in uit["tekst"].lower()
+    assert c.airco_knop_uit is True and c.airco_knop_sinds == NU.isoformat()
+    zelf = _c(make_coordinator, "on")
+    zelf.airco_door_ems = False
+    assert zelf._airco_knop_ronde(NU, {"actie": "niets"}, "heat")["actie"] == "uit"
+    # zonder knop: de lang-weg-regel pas na twee uur, en alleen voor een EMS-airco
     z = _c(make_coordinator, "off")
     z.airco_door_ems = True
     z._weg_sinds = NU - timedelta(minutes=1)
+    assert z._airco_knop_ronde(NU, {"actie": "niets"}, "heat") == {"actie": "niets"}
     assert z._airco_lang_weg_terugzetten(NU, {"actie": "niets"}, "heat", 21.0)["actie"] == "niets"
-    # v5.255.1 (Ruud 24-11: knop aan, airco bleef op 23): de knop geldt ook
-    # voor een airco die jullie zelf aanzetten; zonder knop blijft die staan
     z.airco_door_ems = False
     z._weg_sinds = NU - timedelta(hours=3)
     assert z._airco_lang_weg_terugzetten(NU, {"actie": "niets"}, "heat", 23.0)["actie"] == "niets"
-    zelf = _c(make_coordinator, "on")
-    zelf.airco_door_ems = False
-    zelf._weg_sinds = NU - timedelta(minutes=1)
-    assert zelf._airco_lang_weg_terugzetten(NU, {"actie": "niets"}, "heat", 23.0)["doel_c"] == 18.0
 
 
 def test_de_ochtendverwarming_slaat_over(make_coordinator, hass):

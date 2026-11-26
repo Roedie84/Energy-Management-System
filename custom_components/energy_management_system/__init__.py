@@ -208,7 +208,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # v5.249.0: een tik op een knop in de melding "nieuw apparaat gevonden".
     def _ontdekking_actie(event) -> None:
         try:
-            coordinator.ontdekking_antwoord(str((event.data or {}).get("action") or ""))
+            actie = str((event.data or {}).get("action") or "")
+            # v5.263.0: de knop "Minder hiervan" loopt via dezelfde luisteraar.
+            if coordinator.melding_minder_antwoord(actie) is None:
+                coordinator.ontdekking_antwoord(actie)
         except Exception:  # noqa: BLE001 - een knop mag het EMS nooit raken
             _LOGGER.warning("Antwoord op een ontdekking niet verwerkt", exc_info=True)
 
