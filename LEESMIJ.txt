@@ -1,3 +1,11 @@
+v5.265.0 (26-11-2026)
+- Airco-vermogen nameten op de P1-meter (alleen meten): per blok van tien
+  minuten legt het EMS het berekende vermogen naast wat de fase van de airco
+  boven zijn rustwaarde trekt. Blokken met Quooker, kookplaat of oven aan
+  tellen niet. De uitkomst staat bij Airco vermogen (ijking_p1): afwijking in
+  procenten, en de omrekening die de meter zelf geeft. De berekening van het
+  EMS verandert hier niet door; het besluit staat in het meetregister.
+
 v5.264.0 (26-11-2026)
 - Accuplan: de werkdagochtend van de airco zit nu in de verbruiksverwachting.
   Het plan kijkt 37 uur vooruit; het gewone airco-verbruik van de middag en

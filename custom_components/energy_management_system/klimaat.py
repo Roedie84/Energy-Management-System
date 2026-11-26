@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from homeassistant.util import dt as dt_util
 from . import airco_frequentie, airco_ontdooi, airco_ritme, airco_sturing, klimaat_wind, klimaat_zon
 from . import oorzaak as oorzaak_mod
+from . import airco_ijking
 from .const import (
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -60,6 +61,10 @@ from .const import (
     CONF_AIRCO_MIDDAG_DOEL_C,
     CONF_AIRCO_MIDDAG_VANAF,
     CONF_AIRCO_NACHT_C,
+    CONF_PHASE_POWER_SENSORS,
+    CONF_QUOOKER_POWER_SENSOR,
+    CONF_KOOKPLAAT_STATE_SENSOR,
+    CONF_OVEN_STATE_SENSOR,
     CONF_AIRCO_WEG_C,
     DEFAULT_AIRCO_WERKDAG_WARM_OM,
     AIRCO_WERKDAG_OCHTEND_DOEL_C,
@@ -2235,6 +2240,8 @@ class KlimaatMixin:
                 "ontdooien": airco_ontdooi.overzicht(
                     (self.airco_ritme or {}).get("ontdooi"), dt_util.now()
                 ),
+                # v5.265.0: het berekende vermogen nagemeten op de P1-meter
+                "ijking_p1": airco_ijking.overzicht((self.airco_ritme or {}).get("ijking"), a, b),
             }
         except Exception as err:  # noqa: BLE001 - een overzicht mag nooit breken
             return {"vermogen_w": None, "fout": str(err)}
@@ -2285,6 +2292,41 @@ class KlimaatMixin:
             doel_c=float(doel) if isinstance(doel, (int, float)) else None,
             verwarmt=toestand is not None and toestand.state == "heat",
         )
+        self._airco_ijking_ronde(now, ritme, hz)
+
+    _airco_ijk_blok: dict | None = None
+
+    def _airco_ijking_ronde(self, now: datetime, ritme: dict, hz) -> None:
+        """v5.265.0: het berekende vermogen nameten op de P1-meter - zie
+        `airco_ijking`. Alleen meten; mag de ronde nooit raken."""
+        try:
+            fasen = []
+            for entiteit in self.config.get(CONF_PHASE_POWER_SENSORS) or []:
+                toestand = self.hass.states.get(entiteit)
+                try:
+                    fasen.append(float(toestand.state))
+                except (AttributeError, TypeError, ValueError):
+                    fasen.append(None)
+            if len(fasen) < 2:
+                return
+            storing = False
+            quooker = self.hass.states.get(self.config.get(CONF_QUOOKER_POWER_SENSOR) or "")
+            try:
+                storing = quooker is not None and float(quooker.state) > 100.0
+            except (TypeError, ValueError):
+                storing = False
+            for sleutel in (CONF_KOOKPLAAT_STATE_SENSOR, CONF_OVEN_STATE_SENSOR):
+                toestand = self.hass.states.get(self.config.get(sleutel) or "")
+                if toestand is not None and str(toestand.state).lower() == "run":
+                    storing = True
+            if self._airco_ijk_blok is None:
+                self._airco_ijk_blok = airco_ijking.nieuw_blok(now)
+            self._airco_ijk_blok = airco_ijking.ronde(
+                ritme.setdefault("ijking", airco_ijking.leeg()), self._airco_ijk_blok, now,
+                hz=hz, fasen_w=fasen, storing=storing,
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Airco-ijking op de P1-meter overgeslagen", exc_info=True)
 
     def _zoek_airco_vermogen(self) -> str | None:
         try:

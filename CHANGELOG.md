@@ -36175,3 +36175,6 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 
 ## v5.264.0 (26-11-2026)
 - `airco_ritme.nacht_extra_kwh` vergelijkt de ochtendverwarming per uur met het airco-profiel in plaats van over het hele venster; de ochtend komt daardoor in de planenergie (v5.186.0) en de reserve.
+
+## v5.265.0 (26-11-2026)
+- Nieuw `airco_ijking.py`: berekend airco-vermogen tegen de fasevermogens van de P1-meter (`ritme["ijking"]`, uitkomst in `get_airco_vermogen()["ijking_p1"]`). Alleen meten.
