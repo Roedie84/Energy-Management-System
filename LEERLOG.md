@@ -478,3 +478,16 @@ laatste ronde: 24-11 06:45, gemeten t/m 24-11 06:45
 - Niet gemeten: MC-Brier, SoC-voorspelling, NILM; replay van H-EMS-26 (tijd).
 
 laatste ronde: 25-11 06:45, gemeten t/m 25-11 06:45
+
+## 26-11 06:45 · dagcontrole (25-11 06:45 t/m 26-11 06:45; v5.260.0 actief sinds herstart 25-11 17:50)
+- Achteraf (LP 96 kw, accudeel, laden 82,1 %, ontladen 99 %, start 54 % eind 99 %): werkelijk € 0,60, optimum € 0,54 → **gemist € 0,06, 0 FOUT, 0 PECH** (nabeschouwing EMS ook € 0,06). Ochtend 08:30-09:15 verkocht 44,6-48,9 ct, 10:45-13:45 bijgeladen 29,6-36 ct tot 100 %, 14:45-18:45 verkocht 48-50 ct tot 11 %, nacht 22:00-05:15 8,9 kWh AC op 33,5-36,9 ct.
+- Regels c: ochtendverkoop + middagterugkoop met winst (44,7-48,9 tegen ~32 ct); avondimport 19:00-22:00 3,47 kWh 41,3 ct bij lege accu, maar de lading ging voor 49 ct weg; geen onnodig vastgehouden lading. Loslaten woning-eerst +€ 0,31. Verkoopmarge 2 ct sinds 25-11 17:45 (keuze Ruud). Knop verkopen-uit niet gebruikt.
+- PV-plan 10 d **+5,3 %** (plan te laag; 30 d −6,5 %), net buiten ±5 %: komt van 10 u (+71 %, 68 % van het verschil). Onder saldering geen euro-effect (nr. 2 afgesloten); na 31-12 wel relevant, nr. 12 (01-03-2027). Geen voorstel.
+- H-EMS-27: 2e werkdagochtend: 26-11 06:30 gemeten 1242 W tegen 332 W (1 u vooraf); werkdag-airco zit niet in het plan. Morgen 3e ochtend, dan oordeel.
+- Nr. 16 airco 25-11: 10,7 kWh (0,8 nachtfout), 0,56 kWh/graad (0,52 zonder fout) tegen nulmeting 0,45; binnen 18,7 °C, buiten −0,5; € 4,41. Accu: gemist € 0,06, leverde € 0,33.
+- Module 1: 100 % 0,08 V (was 0,09), 0 % 0,04 V (anderen 0,01/0,01), laagste cel 25-11 3,08 (3,10/3,11), daghoogste celdelta **0,20** (hoogste tot nu, bij volladen; bucket 90 % 0,11). Geen drempel; volgen.
+- Register nr. 7 **afgesloten**: sinds herstart 36/37 gevolgd (97,3 %), de enige misser en alle eerdere = afbouw bovenin → stap b niet nodig, opdrachten_gevolgd wordt vaste bewaking. Nr. 13 **afgesloten**: oude regels stuurden sinds 10-11 00:30 geen kwartier meer (0 van ~1530) → terugval blijft als vangnet; L-EMS-083 (dode code en rapportages eruit) wacht op Ruud. Nr. 8: 25-11 € 0,00.
+- Storingen: 26-11 04:10-04:12 Zendure-integratie zag de accu 2 min offline (2 waarschuwingen), herstelde zelf; plan stond op houden. Stilstand 0. Geen codewijziging, geen release.
+- Niet gemeten: MC-Brier, SoC-voorspelling, NILM; replay H-EMS-26.
+
+laatste ronde: 26-11 06:45, gemeten t/m 26-11 06:45

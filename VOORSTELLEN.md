@@ -590,3 +590,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Bouw (na akkoord): economische_schaduw.py, economische_schaduw_sturing.py, de schakelaar, de haken in waardeplan_sturing.py en de diagnose eruit; tests bijwerken. Sturing ongewijzigd.
 - Verwacht effect: minder rekenwerk per kwartier en minder code; € 0.
 - Hoe gemeten: suite groen, rondeduur gelijk of lager, geen ontbrekende entiteiten in cockpit/dashboards.
+
+## L-EMS-083 · oude reserve-regels: dode code en rapportages eruit, terugval zelf blijft (meetregister nr. 13)
+- Status: **open, wacht op Ruud** (26-11, dagcontrole). Akkoord geven in de chat: "akkoord L-EMS-083".
+- Onderbouwing: dagverloop 10-11 00:30 t/m 26-11 06:30 (~1530 kwartieren): geen enkel kwartier met een reden buiten het waardeplan (laatste: 10-11 00:30 `grid_charging_dip`). De oude regels (legacy_sturing.py) sturen alleen nog als het waardeplan niet te berekenen is (uitzondering of geen prijzen); dat vangnet blijft. Nooit aangeroepen in de integratie (alleen in tests): `_reserve_margin_factor` en `_piekverkoop` (`last_piekverkoop` blijft daardoor altijd leeg; gelezen in diagnose, uitleg en meetlaag). Alleen rapportage (diagnose/sensorattribuut, niet in de cockpit): `monte_carlo_vergelijking`, `lange_horizon_effect`.
+- Bouw (na akkoord): `_reserve_margin_factor` en `_piekverkoop` met hun lezers en tests eruit; `monte_carlo_vergelijking` en `lange_horizon_effect` uit diagnose/sensor. `pv_band_calibration` en `safe_sell_shadow` blijven zolang de terugval ze gebruikt. Sturing ongewijzigd.
+- Verwacht effect: € 0; minder code en minder tests om bij te houden.
+- Hoe gemeten: suite groen, bedradingstoets groen, geen ontbrekende entiteiten of cockpitvelden.
