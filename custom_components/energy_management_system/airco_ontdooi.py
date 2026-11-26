@@ -42,12 +42,14 @@ TUSSENTIJD_MIN = 20
 #: Een beurt die na zoveel minuten niet hersteld is, sluiten we af.
 DUUR_MAX_MIN = 30
 BEURTEN_MAX = 120
-#: v5.266.0 - tweede patroon, geijkt op Ruud 26-11 20:22 ("binnen een raar
-#: compressiegeluid en koudere lucht", buiten -2,7 °C): de compressor valt
+#: v5.266.0/v5.266.1 - plotselinge stops. Ruud 26-11 20:22: "binnen een raar
+#: compressiegeluid en koudere lucht" (buiten -2,7 °C): de compressor valt
 #: vanuit bedrijf in een keer stil (67 -> 0 Hz; de fase van de airco trekt dan
-#: ~45 W) en start binnen een kwartier weer. Dezelfde dag ook 07:16 en 19:27,
-#: steeds 45-55 minuten na de vorige start. Afslaan op de eigen thermostaat
-#: gaat anders: de frequentie bouwt eerst af (08:10: 33 -> 13 -> 0 Hz).
+#: ~45 W) en start binnen een kwartier weer. Dezelfde dag ook 07:16 en 19:27.
+#: Eerst als ontdooien geteld (v5.266.0); Ruud keek daarna buiten: geen water
+#: onder de buitenunit, dus GEEN ontdooien. Wat het wel is, is niet bekend
+#: (afslaan op de eigen thermostaat of een beveiliging). Daarom apart geteld
+#: als 'plotselinge stop', niet als ontdooibeurt.
 STIL_VAN_HZ = 30.0
 #: Start hij binnen zoveel minuten niet opnieuw, dan was het geen ontdooien.
 STIL_MAX_MIN = 20
@@ -92,7 +94,7 @@ def ronde(
             lopend["duur_min"] = round(minuten, 0)
             lopend["hersteld"] = True
         elif minuten >= STIL_MAX_MIN or not verwarmt:
-            beurten.pop()       # bleef uit: afgeslagen of uitgezet, geen ontdooien
+            beurten.pop()       # bleef uit: gewoon afgeslagen of uitgezet
     # een lopende beurt afsluiten zodra de binnenunit weer warm is
     if beurten and beurten[-1].get("duur_min") is None and beurten[-1].get("soort") != "stilstand":
         lopend = beurten[-1]
@@ -159,7 +161,8 @@ def ronde(
 
 
 def _stilstand(buffer: list, now: datetime, buiten_c) -> dict | None:
-    """De compressor valt vanuit bedrijf in een keer stil (v5.266.0)."""
+    """De compressor valt vanuit bedrijf in een keer stil (v5.266.0); sinds
+    v5.266.1 een plotselinge stop, geen ontdooibeurt."""
     if len(buffer) < VOORAF_METINGEN + 1 or buffer[-1][1] > 0:
         return None
     eerder = buffer[:-1]
@@ -186,23 +189,27 @@ def _stilstand(buffer: list, now: datetime, buiten_c) -> dict | None:
 
 def overzicht(model: dict | None, now: datetime) -> dict:
     """Voor de sensor en de diagnose."""
-    beurten = [
-        b for b in ((model or {}).get("beurten") or [])
-        if not (b.get("soort") == "stilstand" and b.get("duur_min") is None)
-    ]
+    alle = list((model or {}).get("beurten") or [])
+    stops = [b for b in alle if b.get("soort") == "stilstand" and b.get("duur_min") is not None]
+    beurten = [b for b in alle if b.get("soort") != "stilstand"]
     vandaag = now.date().isoformat()
     week = (now - timedelta(days=7)).isoformat()
     duren = [b["duur_min"] for b in beurten if isinstance(b.get("duur_min"), (int, float)) and b.get("hersteld")]
     return {
         "zeker": False,
         "toelichting": (
-            "Vermoedelijke ontdooibeurten: de compressor valt vanuit bedrijf in een keer stil en "
-            "start binnen twintig minuten weer (geijkt op een waarneming van 26-11), of de "
-            "temperatuur bij de binnenunit zakt snel terwijl de compressor inzakt. Het EMS stuurt er niet op."
+            "Vermoedelijke ontdooibeurten, afgeleid uit de compressorfrequentie en de "
+            "temperatuur bij de binnenunit. Nog niet geijkt; het EMS stuurt er niet op. "
+            "Plotselinge stops (compressor in een keer stil en binnen twintig minuten weer aan) "
+            "staan er apart bij: op 26-11 bleek dat geen ontdooien te zijn."
         ),
         "vandaag": sum(1 for b in beurten if str(b.get("begin", ""))[:10] == vandaag),
         "laatste_7_dagen": sum(1 for b in beurten if str(b.get("begin", "")) >= week),
         "gemiddelde_duur_min": round(sum(duren) / len(duren), 1) if duren else None,
         "laatste": beurten[-1] if beurten else None,
         "beurten": beurten[-20:],
+        # v5.266.1: plotselinge stops, geen ontdooien (zie boven)
+        "plotselinge_stops_vandaag": sum(1 for b in stops if str(b.get("begin", ""))[:10] == vandaag),
+        "plotselinge_stops_7_dagen": sum(1 for b in stops if str(b.get("begin", "")) >= week),
+        "plotselinge_stops": stops[-10:],
     }

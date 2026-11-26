@@ -36181,3 +36181,6 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 
 ## v5.266.0 (26-11-2026)
 - `airco_ontdooi`: tweede patroon `stilstand` (compressor >= 30 Hz in een keer naar 0, herstart binnen 20 min), geijkt op een waarneming van 26-11. Alleen meten.
+
+## v5.266.1 (26-11-2026)
+- `airco_ontdooi`: het patroon `stilstand` telt niet meer als ontdooibeurt (waarneming Ruud: geen water onder de buitenunit); apart in het overzicht als `plotselinge_stops`.

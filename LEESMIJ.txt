@@ -1,3 +1,9 @@
+v5.266.1 (26-11-2026)
+- Correctie op v5.266.0: de plotselinge stop van de airco (26-11 20:22) was
+  GEEN ontdooien: er lag geen water onder de buitenunit. Zulke stops tellen
+  niet meer als ontdooibeurt; ze staan er apart bij als 'plotselinge stop'.
+  Wat ze veroorzaakt is nog niet bekend.
+
 v5.266.0 (26-11-2026)
 - Ontdooien van de airco herkennen, geijkt op een waarneming (Ruud 26-11
   20:22: raar compressiegeluid en koudere lucht, buiten -2,7 °C). Het patroon:

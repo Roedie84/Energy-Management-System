@@ -80,7 +80,8 @@ def test_alleen_een_daling_bij_de_binnenunit_telt_niet():
     assert len(_speel(VANDAAG, buiten=4.0)[1]) == 1
 
 
-# --- v5.266.0: het patroon dat Ruud op 26-11 20:22 zag en hoorde -------------
+# --- v5.266.0/v5.266.1: de plotselinge stop van 26-11 20:22. Eerst als
+# ontdooien geteld; Ruud zag daarna geen water onder de buitenunit.
 
 # 19:20 = minuut 0: vol bedrijf, 19:27 in een keer stil, 19:40 weer aan
 STILSTAND = [(0, 67, 22), (4, 68, 22), (7, 0, 23), (11, 0, 24), (20, 43, 22), (24, 52, 21), (30, 67, 22)]
@@ -88,13 +89,14 @@ STILSTAND = [(0, 67, 22), (4, 68, 22), (7, 0, 23), (11, 0, 24), (20, 43, 22), (2
 AFSLAAN = [(0, 33, 22), (6, 20, 22), (10, 12, 22), (14, 0, 22), (40, 0, 22)]
 
 
-def test_in_een_keer_stil_en_weer_aan_is_een_ontdooibeurt():
+def test_in_een_keer_stil_en_weer_aan_is_een_plotselinge_stop_geen_ontdooien():
     model, nieuw = _speel([(-12, 66, 22)] + STILSTAND, buiten=-2.7)
     assert len(nieuw) == 1 and nieuw[0]["soort"] == "stilstand"
     beurt = model["beurten"][0]
     assert beurt["hz_voor"] == 68 and beurt["hersteld"] is True and beurt["duur_min"] == 13
     uit = airco_ontdooi.overzicht(model, T0 + timedelta(hours=1))
-    assert uit["vandaag"] == 1 and uit["gemiddelde_duur_min"] == 13.0
+    assert uit["vandaag"] == 0 and uit["laatste"] is None and uit["beurten"] == []
+    assert uit["plotselinge_stops_vandaag"] == 1 and uit["plotselinge_stops"][0]["duur_min"] == 13
 
 
 def test_afbouwen_en_afslaan_telt_niet():
@@ -102,14 +104,15 @@ def test_afbouwen_en_afslaan_telt_niet():
     assert nieuw == [] and model["beurten"] == []
 
 
-def test_blijft_hij_uit_dan_was_het_geen_ontdooien():
+def test_blijft_hij_uit_dan_telt_het_nergens():
     reeks = [(-12, 66, 22), (0, 67, 22), (4, 68, 22), (7, 0, 23), (40, 0, 22)]
     model, nieuw = _speel(reeks, buiten=-2.7)
     assert len(nieuw) == 1 and model["beurten"] == []
     # en zolang hij loopt telt hij nog niet mee in het overzicht
     model, _ = _speel(reeks[:4] + [(15, 0, 23)], buiten=-2.7)
     assert len(model["beurten"]) == 1
-    assert airco_ontdooi.overzicht(model, T0 + timedelta(minutes=16))["vandaag"] == 0
+    uit = airco_ontdooi.overzicht(model, T0 + timedelta(minutes=16))
+    assert uit["vandaag"] == 0 and uit["plotselinge_stops_vandaag"] == 0
 
 
 def test_stilstand_bij_zacht_weer_of_na_bediening_telt_niet():
