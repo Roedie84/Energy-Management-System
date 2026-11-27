@@ -166,6 +166,9 @@ def test_only_the_pre_existing_kinds_default_to_on():
         # v5.247.0: "nieuw apparaat gevonden" - door Ruud zelf gevraagd (19-11) en
         # zeldzaam (alleen als er echt iets bij komt), dus geen ruis.
         "ontdekking",
+        # v5.268.0: de omvormer valt uit - door Ruud gevraagd (27-11), hooguit
+        # een keer per dag en alleen als er echt iets misgaat.
+        "omvormer_uitval",
         # v1.23.4: "Accu haalt de nacht mogelijk niet" staat standaard
         # aan, net als vakantie_beweging en om dezelfde reden: hij vuurt
         # alleen als er werkelijk iets misgaat. De twee andere

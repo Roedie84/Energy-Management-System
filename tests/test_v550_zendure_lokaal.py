@@ -141,9 +141,10 @@ def test_de_sturing_leest_alleen_via_de_terugval():
     # v5.244.0: twee plekken erbij die alleen TELLEN (deed de accu wat er
     # stond?) en niets aan de sturing teruggeven. De sturing zelf leest nog
     # steeds alleen via de terugval.
-    assert coord.count('getattr(self, "zendure_lokaal", None)') == 3
+    # v5.268.0: een vierde plek die alleen MELDT (de omvormer valt uit).
+    assert coord.count('getattr(self, "zendure_lokaal", None)') == 4
     assert "meelezer.vervanging(entity_id)" in coord
-    for meting in ("_accu_volgde_opdracht", "_opdracht_accu_overzicht"):
+    for meting in ("_accu_volgde_opdracht", "_opdracht_accu_overzicht", "_update_omvormer_uitval"):
         stuk = coord.split(f"    def {meting}(")[1].split("\n    def ")[0]
         assert 'getattr(self, "zendure_lokaal", None)' in stuk
     # de uitkomst van de meting wordt nergens gebruikt om te sturen

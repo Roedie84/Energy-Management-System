@@ -1,3 +1,14 @@
+v5.268.0 (27-11-2026)
+- Nieuw (akkoord Ruud): het EMS telt hoe vaak de omvormer van de accu zelf
+  uitvalt. Sinds 26-11 15:01 meldt de SolarFlow af en toe een fout, levert
+  dan ongeveer anderhalve minuut niets en komt vanzelf terug; in die tijd
+  komt het verbruik van het net. Per uitval: begin, duur, vermogen vlak
+  ervoor en laadstand (attribuut omvormer_uitval op "Zendure lokaal
+  meelezen").
+- Melding "De omvormer van de accu valt uit": vanaf drie keer op een dag,
+  hooguit een keer per dag. Alleen tellen en melden; de sturing is niet
+  veranderd.
+
 v5.267.0 (27-11-2026)
 - Opruimen (L-EMS-084, akkoord Ruud): de meting "regelkwaliteit nul op de
   meter" (v5.232.0) is weg. Uitkomst over 11 dagen: buiten de Quooker

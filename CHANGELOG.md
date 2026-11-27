@@ -36188,3 +36188,7 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 ## v5.267.0 (27-11-2026)
 - L-EMS-084: `regelkwaliteit.py`, `_werk_regelkwaliteit_bij`, `get_regelkwaliteit`, het bewaarde veld en de diagnose-ingang verwijderd; attributen `regelkwaliteit_vandaag/gisteren` op P1 regeldoel vervallen.
 - `airco_ijking._fase`: een fase met een negatieve som telt niet als tegenstem; vanaf vijf blokken moet de fase met de frequentie meebewegen.
+
+## v5.268.0 (27-11-2026)
+- `zendure_lokaal`: `verwerk_uitval`, `uitval_samenvatting`, `uitval_te_melden` (omvormer meldt `is_error`); telling per dag (14 dagen) en de laatste 60 gebeurtenissen, bewaard over een herstart.
+- Meldingssoort `omvormer_uitval` (standaard aan, eens per dag vanaf 3 keer); `_update_omvormer_uitval` in de staart van de ronde.

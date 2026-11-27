@@ -368,7 +368,7 @@ def afgeleid(rapport: dict) -> dict:
         "relais_stand": RELAIS_STAND.get(_int(p.get("acMode")), p.get("acMode")),
         "opslagmodus": OPSLAGMODUS.get(_int(p.get("smartMode")), p.get("smartMode")),
         "kalibreert": _int(p.get("socStatus")) == 1,
-        "foutmelding": _int(p.get("is_error")) == 1,
+        "foutmelding": 1 in (_int(p.get("is_error")), _int(p.get("isError"))),
         "storingsniveau": _int(p.get("faultLevel")),
         "soc_limiet": SOC_LIMIET.get(_int(p.get("socLimit")), p.get("socLimit")),
         "dc_laden_w": dc_laden,
@@ -496,6 +496,144 @@ def relais_samenvatting(tellingen: dict) -> dict:
     if relais.get("per_dag_apparaat"):
         uit["per_dag_apparaat"] = relais["per_dag_apparaat"]
     return uit
+
+
+# v5.268.0: uitval van de omvormer. Gevonden op 27 november na de vraag
+# "af en toe houdt de accu de meter niet op nul": sinds 26-11 15:01 meldt de
+# SolarFlow af en toe een fout (is_error), stopt met leveren en komt na
+# ongeveer anderhalve minuut terug. In die tijd komt het verbruik van het
+# net. Home Assistant liet dat nergens zien. Hier wordt elke uitval geteld,
+# met het vermogen van vlak ervoor; de coordinator meldt het vanaf
+# UITVAL_MELD_VANAF keer op een dag. Alleen meten en melden, stuurt niets.
+UITVAL_BEWAAR = 60
+UITVAL_DAGEN = 14
+UITVAL_MELD_VANAF = 3
+# Na zo lang zonder lezing geldt een lopende uitval als afgesloten op de
+# laatste lezing (herstart, accu onbereikbaar); anders zou een herstart
+# midden in een storing een uitval van uren opleveren.
+UITVAL_MAX_GAT_S = 120.0
+
+
+def _lokale_klok(ts) -> str | None:
+    """UU:MM in de tijdzone van Home Assistant (zie `_lokale_dag`)."""
+    if not isinstance(ts, (int, float)):
+        return None
+    from datetime import datetime, timezone
+
+    moment = datetime.fromtimestamp(ts, tz=timezone.utc)
+    try:
+        from homeassistant.util import dt as dt_util
+
+        moment = dt_util.as_local(moment)
+    except Exception:  # noqa: BLE001 - buiten Home Assistant: procestijd
+        moment = moment.astimezone()
+    return moment.strftime("%H:%M")
+
+
+def lege_uitval() -> dict:
+    return {"lopend": None, "gebeurtenissen": [], "per_dag": {}, "voor_w": None, "gezien": None, "gemeld_dag": None}
+
+
+def _sluit_uitval(u: dict, eind: float) -> None:
+    lopend = u.get("lopend")
+    if not isinstance(lopend, dict):
+        u["lopend"] = None
+        return
+    lopend["eind"] = eind
+    lopend["duur_s"] = round(max(0.0, eind - float(lopend.get("begin") or eind)), 0)
+    u.setdefault("gebeurtenissen", []).append(lopend)
+    del u["gebeurtenissen"][:-UITVAL_BEWAAR]
+    u["lopend"] = None
+
+
+def verwerk_uitval(tellingen: dict, afg: dict, apparaat: dict, nu: float) -> bool:
+    """Telt elke keer dat de omvormer een fout meldt. True = iets veranderd (bewaren)."""
+    u = tellingen.get("uitval")
+    if not isinstance(u, dict):
+        u = tellingen["uitval"] = lege_uitval()
+    gewijzigd = False
+    gezien = u.get("gezien")
+    lopend = u.get("lopend")
+    if isinstance(lopend, dict) and isinstance(gezien, (int, float)) and nu - gezien > UITVAL_MAX_GAT_S:
+        _sluit_uitval(u, float(gezien))
+        lopend = None
+        gewijzigd = True
+    u["gezien"] = nu
+    fout = bool(afg.get("foutmelding"))
+    niveau = afg.get("storingsniveau")
+    if fout and not isinstance(lopend, dict):
+        dag = _lokale_dag(nu)
+        per_dag = u.setdefault("per_dag", {})
+        per_dag[dag] = int(per_dag.get(dag) or 0) + 1
+        for oud in sorted(per_dag)[:-UITVAL_DAGEN]:
+            per_dag.pop(oud, None)
+        u["lopend"] = {
+            "begin": nu,
+            "vermogen_voor_w": u.get("voor_w"),
+            "soc": apparaat.get("electricLevel"),
+            "storingsniveau": niveau,
+        }
+        gewijzigd = True
+    elif fout:
+        if isinstance(niveau, int) and niveau > int(lopend.get("storingsniveau") or 0):
+            lopend["storingsniveau"] = niveau
+    elif isinstance(lopend, dict):
+        _sluit_uitval(u, nu)
+        gewijzigd = True
+    if not fout:
+        # Wat de accu vlak voor een storing deed: + = leveren aan huis, - = laden.
+        uit_w, in_w = apparaat.get("outputHomePower"), apparaat.get("gridInputPower")
+        if uit_w is not None or in_w is not None:
+            u["voor_w"] = float(uit_w or 0.0) - float(in_w or 0.0)
+    return gewijzigd
+
+
+def uitval_samenvatting(tellingen: dict, nu: float) -> dict:
+    """De uitval van de omvormer voor de sensor en de diagnose."""
+    u = tellingen.get("uitval") if isinstance(tellingen.get("uitval"), dict) else lege_uitval()
+    per_dag = dict(u.get("per_dag") or {})
+    dag = _lokale_dag(nu)
+    week = sorted(per_dag)[-7:]
+    lopend = u.get("lopend") if isinstance(u.get("lopend"), dict) else None
+
+    def _regel(g: dict) -> dict:
+        return {
+            "begin": _tijd(g.get("begin")),
+            "duur_s": g.get("duur_s"),
+            "vermogen_voor_w": g.get("vermogen_voor_w"),
+            "soc": g.get("soc"),
+            "storingsniveau": g.get("storingsniveau"),
+        }
+
+    return {
+        "vandaag": int(per_dag.get(dag) or 0),
+        "laatste_7_dagen": sum(int(per_dag[d] or 0) for d in week),
+        "per_dag": per_dag,
+        "nu_in_storing": lopend is not None,
+        "lopend_sinds": _tijd(lopend.get("begin")) if lopend else None,
+        "laatste": [_regel(g) for g in (u.get("gebeurtenissen") or [])[-10:]],
+        "meldt_vanaf_per_dag": UITVAL_MELD_VANAF,
+        "uitleg": "De omvormer meldt een fout en levert of laadt even niet; alleen tellen en melden.",
+    }
+
+
+def uitval_te_melden(tellingen: dict, nu: float) -> dict | None:
+    """Eens per dag, zodra de omvormer UITVAL_MELD_VANAF keer is uitgevallen."""
+    u = tellingen.get("uitval")
+    if not isinstance(u, dict):
+        return None
+    dag = _lokale_dag(nu)
+    aantal = int((u.get("per_dag") or {}).get(dag) or 0)
+    if aantal < UITVAL_MELD_VANAF or u.get("gemeld_dag") == dag:
+        return None
+    u["gemeld_dag"] = dag
+    klaar = [g for g in (u.get("gebeurtenissen") or []) if g.get("duur_s") is not None]
+    laatste = klaar[-1] if klaar else (u.get("lopend") or {})
+    return {
+        "aantal": aantal,
+        "laatste_om": _lokale_klok(laatste.get("begin")),
+        "laatste_duur_s": laatste.get("duur_s"),
+    }
 
 
 def rendement_samenvatting(tellingen: dict) -> dict:
@@ -893,6 +1031,8 @@ def lege_tellingen() -> dict:
         "eigen_teller": accuteller.leeg(),
         "teller_vergelijking": accuteller.lege_vergelijking(),
         "teller_ingevuld": 0,
+        # v5.268.0: uitval van de omvormer (is_error), zie verwerk_uitval.
+        "uitval": lege_uitval(),
     }
 
 
@@ -1400,6 +1540,9 @@ class ZendureLokaalMeelezer:
                 self.afgeleid["apparaat_schakelingen"] = int(teller)
         if verwerk_afgeleid(self.tellingen, self.afgeleid, nu):
             self._relais_gewijzigd = True
+        # v5.268.0: uitval van de omvormer tellen; een wijziging meteen bewaren.
+        if verwerk_uitval(self.tellingen, self.afgeleid, lokaal["apparaat"], nu):
+            self._relais_gewijzigd = True
         for veld in REACTIE_VELDEN:
             reactie_waarneming(r, "lokaal", veld, lokaal["apparaat"].get(veld), nu)
         ref = self.tellingen.setdefault("referentie", lege_referentie())
@@ -1466,6 +1609,7 @@ class ZendureLokaalMeelezer:
         uit["accu"] = self.afgeleid
         uit["relaisschakelingen"] = relais_samenvatting(self.tellingen)
         uit["omzetrendement"] = rendement_samenvatting(self.tellingen)
+        uit["omvormer_uitval"] = uitval_samenvatting(self.tellingen, time.time())
         # v5.244.0: deed de accu zelf wat het EMS opdroeg (stap a)?
         from . import opdracht_accu
         uit["opdrachten_gevolgd"] = opdracht_accu.overzicht(self.tellingen.get("opdracht_accu"))

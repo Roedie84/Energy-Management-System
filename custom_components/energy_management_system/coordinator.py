@@ -6861,6 +6861,39 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         self._notify_listeners()
         return uit
 
+    def _update_omvormer_uitval(self, now: datetime) -> None:
+        """v5.268.0: meldt (eens per dag) dat de omvormer van de accu vaak uitvalt.
+
+        Het tellen doet de meelezer (zendure_lokaal.verwerk_uitval, elke twee
+        seconden); hier alleen de melding. Stuurt niets.
+        """
+        from . import zendure_lokaal as zl
+
+        meelezer = getattr(self, "zendure_lokaal", None)
+        if meelezer is None:
+            return
+        te_melden = zl.uitval_te_melden(meelezer.tellingen, now.timestamp())
+        if not te_melden:
+            return
+        meelezer._relais_gewijzigd = True  # gemeld_dag meteen bewaren
+        laatste = ""
+        if te_melden.get("laatste_om"):
+            laatste = f" Laatste keer om {te_melden['laatste_om']}"
+            if te_melden.get("laatste_duur_s") is not None:
+                laatste += f", {int(te_melden['laatste_duur_s'])} seconden"
+            laatste += "."
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="EMS: de omvormer van de accu valt uit",
+            message=(
+                f"De omvormer meldde vandaag {te_melden['aantal']} keer een fout en leverde dan even niets; "
+                f"het verbruik komt in die tijd van het net.{laatste} "
+                "Kijk in de Zendure-app welke fout er staat."
+            ),
+            notification_id="ems_omvormer_uitval",
+            kind="omvormer_uitval",
+        )
+
     def _update_ontdekking(self, now: datetime) -> None:
         """Eens per tien minuten: is er iets nieuws in Home Assistant?"""
         from . import ontdekking
@@ -39253,6 +39286,7 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             ("panelen-bedekt", lambda: self._update_panelen_bedekt(now)),
             ("koude-laden", lambda: self._update_koude_laden(now)),
             ("ontdekking", lambda: self._update_ontdekking(now)),
+            ("omvormer-uitval", lambda: self._update_omvormer_uitval(now)),
             ("meldingen", lambda: self._evaluate_new_notifications(now)),
             # v5.31: schaduw - leert, stuurt niets.
             ("grootverbruikers", lambda: self._leer_grootverbruikers(now)),

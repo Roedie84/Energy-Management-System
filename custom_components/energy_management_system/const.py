@@ -3451,6 +3451,7 @@ LOG_PRIORITEITEN = {
     "opdracht_niet_aangekomen": LOG_PRIO_KRITIEK,
     "accu_niet_aanstuurbaar": LOG_PRIO_AANDACHT,
     "ontdekking": LOG_PRIO_AANDACHT,  # v5.247.0
+    "omvormer_uitval": LOG_PRIO_AANDACHT,  # v5.268.0
     "installatie_onvolledig": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
@@ -4558,6 +4559,13 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
         "Kijk of de Zendure-integratie werkt. Blijft het staan, herstart die "
         "integratie; de sturing valt intussen terug op de slimme stand.",
     ),
+    "omvormer_uitval": (
+        "De omvormer van de accu meldde vandaag meerdere keren een fout en "
+        "leverde dan ongeveer anderhalve minuut niets. In die tijd komt het "
+        "verbruik van het net.",
+        "Kijk in de Zendure-app welke fout er staat. Het EMS telt alleen; "
+        "de accu komt vanzelf terug.",
+    ),
     "accu_niet_aanstuurbaar": (
         "De accu neemt al minstens tien minuten geen opdrachten aan. De "
         "melding noemt de reden, bijvoorbeeld een Zendure-integratie die de "
@@ -4860,6 +4868,15 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "luchtledige, en dat is niet aan de meters te zien.",
         True,
         30,
+    ),
+    # v5.268.0: de omvormer valt zelf uit (is_error); Ruud akkoord 27-11.
+    (
+        "omvormer_uitval",
+        "De omvormer van de accu valt uit",
+        "Wanneer de omvormer op een dag drie keer of vaker een fout meldt "
+        "en even niet levert of laadt. Hooguit een keer per dag.",
+        True,
+        1440,
     ),
     # v5.29: de accu staat stil terwijl het EMS denkt te sturen.
     (
@@ -7194,6 +7211,7 @@ ACHTERHOEKS_TITELS = {
     "opdracht_niet_aangekomen": "De accu luusterde neet",
     "ontdekking": "Ne nieuw apparaat evonden",
     "accu_niet_aanstuurbaar": "De accu is neet te stuurn",
+    "omvormer_uitval": "De umvormer van de accu völt uut",
     "installatie_onvolledig": "De installatie is neet compleet",
     # v3.93.1: GEEN vaste titel meer voor "appliance_ready".
     #
