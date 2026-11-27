@@ -505,3 +505,5 @@ laatste ronde: 26-11 06:45, gemeten t/m 26-11 06:45
 - Niet gemeten: MC-Brier, SoC-voorspelling, NILM; replay H-EMS-26 (nr. 17, besluit 02-12).
 
 laatste ronde: 27-11 06:45, gemeten t/m 27-11 06:45
+
+- 27-11 07:30 (chat, Claude): v5.267.0 - L-EMS-084 gebouwd (regelkwaliteit eruit) en de faseherkenning van de airco-ijking (nr. 18) hersteld. De correctie die de dagcontrole op een eigen werkbranch had staan stond niet op GitHub en is dus niet gebruikt; niet alsnog uitbrengen zonder te vergelijken met v5.267.0.

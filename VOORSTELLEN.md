@@ -599,7 +599,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Hoe gemeten: suite groen, bedradingstoets groen, geen ontbrekende entiteiten of cockpitvelden.
 
 ## L-EMS-084 · regelkwaliteit 'nul op de meter' uit de code (meetregister nr. 11)
-- Status: **wacht op akkoord Ruud** (27-11).
+- Status: **gebouwd in v5.267.0** (27-11 07:06, Ruud in de chat: "Doen wat het beste is voor mijn EMS"). regelkwaliteit.py, de drie functies, het bewaarde veld, de diagnose-ingang en de test zijn weg; de attributen regelkwaliteit_vandaag/gisteren op P1 regeldoel vervallen. Suite groen.
 - Onderbouwing: v5.232.0 meet per dag hoe dicht de regeling bij 0 W blijft. 11 dagen (13-26/11): buiten de Quooker gemiddeld −7,6 W netto over 17,8 regeluren; met de Quooker +530 W over 1,6 u (65 % van de afname, ~0,08 kWh/dag ≈ 3-4 ct/dag). Geen storing gezien. Wijzigingen aan de regeling zelf zijn op 13-11 afgewezen, dus de meting stuurt nergens heen.
 - Bouw (na akkoord): regelkwaliteit.py, `_werk_regelkwaliteit_bij`/`get_regelkwaliteit` in de coordinator, het bewaarde veld (const) en de diagnose eruit; test_v5232_regelkwaliteit.py weg. Niet in de cockpit. Sturing ongewijzigd.
 - Verwacht effect: € 0; minder code.
