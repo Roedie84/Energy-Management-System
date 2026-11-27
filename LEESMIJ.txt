@@ -1,3 +1,12 @@
+v5.269.0 (27-11-2026)
+- Uitval van de omvormer (akkoord Ruud): bij elke uitval bewaart het EMS
+  het volledige rapport van de accu vlak ervoor, bij het begin, de laatste
+  lezing tijdens en de eerste erna, plus welke velden veranderden. De
+  lokale koppeling van Zendure kent geen foutcode of logboek; dit is het
+  meeste wat de accu zelf vertelt. Staat in de diagnose
+  (zendure_lokaal.omvormer_uitval_momentopnamen, de laatste tien); in de
+  sensor alleen de namen van de veranderde velden. Stuurt niets.
+
 v5.268.0 (27-11-2026)
 - Nieuw (akkoord Ruud): het EMS telt hoe vaak de omvormer van de accu zelf
   uitvalt. Sinds 26-11 15:01 meldt de SolarFlow af en toe een fout, levert

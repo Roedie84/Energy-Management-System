@@ -512,6 +512,15 @@ UITVAL_MELD_VANAF = 3
 # laatste lezing (herstart, accu onbereikbaar); anders zou een herstart
 # midden in een storing een uitval van uren opleveren.
 UITVAL_MAX_GAT_S = 120.0
+# v5.269.0: het volledige ruwe rapport rond een uitval (vlak ervoor, bij het
+# begin, de laatste lezing tijdens en de eerste erna). De lokale API kent geen
+# foutcode of logboek; dit is het meeste wat de accu zelf vertelt. Alleen in
+# de diagnose (te groot voor een attribuut), de laatste UITVAL_MOMENTOPNAMEN.
+UITVAL_MOMENTOPNAMEN = 10
+# Velden die elke lezing anders zijn en niets over de storing zeggen.
+_RUIS_VELDEN = frozenset({"ts", "timestamp", "messageId"})
+# Hooguit zoveel verschillende waarden per veld tijdens een storing.
+UITVAL_TIJDENS_MAX = 8
 
 
 def _lokale_klok(ts) -> str | None:
@@ -531,7 +540,27 @@ def _lokale_klok(ts) -> str | None:
 
 
 def lege_uitval() -> dict:
-    return {"lopend": None, "gebeurtenissen": [], "per_dag": {}, "voor_w": None, "gezien": None, "gemeld_dag": None}
+    return {"lopend": None, "gebeurtenissen": [], "per_dag": {}, "voor_w": None, "gezien": None, "gemeld_dag": None,
+            "momentopnamen": []}
+
+
+def _plat(rapport: dict | None) -> dict:
+    """Ruw rapport -> {veld: waarde}; modules als `module.<sn>.<veld>`."""
+    if not isinstance(rapport, dict):
+        return {}
+    uit = {k: v for k, v in (rapport.get("properties") or {}).items() if k not in _RUIS_VELDEN}
+    for pak in rapport.get("packData") or []:
+        if isinstance(pak, dict) and pak.get("sn"):
+            for k, v in pak.items():
+                if k != "sn":
+                    uit[f"module.{pak['sn']}.{k}"] = v
+    return uit
+
+
+def rapport_verschil(voor: dict | None, na: dict | None) -> dict:
+    """Welke velden van het ruwe rapport veranderden: {veld: [voor, na]}."""
+    a, b = _plat(voor), _plat(na)
+    return {k: [a.get(k), b.get(k)] for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)}
 
 
 def _sluit_uitval(u: dict, eind: float) -> None:
@@ -541,13 +570,28 @@ def _sluit_uitval(u: dict, eind: float) -> None:
         return
     lopend["eind"] = eind
     lopend["duur_s"] = round(max(0.0, eind - float(lopend.get("begin") or eind)), 0)
+    rapporten = lopend.pop("rapporten", None)
+    tijdens = lopend.pop("tijdens_waarden", None)
+    if isinstance(rapporten, dict) and rapporten.get("begin") is not None:
+        opname = {"begin": lopend.get("begin"), "duur_s": lopend["duur_s"], "rapporten": rapporten,
+                  "verschil_bij_begin": rapport_verschil(rapporten.get("voor"), rapporten.get("begin")),
+                  "verschil_na": rapport_verschil(rapporten.get("begin"), rapporten.get("na")),
+                  "tijdens_waarden": tijdens or {}}
+        lopend["velden_veranderd"] = sorted(opname["verschil_bij_begin"])[:40]
+        u.setdefault("momentopnamen", []).append(opname)
+        del u["momentopnamen"][:-UITVAL_MOMENTOPNAMEN]
     u.setdefault("gebeurtenissen", []).append(lopend)
     del u["gebeurtenissen"][:-UITVAL_BEWAAR]
     u["lopend"] = None
 
 
-def verwerk_uitval(tellingen: dict, afg: dict, apparaat: dict, nu: float) -> bool:
-    """Telt elke keer dat de omvormer een fout meldt. True = iets veranderd (bewaren)."""
+def verwerk_uitval(tellingen: dict, afg: dict, apparaat: dict, nu: float,
+                   rapport: dict | None = None, vorig_rapport: dict | None = None) -> bool:
+    """Telt elke keer dat de omvormer een fout meldt. True = iets veranderd (bewaren).
+
+    v5.269.0: met `rapport` (ruw, deze lezing) en `vorig_rapport` (ruw, de
+    lezing ervoor) wordt rond elke uitval een momentopname bewaard.
+    """
     u = tellingen.get("uitval")
     if not isinstance(u, dict):
         u = tellingen["uitval"] = lege_uitval()
@@ -573,11 +617,25 @@ def verwerk_uitval(tellingen: dict, afg: dict, apparaat: dict, nu: float) -> boo
             "soc": apparaat.get("electricLevel"),
             "storingsniveau": niveau,
         }
+        if rapport is not None:
+            u["lopend"]["rapporten"] = {"voor": vorig_rapport, "begin": rapport, "laatste_tijdens": rapport, "na": None}
+            u["lopend"]["tijdens_waarden"] = {}
         gewijzigd = True
     elif fout:
         if isinstance(niveau, int) and niveau > int(lopend.get("storingsniveau") or 0):
             lopend["storingsniveau"] = niveau
+        rapporten = lopend.get("rapporten")
+        if rapport is not None and isinstance(rapporten, dict):
+            # Wat er tijdens de storing nog verandert, per veld de waarden.
+            tijdens = lopend.setdefault("tijdens_waarden", {})
+            for veld, (_oud, nieuw) in rapport_verschil(rapporten.get("laatste_tijdens"), rapport).items():
+                rij = tijdens.setdefault(veld, [])
+                if nieuw not in rij and len(rij) < UITVAL_TIJDENS_MAX:
+                    rij.append(nieuw)
+            rapporten["laatste_tijdens"] = rapport
     elif isinstance(lopend, dict):
+        if rapport is not None and isinstance(lopend.get("rapporten"), dict):
+            lopend["rapporten"]["na"] = rapport
         _sluit_uitval(u, nu)
         gewijzigd = True
     if not fout:
@@ -603,6 +661,7 @@ def uitval_samenvatting(tellingen: dict, nu: float) -> dict:
             "vermogen_voor_w": g.get("vermogen_voor_w"),
             "soc": g.get("soc"),
             "storingsniveau": g.get("storingsniveau"),
+            "velden_veranderd": g.get("velden_veranderd"),
         }
 
     return {
@@ -615,6 +674,14 @@ def uitval_samenvatting(tellingen: dict, nu: float) -> dict:
         "meldt_vanaf_per_dag": UITVAL_MELD_VANAF,
         "uitleg": "De omvormer meldt een fout en levert of laadt even niet; alleen tellen en melden.",
     }
+
+
+def uitval_momentopnamen(tellingen: dict) -> list[dict]:
+    """De ruwe rapporten rond de laatste uitvallen (alleen voor de diagnose)."""
+    u = tellingen.get("uitval")
+    if not isinstance(u, dict):
+        return []
+    return [{**o, "begin": _tijd(o.get("begin"))} for o in (u.get("momentopnamen") or [])]
 
 
 def uitval_te_melden(tellingen: dict, nu: float) -> dict | None:
@@ -1279,6 +1346,8 @@ class ZendureLokaalMeelezer:
         self._luisteraar: Callable[[], None] | None = None
         self._entiteiten: dict[tuple[str | None, str], str] = {}
         self._relais_gewijzigd = False
+        # v5.269.0: het ruwe rapport van de vorige lezing (momentopname bij uitval).
+        self._vorig_rapport: dict | None = None
         # v5.56: per bron hoe lang elk snel vermogensveld stabiel is.
         self._stabiliteit: dict = {"lokaal": {}, "zendure": {}}
         # v5.82: wanneer de laatste eigen lezing binnenkwam (monotoon), en
@@ -1541,8 +1610,10 @@ class ZendureLokaalMeelezer:
         if verwerk_afgeleid(self.tellingen, self.afgeleid, nu):
             self._relais_gewijzigd = True
         # v5.268.0: uitval van de omvormer tellen; een wijziging meteen bewaren.
-        if verwerk_uitval(self.tellingen, self.afgeleid, lokaal["apparaat"], nu):
+        if verwerk_uitval(self.tellingen, self.afgeleid, lokaal["apparaat"], nu,
+                          rapport=rapport, vorig_rapport=self._vorig_rapport):
             self._relais_gewijzigd = True
+        self._vorig_rapport = rapport
         for veld in REACTIE_VELDEN:
             reactie_waarneming(r, "lokaal", veld, lokaal["apparaat"].get(veld), nu)
         ref = self.tellingen.setdefault("referentie", lege_referentie())

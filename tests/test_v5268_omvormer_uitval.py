@@ -137,3 +137,61 @@ def test_het_tellen_stuurt_niets():
     blok = bron[bron.index("def lege_uitval"):bron.index("def rendement_samenvatting")]
     for verboden in ("async_call", "sessie.post", "properties/write", "set_value"):
         assert verboden not in blok, verboden
+
+
+# --- v5.269.0: momentopname van het ruwe rapport rond een uitval -----------
+
+def _rapport(fout, ac, vermogen, ts):
+    return {"timestamp": ts, "messageId": ts % 100, "sn": "HOA1",
+            "properties": {"is_error": fout, "faultLevel": 2 if fout else 0, "acStatus": ac,
+                           "outputHomePower": vermogen, "ts": ts, "gridState": 1},
+            "packData": [{"sn": "M1", "state": 0 if fout else 2, "power": 0 if fout else 250}]}
+
+
+def test_momentopname_bewaart_voor_begin_tijdens_en_na():
+    t = zl.lege_tellingen()
+    voor = _rapport(0, 2, 738, 1)
+    zl.verwerk_uitval(t, GOED, LEVERT, T0 - 2, rapport=voor, vorig_rapport=None)
+    begin = _rapport(1, 0, 0, 2)
+    zl.verwerk_uitval(t, FOUT, STIL, T0, rapport=begin, vorig_rapport=voor)
+    tijdens = _rapport(1, 0, 0, 3)
+    tijdens["properties"]["faultLevel"] = 3
+    zl.verwerk_uitval(t, FOUT, STIL, T0 + 30, rapport=tijdens, vorig_rapport=begin)
+    na = _rapport(0, 2, 100, 4)
+    zl.verwerk_uitval(t, GOED, STIL, T0 + 76, rapport=na, vorig_rapport=tijdens)
+    [o] = zl.uitval_momentopnamen(t)
+    assert o["rapporten"]["voor"] is voor and o["rapporten"]["begin"] is begin
+    assert o["rapporten"]["laatste_tijdens"] is tijdens and o["rapporten"]["na"] is na
+    v = o["verschil_bij_begin"]
+    assert v["is_error"] == [0, 1] and v["acStatus"] == [2, 0] and v["module.M1.power"] == [250, 0]
+    assert "ts" not in v and "gridState" not in v           # ruis en ongewijzigd tellen niet
+    assert o["tijdens_waarden"] == {"faultLevel": [3]}
+    assert "is_error" in o["verschil_na"]
+    # de gebeurtenis zelf blijft klein: alleen de namen van wat veranderde
+    [g] = zl.uitval_samenvatting(t, T0 + 100)["laatste"]
+    assert "acStatus" in g["velden_veranderd"] and "rapporten" not in g
+
+
+def test_momentopnamen_houden_de_laatste_tien():
+    t = zl.lege_tellingen()
+    for i in range(12):
+        b = T0 + i * 600
+        zl.verwerk_uitval(t, GOED, LEVERT, b - 2, rapport=_rapport(0, 2, 700, 1))
+        zl.verwerk_uitval(t, FOUT, STIL, b, rapport=_rapport(1, 0, 0, 2), vorig_rapport=_rapport(0, 2, 700, 1))
+        zl.verwerk_uitval(t, GOED, STIL, b + 80, rapport=_rapport(0, 2, 0, 3))
+    assert len(zl.uitval_momentopnamen(t)) == zl.UITVAL_MOMENTOPNAMEN
+    assert len(zl.uitval_samenvatting(t, T0 + 9000)["laatste"]) == 10
+
+
+def test_zonder_rapport_geen_momentopname():
+    t = zl.lege_tellingen()
+    _uitval(t, T0)
+    assert zl.uitval_momentopnamen(t) == []
+
+
+def test_meelezer_geeft_het_ruwe_rapport_door():
+    bron = (Path(pkg.__file__).parent / "zendure_lokaal.py").read_text(encoding="utf-8")
+    assert "rapport=rapport, vorig_rapport=self._vorig_rapport" in bron
+    assert "self._vorig_rapport = rapport" in bron
+    diag = (Path(pkg.__file__).parent / "diagnostics.py").read_text(encoding="utf-8")
+    assert "omvormer_uitval_momentopnamen" in diag

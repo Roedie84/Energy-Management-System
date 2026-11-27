@@ -36192,3 +36192,6 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 ## v5.268.0 (27-11-2026)
 - `zendure_lokaal`: `verwerk_uitval`, `uitval_samenvatting`, `uitval_te_melden` (omvormer meldt `is_error`); telling per dag (14 dagen) en de laatste 60 gebeurtenissen, bewaard over een herstart.
 - Meldingssoort `omvormer_uitval` (standaard aan, eens per dag vanaf 3 keer); `_update_omvormer_uitval` in de staart van de ronde.
+
+## v5.269.0 (27-11-2026)
+- `zendure_lokaal.verwerk_uitval`: met `rapport`/`vorig_rapport` een momentopname per uitval (voor, begin, laatste_tijdens, na), `rapport_verschil`, `tijdens_waarden`; `uitval_momentopnamen` (laatste 10) in de diagnose; `velden_veranderd` per gebeurtenis.

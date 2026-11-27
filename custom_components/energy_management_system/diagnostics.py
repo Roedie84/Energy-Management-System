@@ -1648,7 +1648,11 @@ def _luchtreiniger_lokaal(coord) -> dict:
     meelezer = getattr(coord, "luchtreiniger_lokaal", None)
     if meelezer is None:
         return {"modus": "niet gestart"}
-    return meelezer.attributen() | {"oordeel": meelezer.status()}
+    from . import zendure_lokaal as zl
+
+    # v5.269.0: de ruwe rapporten rond een uitval van de omvormer.
+    return meelezer.attributen() | {"oordeel": meelezer.status(),
+                                    "omvormer_uitval_momentopnamen": zl.uitval_momentopnamen(meelezer.tellingen)}
 
 
 def _zendure_lokaal(coord) -> dict:
