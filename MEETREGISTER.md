@@ -26,6 +26,7 @@ Opgezet 19-11-2026 op verzoek van Ruud: "vele metingen in het EMS; monitor jij d
 | Bewaking | Reden |
 |---|---|
 | Zonverwachting van het plan per uur (v5.237.0, uit nr. 2) | 24-11: geen correctie nodig; nr. 12 (01-03-2027) gebruikt de uurcijfers |
+| Uitval van de omvormer (v5.268.0, 27-11, akkoord Ruud) | Sinds 26-11 15:01 meldt de SolarFlow af en toe een fout (is_error), levert dan ca. 95 s niets en komt vanzelf terug: 8 keer t/m 27-11 07:37 (26-11 15:01, 15:04, 15:13, 15:46, 15:48, 15:50, 20:21; 27-11 07:37), in de 9 dagen ervoor nul. Het EMS telt elke uitval (attribuut omvormer_uitval op Zendure lokaal meelezen: vandaag, 7 dagen, per dag, laatste 10 met duur, vermogen ervoor, SoC, storingsniveau) en meldt het vanaf 3 keer op een dag (soort omvormer_uitval, 1x per dag). Oorzaak onbekend; Ruud kijkt in de Zendure-app. DAGCONTROLE: het aantal per dag melden; geen wijziging aan de sturing voorstellen zolang de oorzaak niet bekend is |
 | Tweede prijsbron EnergyZero (v5.251.0) | reserve bij een storing van Zonneplan; opslag geleerd uit de laatste 672 kwartieren; status in get_prijsbron.reserve en de diagnose. 24-11 nagekeken: 96 geleerde kwartieren, opslag 13,1 ct incl., fout null |
 | Bedradingstoets (v5.251.0) | elke functie moet in de integratie gebruikt worden, elke bewaakte meting een aangeroepen vuller hebben (vond eigen_ingrepen en de logopvang; reden_afwijkingen in v5.250.1) |
 | Nieuwe apparaten herkennen (v5.247.0) | accumodule vanzelf in de bewaking; airco en sensoren pas na akkoord; melding per nieuw apparaat |
