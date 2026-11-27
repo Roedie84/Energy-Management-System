@@ -607,6 +607,7 @@ from .const import (
     PLAN_REVIEW_SOC_TOLERANCE_PERCENT,
     PLAN_REVIEW_TOLERANCE_PERCENT,
     PLAN_SNAPSHOT_HOUR,
+    OCHTENDPLAN_UUR,
     QUARTER_PLAN_SNAPSHOT_LENGTH,
     PRESENCE_ABSENCE_AFTER_MINUTES,
     PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
@@ -1414,6 +1415,8 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         self._capacity_trend_day_key = None
 
         self.plan_snapshot: dict | None = None
+        # v5.270.0: de verwachte accustand van het plan van 06:00 (cockpit).
+        self.ochtendplan: dict | None = None
         self.plan_review_history: list[dict] = []
         self.eindprijs_toets: dict = {}  # v5.239.0
         self.laagste_soc_vandaag_procent: float | None = None
@@ -23305,6 +23308,70 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
         bruikbaar = capaciteit * (100 - self.effective_min_soc_percent()) / 100
         return min(beschikbaar, bruikbaar)
 
+    def _werk_ochtendplan_bij(self, now: datetime) -> None:
+        """Legt eens per dag (vanaf OCHTENDPLAN_UUR) de verwachte accustand vast (v5.270.0).
+
+        Alleen weergave: de cockpit tekent hem naast het actuele plan, zodat
+        te zien is hoe het plan in de loop van de dag bijstelde.
+        """
+        vandaag = now.date().isoformat()
+        if now.hour < OCHTENDPLAN_UUR or (self.ochtendplan or {}).get("datum") == vandaag:
+            return
+        plan = self.get_quarter_plan(now)
+        try:
+            vermogens = planvolging.vermogens_per_kwartier(plan, self._plan_startvoorraad_kwh())
+        except Exception:  # noqa: BLE001 - zonder vermogens kleurt de modus
+            vermogens = [{} for _ in plan]
+        begin, soc, vorige = None, [], None
+        modi: list[str] = []
+        m: list[int] = []
+        a: list[int | None] = []
+        tekort: list[int] = []
+        for r, v in zip(plan, vermogens):
+            try:
+                start = datetime.fromisoformat(str(r.get("start")))
+            except (TypeError, ValueError):
+                break
+            waarde = r.get("soc_procent")
+            if waarde is None:
+                break
+            # alleen aaneengesloten kwartieren; een gat beeindigt de reeks
+            if vorige is not None and start - vorige != timedelta(minutes=15):
+                break
+            if begin is None:
+                begin = start
+            soc.append(round(float(waarde), 1))
+            modus = str(r.get("modus") or "")
+            if modus not in modi:
+                modi.append(modus)
+            m.append(modi.index(modus))
+            accu_w = (v or {}).get("accu_w")
+            a.append(int(round(accu_w)) if isinstance(accu_w, (int, float)) else None)
+            if r.get("tekort"):
+                tekort.append(len(soc) - 1)
+            vorige = start
+        if begin is None or not soc:
+            return
+        # Compact: de modi een keer, per kwartier een index (cockpit: `doen`).
+        self.ochtendplan = {
+            "datum": vandaag,
+            "om": now.strftime("%H:%M"),
+            "begin": begin.isoformat(),
+            "soc": soc,
+            "modi": modi,
+            "m": m,
+            "a": a,
+            "tekort": tekort,
+        }
+
+    def get_ochtendplan(self, now: datetime | None = None) -> dict | None:
+        """Het plan van vanochtend voor de cockpit, of None (v5.270.0)."""
+        plan = self.ochtendplan
+        nu = now or dt_util.now()
+        if not plan or plan.get("datum") != nu.date().isoformat():
+            return None
+        return plan
+
     def _update_plan_review(self, now: datetime) -> None:
         """Legt het plan van vanochtend vast en toetst het 's avonds aan
         de werkelijkheid (v1.31.0).
@@ -38889,6 +38956,11 @@ class EnergyManagementSystemCoordinator(VerkoopPauzeMixin, WaardeplanSturingMixi
             self.internal_failures["capaciteitstrend"] = f"{type(fout).__name__}: {fout}"
         else:
             self.internal_failures.pop("capaciteitstrend", None)
+
+        try:
+            self._klok("ochtendplan", lambda: self._werk_ochtendplan_bij(now))
+        except Exception:  # noqa: BLE001 - alleen weergave
+            _LOGGER.debug("Ochtendplan niet vastgelegd", exc_info=True)
 
         try:
             self._klok("plantoetsing", lambda: self._update_plan_review(now))

@@ -1,3 +1,13 @@
+v5.270.0 (27-11-2026)
+- Cockpit, grafiek Prijs en lading (Ruud: "zichtbaar wat de planning
+  oorspronkelijk was, bijvoorbeeld om 6 uur"): om 06:00 legt het EMS het
+  plan vast. De verwachte accustand van toen staat als grijze stippellijn
+  naast de witte lijn van nu, en onder de grafiek staat een balk met per
+  kwartier de kleur die de staaf toen had. Na een herstart na 06:00 het
+  eerste plan daarna, met het tijdstip in de legenda. Blijft over een
+  herstart bewaard. Alleen weergave; de sturing is niet veranderd.
+  Na installatie Ctrl+F5 in de browser.
+
 v5.269.0 (27-11-2026)
 - Uitval van de omvormer (akkoord Ruud): bij elke uitval bewaart het EMS
   het volledige rapport van de accu vlak ervoor, bij het begin, de laatste

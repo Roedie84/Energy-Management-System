@@ -4927,6 +4927,7 @@ class GacsAssessmentSensor(ZuinigSchrijven, SensorEntity):
             ("kwartierplanning", self._coordinator.get_quarter_plan_compact),
             ("laadplan_gewijzigd", self._coordinator.get_laadplan_gewijzigd),
             ("planvolging", self._coordinator.get_planvolging),
+            ("ochtendplan", self._coordinator.get_ochtendplan),  # v5.270.0
             ("verkooptoets", lambda: self._coordinator.last_sell_check),
             ("reservemarge", self._coordinator.get_reserve_margin_overview),
             ("zelfconsumptie", self._coordinator.get_self_consumption_overview),
@@ -5258,7 +5259,7 @@ DASHBOARD_PAGINA_INTERVAL_S = {
 # v5.62: (suffix, naam, icoon, attributen, lijst die de toestand telt).
 # De toestand is het aantal regels van het eerste attribuut.
 DASHBOARD_PAGINA_SENSOREN = (
-    ("kwartierplanning_tabel", "Kwartierplanning", "mdi:table-clock", ("kwartierplanning", "laadplan_gewijzigd", "planvolging"), None),
+    ("kwartierplanning_tabel", "Kwartierplanning", "mdi:table-clock", ("kwartierplanning", "laadplan_gewijzigd", "planvolging", "ochtendplan"), None),
     ("logboek", "Logboek", "mdi:notebook-outline", ("logboek",), "regels"),
     ("aanwezigheid", "Aanwezigheid", "mdi:home-account", ("aanwezigheid",), "tijdlijn"),
     ("plantoetsing", "Plantoetsing", "mdi:clipboard-text-clock-outline", ("plantoetsing",), "dagen_overzicht"),

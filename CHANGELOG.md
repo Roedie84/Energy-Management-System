@@ -36195,3 +36195,7 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 
 ## v5.269.0 (27-11-2026)
 - `zendure_lokaal.verwerk_uitval`: met `rapport`/`vorig_rapport` een momentopname per uitval (voor, begin, laatste_tijdens, na), `rapport_verschil`, `tijdens_waarden`; `uitval_momentopnamen` (laatste 10) in de diagnose; `velden_veranderd` per gebeurtenis.
+
+## v5.270.0 (27-11-2026)
+- `ochtendplan` (bewaard): eens per dag vanaf `OCHTENDPLAN_UUR` (6) de verwachte accustand, modus (geindexeerd), accu_w en tekort per kwartier; `get_ochtendplan` als attribuut op Kwartierplanning.
+- Cockpit: stippellijn `soc-ochtend`, strook `g-strook` (een blokje per kwartier, kleur via `doen`), legenda "plan van HH:MM".

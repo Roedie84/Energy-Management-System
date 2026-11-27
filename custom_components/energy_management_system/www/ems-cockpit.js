@@ -672,6 +672,7 @@ button { font: inherit; }
 .pl-legenda { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 11px; color: var(--tekst2); }
 .pl-legenda i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
 .pl-legenda .lijn-i { height: 2px; width: 12px; border-radius: 1px; vertical-align: 3px; }
+.pl-legenda .lijn-i.stip { height: 0; border-radius: 0; border-top: 2px dashed var(--tekst2); background: none; }
 .pl-legenda.klein { gap: 4px 12px; }
 .gwrap { position: relative; display: grid; grid-template-columns: 32px 1fr 36px; grid-template-rows: 180px 24px; }
 .g-y, .g-y2 { position: relative; }
@@ -688,6 +689,12 @@ button { font: inherit; }
 .staaf:hover { opacity: 1; }
 .g-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .vloer { stroke: var(--tekst3); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+/* v5.270.0: de verwachte accustand volgens het plan van 06:00 */
+.gwrap.met-ochtend { grid-template-rows: 180px 14px 24px; }
+.g-strook-l { font-size: 11px; line-height: 8px; color: var(--tekst2); text-align: right; padding: 4px 6px 0 0; }
+.g-strook { display: flex; padding: 0 1px; margin-top: 4px; height: 8px; }
+.g-strook i { flex: 1 1 0; min-width: 0; opacity: .85; clip-path: inset(0 14% 0 14% round 2px); }
+.soc-ochtend { fill: none; stroke: var(--tekst2); stroke-width: 1.4; stroke-dasharray: 4 3; opacity: .8; vector-effect: non-scaling-stroke; }
 .soc-lijn { fill: none; stroke: var(--tekst); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
 .zon-vlak { fill: rgba(214, 166, 79, .10); stroke: rgba(214, 166, 79, .45); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .drempel { stroke: rgba(224, 101, 108, .5); stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
@@ -801,6 +808,7 @@ button { font: inherit; }
   .kolom { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .kolom > * { order: 0; }
   .gwrap { grid-template-rows: 200px 24px; }
+  .gwrap.met-ochtend { grid-template-rows: 200px 14px 24px; }
   .huislijst { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .knoppen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -819,6 +827,7 @@ button { font: inherit; }
   .planvolg { grid-template-columns: minmax(0, 1fr); }
   .planvolg .rk { margin-bottom: -4px; }
   .gwrap { grid-template-columns: 28px 1fr 32px; grid-template-rows: 180px 24px; }
+  .gwrap.met-ochtend { grid-template-rows: 180px 14px 24px; }
   .tabel td, .tabel th { padding-left: 6px; padding-right: 6px; }
   /* v5.215.0: op een smal scherm vielen Vermogen en Prijs buiten beeld. */
   .tabel.vb { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -1528,6 +1537,22 @@ class EmsCockpitCard extends HTMLElement {
     return Array.isArray(rijen) ? rijen : [];
   }
 
+  /* v5.270.0: het plan van vanochtend ({om, begin (ms), soc[]}) of null. */
+  _ochtendplan() {
+    const o = attr(this._s("plan"), "ochtendplan");
+    if (!o || !Array.isArray(o.soc) || !o.soc.length) return null;
+    const begin = Date.parse(o.begin || "");
+    if (!Number.isFinite(begin)) return null;
+    // v5.270.0: per kwartier de planregel van toen (modus, accu_w, tekort),
+    // zodat de strook dezelfde kleur krijgt als de staaf toen had (`doen`).
+    const modi = Array.isArray(o.modi) ? o.modi : [];
+    const m = Array.isArray(o.m) ? o.m : [];
+    const a = Array.isArray(o.a) ? o.a : [];
+    const tekort = new Set(Array.isArray(o.tekort) ? o.tekort : []);
+    const rijen = m.map((k, i) => ({ modus: modi[k], accu_w: a[i], tekort: tekort.has(i) }));
+    return { om: o.om || "06:00", begin, soc: o.soc, rijen };
+  }
+
   _blokken() {
     const t = attr(this._s("schema"), "transitions");
     return Array.isArray(t) ? t : [];
@@ -2015,7 +2040,7 @@ class EmsCockpitCard extends HTMLElement {
     const drempel = num(attr(this._s("uitleg"), "expensive_price_threshold"));
     const uitleg =
       `<div class="meternoot">Prijzen: alle bekende kwartierprijzen (morgen zodra die bekend zijn); staaf = prijs per kwartier (ct/kWh) in de kleur van wat de accu dan doet; ` +
-      `witte lijn = verwachte accustand, geel = verwachte zon${drempel != null ? `, stippellijn = drempel voor duur (${ct(drempel)} ct)` : ""}. ` +
+      `witte lijn = verwachte accustand, gestippelde lijn en de balk onder de grafiek = de accustand en wat de accu zou doen volgens het plan van 06:00, geel = verwachte zon${drempel != null ? `, stippellijn = drempel voor duur (${ct(drempel)} ct)` : ""}. ` +
       `7 dagen: vol = bekend, in de kleur van het plan; licht = verwachting, gekleurd naar de dagregel ` +
       `(goedkoopste deel = laden, boven de drempel voor duur = verkopen). Alleen meten.</div>`;
     return kop + `<div class="pb">${lichaam}${this._uitklap("grafiekuitleg", "Uitleg bij de grafiek", uitleg)}</div>`;
@@ -2071,6 +2096,16 @@ class EmsCockpitCard extends HTMLElement {
     const ruw = rijen.map((r, i) => ({ t: tijden[i].getTime() + 15 * 60000, soc: num(r.soc_procent) }));
     const lijn = socLive != null && nuX >= 0 && nuX <= 100 ? socLijn(ruw, Date.now(), socLive) : ruw.filter((q) => q.soc != null);
     const socPunten = lijn.map((q) => `${Math.max(0, Math.min(100, tX(q.t))).toFixed(2)},${(100 - q.soc).toFixed(2)}`).join(" ");
+    // v5.270.0 (Ruud 27-11): het plan zoals het om 06:00 was, als stippellijn.
+    // soc is de stand aan het eind van elk kwartier, net als soc_procent.
+    const ochtend = this._ochtendplan();
+    const ochtendPunten = ochtend
+      ? ochtend.soc
+          .map((v, i) => ({ t: ochtend.begin + (i + 1) * 15 * 60000, soc: num(v) }))
+          .filter((q) => q.soc != null && q.t >= t0 && q.t <= tEind)
+          .map((q) => `${tX(q.t).toFixed(2)},${(100 - Math.max(0, Math.min(100, q.soc))).toFixed(2)}`)
+          .join(" ")
+      : "";
     // v5.215.0: de zon als vermogen (zon_w). zon_kwh van het lopende kwartier is
     // alleen het restant, waardoor het vlak bij "nu" naar nul dook; en het vlak
     // begint bij het eerste kwartier in plaats van schuin vanuit de hoek.
@@ -2091,6 +2126,7 @@ class EmsCockpitCard extends HTMLElement {
       `<polygon class="zon-vlak" points="${zonPunten}"/>` +
       (drempelY != null && drempelY > 0 && drempelY < 100 ? `<line class="drempel" x1="0" x2="100" y1="${drempelY.toFixed(2)}" y2="${drempelY.toFixed(2)}"/>` : "") +
       vloerLijn +
+      (ochtendPunten ? `<polyline class="soc-ochtend" points="${ochtendPunten}"/>` : "") +
       (socPunten ? `<polyline class="soc-lijn" points="${socPunten}"/>` : "") +
       `</svg>`;
 
@@ -2114,20 +2150,36 @@ class EmsCockpitCard extends HTMLElement {
       const uur = d.getHours();
       if (uur % stap === 0 && x(i) > 3 && x(i) < 97) xLab.push(`<span style="left:${x(i).toFixed(2)}%">${String(uur).padStart(2, "0")}:00</span>`);
     }
+    // v5.270.0: de staafkleuren van het plan van 06:00, een blokje per
+    // kwartier recht onder de staaf van hetzelfde kwartier.
+    let strook = "";
+    if (ochtend && ochtend.rijen.length) {
+      const blokjes = tijden.map((d) => {
+        const i = Math.round((d.getTime() - ochtend.begin) / (15 * 60000));
+        const r = i >= 0 && i < ochtend.rijen.length ? ochtend.rijen[i] : null;
+        if (!r || r.modus == null) return `<i style="background:transparent"></i>`;
+        const dk = doen(r);
+        gezien.add(dk);
+        return `<i style="background:${DOEN[dk].kleur}" title="${esc(`${ochtend.om}: ${DOEN[dk].label}`)}"></i>`;
+      });
+      strook = `<div class="g-strook-l">${esc(ochtend.om)}</div><div class="g-strook">${blokjes.join("")}</div><div></div>`;
+    }
     const legenda =
       `<div class="pl-legenda">` +
       Object.keys(DOEN).filter((k) => gezien.has(k))
         .map((k) => `<span><i style="background:${DOEN[k].kleur}"></i>${DOEN[k].label.toLowerCase()}</span>`).join("") +
       `<span><i class="lijn-i" style="background:var(--tekst)"></i>accu %</span>` +
+      (ochtendPunten ? `<span><i class="lijn-i stip"></i>plan van ${esc(ochtend.om)}</span>` : "") +
       (vloer != null ? `<span><i class="lijn-i" style="background:var(--tekst3)"></i>leeg (${fmt(vloer)} %)</span>` : "") +
       `<span><i style="background:rgba(214,166,79,.45)"></i>zon</span></div>`;
     // v5.181.2 (d): de eenheden boven de assen
     return (
       `<div class="g-eenheid" aria-hidden="true"><span>ct/kWh</span><span>accu %</span></div>` +
-      `<div class="gwrap">` +
+      `<div class="gwrap${strook ? " met-ochtend" : ""}">` +
       `<div class="g-y">${yLab}</div>` +
       `<div class="g-plot">${yRaster}<div class="staven">${staven}</div>${svg}${nuLijn}</div>` +
       `<div class="g-y2">${y2Lab}</div>` +
+      strook +
       `<div class="g-x">${xLab.join("")}</div>` +
       `</div>` + legenda
     );

@@ -3921,6 +3921,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_pv_geometry_day_expected_peak_w": {"type": "plain"},
     "plan_review_history": {"type": "plain"},
     "plan_snapshot": {"type": "plain"},
+    # v5.270.0: de verwachte accustand zoals het plan hem om 06:00 zag.
+    "ochtendplan": {"type": "plain"},
     "_plan_review_dagstand": {"type": "plain"},
     "bedtime_history": {"type": "plain"},
     "battery_cooling_history": {"type": "plain"},
@@ -7029,6 +7031,14 @@ QUARTER_PLAN_MAX_ROWS = 192
 # De momentopname wordt genomen zodra de dag echt begonnen is; 's nachts
 # staat er nog geen zon in het plan.
 PLAN_SNAPSHOT_HOUR = 8
+
+# v5.270.0 (Ruud 27-11: "De voorspelling stelt telkens bij, is er een
+# mogelijkheid dat zichtbaar wordt wat de planning oorspronkelijk was,
+# bijvoorbeeld om 6 uur 's morgens?"). Om dit uur wordt de verwachte
+# accustand per kwartier vastgelegd; de cockpit tekent hem als stippellijn
+# naast het actuele plan. Na een herstart later op de dag: het eerste
+# plan daarna, met het tijdstip erbij.
+OCHTENDPLAN_UUR = 6
 
 # Dertig dagen is genoeg om een patroon te zien zonder dat een seizoen
 # van maanden geleden blijft meepraten.
