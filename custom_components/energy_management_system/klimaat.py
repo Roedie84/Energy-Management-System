@@ -17,6 +17,7 @@ from . import airco_frequentie, airco_ontdooi, airco_ritme, airco_sturing, klima
 from . import oorzaak as oorzaak_mod
 from . import airco_ijking
 from .const import (
+    CONF_BATTERY_POWER_SENSOR,
     AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
     AIRCO_LEER_VERSIE,
@@ -2319,6 +2320,16 @@ class KlimaatMixin:
                 toestand = self.hass.states.get(self.config.get(sleutel) or "")
                 if toestand is not None and str(toestand.state).lower() == "run":
                     storing = True
+            # v5.267.0: accu en zonnepanelen hangen ook achter een fase (L1)
+            # en bewegen die met kilowatts; dan is de fase van de airco niet
+            # te herkennen. Zulke blokken tellen niet (ook niet als rust).
+            for sleutel in (CONF_BATTERY_POWER_SENSOR, CONF_PV_POWER_SENSOR):
+                toestand = self.hass.states.get(self.config.get(sleutel) or "")
+                try:
+                    if toestand is not None and abs(float(toestand.state)) > airco_ijking.ACCU_ZON_MAX_W:
+                        storing = True
+                except (TypeError, ValueError):
+                    pass
             if self._airco_ijk_blok is None:
                 self._airco_ijk_blok = airco_ijking.nieuw_blok(now)
             self._airco_ijk_blok = airco_ijking.ronde(

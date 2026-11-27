@@ -39,6 +39,9 @@ BLOKKEN_BEWAREN = 700
 OORDEEL_MIN_BLOKKEN = 30
 #: Stabiel: de frequentie bewoog binnen het blok hooguit zoveel.
 STABIEL_HZ = 10.0
+#: v5.267.0: boven dit vermogen van de accu of de zonnepanelen telt een
+#: meting als storing (ze zitten op een fase en overstemmen de airco).
+ACCU_ZON_MAX_W = 50.0
 
 
 def leeg() -> dict:
