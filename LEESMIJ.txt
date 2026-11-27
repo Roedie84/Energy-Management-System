@@ -1,3 +1,12 @@
+v5.267.0 (27-11-2026)
+- Opruimen (L-EMS-084, akkoord Ruud): de meting "regelkwaliteit nul op de
+  meter" (v5.232.0) is weg. Uitkomst over 11 dagen: buiten de Quooker
+  gemiddeld -8 W; wijzigingen aan de regeling waren al afgewezen, dus de
+  meting leidde nergens meer toe. De regeling zelf is niet veranderd.
+- Airco-ijking op de P1-meter: de fase van de airco wordt nu wel herkend. De
+  accu zit op een andere fase en levert daar terug wat de airco vraagt; dat
+  telde als tegenstem, waardoor geen fase er duidelijk bovenuit kwam.
+
 v5.266.1 (26-11-2026)
 - Correctie op v5.266.0: de plotselinge stop van de airco (26-11 20:22) was
   GEEN ontdooien: er lag geen water onder de buitenunit. Zulke stops tellen

@@ -39,6 +39,9 @@ BLOKKEN_BEWAREN = 700
 OORDEEL_MIN_BLOKKEN = 30
 #: Stabiel: de frequentie bewoog binnen het blok hooguit zoveel.
 STABIEL_HZ = 10.0
+#: De fase moet zo sterk met de frequentie meebewegen (vanaf zoveel blokken).
+FASE_SAMENHANG_MIN = 0.5
+FASE_SAMENHANG_VANAF = 5
 
 
 def leeg() -> dict:
@@ -134,15 +137,44 @@ def _sluit(model: dict, blok: dict, begin: datetime) -> None:
         del model["wacht"][:-WACHT_BEWAREN]
 
 
+def _samenhang(blokken: list, i: int) -> float:
+    """Hoe sterk de fase meebeweegt met de frequentie (-1..1)."""
+    paren = [(b["hz"], b["extra_w"][i]) for b in blokken if len(b["extra_w"]) > i]
+    n = len(paren)
+    if n < 3:
+        return 0.0
+    gx = sum(x for x, _y in paren) / n
+    gy = sum(y for _x, y in paren) / n
+    sx = sum((x - gx) ** 2 for x, _y in paren)
+    sy = sum((y - gy) ** 2 for _x, y in paren)
+    if sx <= 0:
+        return 1.0      # de frequentie bewoog niet: niets te toetsen
+    if sy <= 0:
+        return 0.0
+    return sum((x - gx) * (y - gy) for x, y in paren) / math.sqrt(sx * sy)
+
+
 def _fase(blokken: list) -> int | None:
-    """De fase van de airco: die het meeste meebeweegt, en duidelijk."""
+    """De fase van de airco: die het meeste MEER trekt als de compressor
+    draait, en duidelijk.
+
+    v5.267.0 (dagcontrole 27-11: na 15 blokken geen fase herkend): een fase
+    die juist MINDER trekt telt niet als tegenstem. De accu en de panelen
+    zitten op een andere fase; volgt de accu het huis, dan levert die fase
+    precies terug wat de airco op zijn eigen fase vraagt. Eerst woog die
+    negatieve som even zwaar mee en kwam geen fase er duidelijk bovenuit.
+    Met maar een paar blokken beslist de som; vanaf vijf blokken moet de
+    fase ook met de frequentie meebewegen."""
     if not blokken:
         return None
     aantal = len(blokken[0]["extra_w"])
-    som = [sum(b["extra_w"][i] for b in blokken if len(b["extra_w"]) == aantal) for i in range(aantal)]
+    geldig_ = [b for b in blokken if len(b["extra_w"]) == aantal]
+    som = [sum(b["extra_w"][i] for b in geldig_) for i in range(aantal)]
     beste = max(range(aantal), key=lambda i: som[i])
-    rest = max([abs(som[i]) for i in range(aantal) if i != beste] or [0.0])
+    rest = max([som[i] for i in range(aantal) if i != beste and som[i] > 0] or [0.0])
     if som[beste] <= 0 or som[beste] < 3 * rest:
+        return None
+    if len(geldig_) >= FASE_SAMENHANG_VANAF and _samenhang(geldig_, beste) < FASE_SAMENHANG_MIN:
         return None
     return beste
 

@@ -117,3 +117,28 @@ def test_een_lange_draaibeurt_wacht_op_de_rust_erna():
     # en twee blokken in het midden liggen verder dan twee uur van elke rust
     assert len(model["blokken"]) == 21 and len(model["wacht"]) == 2
     assert all(b["extra_w"][1] == 960.0 for b in model["blokken"])
+
+
+def test_de_accu_op_een_andere_fase_stemt_niet_tegen():
+    """27-11 (dagcontrole): na 15 blokken geen fase herkend. De accu op fase 1
+    volgt het huis en levert terug wat de airco op fase 2 vraagt."""
+    model = ij.leeg()
+    rust = [(0.0, [60.0, 44.0, 50.0])] * 60
+    aan = []
+    for hz in (30.0, 45.0, 60.0):
+        w = 24.0 * hz - 90.0
+        aan += [(hz, [60.0 - w, 44.0 + w, 50.0])] * 40
+    _speel(model, rust + aan + [(0.0, [60.0, 44.0, 50.0])] * 31)
+    uit = ij.overzicht(model, 26.1, -119.0)
+    assert uit["fase"] == 2 and uit["meter_w_per_hz"] == 24.0, uit
+
+
+def test_een_fase_die_niet_met_de_frequentie_meebeweegt_is_het_niet():
+    model = ij.leeg()
+    rust = [(0.0, [60.0, 44.0, 50.0])] * 60
+    aan = []
+    for k, hz in enumerate((30.0, 60.0, 30.0, 60.0, 30.0, 60.0)):
+        # fase 3 trekt veel meer, maar juist als de compressor laag draait
+        aan += [(hz, [60.0, 44.0, 50.0 + (2000.0 if hz < 40 else 200.0)])] * 20
+    _speel(model, rust + aan + [(0.0, [60.0, 44.0, 50.0])] * 31)
+    assert "fase" not in ij.overzicht(model, 26.1, -119.0)

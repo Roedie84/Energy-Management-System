@@ -36184,3 +36184,7 @@ Ruud 25-11, akkoord op de punten 2 t/m 10 van de rondgang.
 
 ## v5.266.1 (26-11-2026)
 - `airco_ontdooi`: het patroon `stilstand` telt niet meer als ontdooibeurt (waarneming Ruud: geen water onder de buitenunit); apart in het overzicht als `plotselinge_stops`.
+
+## v5.267.0 (27-11-2026)
+- L-EMS-084: `regelkwaliteit.py`, `_werk_regelkwaliteit_bij`, `get_regelkwaliteit`, het bewaarde veld en de diagnose-ingang verwijderd; attributen `regelkwaliteit_vandaag/gisteren` op P1 regeldoel vervallen.
+- `airco_ijking._fase`: een fase met een negatieve som telt niet als tegenstem; vanaf vijf blokken moet de fase met de frequentie meebewegen.
