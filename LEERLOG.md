@@ -507,3 +507,13 @@ laatste ronde: 26-11 06:45, gemeten t/m 26-11 06:45
 laatste ronde: 27-11 06:45, gemeten t/m 27-11 06:45
 
 - 27-11 07:30 (chat, Claude): v5.267.0 - L-EMS-084 gebouwd (regelkwaliteit eruit) en de faseherkenning van de airco-ijking (nr. 18) hersteld. De correctie die de dagcontrole op een eigen werkbranch had staan stond niet op GitHub en is dus niet gebruikt; niet alsnog uitbrengen zonder te vergelijken met v5.267.0.
+
+## 28-11 06:45 · dagcontrole (27-11 06:45 t/m 28-11 06:45; v5.270.0 actief)
+- 27-11: omvormer 16 keer uitgevallen (14:15-15:00, code 46), gesmolten connector gevonden, 15:00-15:24 accu uit; sinds 15:24 stuurt het EMS weer, nu op **2 modules (5,76 kWh)**: 01029 is onbeschikbaar. Sindsdien 0 uitval. Capaciteit volgt de sensor total_kwh (stappen 0,0576 = 1 %).
+- Achteraf (LP in twee delen, laden 83 %, ontladen 99 %, slijtage 4,22 ct): werkelijk € 2,71, optimum € 2,96 → **gemist € 0,25, 0 FOUT**. Knop verkopen-uit (Ruud, 06:08-24:00) € 0,12 (piek 08:00-09:00 62,5-64,7 ct niet verkocht). Rest € 0,13 pech: storing en module eruit halverwege de dag.
+- Regels c: avond 15:15-18:15 leeg op 55-57 ct, daarna netafname 41-55 ct bij lege accu (geen goedkoper laadmoment ervoor: zon ~51 ct/0,83). Nacht 27/28 niet geladen (36-38 ct tegen max 39,7 vandaag): terecht. Geen vastgehouden lading.
+- PV-plan 10 d +6,3 % (was +10,2), 10 u +46 %; onder saldering geen euro-effect. Nr. 16 airco 27-11: 10,4 kWh, 0,50 kWh/graad (17,3 / −3,6 °C), ca. € 5,10. Stilstand 0. Terugval 0 kwartieren.
+- Module 1: niet meer te meten (uit het systeem); de KPI-reeks stopt tot de vervanging. Geen release, geen codewijziging.
+- Niet gemeten: MC-Brier, SoC-voorspelling, NILM, opdrachten_gevolgd (niet nagekeken).
+
+laatste ronde: 28-11 06:55, gemeten t/m 28-11 06:45
